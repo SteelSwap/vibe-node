@@ -132,6 +132,31 @@ The node must match or beat Haskell on memory. Bloat isn't just ugly — it's a 
 - **Vibe responsibly.** Vibe coding doesn't mean sloppy coding. It means the AI does the heavy lifting and the human steers. The output still has to be correct, tested, and maintainable.
 - **Document the journey, not just the destination.** A clean final product with no visible process teaches nobody anything.
 
+## Spec Consultation Discipline
+
+Every implementation step must follow this loop:
+
+1. **Consult the spec** — Use the search MCP to find the relevant spec sections before writing implementation code. Note the document, section, and equation numbers.
+2. **Implement against the spec** — Code should trace back to specific spec definitions and rules. Include spec references in comments where the mapping isn't obvious.
+3. **Test against the Haskell node** — The Haskell node is the oracle of truth. Use Ogmios and the Docker Compose cardano-node for conformance testing.
+4. **Document observed gaps** — Any divergence between spec and Haskell implementation is recorded in `docs/gap-analysis/` using the standard entry format.
+
+### Gap Analysis Entry Format
+
+```markdown
+## [Subsystem] — [Brief description of divergence]
+
+**Spec reference:** [Document, section, page/equation number]
+**Era:** [Which era this applies to]
+**Spec says:** [What the spec defines]
+**Haskell does:** [What the Haskell node actually implements]
+**Delta:** [The specific difference]
+**Implications:** [How this affects our implementation]
+**Discovered during:** [Which phase/task uncovered this]
+```
+
+Gap analysis is not a phase — it is a discipline woven into every development step. The spec is the ideal, the code is the reality, the gap is the measured delta.
+
 ## Project Standards
 
 - **License**: AGPL-3.0
