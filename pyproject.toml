@@ -1,0 +1,59 @@
+[project]
+name = "vibe-node"
+version = "0.1.0.dev0"
+description = "A vibe-coded Cardano node"
+readme = "README.md"
+authors = [
+    { name = "Elder Millenial", email = "eldermillenial@protonmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "sqlmodel>=0.0.37",
+    "typer>=0.15",
+]
+
+[project.scripts]
+vibe-node = "vibe_node.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.bumpversion]
+current_version = "0.1.0.dev0"
+parse = '(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(\.(?P<release>dev)(?P<dev>\d+))?'
+serialize = [
+    "{major}.{minor}.{patch}.{release}{dev}",
+    "{major}.{minor}.{patch}",
+]
+commit = false
+tag = false
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "src/vibe_node/__init__.py"
+search = '__version__ = "{current_version}"'
+replace = '__version__ = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "VERSION"
+search = "{current_version}"
+replace = "{new_version}"
+
+[tool.bumpversion.parts.release]
+optional_value = "rel"
+values = ["dev", "rel"]
+
+[tool.bumpversion.parts.dev]
+first_value = 0
+
+[dependency-groups]
+dev = [
+    "bump-my-version>=1.2.7",
+    "mkdocs-material>=9.7.5",
+]
