@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 650 380" font-family="Inter, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="sfSpecGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#2563eb"/>
+    </linearGradient>
+    <linearGradient id="sfImplGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6"/>
+      <stop offset="100%" style="stop-color:#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="sfTestGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#06b6d4"/>
+      <stop offset="100%" style="stop-color:#0891b2"/>
+    </linearGradient>
+    <linearGradient id="sfGapGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981"/>
+      <stop offset="100%" style="stop-color:#059669"/>
+    </linearGradient>
+    <linearGradient id="sfCommitGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#d97706"/>
+    </linearGradient>
+    <filter id="sfShadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.2"/>
+    </filter>
+    <marker id="sfArrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="650" height="380" rx="16" fill="#0f172a"/>
+
+  <!-- Title -->
+  <text x="325" y="32" text-anchor="middle" fill="#e2e8f0" font-size="16" font-weight="700">Spec-First Development Workflow</text>
+
+  <!-- Step 1: Consult Spec -->
+  <rect x="225" y="50" width="200" height="55" rx="10" fill="url(#sfSpecGrad)" filter="url(#sfShadow)"/>
+  <text x="285" y="75" text-anchor="middle" fill="white" font-size="20" font-weight="700">1</text>
+  <text x="355" y="72" text-anchor="middle" fill="white" font-size="12" font-weight="600">Consult Spec</text>
+  <text x="355" y="90" text-anchor="middle" fill="#bfdbfe" font-size="9">Search MCP → ranked results</text>
+
+  <!-- Arrow down -->
+  <path d="M 325 108 L 325 125" stroke="#94a3b8" stroke-width="2" marker-end="url(#sfArrow)"/>
+
+  <!-- Step 2: Implement -->
+  <rect x="225" y="130" width="200" height="55" rx="10" fill="url(#sfImplGrad)" filter="url(#sfShadow)"/>
+  <text x="285" y="155" text-anchor="middle" fill="white" font-size="20" font-weight="700">2</text>
+  <text x="355" y="152" text-anchor="middle" fill="white" font-size="12" font-weight="600">Implement</text>
+  <text x="355" y="170" text-anchor="middle" fill="#ddd6fe" font-size="9">Trace code to spec definitions</text>
+
+  <!-- Arrow down -->
+  <path d="M 325 188 L 325 205" stroke="#94a3b8" stroke-width="2" marker-end="url(#sfArrow)"/>
+
+  <!-- Step 3: Test -->
+  <rect x="225" y="210" width="200" height="55" rx="10" fill="url(#sfTestGrad)" filter="url(#sfShadow)"/>
+  <text x="285" y="235" text-anchor="middle" fill="white" font-size="20" font-weight="700">3</text>
+  <text x="355" y="232" text-anchor="middle" fill="white" font-size="12" font-weight="600">Test vs Haskell</text>
+  <text x="355" y="250" text-anchor="middle" fill="#a5f3fc" font-size="9">Ogmios + cardano-node in Docker</text>
+
+  <!-- Decision diamond -->
+  <polygon points="325,275 370,300 325,325 280,300" fill="#1e293b" stroke="#64748b" stroke-width="1.5"/>
+  <text x="325" y="303" text-anchor="middle" fill="#e2e8f0" font-size="9" font-weight="600">Gap?</text>
+
+  <!-- Yes arrow → Gap -->
+  <path d="M 370 300 L 460 300" stroke="#ef4444" stroke-width="2" marker-end="url(#sfArrow)"/>
+  <text x="415" y="293" fill="#ef4444" font-size="9" font-weight="600">Yes</text>
+
+  <!-- Gap box -->
+  <rect x="465" y="275" width="160" height="50" rx="10" fill="url(#sfGapGrad)" filter="url(#sfShadow)"/>
+  <text x="545" y="297" text-anchor="middle" fill="white" font-size="11" font-weight="600">Document Gap</text>
+  <text x="545" y="313" text-anchor="middle" fill="#a7f3d0" font-size="9">docs/gap-analysis/</text>
+
+  <!-- No arrow → Commit -->
+  <path d="M 325 325 L 325 340" stroke="#10b981" stroke-width="2" marker-end="url(#sfArrow)"/>
+  <text x="340" y="338" fill="#10b981" font-size="9" font-weight="600">No</text>
+
+  <!-- Gap → Commit -->
+  <path d="M 545 328 L 545 350 L 428 350" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#sfArrow)"/>
+
+  <!-- Commit box -->
+  <rect x="225" y="345" width="200" height="28" rx="8" fill="url(#sfCommitGrad)" filter="url(#sfShadow)"/>
+  <text x="325" y="364" text-anchor="middle" fill="white" font-size="10" font-weight="600">Commit with Co-Authored-By</text>
+
+  <!-- Side annotations -->
+  <rect x="20" y="60" width="180" height="80" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="110" y="82" text-anchor="middle" fill="#3b82f6" font-size="10" font-weight="600">Knowledge Base</text>
+  <text x="110" y="98" text-anchor="middle" fill="#94a3b8" font-size="8">Formal specs (PDF → MD)</text>
+  <text x="110" y="112" text-anchor="middle" fill="#94a3b8" font-size="8">Haskell source per release</text>
+  <text x="110" y="126" text-anchor="middle" fill="#94a3b8" font-size="8">GitHub issues history</text>
+
+  <!-- Arrow KB → Step 1 -->
+  <path d="M 203 90 L 222 78" stroke="#334155" stroke-width="1" stroke-dasharray="4,2"/>
+
+  <rect x="20" y="220" width="180" height="60" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="110" y="242" text-anchor="middle" fill="#06b6d4" font-size="10" font-weight="600">Docker Stack</text>
+  <text x="110" y="258" text-anchor="middle" fill="#94a3b8" font-size="8">cardano-node + Ogmios</text>
+  <text x="110" y="270" text-anchor="middle" fill="#94a3b8" font-size="8">Live conformance testing</text>
+
+  <!-- Arrow Docker → Step 3 -->
+  <path d="M 203 243 L 222 240" stroke="#334155" stroke-width="1" stroke-dasharray="4,2"/>
+</svg>

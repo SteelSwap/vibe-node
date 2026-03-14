@@ -21,25 +21,7 @@ For independent tasks, Agent Millenial dispatches worker agents that run in **is
 - Cannot interfere with other workers
 - Returns a summary of what it built
 
-```mermaid
-sequenceDiagram
-    participant EM as Elder Millenial
-    participant AM as Agent Millenial<br/>(Orchestrator)
-    participant W1 as Worker Agent 1<br/>(Worktree A)
-    participant W2 as Worker Agent 2<br/>(Worktree B)
-    participant W3 as Worker Agent 3<br/>(Worktree C)
-
-    EM->>AM: Start Wave 1
-    AM->>W1: M0.1 Docker Compose
-    AM->>W2: M0.2 Submodules & Schema
-    AM->>W3: M0.9 Documentation
-    Note over W1,W3: All three work in parallel<br/>in isolated worktrees
-    W1-->>AM: Files created, summary
-    W2-->>AM: Submodules added, SQL ready
-    W3-->>AM: Docs written, mkdocs updated
-    AM->>AM: Review, integrate, resolve conflicts
-    AM-->>EM: Wave 1 complete, ready for review
-```
+![Agent Architecture](../assets/agent-architecture.svg)
 
 ### Parallelism Strategy
 

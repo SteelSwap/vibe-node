@@ -4,37 +4,7 @@ Every tool in the stack was chosen for a reason. Here's what we use, why, and ho
 
 ## Architecture
 
-```mermaid
-graph TB
-    subgraph "Development Environment"
-        CC[Claude Code<br/>+ Opus 4.6] --> SMCP[Search MCP]
-        CC --> CMCP[CrystalDB MCP]
-        CC --> PLANE[Plane MCP]
-        SMCP --> VLLM[vLLM<br/>Jina Code 1.5B]
-        SMCP --> PDB[ParadeDB<br/>pg17]
-        CMCP --> PDB
-    end
-
-    subgraph "Ingestion Pipeline"
-        POCR[PaddleOCR] --> PDB
-        TS[tree-sitter-haskell] --> PDB
-        GH[GitHub API] --> PDB
-    end
-
-    subgraph "Cardano Infrastructure"
-        MITH[Mithril] --> CN[cardano-node]
-        CN --> OGM[Ogmios]
-    end
-
-    subgraph "Project"
-        PY[Python 3.14 + uv] --> CLI[vibe-node CLI<br/>typer]
-        SM[SQLModel + asyncpg] --> PDB
-        MK[MkDocs Material] --> DOCS[Documentation]
-    end
-
-    CC --> PY
-    CC --> CN
-```
+![Toolchain Architecture](../assets/toolchain-architecture.svg)
 
 ## Tools
 

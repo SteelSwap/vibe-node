@@ -15,13 +15,7 @@ These objectives reinforce each other. Understanding the spec deeply enough to d
 
 Every implementation step follows the same discipline:
 
-```mermaid
-graph LR
-    A[Consult Spec] --> B[Implement]
-    B --> C[Test Against<br/>Haskell Node]
-    C --> D[Document Gaps]
-    D --> A
-```
+![The Development Cycle](../assets/dev-cycle.svg)
 
 1. **Consult the spec** — Use the Search MCP to find relevant spec sections before writing code
 2. **Implement against the spec** — Code traces back to specific definitions and rules

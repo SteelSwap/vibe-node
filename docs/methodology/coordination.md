@@ -47,15 +47,7 @@ Each issue has:
 
 ## Workflow
 
-```mermaid
-graph LR
-    A[Plane Issue<br/>Created] --> B[Assign to<br/>Module]
-    B --> C[Agent Picks<br/>Up Issue]
-    C --> D[Implementation<br/>in Worktree]
-    D --> E[Review &<br/>Integration]
-    E --> F[Update Docs<br/>& Roadmap]
-    F --> G[Issue Closed<br/>in Plane]
-```
+![Work Item Lifecycle](../assets/coordination-workflow.svg)
 
 1. **Issue created** in Plane with description and acceptance criteria
 2. **Assigned to module** with priority and labels

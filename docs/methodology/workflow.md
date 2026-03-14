@@ -4,16 +4,7 @@
 
 Every piece of implementation follows the same four-step discipline. No exceptions.
 
-```mermaid
-graph TD
-    A[1. Consult Spec<br/>via Search MCP] --> B[2. Implement<br/>Against the Spec]
-    B --> C[3. Test Against<br/>Haskell Node]
-    C --> D{Divergence<br/>Found?}
-    D -->|Yes| E[4. Document Gap<br/>in docs/gap-analysis/]
-    D -->|No| F[Done]
-    E --> F
-    F --> G[Commit with<br/>Co-Authored-By]
-```
+![Spec-First Workflow](../assets/spec-first-workflow.svg)
 
 ### Step 1: Consult the Spec
 
