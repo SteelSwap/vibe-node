@@ -108,8 +108,11 @@ The following repositories are added as git submodules under `vendor/`:
 | Submodule | Path | Purpose |
 |-----------|------|---------|
 | [cardano-node](https://github.com/IntersectMBO/cardano-node) | `vendor/cardano-node` | Node source, release tags, integration code |
-| [cardano-ledger](https://github.com/IntersectMBO/cardano-ledger) | `vendor/cardano-ledger` | Ledger rules, formal specs, CDDL schemas |
+| [cardano-ledger](https://github.com/IntersectMBO/cardano-ledger) | `vendor/cardano-ledger` | Ledger rules, formal specs (LaTeX), CDDL schemas |
 | [ouroboros-network](https://github.com/IntersectMBO/ouroboros-network) | `vendor/ouroboros-network` | Networking protocols, miniprotocol implementations |
+| [ouroboros-consensus](https://github.com/IntersectMBO/ouroboros-consensus) | `vendor/ouroboros-consensus` | Consensus formal spec, design docs, storage layer |
+| [plutus](https://github.com/IntersectMBO/plutus) | `vendor/plutus` | Plutus Core spec, EUTxO spec, cost models |
+| [formal-ledger-specifications](https://github.com/IntersectMBO/formal-ledger-specifications) | `vendor/formal-ledger-specs` | Conway/Dijkstra era Agda formal specs |
 
 Each submodule provides:
 
@@ -127,7 +130,7 @@ Submodules are pinned to specific commits but the code-ingest pipeline walks all
 
 #### `spec_documents`
 
-Stores converted spec content chunked by section, definition, or rule.
+Stores converted spec content chunked by section, definition, or rule. Tracks version history via commit hash — the same spec file may have multiple rows at different commits.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -135,15 +138,18 @@ Stores converted spec content chunked by section, definition, or rule.
 | `title` | text | Section/chunk title |
 | `source_repo` | text | Source repository (e.g. "IntersectMBO/cardano-ledger") |
 | `source_path` | text | Original file path |
-| `era` | text | byron, shelley, alonzo, babbage, conway |
-| `spec_version` | text | Version/revision of the spec |
-| `published_date` | timestamp | When this version was published |
+| `era` | text | byron, shelley, alonzo, babbage, conway, dijkstra |
+| `spec_version` | text | Tag name if from a tagged release, or "HEAD" |
+| `commit_hash` | text | Git commit SHA at time of ingestion |
+| `commit_date` | timestamp | When this version was committed |
+| `published_date` | timestamp | When this version was published (if tagged release) |
 | `content_markdown` | text | Mathpix markdown with math notation |
 | `content_plain` | text | Stripped text for BM25 indexing |
-| `embedding` | vector(768) | Jina Code 1.5B embedding |
-| `chunk_type` | text | section, definition, rule, schema |
+| `embedding` | vector(1536) | Jina Code 1.5B embedding |
+| `chunk_type` | text | section, definition, rule, schema, agda |
 | `parent_document_id` | uuid | FK to parent document for section-level chunks |
 | `metadata` | jsonb | Flexible extra fields |
+| `content_hash` | text | SHA256 of content for deduplication |
 
 #### `code_chunks`
 
@@ -163,13 +169,13 @@ Stores function-level Haskell source indexed per release.
 | `line_end` | int | Ending line number |
 | `content` | text | The actual Haskell source |
 | `signature` | text | Type signature if available |
-| `embedding` | vector(768) | Jina Code 1.5B embedding |
+| `embedding` | vector(1536) | Jina Code 1.5B embedding |
 | `era` | text | Inferred from module path |
 | `metadata` | jsonb | Flexible extra fields |
 
 #### `github_issues`
 
-Stores GitHub issues for historical bug/ambiguity awareness.
+Stores GitHub issues with full discussion threads for historical bug/ambiguity awareness.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -177,15 +183,36 @@ Stores GitHub issues for historical bug/ambiguity awareness.
 | `repo` | text | Source repository |
 | `issue_number` | int | GitHub issue number |
 | `title` | text | Issue title |
-| `body` | text | Issue body |
+| `body` | text | Issue body (first post) |
 | `state` | text | open, closed |
 | `labels` | text[] | Issue labels |
 | `created_at` | timestamp | When the issue was created |
 | `closed_at` | timestamp | When the issue was closed (if applicable) |
+| `updated_at` | timestamp | Last update timestamp |
 | `author` | text | Issue author |
-| `content_combined` | text | Title + body concatenated for search |
-| `embedding` | vector(768) | Jina Code 1.5B embedding |
+| `comment_count` | int | Number of comments |
+| `content_combined` | text | Title + body + all comments concatenated with separators |
+| `embedding` | vector(1536) | Jina Code 1.5B embedding |
+| `linked_prs` | text[] | Referenced PR numbers/URLs |
 | `metadata` | jsonb | Flexible extra fields |
+
+#### `github_issue_comments`
+
+Stores individual comments on issues for fine-grained search. Each comment is separately embedded so we can find specific insights within long discussion threads.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | uuid | Primary key |
+| `issue_id` | uuid | FK to github_issues |
+| `repo` | text | Source repository (denormalized for query performance) |
+| `issue_number` | int | GitHub issue number (denormalized) |
+| `comment_id` | bigint | GitHub comment ID |
+| `author` | text | Comment author |
+| `body` | text | Comment body |
+| `created_at` | timestamp | When the comment was posted |
+| `updated_at` | timestamp | Last edit timestamp |
+| `embedding` | vector(1536) | Jina Code 1.5B embedding |
+| `metadata` | jsonb | Flexible extra fields (reactions, edit history, etc.) |
 
 ### Search Indexes
 
@@ -221,32 +248,53 @@ All pipelines are containerized, idempotent, and independently runnable.
 
 ### spec-ingest
 
-**Sources:**
+**Sources (critical — must track versioned history):**
 
-| Source | Format | Repository |
-|--------|--------|------------|
-| Shelley formal spec | LaTeX/PDF | IntersectMBO/cardano-ledger |
-| Alonzo formal spec | LaTeX/PDF | IntersectMBO/cardano-ledger |
-| Babbage formal spec | LaTeX/PDF | IntersectMBO/cardano-ledger |
-| Conway formal spec (CIP-1694) | LaTeX/PDF | IntersectMBO/cardano-ledger |
-| Byron CBOR spec | PDF | IntersectMBO/cardano-ledger |
-| Ouroboros Classic/BFT/Praos/Genesis | Academic PDF | IOG research papers |
-| Network design spec | PDF/Markdown | IntersectMBO/ouroboros-network |
-| CIPs | Markdown | cardano-foundation/CIPs |
-| CDDL schemas | CDDL | IntersectMBO/cardano-ledger |
+| Source | Format | Repository | Versioning Strategy |
+|--------|--------|------------|-------------------|
+| Byron formal specs (chain + ledger) | LaTeX | IntersectMBO/cardano-ledger `eras/byron/` | Track commits touching spec files |
+| Shelley formal spec | LaTeX | IntersectMBO/cardano-ledger `eras/shelley/formal-spec/` | Track commits touching spec files |
+| Shelley delegation design spec | LaTeX | IntersectMBO/cardano-ledger `eras/shelley/design-spec/` | Track commits touching spec files |
+| Mary/Allegra formal spec | LaTeX | IntersectMBO/cardano-ledger `eras/shelley-ma/formal-spec/` | Track commits touching spec files |
+| Alonzo formal spec | LaTeX | IntersectMBO/cardano-ledger `eras/alonzo/formal-spec/` | Track commits touching spec files |
+| Babbage formal spec | LaTeX | IntersectMBO/cardano-ledger `eras/babbage/formal-spec/` | Track commits touching spec files |
+| Conway/Dijkstra formal spec (Agda) | Literate Agda | IntersectMBO/formal-ledger-specifications | Tags: conway-v0.8/v0.9/v1.0 + commits |
+| Consensus formal spec | LaTeX | IntersectMBO/ouroboros-consensus `docs/formal-spec/` | Track commits touching spec files |
+| Consensus design docs (website) | Markdown | IntersectMBO/ouroboros-consensus `docs/website/` | Track commits |
+| Network protocol spec | LaTeX | IntersectMBO/ouroboros-network `docs/network-spec/` | Track commits touching spec files |
+| Network design spec | LaTeX | IntersectMBO/ouroboros-network `docs/network-design/` | Track commits |
+| Plutus Core spec | LaTeX | IntersectMBO/plutus `doc/plutus-core-spec/` | Track commits touching spec files |
+| Extended UTxO spec | LaTeX | IntersectMBO/plutus `doc/extended-utxo-spec/` | Track commits |
+| CDDL schemas (all eras) | CDDL | IntersectMBO/cardano-ledger `eras/*/impl/cddl/` | Track commits per era |
+| CIPs | Markdown | cardano-foundation/CIPs | Track commits per CIP |
+| Ouroboros papers (Classic/BFT/Praos/Genesis/Chronos) | PDF | IOG research / IACR ePrint | Static (academic papers) |
+| STS framework + supplementary docs | LaTeX/MD | IntersectMBO/cardano-ledger `docs/` | Track commits |
+
+**Key design note:** Formal specs are under-tagged. The cardano-ledger repo has only 2 spec releases (both 2023) despite ongoing changes. We cannot rely on tags alone — the spec-ingest pipeline must track **commits that modify spec files** on the default branch, not just releases. This gives us the full historical record of how each spec evolved.
+
+**Additional submodules required:**
+
+| Submodule | Path | Purpose |
+|-----------|------|---------|
+| formal-ledger-specifications | `vendor/formal-ledger-specs` | Conway/Dijkstra era Agda specs |
+| ouroboros-consensus | `vendor/ouroboros-consensus` | Consensus formal spec and design docs |
+| plutus | `vendor/plutus` | Plutus Core spec and EUTxO spec |
 
 **Pipeline:**
 
-1. Pull source documents from known repositories
+1. Pull source documents from all spec repositories (submodules + external)
 2. For PDFs: PaddleOCR → Mathpix markdown (preserves equations as `$...$` / `$$...$$`)
 3. For LaTeX: pandoc → markdown with math delimiters
-4. For existing markdown/CDDL: direct ingestion
-5. Chunk by document structure (sections, definitions, rules) — not arbitrary token windows
-6. Embed each chunk via vLLM/Jina Code 1.5B endpoint
-7. Load into `spec_documents` with full metadata
-8. Track ingested content by source path + content hash for idempotency
+4. For Literate Agda: extract markdown content, preserve code blocks
+5. For existing markdown/CDDL: direct ingestion
+6. Chunk by document structure (sections, definitions, rules) — not arbitrary token windows
+7. Embed each chunk via Ollama/Jina Code 1.5B endpoint
+8. Load into `spec_documents` with full metadata including **commit hash and commit date** for version tracking
+9. Track ingested content by (source_repo, source_path, commit_hash) for idempotency
+10. For repos without spec tags: walk git log filtering to commits that touch spec file paths
+11. For repos with spec tags: ingest at each tag, plus HEAD of default branch
 
-**Output:** Converted specs are also written to `docs/specs/` as browsable markdown pages in mkdocs (with MathJax/KaTeX rendering via `pymdownx.arithmatex`).
+**Output:** Converted specs are also written to `docs/specs/` as browsable markdown pages in mkdocs (with MathJax/KaTeX rendering via `pymdownx.arithmatex`). The latest version is the default view, with links to the version history in ParadeDB.
 
 ### code-ingest
 
@@ -257,32 +305,57 @@ All pipelines are containerized, idempotent, and independently runnable.
 | `vendor/cardano-node` | Node integration, CLI, topology, configuration |
 | `vendor/cardano-ledger` | Ledger rules (the core spec implementation), CDDL schemas, era-specific logic |
 | `vendor/ouroboros-network` | Networking stack, miniprotocol implementations, multiplexer |
+| `vendor/ouroboros-consensus` | Consensus protocol, chain selection, storage layer |
+| `vendor/plutus` | Plutus Core evaluator, cost models, builtins |
+| `vendor/formal-ledger-specs` | Agda formalization (indexed as code, not spec — contains executable definitions) |
 
 **Pipeline:**
 
 1. For each submodule, walk git tags (release tags only)
 2. For each release tag: checkout the tag
 3. Parse Haskell source files using **tree-sitter-haskell** for AST-aware function-level chunking
-4. Extract: function definitions, type signatures, data declarations, class instances
-5. For each chunk, record: repo, file path, module name, function name, line range, release tag, commit date, inferred era
-6. Embed via vLLM/Jina Code 1.5B endpoint
-7. Load into `code_chunks`
-8. Skip already-indexed (repo, release_tag) pairs for idempotency
+4. Parse Agda files using text-based extraction for formal-ledger-specs (function/data definitions)
+5. Extract: function definitions, type signatures, data declarations, class instances
+6. For each chunk, record: repo, file path, module name, function name, line range, release tag, commit date, inferred era
+7. Embed via Ollama/Jina Code 1.5B endpoint
+8. Load into `code_chunks`
+9. Skip already-indexed (repo, release_tag) pairs for idempotency
 
 **Era inference:** Module paths map to eras (e.g. `Cardano.Ledger.Alonzo.*` → alonzo). A mapping table is maintained in the ingest config.
 
 ### issues-ingest
 
-**Pipeline:**
+**Repositories tracked:**
 
-1. Pull all issues (open + closed) via GitHub API from:
-   - `IntersectMBO/cardano-node`
-   - `IntersectMBO/cardano-ledger`
-   - `IntersectMBO/ouroboros-network`
-2. Store title, body, labels, dates, state, author
-3. Embed title + body combined via vLLM endpoint
-4. Load into `github_issues`
-5. Track by repo + issue number; update changed issues on re-run
+- `IntersectMBO/cardano-node`
+- `IntersectMBO/cardano-ledger`
+- `IntersectMBO/ouroboros-network`
+- `IntersectMBO/ouroboros-consensus`
+- `IntersectMBO/plutus`
+- `IntersectMBO/formal-ledger-specifications`
+- `cardano-foundation/CIPs`
+
+**Issues pipeline:**
+
+1. Pull all issues (open + closed) via GitHub API with full discussion threads
+2. For each issue, also fetch all comments (paginated) — these contain root cause analysis, design decisions, and fix rationale
+3. Store: title, body, all comments (with author + timestamp), labels, dates, state, linked PRs, referenced issues
+4. Construct `content_combined` as the full discussion: title + body + all comments concatenated with author/timestamp separators
+5. Embed the full discussion via Ollama endpoint
+6. Load into `github_issues` table (issue-level rows) and `github_issue_comments` table (comment-level rows)
+7. Track by (repo, issue_number); update changed issues and new comments on re-run
+
+**Pull requests pipeline:**
+
+1. Pull all PRs (open + closed + merged) via GitHub API
+2. For each PR, fetch: general comments, review comments (line-level with file path and diff hunk), and review summaries
+3. Store: title, body, all comments (with type, author, timestamp, file context), labels, merge status, linked issues, base/head branches
+4. Construct `content_combined` as: title + body + all comments concatenated
+5. Embed the full discussion via Ollama endpoint
+6. Load into `github_pull_requests` table (PR-level rows) and `github_pr_comments` table (comment-level rows)
+7. Track by (repo, pr_number); update changed PRs and new comments on re-run
+
+**Rationale:** Issues describe problems, but comments contain the nuance — root cause analysis, workarounds, design decisions. PRs contain code review decisions, implementation rationale, and architectural discussions that never appear in issues. Capturing only first posts loses most of the value.
 
 ### index-build
 
@@ -305,24 +378,28 @@ All containers emit structured JSON logs with:
 
 ## Embedding Model
 
-**Model:** Jina Code Embeddings 1.5B (`jinaai/jina-code-embeddings-1.5b`)
+**Model:** Jina Code Embeddings 1.5B (`hf.co/jinaai/jina-code-embeddings-1.5b-GGUF:Q8_0`)
 
 | Attribute | Value |
 |-----------|-------|
 | Parameters | 1.5B |
 | Base | Qwen2.5-Coder-1.5B |
-| Context window | 8,192 tokens |
-| Embedding dimensions | 768 |
-| vLLM support | Yes |
-| License | Apache 2.0 |
-| Code-specific | Yes — text-to-code, code-to-code retrieval |
-| Haskell exposure | Via Qwen2.5-Coder pre-training (80+ languages) |
+| Context window | 32,000 tokens (8K recommended) |
+| Embedding dimensions | 1536 |
+| Serving | Ollama (cross-platform: Mac Metal, Linux NVIDIA, CPU) |
+| Source | Official first-party GGUF from Jina AI on HuggingFace |
+| License | CC-BY-NC-4.0 |
+| Code-specific | Yes — text-to-code, code-to-code, code-to-text retrieval |
+| Languages | 15+ programming languages including Haskell via Qwen2.5-Coder base |
+| Quantization | Q8_0 (1.6 GB) |
+| Digest verification | SHA256 pinned and verified on every pull |
 
 **Why this model:**
 - Code-specialized with Qwen2.5-Coder base — understands code structure, not just text
-- Small enough (~3GB VRAM) to run alongside the full compose stack
-- vLLM-native for high-throughput batch embedding during ingestion
-- Any deficiencies are mitigated by BM25 keyword search via fused retrieval — exact function names, type signatures, and error codes are captured by keyword matching even when the embedding model misses semantic nuance
+- Official first-party GGUF from Jina AI — verifiable authenticity via SHA256 digest
+- Served via Ollama — works on Mac (Metal), Linux (NVIDIA), and CPU without platform-specific config
+- OpenAI-compatible `/v1/embeddings` endpoint — same API for all consumers
+- Any deficiencies are mitigated by BM25 keyword search via fused retrieval
 
 ---
 
