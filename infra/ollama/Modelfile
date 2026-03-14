@@ -1,0 +1,7 @@
+# Pinned embedding model for vibe-node knowledge base
+# Model: unclemusclez/jina-embeddings-v2-base-code
+# Architecture: jina-bert-v2, 160M params, 768-dim embeddings
+# Weights hash: sha256:33a8a1b6a1cbba662f292d32bb55f8d109c0e6cb02de2d243a1b70705ea20986
+
+FROM unclemusclez/jina-embeddings-v2-base-code
+TEMPLATE {{ .Prompt }}
