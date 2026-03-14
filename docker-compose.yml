@@ -1,6 +1,6 @@
 # vibe-node development infrastructure
 # Usage: docker compose up -d
-# Full stack: ParadeDB, vLLM, Mithril → cardano-node → Ogmios
+# Full stack: ParadeDB, Ollama, Mithril → cardano-node → Ogmios
 
 services:
   # ─── Knowledge Base Infrastructure ────────────────────────────────
@@ -25,71 +25,34 @@ services:
       - vibe-node
     restart: unless-stopped
 
-  vllm:
-    image: vllm/vllm-openai:latest
-    command:
-      - --model
-      - ${VLLM_MODEL:-jinaai/jina-code-embeddings-1.5b}
-      - --task
-      - embed
-      - --host
-      - "0.0.0.0"
-      - --port
-      - "8000"
-      - --dtype
-      - auto
+  ollama:
+    image: ollama/ollama:latest
     volumes:
-      - vllm-cache:/root/.cache/huggingface
+      - ollama-data:/root/.ollama
     ports:
-      - "${VLLM_PORT:-8000}:8000"
+      - "${OLLAMA_PORT:-11434}:11434"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "ollama", "list"]
       interval: 10s
-      timeout: 10s
+      timeout: 5s
       retries: 30
-      start_period: 120s
+      start_period: 10s
     networks:
       - vibe-node
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
 
-  # CPU-only vLLM (use with: docker compose --profile cpu up)
-  vllm-cpu:
-    image: vllm/vllm-openai:latest
-    profiles:
-      - cpu
-    command:
-      - --model
-      - ${VLLM_MODEL:-jinaai/jina-code-embeddings-1.5b}
-      - --task
-      - embed
-      - --host
-      - "0.0.0.0"
-      - --port
-      - "8000"
-      - --dtype
-      - auto
-      - --device
-      - cpu
-    volumes:
-      - vllm-cache:/root/.cache/huggingface
-    ports:
-      - "${VLLM_PORT:-8000}:8000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 10s
-      retries: 60
-      start_period: 300s
+  # Pull the embedding model on first startup
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["ollama", "pull", "${EMBEDDING_MODEL:-unclemusclez/jina-embeddings-v2-base-code}"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
     networks:
       - vibe-node
-    restart: unless-stopped
+    restart: "no"
 
   # ─── Cardano Infrastructure ───────────────────────────────────────
 
@@ -163,4 +126,4 @@ networks:
 volumes:
   paradedb-data:
   cardano-node-data:
-  vllm-cache:
+  ollama-data:
