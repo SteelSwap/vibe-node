@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-MODEL="${EMBEDDING_MODEL:-hf.co/jinaai/jina-code-embeddings-0.5b-GGUF:Q8_0}"
-EXPECTED_DIGEST="sha256:2f8aa3f34f1fae493ff9f6f7894ca7ba390b0d9a58fa0b4e65709a041beb0dc5"
+MODEL="${EMBEDDING_MODEL:-hf.co/jinaai/jina-code-embeddings-1.5b-GGUF:Q8_0}"
+EXPECTED_DIGEST="sha256:3a09a8817b852b5a4faaa6ebb1a5590322746d2b570b578d0b7e3b6e849062aa"
 
 echo "=== Ollama Model Init ==="
 echo "Model:           $MODEL"
