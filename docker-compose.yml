@@ -1,0 +1,166 @@
+# vibe-node development infrastructure
+# Usage: docker compose up -d
+# Full stack: ParadeDB, vLLM, Mithril → cardano-node → Ogmios
+
+services:
+  # ─── Knowledge Base Infrastructure ────────────────────────────────
+
+  paradedb:
+    image: paradedb/paradedb:latest
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vibenode}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vibenode}
+      POSTGRES_DB: ${POSTGRES_DB:-vibenode}
+    volumes:
+      - paradedb-data:/var/lib/postgresql/data
+      - ./infra/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${PARADEDB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vibenode}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - vibe-node
+    restart: unless-stopped
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    command:
+      - --model
+      - ${VLLM_MODEL:-jinaai/jina-code-embeddings-1.5b}
+      - --task
+      - embed
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --dtype
+      - auto
+    volumes:
+      - vllm-cache:/root/.cache/huggingface
+    ports:
+      - "${VLLM_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 120s
+    networks:
+      - vibe-node
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # CPU-only vLLM (use with: docker compose --profile cpu up)
+  vllm-cpu:
+    image: vllm/vllm-openai:latest
+    profiles:
+      - cpu
+    command:
+      - --model
+      - ${VLLM_MODEL:-jinaai/jina-code-embeddings-1.5b}
+      - --task
+      - embed
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --dtype
+      - auto
+      - --device
+      - cpu
+    volumes:
+      - vllm-cache:/root/.cache/huggingface
+    ports:
+      - "${VLLM_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+      start_period: 300s
+    networks:
+      - vibe-node
+    restart: unless-stopped
+
+  # ─── Cardano Infrastructure ───────────────────────────────────────
+
+  mithril:
+    build:
+      context: ./infra/mithril
+    environment:
+      CARDANO_NETWORK: ${CARDANO_NETWORK:-preprod}
+      SNAPSHOT_DIGEST: ${SNAPSHOT_DIGEST:-latest}
+    volumes:
+      - cardano-node-data:/data
+    networks:
+      - vibe-node
+    restart: "no"
+
+  cardano-node:
+    image: ghcr.io/intersectmbo/cardano-node:latest
+    depends_on:
+      mithril:
+        condition: service_completed_successfully
+    environment:
+      CARDANO_NODE_SOCKET_PATH: /data/node.socket
+      NETWORK: ${CARDANO_NETWORK:-preprod}
+    volumes:
+      - cardano-node-data:/data
+    ports:
+      - "${CARDANO_NODE_PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /data/node.socket"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    networks:
+      - vibe-node
+    restart: unless-stopped
+
+  ogmios:
+    image: cardanosolutions/ogmios:latest
+    depends_on:
+      cardano-node:
+        condition: service_healthy
+    command:
+      - --host
+      - "0.0.0.0"
+      - --node-socket
+      - /data/node.socket
+      - --node-config
+      - /data/config.json
+    volumes:
+      - cardano-node-data:/data:ro
+    ports:
+      - "${OGMIOS_PORT:-1337}:1337"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1337/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - vibe-node
+    restart: unless-stopped
+
+# ─── Networks ─────────────────────────────────────────────────────
+
+networks:
+  vibe-node:
+    driver: bridge
+
+# ─── Volumes ──────────────────────────────────────────────────────
+
+volumes:
+  paradedb-data:
+  cardano-node-data:
+  vllm-cache:
