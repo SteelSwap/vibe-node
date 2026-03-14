@@ -74,24 +74,39 @@ services:
       - vibe-node
     restart: "no"
 
+  cardano-config:
+    image: alpine:latest
+    entrypoint: ["/bin/sh", "/fetch-config.sh"]
+    environment:
+      CARDANO_NETWORK: ${CARDANO_NETWORK:-preprod}
+    volumes:
+      - cardano-node-config:/shared
+      - ./infra/cardano/fetch-config.sh:/fetch-config.sh:ro
+    networks:
+      - vibe-node
+    restart: "no"
+
   cardano-node:
     image: ghcr.io/intersectmbo/cardano-node:latest
     depends_on:
       mithril:
         condition: service_completed_successfully
+      cardano-config:
+        condition: service_completed_successfully
     environment:
-      CARDANO_NODE_SOCKET_PATH: /data/node.socket
+      CARDANO_NODE_SOCKET_PATH: /ipc/node.socket
       NETWORK: ${CARDANO_NETWORK:-preprod}
     volumes:
       - cardano-node-data:/data
+      - cardano-node-ipc:/ipc
     ports:
       - "${CARDANO_NODE_PORT:-3001}:3001"
     healthcheck:
-      test: ["CMD-SHELL", "test -S /data/node.socket"]
+      test: ["CMD-SHELL", "test -S /ipc/node.socket"]
       interval: 10s
       timeout: 5s
-      retries: 30
-      start_period: 60s
+      retries: 60
+      start_period: 120s
     networks:
       - vibe-node
     restart: unless-stopped
@@ -105,11 +120,12 @@ services:
       - --host
       - "0.0.0.0"
       - --node-socket
-      - /data/node.socket
+      - /ipc/node.socket
       - --node-config
-      - /data/config.json
+      - /shared/config.json
     volumes:
-      - cardano-node-data:/data:ro
+      - cardano-node-ipc:/ipc:ro
+      - cardano-node-config:/shared:ro
     ports:
       - "${OGMIOS_PORT:-1337}:1337"
     healthcheck:
@@ -132,4 +148,6 @@ networks:
 volumes:
   paradedb-data:
   cardano-node-data:
+  cardano-node-ipc:
+  cardano-node-config:
   ollama-data:
