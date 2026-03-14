@@ -6,13 +6,13 @@ services:
   # ─── Knowledge Base Infrastructure ────────────────────────────────
 
   paradedb:
-    image: paradedb/paradedb:latest
+    image: paradedb/paradedb:latest-pg17
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vibenode}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vibenode}
       POSTGRES_DB: ${POSTGRES_DB:-vibenode}
     volumes:
-      - paradedb-data:/var/lib/postgresql
+      - paradedb-data:/var/lib/postgresql/data
       - ./infra/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "${PARADEDB_PORT:-5432}:5432"
