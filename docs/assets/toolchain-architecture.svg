@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" font-family="Inter, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="devGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e293b"/>
+      <stop offset="100%" style="stop-color:#0f172a"/>
+    </linearGradient>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#2563eb"/>
+    </linearGradient>
+    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6"/>
+      <stop offset="100%" style="stop-color:#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#06b6d4"/>
+      <stop offset="100%" style="stop-color:#0891b2"/>
+    </linearGradient>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981"/>
+      <stop offset="100%" style="stop-color:#059669"/>
+    </linearGradient>
+    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#d97706"/>
+    </linearGradient>
+    <filter id="boxShadow" x="-3%" y="-3%" width="106%" height="112%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="720" height="520" rx="16" fill="#0f172a"/>
+
+  <!-- Title -->
+  <text x="360" y="32" text-anchor="middle" fill="#e2e8f0" font-size="18" font-weight="700">Toolchain Architecture</text>
+
+  <!-- ─── Development Environment Section ─── -->
+  <rect x="20" y="50" width="340" height="200" rx="12" fill="url(#devGrad)" stroke="#334155" stroke-width="1" filter="url(#boxShadow)"/>
+  <text x="190" y="72" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="600" letter-spacing="1">DEVELOPMENT ENVIRONMENT</text>
+
+  <!-- Claude Code -->
+  <rect x="40" y="85" width="140" height="50" rx="8" fill="url(#blueGrad)"/>
+  <text x="110" y="108" text-anchor="middle" fill="white" font-size="11" font-weight="600">Claude Code</text>
+  <text x="110" y="123" text-anchor="middle" fill="#bfdbfe" font-size="9">Opus 4.6 · 1M ctx</text>
+
+  <!-- Search MCP -->
+  <rect x="200" y="85" width="140" height="50" rx="8" fill="url(#purpleGrad)"/>
+  <text x="270" y="108" text-anchor="middle" fill="white" font-size="11" font-weight="600">Search MCP</text>
+  <text x="270" y="123" text-anchor="middle" fill="#ddd6fe" font-size="9">Embed + RRF fusion</text>
+
+  <!-- Arrow Claude → Search -->
+  <line x1="183" y1="110" x2="197" y2="110" stroke="#64748b" stroke-width="1.5"/>
+
+  <!-- Plane MCP -->
+  <rect x="40" y="150" width="140" height="40" rx="8" fill="#334155"/>
+  <text x="110" y="175" text-anchor="middle" fill="#e2e8f0" font-size="10" font-weight="500">Plane MCP</text>
+
+  <!-- CrystalDB MCP -->
+  <rect x="200" y="150" width="140" height="40" rx="8" fill="#334155"/>
+  <text x="270" y="175" text-anchor="middle" fill="#e2e8f0" font-size="10" font-weight="500">CrystalDB MCP</text>
+
+  <!-- Arrow Claude → Plane -->
+  <line x1="110" y1="138" x2="110" y2="147" stroke="#64748b" stroke-width="1.5"/>
+  <!-- Arrow Claude → CrystalDB -->
+  <line x1="183" y1="125" x2="270" y2="147" stroke="#64748b" stroke-width="1" stroke-dasharray="4,2"/>
+
+  <!-- ─── Knowledge Base Section ─── -->
+  <rect x="380" y="50" width="320" height="200" rx="12" fill="url(#devGrad)" stroke="#334155" stroke-width="1" filter="url(#boxShadow)"/>
+  <text x="540" y="72" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="600" letter-spacing="1">KNOWLEDGE BASE</text>
+
+  <!-- ParadeDB -->
+  <rect x="400" y="85" width="140" height="50" rx="8" fill="url(#cyanGrad)"/>
+  <text x="470" y="108" text-anchor="middle" fill="white" font-size="11" font-weight="600">ParadeDB</text>
+  <text x="470" y="123" text-anchor="middle" fill="#a5f3fc" font-size="9">pg17 · BM25 · pgvector</text>
+
+  <!-- vLLM -->
+  <rect x="560" y="85" width="120" height="50" rx="8" fill="url(#emeraldGrad)"/>
+  <text x="620" y="108" text-anchor="middle" fill="white" font-size="11" font-weight="600">vLLM</text>
+  <text x="620" y="123" text-anchor="middle" fill="#a7f3d0" font-size="9">Jina Code 1.5B</text>
+
+  <!-- Arrow Search → ParadeDB -->
+  <line x1="343" y1="110" x2="397" y2="110" stroke="#64748b" stroke-width="1.5"/>
+  <!-- Arrow Search → vLLM -->
+  <line x1="343" y1="100" x2="557" y2="100" stroke="#64748b" stroke-width="1" stroke-dasharray="4,2"/>
+
+  <!-- Ingestion tools -->
+  <rect x="400" y="150" width="85" height="40" rx="8" fill="#334155"/>
+  <text x="442" y="175" text-anchor="middle" fill="#e2e8f0" font-size="9" font-weight="500">PaddleOCR</text>
+
+  <rect x="495" y="150" width="85" height="40" rx="8" fill="#334155"/>
+  <text x="537" y="175" text-anchor="middle" fill="#e2e8f0" font-size="9" font-weight="500">tree-sitter</text>
+
+  <rect x="590" y="150" width="90" height="40" rx="8" fill="#334155"/>
+  <text x="635" y="175" text-anchor="middle" fill="#e2e8f0" font-size="9" font-weight="500">GitHub API</text>
+
+  <!-- Arrows ingestion → ParadeDB -->
+  <line x1="442" y1="148" x2="460" y2="138" stroke="#475569" stroke-width="1"/>
+  <line x1="537" y1="148" x2="480" y2="138" stroke="#475569" stroke-width="1"/>
+  <line x1="635" y1="148" x2="490" y2="138" stroke="#475569" stroke-width="1"/>
+
+  <!-- ─── Cardano Infrastructure Section ─── -->
+  <rect x="20" y="270" width="340" height="120" rx="12" fill="url(#devGrad)" stroke="#334155" stroke-width="1" filter="url(#boxShadow)"/>
+  <text x="190" y="292" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="600" letter-spacing="1">CARDANO INFRASTRUCTURE</text>
+
+  <!-- Mithril -->
+  <rect x="40" y="305" width="90" height="65" rx="8" fill="url(#amberGrad)"/>
+  <text x="85" y="335" text-anchor="middle" fill="white" font-size="10" font-weight="600">Mithril</text>
+  <text x="85" y="350" text-anchor="middle" fill="#fef3c7" font-size="8">Snapshots</text>
+
+  <!-- cardano-node -->
+  <rect x="148" y="305" width="100" height="65" rx="8" fill="url(#blueGrad)"/>
+  <text x="198" y="330" text-anchor="middle" fill="white" font-size="10" font-weight="600">cardano-</text>
+  <text x="198" y="345" text-anchor="middle" fill="white" font-size="10" font-weight="600">node</text>
+  <text x="198" y="360" text-anchor="middle" fill="#bfdbfe" font-size="8">Haskell ref</text>
+
+  <!-- Ogmios -->
+  <rect x="266" y="305" width="75" height="65" rx="8" fill="url(#purpleGrad)"/>
+  <text x="303" y="335" text-anchor="middle" fill="white" font-size="10" font-weight="600">Ogmios</text>
+  <text x="303" y="350" text-anchor="middle" fill="#ddd6fe" font-size="8">JSON/WS</text>
+
+  <!-- Arrows Mithril → node → Ogmios -->
+  <line x1="133" y1="337" x2="145" y2="337" stroke="#94a3b8" stroke-width="1.5"/>
+  <line x1="251" y1="337" x2="263" y2="337" stroke="#94a3b8" stroke-width="1.5"/>
+
+  <!-- ─── Project Tooling Section ─── -->
+  <rect x="380" y="270" width="320" height="120" rx="12" fill="url(#devGrad)" stroke="#334155" stroke-width="1" filter="url(#boxShadow)"/>
+  <text x="540" y="292" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="600" letter-spacing="1">PROJECT TOOLING</text>
+
+  <rect x="400" y="305" width="85" height="40" rx="8" fill="#334155"/>
+  <text x="442" y="322" text-anchor="middle" fill="#e2e8f0" font-size="9" font-weight="600">Python 3.14</text>
+  <text x="442" y="336" text-anchor="middle" fill="#94a3b8" font-size="8">uv · typer</text>
+
+  <rect x="495" y="305" width="85" height="40" rx="8" fill="#334155"/>
+  <text x="537" y="322" text-anchor="middle" fill="#e2e8f0" font-size="9" font-weight="600">SQLModel</text>
+  <text x="537" y="336" text-anchor="middle" fill="#94a3b8" font-size="8">asyncpg</text>
+
+  <rect x="590" y="305" width="90" height="40" rx="8" fill="#334155"/>
+  <text x="635" y="322" text-anchor="middle" fill="#e2e8f0" font-size="9" font-weight="600">MkDocs</text>
+  <text x="635" y="336" text-anchor="middle" fill="#94a3b8" font-size="8">Material</text>
+
+  <rect x="400" y="350" width="85" height="30" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="442" y="370" text-anchor="middle" fill="#94a3b8" font-size="8">bump-my-version</text>
+
+  <rect x="495" y="350" width="85" height="30" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="537" y="370" text-anchor="middle" fill="#94a3b8" font-size="8">Docker Compose</text>
+
+  <rect x="590" y="350" width="90" height="30" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="635" y="370" text-anchor="middle" fill="#94a3b8" font-size="8">Plane</text>
+
+  <!-- Connection lines between sections -->
+  <line x1="270" y1="193" x2="470" y2="268" stroke="#334155" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="110" y1="253" x2="110" y2="268" stroke="#334155" stroke-width="1" stroke-dasharray="4,3"/>
+
+  <!-- Legend -->
+  <text x="360" y="430" text-anchor="middle" fill="#64748b" font-size="10">Solid lines: direct data flow · Dashed lines: configuration/query paths</text>
+
+  <!-- Data flow labels -->
+  <rect x="130" y="445" width="160" height="55" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="210" y="465" text-anchor="middle" fill="#3b82f6" font-size="10" font-weight="600">Specs + Code + Issues</text>
+  <text x="210" y="480" text-anchor="middle" fill="#64748b" font-size="9">Ingested → ParadeDB</text>
+  <text x="210" y="492" text-anchor="middle" fill="#64748b" font-size="9">Embedded via vLLM</text>
+
+  <rect x="320" y="445" width="160" height="55" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="400" y="465" text-anchor="middle" fill="#8b5cf6" font-size="10" font-weight="600">Agent Queries</text>
+  <text x="400" y="480" text-anchor="middle" fill="#64748b" font-size="9">Search MCP → embed</text>
+  <text x="400" y="492" text-anchor="middle" fill="#64748b" font-size="9">→ BM25+vector RRF</text>
+
+  <rect x="510" y="445" width="160" height="55" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="590" y="465" text-anchor="middle" fill="#06b6d4" font-size="10" font-weight="600">Conformance</text>
+  <text x="590" y="480" text-anchor="middle" fill="#64748b" font-size="9">Our node vs Haskell</text>
+  <text x="590" y="492" text-anchor="middle" fill="#64748b" font-size="9">via Ogmios/socket</text>
+</svg>

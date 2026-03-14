@@ -32,6 +32,14 @@ theme:
 
 nav:
   - Home: index.md
+  - How We Build:
+    - Methodology: methodology/index.md
+    - Toolchain: methodology/toolchain.md
+    - Agent Architecture: methodology/agents.md
+    - Coordination: methodology/coordination.md
+    - Workflow: methodology/workflow.md
+  - Gap Analysis:
+    - Overview: gap-analysis/index.md
   - Architecture:
     - Overview: architecture/overview.md
   - Roadmap:
@@ -53,6 +61,11 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.tabbed:
       alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
   - tables
   - toc:
       permalink: true
+
+extra_javascript:
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
