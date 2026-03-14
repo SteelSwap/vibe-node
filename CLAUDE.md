@@ -35,6 +35,22 @@ This is a vibe-coded project. The vibes must be verifiable:
 - If written in a language used by an existing alternative node (Rust, Go, TypeScript, C++, C#), MOSS and JPlag scores must show low structural similarity to those implementations
 - All of the above are subject to reasonable third-party review
 
+### No Other Node Implementations
+
+**You may NOT reference, use, or be influenced by ANY alternative Cardano node implementation.** This includes but is not limited to:
+
+- **Amaru** (Rust)
+- **Dingo** (Go)
+- **Dolos** (Rust)
+- Any other implementation in any language other than Haskell
+
+The only permitted sources are:
+
+1. **The published specifications** (formal specs, CIPs, Ouroboros papers, CDDL schemas)
+2. **The Haskell cardano-node and its ecosystem** (cardano-ledger, ouroboros-network, ouroboros-consensus, plutus)
+
+This is a hard requirement. The goal is to build our Python implementation from the specs and the Haskell reference implementation only. If you encounter code, documentation, or architecture from an alternative node implementation, do not use it. The MOSS/JPlag originality requirement extends beyond just structural similarity — we must demonstrate that our implementation derives solely from the specs and the Haskell node.
+
 ### Deadline
 
 Deliver before Amaru or Dingo claim mainnet readiness, or within one year — whichever is later.

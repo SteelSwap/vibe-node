@@ -7,3 +7,12 @@
 [submodule "vendor/ouroboros-network"]
 	path = vendor/ouroboros-network
 	url = https://github.com/IntersectMBO/ouroboros-network.git
+[submodule "vendor/ouroboros-consensus"]
+	path = vendor/ouroboros-consensus
+	url = https://github.com/IntersectMBO/ouroboros-consensus.git
+[submodule "vendor/plutus"]
+	path = vendor/plutus
+	url = https://github.com/IntersectMBO/plutus.git
+[submodule "vendor/formal-ledger-specs"]
+	path = vendor/formal-ledger-specs
+	url = https://github.com/IntersectMBO/formal-ledger-specifications.git
