@@ -1,0 +1,9 @@
+[submodule "vendor/cardano-node"]
+	path = vendor/cardano-node
+	url = https://github.com/IntersectMBO/cardano-node.git
+[submodule "vendor/cardano-ledger"]
+	path = vendor/cardano-ledger
+	url = https://github.com/IntersectMBO/cardano-ledger.git
+[submodule "vendor/ouroboros-network"]
+	path = vendor/ouroboros-network
+	url = https://github.com/IntersectMBO/ouroboros-network.git
