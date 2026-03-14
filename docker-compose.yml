@@ -50,7 +50,7 @@ services:
     entrypoint: ["/bin/sh", "/init.sh"]
     environment:
       OLLAMA_HOST: http://ollama:11434
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-unclemusclez/jina-embeddings-v2-base-code}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-hf.co/jinaai/jina-code-embeddings-0.5b-GGUF:Q8_0}
     volumes:
       - ./infra/ollama/init.sh:/init.sh:ro
     networks:

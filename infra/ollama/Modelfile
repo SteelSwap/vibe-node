@@ -1,7 +1,11 @@
 # Pinned embedding model for vibe-node knowledge base
-# Model: unclemusclez/jina-embeddings-v2-base-code
-# Architecture: jina-bert-v2, 160M params, 768-dim embeddings
-# Weights hash: sha256:33a8a1b6a1cbba662f292d32bb55f8d109c0e6cb02de2d243a1b70705ea20986
+# Model: jinaai/jina-code-embeddings-0.5b (OFFICIAL from Jina AI)
+# Source: https://huggingface.co/jinaai/jina-code-embeddings-0.5b-GGUF
+# Architecture: Qwen2.5-Coder-0.5B, 500M params, 896-dim embeddings
+# Quantization: Q8_0 (531 MB)
+# Languages: 15+ programming languages
+# Context: 32K tokens (8K recommended)
+# Weights digest: sha256:2f8aa3f34f1fae493ff9f6f7894ca7ba390b0d9a58fa0b4e65709a041beb0dc5
 
-FROM unclemusclez/jina-embeddings-v2-base-code
+FROM hf.co/jinaai/jina-code-embeddings-0.5b-GGUF:Q8_0
 TEMPLATE {{ .Prompt }}

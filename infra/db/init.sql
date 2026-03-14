@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS spec_documents (
     published_date      TIMESTAMPTZ,
     content_markdown    TEXT          NOT NULL,
     content_plain       TEXT          NOT NULL,
-    embedding           vector(768),
+    embedding           vector(896),
     chunk_type          VARCHAR(32)   NOT NULL,
     parent_document_id  UUID REFERENCES spec_documents(id),
     metadata            JSONB,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS code_chunks (
     line_end        INTEGER       NOT NULL,
     content         TEXT          NOT NULL,
     signature       TEXT,
-    embedding       vector(768),
+    embedding       vector(896),
     era             VARCHAR(32)   NOT NULL,
     metadata        JSONB,
 
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS github_issues (
     closed_at         TIMESTAMPTZ,
     author            VARCHAR(128)  NOT NULL,
     content_combined  TEXT          NOT NULL,
-    embedding         vector(768),
+    embedding         vector(896),
     metadata          JSONB,
 
     CONSTRAINT uq_github_issues_identity
