@@ -2,7 +2,7 @@
 
 Chunks markdown by heading structure with hierarchical title tracking.
 Each chunk carries document_title, section_title, subsection_title,
-section_index, and an embed_text that includes the full hierarchy
+and an embed_text that includes the full hierarchy
 for better embedding quality.
 """
 
@@ -207,7 +207,6 @@ def chunk_cddl(
                 document_title=doc_title,
                 section_title=current_name,
                 subsection_title=None,
-                section_index=len(chunks),
                 content_markdown=md,
                 content_plain=text,
                 embed_text=embed,
