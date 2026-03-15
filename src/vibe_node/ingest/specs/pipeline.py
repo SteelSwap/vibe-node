@@ -112,7 +112,7 @@ class SpecIngestor:
         task = None
         if progress:
             task = progress.add_task(
-                f"[green]{source.source_repo} ({source.format})",
+                f"[green]{source.source_repo} ({source.format}/{source.era})",
                 total=len(files),
             )
 
