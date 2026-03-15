@@ -17,7 +17,11 @@ CREATE EXTENSION IF NOT EXISTS pg_search;
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS spec_documents (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title               VARCHAR(512)  NOT NULL,
+    document_title      VARCHAR(512)  NOT NULL,
+    section_title       VARCHAR(512),
+    subsection_title    VARCHAR(512),
+    prev_chunk_id       UUID,
+    next_chunk_id       UUID,
     source_repo         VARCHAR(256)  NOT NULL,
     source_path         VARCHAR(1024) NOT NULL,
     era                 VARCHAR(32)   NOT NULL,
@@ -27,6 +31,7 @@ CREATE TABLE IF NOT EXISTS spec_documents (
     published_date      TIMESTAMPTZ,
     content_markdown    TEXT          NOT NULL,
     content_plain       TEXT          NOT NULL,
+    embed_text          TEXT          NOT NULL,
     embedding           vector(1536),
     chunk_type          VARCHAR(32)   NOT NULL,
     parent_document_id  UUID REFERENCES spec_documents(id),
@@ -63,6 +68,7 @@ CREATE TABLE IF NOT EXISTS code_chunks (
     line_end        INTEGER       NOT NULL,
     content         TEXT          NOT NULL,
     signature       TEXT,
+    embed_text      TEXT          NOT NULL,
     embedding       vector(1536),
     era             VARCHAR(32)   NOT NULL,
     metadata        JSONB,
