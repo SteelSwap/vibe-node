@@ -188,7 +188,7 @@ def issues(
         typer.echo("Get one: https://github.com/settings/tokens (no special scopes needed)")
         raise typer.Exit(1)
 
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
 
     logging.basicConfig(
         level=logging.WARNING,
@@ -215,6 +215,7 @@ def issues(
                 BarColumn(),
                 TaskProgressColumn(),
                 TimeElapsedColumn(),
+                TimeRemainingColumn(),
             ) as progress:
                 async with get_session() as session:
                     results = await ingestor.ingest_all(
@@ -234,5 +235,142 @@ def issues(
         finally:
             await embed_client.close()
             await ingestor.close()
+
+    asyncio.run(run())
+
+
+@ingest_app.command()
+def specs(
+    format: str = typer.Option(
+        None, "--format", "-f",
+        help="Only ingest this format: markdown, cddl, latex, agda",
+    ),
+    source: str = typer.Option(
+        None, "--source", "-s",
+        help="Only ingest sources matching this substring (e.g. 'consensus').",
+    ),
+    limit: int = typer.Option(
+        None, "--limit", "-n",
+        help="Max files per source (for testing).",
+    ),
+) -> None:
+    """Ingest spec documents from vendor submodules."""
+    import asyncio
+    import logging
+
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+
+    async def run():
+        from vibe_node.db.session import get_session
+        from vibe_node.embed.client import EmbeddingClient
+        from vibe_node.ingest.specs.pipeline import SpecIngestor
+
+        suffix = ""
+        if format:
+            suffix += f" format={format}"
+        if source:
+            suffix += f" source={source}"
+        if limit:
+            suffix += f" limit={limit}"
+        typer.echo(f"Ingesting spec documents...{suffix}")
+
+        embed_client = EmbeddingClient()
+        ingestor = SpecIngestor()
+
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+            ) as progress:
+                async with get_session() as session:
+                    results = await ingestor.ingest_all(
+                        session, embed_client,
+                        format_filter=format,
+                        source_filter=source,
+                        limit=limit,
+                        progress=progress,
+                    )
+
+            typer.echo("")
+            typer.echo("=== Spec Ingestion Complete ===")
+            total = 0
+            for key, count in results.items():
+                typer.echo(f"  {key}: {count} chunks")
+                total += count
+            typer.echo(f"  Total: {total} chunks")
+        finally:
+            await embed_client.close()
+
+    asyncio.run(run())
+
+
+@ingest_app.command()
+def code(
+    repo: str = typer.Option(
+        None, "--repo", "-r",
+        help="Single repo to ingest (e.g. cardano-node). Omit for all.",
+    ),
+    limit: int = typer.Option(
+        None, "--limit", "-n",
+        help="Max tags per repo (for testing).",
+    ),
+) -> None:
+    """Index Haskell source code from vendor submodules by release tag."""
+    import asyncio
+    import logging
+
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+
+    async def run():
+        from vibe_node.db.session import get_session
+        from vibe_node.embed.client import EmbeddingClient
+        from vibe_node.ingest.code import CodeIngestor
+        from vibe_node.ingest.config import CODE_REPOS
+
+        repos = {repo: CODE_REPOS[repo]} if repo and repo in CODE_REPOS else CODE_REPOS
+        suffix = f" (limit {limit} tags per repo)" if limit else ""
+        typer.echo(f"Indexing code from {len(repos)} repo(s){suffix}...")
+
+        embed_client = EmbeddingClient()
+        ingestor = CodeIngestor()
+
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+            ) as progress:
+                async with get_session() as session:
+                    results = await ingestor.ingest_all(
+                        session, embed_client, repos,
+                        limit=limit, progress=progress,
+                    )
+
+            typer.echo("")
+            typer.echo("=== Code Indexing Complete ===")
+            total = 0
+            for name, count in results.items():
+                typer.echo(f"  {name}: {count} chunks")
+                total += count
+            typer.echo(f"  Total: {total} chunks")
+        finally:
+            await embed_client.close()
 
     asyncio.run(run())

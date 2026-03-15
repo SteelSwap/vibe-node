@@ -24,7 +24,11 @@ class SpecDocument(SQLModel, table=True):
     __tablename__ = "spec_documents"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    title: str = Field(max_length=512)
+    document_title: str = Field(max_length=512)
+    section_title: str | None = Field(default=None, max_length=512)
+    subsection_title: str | None = Field(default=None, max_length=512)
+    prev_chunk_id: uuid.UUID | None = Field(default=None)
+    next_chunk_id: uuid.UUID | None = Field(default=None)
     source_repo: str = Field(max_length=256, index=True)
     source_path: str = Field(max_length=1024)
     era: str = Field(max_length=32, index=True)
@@ -34,6 +38,7 @@ class SpecDocument(SQLModel, table=True):
     published_date: datetime | None = Field(default=None)
     content_markdown: str = Field(sa_column=Column(Text))
     content_plain: str = Field(sa_column=Column(Text))
+    embed_text: str = Field(sa_column=Column(Text))
     chunk_type: str = Field(max_length=32, index=True)
     parent_document_id: uuid.UUID | None = Field(default=None, foreign_key="spec_documents.id")
     metadata_: dict | None = Field(default=None, sa_column=Column("metadata", JSON))
@@ -57,6 +62,7 @@ class CodeChunk(SQLModel, table=True):
     line_end: int
     content: str = Field(sa_column=Column(Text))
     signature: str | None = Field(default=None, sa_column=Column(Text))
+    embed_text: str = Field(sa_column=Column(Text))
     era: str = Field(max_length=32, index=True)
     metadata_: dict | None = Field(default=None, sa_column=Column("metadata", JSON))
 
