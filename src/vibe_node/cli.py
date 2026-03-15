@@ -2,14 +2,23 @@
 
 import subprocess
 import sys
+from pathlib import Path
 
 import typer
 
+# Load .env file if present (so GITHUB_TOKEN etc. are available)
+_env_file = Path.cwd() / ".env"
+if _env_file.exists():
+    from dotenv import load_dotenv
+    load_dotenv(_env_file)
+
 from vibe_node import __version__
 
-app = typer.Typer(help="vibe-node — a vibe-coded Cardano node.")
+app = typer.Typer(help="vibe-node — a vibe-coded Cardano node.", invoke_without_command=True)
 db_app = typer.Typer(help="Database management commands.")
+ingest_app = typer.Typer(help="Data ingestion commands.")
 app.add_typer(db_app, name="db")
+app.add_typer(ingest_app, name="ingest")
 
 
 def version_callback(value: bool) -> None:
@@ -18,14 +27,16 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(
         False, "--version", "-v", callback=version_callback, is_eager=True,
         help="Show version and exit.",
     ),
 ) -> None:
-    pass
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
 
 
 @app.command()
@@ -42,31 +53,45 @@ def serve(
 @db_app.command()
 def reset(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip first confirmation."),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip ALL confirmations (use in scripts)."),
 ) -> None:
     """Drop all tables and recreate the database schema.
 
     THIS IS DESTRUCTIVE. All data in ParadeDB will be lost.
-    Requires double confirmation unless --yes is passed.
+    Use --force to skip all confirmations.
     """
-    typer.echo("WARNING: This will DROP ALL TABLES in the ParadeDB database.")
-    typer.echo("All spec documents, code chunks, issues, and embeddings will be lost.")
-    typer.echo("")
+    if not force:
+        typer.echo("WARNING: This will DROP ALL TABLES in the ParadeDB database.")
+        typer.echo("All spec documents, code chunks, issues, and embeddings will be lost.")
+        typer.echo("")
 
-    if not yes:
-        confirm1 = typer.confirm("Are you sure you want to reset the database?")
-        if not confirm1:
+        if not yes:
+            confirm1 = typer.confirm("Are you sure you want to reset the database?")
+            if not confirm1:
+                typer.echo("Aborted.")
+                raise typer.Exit()
+
+        confirm2 = typer.confirm(
+            "FINAL CONFIRMATION: Type 'y' to permanently delete all data"
+        )
+        if not confirm2:
             typer.echo("Aborted.")
             raise typer.Exit()
 
-    confirm2 = typer.confirm(
-        "FINAL CONFIRMATION: Type 'y' to permanently delete all data"
-    )
-    if not confirm2:
-        typer.echo("Aborted.")
-        raise typer.Exit()
-
     typer.echo("")
     typer.echo("Resetting database...")
+
+    # Terminate active connections first
+    subprocess.run(
+        [
+            "docker", "compose", "exec", "-T", "paradedb",
+            "psql", "-U", "vibenode", "-d", "vibenode", "-c",
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            "WHERE datname = 'vibenode' AND pid <> pg_backend_pid();",
+        ],
+        capture_output=True,
+        text=True,
+    )
 
     # Drop and recreate via docker compose
     result = subprocess.run(
@@ -135,3 +160,79 @@ def status() -> None:
         raise typer.Exit(1)
 
     typer.echo(result.stdout)
+
+
+@ingest_app.command()
+def issues(
+    repo: str = typer.Option(
+        None, "--repo", "-r",
+        help="Single repo to ingest (e.g. IntersectMBO/cardano-node). Omit for all.",
+    ),
+    limit: int = typer.Option(
+        None, "--limit", "-n",
+        help="Max issues/PRs per repo (for testing). Omit for all.",
+    ),
+) -> None:
+    """Ingest GitHub issues and PRs with full discussion threads.
+
+    Requires GITHUB_TOKEN env var for reasonable rate limits (5000 req/hr).
+    Without it, GitHub limits to 60 req/hr which is too slow for ingestion.
+    """
+    import asyncio
+    import logging
+    import os
+
+    if not os.getenv("GITHUB_TOKEN"):
+        typer.echo("ERROR: GITHUB_TOKEN is required (GraphQL API needs authentication).")
+        typer.echo("Set it: export GITHUB_TOKEN=ghp_your_token_here")
+        typer.echo("Get one: https://github.com/settings/tokens (no special scopes needed)")
+        raise typer.Exit(1)
+
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
+
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+
+    async def run():
+        from vibe_node.db.session import get_session
+        from vibe_node.embed.client import EmbeddingClient
+        from vibe_node.ingest.config import GITHUB_REPOS
+        from vibe_node.ingest.github import GitHubIngestor
+
+        repos = [repo] if repo else GITHUB_REPOS
+        suffix = f" (limit {limit} per repo)" if limit else ""
+        typer.echo(f"Ingesting issues and PRs from {len(repos)} repo(s){suffix}...")
+
+        embed_client = EmbeddingClient()
+        ingestor = GitHubIngestor()
+
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeElapsedColumn(),
+            ) as progress:
+                async with get_session() as session:
+                    results = await ingestor.ingest_all(
+                        session, embed_client, repos,
+                        limit=limit, progress=progress,
+                    )
+
+            typer.echo("")
+            typer.echo("=== Ingestion Complete ===")
+            total_issues = 0
+            total_prs = 0
+            for r, counts in results.items():
+                typer.echo(f"  {r}: {counts['issues']} issues, {counts['prs']} PRs")
+                total_issues += counts["issues"]
+                total_prs += counts["prs"]
+            typer.echo(f"  Total: {total_issues} issues, {total_prs} PRs")
+        finally:
+            await embed_client.close()
+            await ingestor.close()
+
+    asyncio.run(run())
