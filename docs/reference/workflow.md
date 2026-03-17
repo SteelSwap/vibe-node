@@ -44,7 +44,7 @@ If the spec and the Haskell node disagree, **the Haskell node wins**. Document t
 
 ### Step 4: Document Gaps
 
-Any divergence between spec and implementation gets recorded. See the [Gap Analysis](../gap-analysis/index.md) methodology for the entry format.
+Any divergence between spec and implementation gets recorded. See the [Gap Analysis](../specs/gap-analysis.md) methodology for the entry format.
 
 ## Commit Workflow
 
@@ -93,4 +93,4 @@ When a divergence is discovered, record it in `docs/gap-analysis/`:
 **Discovered during:** [Which phase/task uncovered this]
 ```
 
-See the [Gap Analysis](../gap-analysis/index.md) page for the full methodology.
+See the [Gap Analysis](../specs/gap-analysis.md) page for the full methodology.

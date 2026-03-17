@@ -1,0 +1,174 @@
+/* vibe-node custom styles — SteelSwap aesthetic with Agent Millenial flair
+ *
+ * SteelSwap brand gradient: #ED458E (pink) → #F48020 (orange) at 110deg
+ * Background palette: #1a1b1e (primary), #25262b (card), #2c2e33 (hover)
+ * Text: #c1c2c5 (primary), #909296 (secondary)
+ */
+
+:root {
+  --ss-pink: #ED458E;
+  --ss-orange: #F48020;
+  --ss-gradient: linear-gradient(110deg, #ED458E 0%, #F48020 100%);
+  --ss-gradient-subtle: linear-gradient(110deg, #ED458E33 0%, #F4802033 100%);
+  --bg-primary: #1a1b1e;
+  --bg-card: #25262b;
+  --bg-hover: #2c2e33;
+  --border: #373a40;
+  --text-primary: #c1c2c5;
+  --text-secondary: #909296;
+}
+
+/* ── Gradient header bar — full SteelSwap gradient ────────────── */
+.md-header {
+  background: var(--ss-gradient);
+}
+
+.md-header[data-md-state="shadow"] {
+  box-shadow: 0 4px 20px rgba(237, 69, 142, 0.25);
+}
+
+.md-header .md-header__title {
+  color: white;
+  font-weight: 700;
+}
+
+.md-header .md-header__button {
+  color: white;
+}
+
+/* ── Navigation tabs ──────────────────────────────────────────── */
+.md-tabs {
+  background: #1a1b1e;
+  border-bottom: 1px solid #373a40;
+}
+
+.md-tabs__link--active {
+  border-bottom: 2px solid #ED458E;
+}
+
+/* ── Hero h1 headings — SteelSwap gradient text ───────────────── */
+.md-content h1 {
+  background: var(--ss-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* ── h2 with subtle accent ────────────────────────────────────── */
+.md-content h2 {
+  border-bottom: 1px solid #373a40;
+  padding-bottom: 0.3em;
+}
+
+/* ── Code blocks — warm dark with pink accent ─────────────────── */
+.highlight pre {
+  border-left: 3px solid #ED458E;
+  border-radius: 0 8px 8px 0;
+  background: #25262b !important;
+}
+
+code {
+  background: #2c2e33;
+}
+
+/* ── Admonitions ──────────────────────────────────────────────── */
+.md-typeset .admonition.note,
+.md-typeset details.note {
+  border-color: #ED458E;
+}
+
+.md-typeset .admonition.warning,
+.md-typeset details.warning {
+  border-color: #F48020;
+}
+
+.md-typeset .admonition.tip,
+.md-typeset details.tip {
+  border-color: #40c057;
+}
+
+/* ── Tables ───────────────────────────────────────────────────── */
+.md-typeset table:not([class]) th {
+  background: var(--ss-gradient);
+  color: white;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75em;
+  letter-spacing: 0.05em;
+}
+
+.md-typeset table:not([class]) tr:hover td {
+  background-color: #ED458E0d;
+}
+
+/* ── Footer ───────────────────────────────────────────────────── */
+.md-footer {
+  background: #1a1b1e;
+}
+
+.md-footer-meta {
+  background: #141517;
+}
+
+/* ── Links — pink accent ──────────────────────────────────────── */
+.md-typeset a {
+  color: #ED458E;
+}
+
+.md-typeset a:hover {
+  color: #F48020;
+  text-decoration: underline;
+}
+
+/* ── Sidebar active link ──────────────────────────────────────── */
+.md-nav__link--active {
+  color: #ED458E !important;
+}
+
+.md-sidebar__scrollwrap::-webkit-scrollbar-thumb {
+  background: #ED458E44;
+  border-radius: 4px;
+}
+
+/* ── Search bar ───────────────────────────────────────────────── */
+.md-search__input {
+  background: #25262b;
+  border: 1px solid #373a40;
+}
+
+.md-search__input:focus {
+  border-color: #ED458E;
+  box-shadow: 0 0 0 3px #ED458E22;
+}
+
+/* ── Mermaid diagrams — dark theme matching brand ─────────────── */
+.mermaid {
+  background: #1a1b1e;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #373a40;
+}
+
+/* ── Content area subtle warm tone ────────────────────────────── */
+[data-md-color-scheme="slate"] .md-main {
+  background: #1a1b1e;
+}
+
+[data-md-color-scheme="slate"] .md-sidebar {
+  background: #1a1b1e;
+}
+
+/* ── Buttons and interactive elements ─────────────────────────── */
+.md-typeset .md-button {
+  background: var(--ss-gradient);
+  color: white;
+  border: none;
+  border-radius: 6px;
+}
+
+.md-typeset .md-button:hover {
+  opacity: 0.9;
+  box-shadow: 0 4px 12px #ED458E44;
+}

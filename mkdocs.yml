@@ -1,18 +1,23 @@
 site_name: vibe-node
 site_description: A vibe-coded Cardano node — built in public, tested against the Haskell node
 site_author: Elder Millenial
+copyright: "&copy; 2026 SteelSwap — Licensed under AGPL-3.0"
 
 theme:
   name: material
+  logo: assets/steelswap-logo.png
+  favicon: assets/steelswap-logo.png
+  icon:
+    repo: fontawesome/brands/github
   palette:
     - scheme: slate
-      primary: deep orange
+      primary: pink
       accent: orange
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
     - scheme: default
-      primary: deep orange
+      primary: pink
       accent: orange
       toggle:
         icon: material/brightness-7
@@ -32,21 +37,34 @@ theme:
 
 nav:
   - Home: index.md
-  - How We Build:
-    - Methodology: methodology/index.md
-    - Toolchain: methodology/toolchain.md
-    - Agent Architecture: methodology/agents.md
-    - Coordination: methodology/coordination.md
-    - Workflow: methodology/workflow.md
-  - Gap Analysis:
-    - Overview: gap-analysis/index.md
-  - Architecture:
-    - Overview: architecture/overview.md
-  - Roadmap:
-    - Milestones: roadmap/milestones.md
-    - Phase 0 Tasks: roadmap/tasks.md
-  - Development Log:
-    - Journal: devlog/index.md
+  - About:
+    - Overview: about/index.md
+    - The Challenge: about/challenge.md
+    - How We Build: about/methodology.md
+    - Toolchain: about/toolchain.md
+    - Agent Architecture: about/agents.md
+    - Coordination: about/coordination.md
+  - Specifications:
+    - Overview: specs/index.md
+    - Gap Analysis: specs/gap-analysis.md
+  - Development:
+    - Overview: development/index.md
+    - Milestones: development/milestones.md
+    - Phase 0 Tasks: development/tasks.md
+    - Development Log:
+      - Journal: development/devlog/index.md
+      - "Phase 0, Wave 1 — Foundation": development/devlog/phase0-wave1.md
+      - "Phase 0, Wave 2 — Ingestion & CLI": development/devlog/phase0-wave2.md
+  - Reference:
+    - Overview: reference/index.md
+    - CLI Reference: reference/cli-reference.md
+    - Database Schema: reference/schema.md
+    - Architecture: reference/architecture.md
+    - Development Workflow: reference/workflow.md
+    - Pipelines:
+      - Spec Ingestion: reference/pipelines/spec-ingestion.md
+      - Code Indexing: reference/pipelines/code-indexing.md
+      - GitHub Ingestion: reference/pipelines/github-ingestion.md
 
 markdown_extensions:
   - admonition
@@ -67,5 +85,13 @@ markdown_extensions:
   - toc:
       permalink: true
 
+extra_css:
+  - stylesheets/extra.css
+
 extra_javascript:
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/SteelSwap/vibe-node

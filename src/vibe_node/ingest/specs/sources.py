@@ -130,4 +130,14 @@ SPEC_SOURCES: list[SpecSource] = [
         format="agda",
         era="conway",
     ),
+
+    # ── PDF sources (Phase 5 — Ouroboros papers, any PDF-only specs) ──
+    # Place PDF files in data/pdf/ — they are not in submodules
+    SpecSource(
+        source_repo="IOG/ouroboros-papers",
+        submodule_path="data/pdf",
+        spec_glob="*.pdf",
+        format="pdf",
+        era="multi-era",
+    ),
 ]

@@ -62,6 +62,7 @@ class CodeChunk(SQLModel, table=True):
     line_end: int
     content: str = Field(sa_column=Column(Text))
     signature: str | None = Field(default=None, sa_column=Column(Text))
+    content_hash: str = Field(max_length=64, index=True)
     embed_text: str = Field(sa_column=Column(Text))
     era: str = Field(max_length=32, index=True)
     metadata_: dict | None = Field(default=None, sa_column=Column("metadata", JSON))

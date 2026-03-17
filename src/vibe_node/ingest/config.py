@@ -22,6 +22,7 @@ CODE_REPOS: dict[str, str] = {
     "ouroboros-network": "vendor/ouroboros-network",
     "ouroboros-consensus": "vendor/ouroboros-consensus",
     "plutus": "vendor/plutus",
+    "formal-ledger-specs": "vendor/formal-ledger-specs",
 }
 
 # Regex patterns for filtering release tags per repo.
@@ -35,4 +36,5 @@ TAG_PATTERNS: dict[str, re.Pattern[str]] = {
     "ouroboros-network": re.compile(r"^ouroboros-network-\d"),
     "ouroboros-consensus": re.compile(r"^ouroboros-consensus-\d"),
     "plutus": re.compile(r"^\d+\.\d+\.\d+\.\d+$"),
+    "formal-ledger-specs": re.compile(r"^conway-v"),
 }

@@ -1,77 +1,69 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 200" font-family="Inter, -apple-system, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 210" font-family="Inter, -apple-system, sans-serif">
   <defs>
-    <filter id="cwShadow" x="-5%" y="-5%" width="110%" height="115%">
-      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000" flood-opacity="0.15"/>
+    <linearGradient id="cwSSGrad" gradientTransform="rotate(110)">
+      <stop offset="0%" style="stop-color:#ED458E"/>
+      <stop offset="100%" style="stop-color:#F48020"/>
+    </linearGradient>
+    <filter id="cwShadow">
+      <feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="#000" flood-opacity="0.25"/>
     </filter>
   </defs>
 
   <!-- Background -->
-  <rect width="700" height="200" rx="16" fill="#0f172a"/>
+  <rect width="720" height="210" rx="16" fill="#1a1b1e"/>
+  <rect width="720" height="4" fill="url(#cwSSGrad)"/>
 
   <!-- Title -->
-  <text x="350" y="30" text-anchor="middle" fill="#e2e8f0" font-size="15" font-weight="600">Work Item Lifecycle</text>
+  <text x="360" y="30" text-anchor="middle" fill="url(#cwSSGrad)" font-size="16" font-weight="800" letter-spacing="-0.02em">Work Item Lifecycle</text>
 
-  <!-- Step 1 -->
-  <rect x="20" y="55" width="80" height="70" rx="10" fill="#f59e0b" filter="url(#cwShadow)"/>
-  <text x="60" y="82" text-anchor="middle" fill="white" font-size="9" font-weight="600">CREATE</text>
-  <text x="60" y="95" text-anchor="middle" fill="white" font-size="9" font-weight="600">ISSUE</text>
-  <text x="60" y="112" text-anchor="middle" fill="#fef3c7" font-size="7">in Plane</text>
+  <!-- Steps as gradient-fading boxes from pink to orange -->
+  <rect x="15" y="55" width="88" height="72" rx="10" fill="#ED458E" filter="url(#cwShadow)"/>
+  <text x="59" y="83" text-anchor="middle" fill="white" font-size="9" font-weight="700">CREATE</text>
+  <text x="59" y="96" text-anchor="middle" fill="white" font-size="9" font-weight="700">ISSUE</text>
+  <text x="59" y="114" text-anchor="middle" fill="#ffcce0" font-size="7">in Plane</text>
 
-  <!-- Arrow -->
-  <line x1="103" y1="90" x2="118" y2="90" stroke="#64748b" stroke-width="1.5"/>
-  <polygon points="116,86 122,90 116,94" fill="#64748b"/>
+  <line x1="106" y1="91" x2="118" y2="91" stroke="#909296" stroke-width="1.5"/>
 
-  <!-- Step 2 -->
-  <rect x="125" y="55" width="80" height="70" rx="10" fill="#8b5cf6" filter="url(#cwShadow)"/>
-  <text x="165" y="82" text-anchor="middle" fill="white" font-size="9" font-weight="600">ASSIGN TO</text>
-  <text x="165" y="95" text-anchor="middle" fill="white" font-size="9" font-weight="600">MODULE</text>
-  <text x="165" y="112" text-anchor="middle" fill="#ddd6fe" font-size="7">+ priority</text>
+  <rect x="121" y="55" width="88" height="72" rx="10" fill="#d94080" filter="url(#cwShadow)"/>
+  <text x="165" y="83" text-anchor="middle" fill="white" font-size="9" font-weight="700">ASSIGN TO</text>
+  <text x="165" y="96" text-anchor="middle" fill="white" font-size="9" font-weight="700">MODULE</text>
+  <text x="165" y="114" text-anchor="middle" fill="#ffd0e0" font-size="7">+ priority</text>
 
-  <!-- Arrow -->
-  <line x1="208" y1="90" x2="223" y2="90" stroke="#64748b" stroke-width="1.5"/>
-  <polygon points="221,86 227,90 221,94" fill="#64748b"/>
+  <line x1="212" y1="91" x2="224" y2="91" stroke="#909296" stroke-width="1.5"/>
 
-  <!-- Step 3 -->
-  <rect x="230" y="55" width="80" height="70" rx="10" fill="#3b82f6" filter="url(#cwShadow)"/>
-  <text x="270" y="82" text-anchor="middle" fill="white" font-size="9" font-weight="600">AGENT</text>
-  <text x="270" y="95" text-anchor="middle" fill="white" font-size="9" font-weight="600">PICKS UP</text>
-  <text x="270" y="112" text-anchor="middle" fill="#bfdbfe" font-size="7">worktree</text>
+  <rect x="227" y="55" width="88" height="72" rx="10" fill="#c83868" filter="url(#cwShadow)"/>
+  <text x="271" y="83" text-anchor="middle" fill="white" font-size="9" font-weight="700">AGENT</text>
+  <text x="271" y="96" text-anchor="middle" fill="white" font-size="9" font-weight="700">PICKS UP</text>
+  <text x="271" y="114" text-anchor="middle" fill="#ffd0e0" font-size="7">worktree</text>
 
-  <!-- Arrow -->
-  <line x1="313" y1="90" x2="328" y2="90" stroke="#64748b" stroke-width="1.5"/>
-  <polygon points="326,86 332,90 326,94" fill="#64748b"/>
+  <line x1="318" y1="91" x2="330" y2="91" stroke="#909296" stroke-width="1.5"/>
 
-  <!-- Step 4 -->
-  <rect x="335" y="55" width="80" height="70" rx="10" fill="#06b6d4" filter="url(#cwShadow)"/>
-  <text x="375" y="82" text-anchor="middle" fill="white" font-size="9" font-weight="600">IMPLEMENT</text>
-  <text x="375" y="95" text-anchor="middle" fill="white" font-size="9" font-weight="600">+ TEST</text>
-  <text x="375" y="112" text-anchor="middle" fill="#a5f3fc" font-size="7">spec-first</text>
+  <rect x="333" y="55" width="88" height="72" rx="10" fill="#E06040" filter="url(#cwShadow)"/>
+  <text x="377" y="83" text-anchor="middle" fill="white" font-size="9" font-weight="700">IMPLEMENT</text>
+  <text x="377" y="96" text-anchor="middle" fill="white" font-size="9" font-weight="700">+ TEST</text>
+  <text x="377" y="114" text-anchor="middle" fill="#ffd0c0" font-size="7">spec-first</text>
 
-  <!-- Arrow -->
-  <line x1="418" y1="90" x2="433" y2="90" stroke="#64748b" stroke-width="1.5"/>
-  <polygon points="431,86 437,90 431,94" fill="#64748b"/>
+  <line x1="424" y1="91" x2="436" y2="91" stroke="#909296" stroke-width="1.5"/>
 
-  <!-- Step 5 -->
-  <rect x="440" y="55" width="80" height="70" rx="10" fill="#10b981" filter="url(#cwShadow)"/>
-  <text x="480" y="82" text-anchor="middle" fill="white" font-size="9" font-weight="600">REVIEW</text>
-  <text x="480" y="95" text-anchor="middle" fill="white" font-size="9" font-weight="600">+ MERGE</text>
-  <text x="480" y="112" text-anchor="middle" fill="#a7f3d0" font-size="7">PR → main</text>
+  <rect x="439" y="55" width="88" height="72" rx="10" fill="#E87030" filter="url(#cwShadow)"/>
+  <text x="483" y="83" text-anchor="middle" fill="white" font-size="9" font-weight="700">REVIEW</text>
+  <text x="483" y="96" text-anchor="middle" fill="white" font-size="9" font-weight="700">+ MERGE</text>
+  <text x="483" y="114" text-anchor="middle" fill="#ffe0c0" font-size="7">PR → main</text>
 
-  <!-- Arrow -->
-  <line x1="523" y1="90" x2="538" y2="90" stroke="#64748b" stroke-width="1.5"/>
-  <polygon points="536,86 542,90 536,94" fill="#64748b"/>
+  <line x1="530" y1="91" x2="542" y2="91" stroke="#909296" stroke-width="1.5"/>
 
-  <!-- Step 6 -->
-  <rect x="545" y="55" width="80" height="70" rx="10" fill="#ef4444" filter="url(#cwShadow)"/>
-  <text x="585" y="82" text-anchor="middle" fill="white" font-size="9" font-weight="600">UPDATE</text>
-  <text x="585" y="95" text-anchor="middle" fill="white" font-size="9" font-weight="600">DOCS</text>
-  <text x="585" y="112" text-anchor="middle" fill="#fecaca" font-size="7">+ roadmap</text>
+  <rect x="545" y="55" width="88" height="72" rx="10" fill="#F48020" filter="url(#cwShadow)"/>
+  <text x="589" y="83" text-anchor="middle" fill="white" font-size="9" font-weight="700">UPDATE</text>
+  <text x="589" y="96" text-anchor="middle" fill="white" font-size="9" font-weight="700">DOCS</text>
+  <text x="589" y="114" text-anchor="middle" fill="#ffe0c0" font-size="7">+ roadmap</text>
 
-  <!-- Arrow -->
-  <path d="M 585 128 Q 585 155 350 155 Q 60 155 60 128" stroke="#334155" stroke-width="1" fill="none" stroke-dasharray="4,3"/>
-  <text x="350" y="170" text-anchor="middle" fill="#475569" font-size="8">Next issue in module</text>
+  <!-- Return arrow -->
+  <path d="M 589 130 Q 589 158 360 158 Q 59 158 59 130" stroke="#373a40" stroke-width="1" fill="none" stroke-dasharray="4,3"/>
+  <text x="360" y="174" text-anchor="middle" fill="#909296" font-size="8">Next issue in module</text>
 
   <!-- Bottom labels -->
-  <text x="165" y="192" text-anchor="middle" fill="#64748b" font-size="9">Plane is the source of truth</text>
-  <text x="480" y="192" text-anchor="middle" fill="#64748b" font-size="9">Docs are the public record</text>
+  <text x="170" y="198" text-anchor="middle" fill="#909296" font-size="9" font-style="italic">Plane is the source of truth</text>
+  <text x="530" y="198" text-anchor="middle" fill="#909296" font-size="9" font-style="italic">Docs are the public record</text>
+
+  <rect y="206" width="720" height="4" fill="url(#cwSSGrad)" rx="2"/>
 </svg>

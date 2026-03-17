@@ -81,8 +81,8 @@ The goal is dual-audience documentation: a newcomer should be able to look at a 
 ### Plane Is the Coordination Layer
 **Plane** is the project management tool for all work items. Priorities, milestones, dependent work items, sprint planning, and task tracking all live in Plane. However, because radical transparency demands public access:
 
-- **Every milestone and its work items must be summarized in `docs/roadmap/milestones.md`**
-- **Development log entries in `docs/devlog/`** should reference the Plane work items they address
+- **Every milestone and its work items must be summarized in `docs/development/milestones.md`**
+- **Development log entries in `docs/development/devlog/`** should reference the Plane work items they address
 - Plane is the internal coordination tool; the docs are the public-facing record
 
 ### Everything Is Reproducible
@@ -152,10 +152,10 @@ The node must match or beat Haskell on memory. Bloat isn't just ugly — it's a 
 
 Every implementation step must follow this loop:
 
-1. **Consult the spec** — Use the search MCP to find the relevant spec sections before writing implementation code. Note the document, section, and equation numbers.
+1. **Consult the spec** — Use `vibe-node db search` to find relevant spec sections before writing implementation code. Note the document, section, and equation numbers. *(TODO: Replace with Search MCP once M0.7 is implemented.)*
 2. **Implement against the spec** — Code should trace back to specific spec definitions and rules. Include spec references in comments where the mapping isn't obvious.
 3. **Test against the Haskell node** — The Haskell node is the oracle of truth. Use Ogmios and the Docker Compose cardano-node for conformance testing.
-4. **Document observed gaps** — Any divergence between spec and Haskell implementation is recorded in `docs/gap-analysis/` using the standard entry format.
+4. **Document observed gaps** — Any divergence between spec and Haskell implementation is recorded in `docs/specs/gap-analysis.md` using the standard entry format.
 
 ### Gap Analysis Entry Format
 
@@ -172,6 +172,44 @@ Every implementation step must follow this loop:
 ```
 
 Gap analysis is not a phase — it is a discipline woven into every development step. The spec is the ideal, the code is the reality, the gap is the measured delta.
+
+### Versioned Codebase Queries
+
+The `code_tag_manifest` table records which functions exist at each release tag of the Haskell node. Use it during implementation to understand how the reference implementation evolved:
+
+- **"What existed at version X?"** — `SELECT * FROM code_tag_manifest WHERE release_tag = 'X'`
+- **"When did this function change?"** — Track `content_hash` across tags for the same function name
+- **"What changed between releases?"** — Diff content_hash sets between two tags
+
+This is essential context when implementing against the spec — understanding not just what the Haskell node does now, but how it got there.
+
+## Dependency Sidecar Pattern
+
+When a Python dependency doesn't support our Python version (e.g., PaddleOCR lacks 3.14 wheels), use a **Docker sidecar** instead of downgrading Python or using an inferior alternative:
+
+1. Create a Dockerfile in `infra/<tool>/` with the required Python version
+2. Wrap the tool in a lightweight HTTP API (Flask)
+3. Add the service to `docker-compose.yml`
+4. Call it from Python via httpx
+
+This preserves reproducibility (Docker handles the version mismatch) while keeping the main project on the latest Python.
+
+## Documentation Structure
+
+The MkDocs documentation uses a **4-tab structure** with 3 levels of hierarchy:
+
+- **About** — Plain language for any audience: challenge, methodology, toolchain, agent architecture, coordination
+- **Specifications** — Cardano specs (converted from LaTeX/Agda/CDDL/PDF) + gap analysis entries
+- **Development** — Roadmap, milestones, task tracking, development log (organized by phase/wave/module)
+- **Reference** — CLI commands, database schema, architecture, pipeline docs, development workflow
+
+When adding new documentation:
+- Public-facing explanatory content → **About**
+- Spec-related content → **Specifications**
+- Progress/planning content → **Development**
+- Technical reference for developers → **Reference**
+
+Development log entries are organized by phase and wave, with per-module sections and an "Issues Encountered & Fixed" table documenting problems and their solutions.
 
 ## Project Standards
 

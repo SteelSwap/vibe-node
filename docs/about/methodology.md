@@ -20,7 +20,7 @@ Every implementation step follows the same discipline:
 1. **Consult the spec** — Use the Search MCP to find relevant spec sections before writing code
 2. **Implement against the spec** — Code traces back to specific definitions and rules
 3. **Test against the Haskell node** — The Haskell node is the oracle of truth. If we disagree, we're wrong.
-4. **Document observed gaps** — Any divergence between spec and Haskell implementation gets recorded in the [Gap Analysis](../gap-analysis/index.md)
+4. **Document observed gaps** — Any divergence between spec and Haskell implementation gets recorded in the [Gap Analysis](../specs/gap-analysis.md)
 
 This isn't a waterfall. It's a tight loop that runs for every function, every protocol message, every ledger rule.
 
@@ -46,4 +46,4 @@ We want someone to look at this a year from now and learn not just what we built
 - [Toolchain](toolchain.md) — Every tool we use, why we chose it
 - [Agent Architecture](agents.md) — How Agent Millenial orchestrates the work
 - [Coordination](coordination.md) — How Plane tracks work items
-- [Workflow](workflow.md) — Step-by-step development process
+- [Workflow](../reference/workflow.md) — Step-by-step development process
