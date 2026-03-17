@@ -1,0 +1,111 @@
+# Ledger State Transition {#sec:ledger-trans}
+
+Figure [1](#fig:rules:ledger){reference-type="ref" reference="fig:rules:ledger"} now separates the cases where all scripts validate in a transaction and the case where there is one that does not. The cases are distinguished by the use of the $\IsValidating$ tag.
+
+Besides fee collection, no side effects should occur when processing a transaction containing a script that does not validate. That is, no delegation or pool state updates, or update proposals should be applied. The UTxO rule is still applied, as this is where the correctness of the validation tag is verified, and script fees are collected.
+
+:::: {#fig:rules:ledger .figure}
+$$\begin{equation}
+    \label{eq:ledger}
+    \inference[ledger-V]
+    {
+      \var{txb}\leteq\txbody{tx} \\
+      \fun{txvaltag}~{tx} \in \Yes \\~\\
+      {
+        \begin{array}{c}
+          \var{slot} \\
+          \var{txIx} \\
+          \var{pp} \\
+          \var{tx}\\
+          \var{reserves}
+        \end{array}
+      }
+      \vdash
+      dpstate \trans{\hyperref[fig:rules:delegation-sequence]{delegs}}{
+                     \fun{txcerts}~\var{txb}} dpstate'
+      \\~\\
+      (\var{dstate}, \var{pstate}) \leteq \var{dpstate} \\
+      (\var{stkCreds}, \_, \_, \_, \_, \var{genDelegs}, \_) \leteq \var{dstate} \\
+      (\var{stpools}, \_, \_) \leteq \var{pstate} \\
+      \\~\\
+      {
+        \begin{array}{c}
+        \var{slot} \\
+        \var{pp} \\
+        \var{stkCreds} \\
+        \var{stpools} \\
+        \var{genDelegs} \\
+        \end{array}
+      }
+      \vdash \var{utxoSt} \trans{\hyperref[fig:rules:utxow-shelley]{utxow}}{tx} \var{utxoSt'}
+    }
+    {
+      \begin{array}{c}
+        \var{slot} \\
+        \var{txIx} \\
+        \var{pp} \\
+        \var{reserves}
+      \end{array}
+      \vdash
+      \left(
+        \begin{array}{ll}
+          \var{utxoSt} \\
+          \var{dpstate} \\
+        \end{array}
+      \right)
+      \trans{ledger}{tx}
+      \left(
+        \begin{array}{ll}
+          \varUpdate{utxoSt'} \\
+          \varUpdate{dpstate'} \\
+        \end{array}
+      \right)
+    }
+\end{equation}$$ $$\begin{equation}
+    \label{eq:ledger}
+    \inference[ledger-NV]
+    {
+      \fun{txvaltag}~{tx} \in \Nope \\~\\
+      (\var{dstate}, \var{pstate}) \leteq \var{dpstate} \\
+      (\var{stkCreds}, \_, \_, \_, \_, \var{genDelegs}, \_) \leteq \var{dstate} \\
+      (\var{stpools}, \_, \_) \leteq \var{pstate} \\
+      \\~\\
+      {
+        \begin{array}{c}
+        \var{slot} \\
+        \var{pp} \\
+        \var{stkCreds} \\
+        \var{stpools} \\
+        \var{genDelegs} \\
+        \end{array}
+      }
+      \vdash \var{utxoSt} \trans{\hyperref[fig:rules:utxow-shelley]{utxow}}{tx} \var{utxoSt'}
+    }
+    {
+      \begin{array}{c}
+        \var{slot} \\
+        \var{txIx} \\
+        \var{pp} \\
+        \var{reserves}
+      \end{array}
+      \vdash
+      \left(
+        \begin{array}{ll}
+          \var{utxoSt} \\
+          \var{dpstate} \\
+        \end{array}
+      \right)
+      \trans{ledger}{tx}
+      \left(
+        \begin{array}{ll}
+          \varUpdate{utxoSt'} \\
+          \var{dpstate} \\
+        \end{array}
+      \right)
+    }
+\end{equation}$$
+
+::: caption
+Ledger inference rules
+:::
+::::

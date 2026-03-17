@@ -456,6 +456,24 @@ def backfill_completion() -> None:
     asyncio.run(_run())
 
 
+@db_app.command(name="export-specs")
+def export_specs_cmd() -> None:
+    """Export pre-converted spec markdown to docs/specs/ organized by era.
+
+    Reads era metadata from the database, then copies pre-converted markdown
+    from data/specs/ to docs/specs/{era}/ with clean filenames and index pages.
+    """
+    from vibe_node.export_specs import export_specs
+
+    typer.echo("Exporting spec documents to docs/specs/...")
+    stats = export_specs()
+    if not stats:
+        typer.echo("No documents exported.", err=True)
+        raise typer.Exit(1)
+    total = sum(stats.values())
+    typer.echo(f"\nDone: {total} documents across {len(stats)} categories.")
+
+
 @db_app.command(name="create-indexes")
 def create_indexes() -> None:
     """Create BM25 and HNSW indexes on all tables."""

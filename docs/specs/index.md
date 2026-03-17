@@ -8,6 +8,18 @@ We ingest and index specifications from 17+ sources across 6 repositories, cover
 
 All specs are searchable via the knowledge base — use `vibe-node db search "query"` to find relevant sections across all indexed documents.
 
+### Browse by Era
+
+- **[Byron](byron/index.md)** — 11 documents
+- **[Shelley](shelley/index.md)** — 32 documents
+- **[Mary / Allegra](shelley-ma/index.md)** — 8 documents
+- **[Alonzo](alonzo/index.md)** — 10 documents
+- **[Conway](conway/index.md)** — 35 documents
+- **[Plutus](plutus/index.md)** — 11 documents
+- **[Consensus](consensus/index.md)** — 49 documents
+- **[Networking](networking/index.md)** — 8 documents
+- **[Papers](papers/index.md)** — 2 documents
+
 ### Sources by Era
 
 | Era | Primary Source | Format |

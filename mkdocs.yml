@@ -47,6 +47,15 @@ nav:
   - Specifications:
     - Overview: specs/index.md
     - Gap Analysis: specs/gap-analysis.md
+    - Byron: specs/byron/index.md
+    - Shelley: specs/shelley/index.md
+    - Mary/Allegra: specs/shelley-ma/index.md
+    - Alonzo: specs/alonzo/index.md
+    - Conway: specs/conway/index.md
+    - Plutus: specs/plutus/index.md
+    - Consensus: specs/consensus/index.md
+    - Networking: specs/networking/index.md
+    - Papers: specs/papers/index.md
   - Development:
     - Overview: development/index.md
     - Milestones: development/milestones.md
