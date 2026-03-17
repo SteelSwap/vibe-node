@@ -334,15 +334,29 @@ async def search_all(
             vector_weight=vector_weight,
         )
         try:
-            rows = await conn.fetch(sql, *params)
+            ranked_rows = await conn.fetch(sql, *params)
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning("Search failed on %s: %s", cfg["table"], e)
             continue
 
-        for row in rows:
+        if not ranked_rows:
+            continue
+
+        # RRF query returns (id, rrf_total, total_count) only.
+        # Fetch full rows for the ranked IDs to get title/preview columns.
+        ranked_ids = [row["id"] for row in ranked_rows]
+        score_map = {row["id"]: float(row["rrf_total"]) for row in ranked_rows}
+
+        full_rows = await conn.fetch(
+            f"SELECT * FROM {cfg['table']} WHERE id = ANY($1::uuid[])",
+            ranked_ids,
+        )
+
+        for row in full_rows:
             r = dict(row)
             r["entity_type"] = etype
+            r["rrf_total"] = score_map.get(row["id"], 0)
             title_col = cfg.get("title_column")
             r["_title"] = r.get(title_col, "") if title_col else ""
             preview_col = cfg["preview_column"]
