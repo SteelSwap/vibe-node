@@ -313,18 +313,6 @@ Create BM25 (pg_search) and HNSW (pgvector) indexes on all 6 knowledge base tabl
 vibe-node db create-indexes
 ```
 
-### db rebuild-manifest
-
-```
-vibe-node db rebuild-manifest
-```
-
-Rebuild the `code_tag_manifest` table from existing `code_chunks` data. Use after schema changes, partial indexing, or to fix gaps.
-
-```bash
-vibe-node db rebuild-manifest
-```
-
 ---
 
 ## Key Files
