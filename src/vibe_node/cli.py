@@ -15,10 +15,18 @@ if _env_file.exists():
 from vibe_node import __version__
 
 app = typer.Typer(help="vibe-node — a vibe-coded Cardano node.", invoke_without_command=True)
-db_app = typer.Typer(help="Database management commands.")
-ingest_app = typer.Typer(help="Data ingestion commands.")
+db_app = typer.Typer(help="Database management commands.", invoke_without_command=True)
+ingest_app = typer.Typer(help="Data ingestion commands.", invoke_without_command=True)
+
+# Import infra commands and extra db commands from cli_infra
+from vibe_node.cli_infra import infra_app, register_db_extras
+
 app.add_typer(db_app, name="db")
 app.add_typer(ingest_app, name="ingest")
+app.add_typer(infra_app, name="infra")
+
+# Register snapshot, restore, search on the db app
+register_db_extras(db_app)
 
 
 def version_callback(value: bool) -> None:
@@ -35,6 +43,18 @@ def main(
         help="Show version and exit.",
     ),
 ) -> None:
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+
+
+@db_app.callback(invoke_without_command=True)
+def db_callback(ctx: typer.Context) -> None:
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+
+
+@ingest_app.callback(invoke_without_command=True)
+def ingest_callback(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
 
@@ -172,11 +192,15 @@ def issues(
         None, "--limit", "-n",
         help="Max issues/PRs per repo (for testing). Omit for all.",
     ),
+    rescan: bool = typer.Option(
+        False, "--rescan",
+        help="Re-fetch all issues/PRs to check for new comments and updates.",
+    ),
 ) -> None:
     """Ingest GitHub issues and PRs with full discussion threads.
 
-    Requires GITHUB_TOKEN env var for reasonable rate limits (5000 req/hr).
-    Without it, GitHub limits to 60 req/hr which is too slow for ingestion.
+    Requires GITHUB_TOKEN env var for authentication (GraphQL API).
+    Use --rescan to update existing items with new comments.
     """
     import asyncio
     import logging
@@ -203,6 +227,8 @@ def issues(
 
         repos = [repo] if repo else GITHUB_REPOS
         suffix = f" (limit {limit} per repo)" if limit else ""
+        if rescan:
+            suffix += " [RESCAN]"
         typer.echo(f"Ingesting issues and PRs from {len(repos)} repo(s){suffix}...")
 
         embed_client = EmbeddingClient()
@@ -221,6 +247,7 @@ def issues(
                     results = await ingestor.ingest_all(
                         session, embed_client, repos,
                         limit=limit, progress=progress,
+                        rescan=rescan,
                     )
 
             typer.echo("")
@@ -243,7 +270,7 @@ def issues(
 def specs(
     format: str = typer.Option(
         None, "--format", "-f",
-        help="Only ingest this format: markdown, cddl, latex, agda",
+        help="Only ingest this format: markdown, cddl, latex, agda, pdf",
     ),
     source: str = typer.Option(
         None, "--source", "-s",
@@ -252,6 +279,10 @@ def specs(
     limit: int = typer.Option(
         None, "--limit", "-n",
         help="Max files per source (for testing).",
+    ),
+    history: bool = typer.Option(
+        False, "--history",
+        help="Walk git commit history for versioned spec tracking (slow).",
     ),
 ) -> None:
     """Ingest spec documents from vendor submodules."""
@@ -277,6 +308,8 @@ def specs(
             suffix += f" source={source}"
         if limit:
             suffix += f" limit={limit}"
+        if history:
+            suffix += " [HISTORY MODE]"
         typer.echo(f"Ingesting spec documents...{suffix}")
 
         embed_client = EmbeddingClient()
@@ -292,13 +325,22 @@ def specs(
                 TimeRemainingColumn(),
             ) as progress:
                 async with get_session() as session:
-                    results = await ingestor.ingest_all(
-                        session, embed_client,
-                        format_filter=format,
-                        source_filter=source,
-                        limit=limit,
-                        progress=progress,
-                    )
+                    if history:
+                        results = await ingestor.ingest_history(
+                            session, embed_client,
+                            format_filter=format,
+                            source_filter=source,
+                            limit=limit,
+                            progress=progress,
+                        )
+                    else:
+                        results = await ingestor.ingest_all(
+                            session, embed_client,
+                            format_filter=format,
+                            source_filter=source,
+                            limit=limit,
+                            progress=progress,
+                        )
 
             typer.echo("")
             typer.echo("=== Spec Ingestion Complete ===")
@@ -374,3 +416,63 @@ def code(
             await embed_client.close()
 
     asyncio.run(run())
+
+
+@db_app.command(name="rebuild-manifest")
+def rebuild_manifest() -> None:
+    """Rebuild the code_tag_manifest table from existing code_chunks data."""
+    import asyncio
+
+    async def _run():
+        from vibe_node.db.session import get_session
+        from vibe_node.ingest.code import CodeIngestor
+
+        typer.echo("Rebuilding code_tag_manifest from code_chunks...")
+        async with get_session() as session:
+            count = await CodeIngestor.rebuild_manifest(session)
+        typer.echo(f"Done. Manifest has {count} entries.")
+
+    asyncio.run(_run())
+
+
+@db_app.command(name="backfill-completion")
+def backfill_completion() -> None:
+    """Backfill code_tag_completion markers from existing data.
+
+    Run this once after upgrading to populate completion markers for
+    tags that were fully ingested before the marker was added.
+    """
+    import asyncio
+
+    async def _run():
+        from vibe_node.db.session import get_session
+        from vibe_node.ingest.code import CodeIngestor
+
+        typer.echo("Backfilling code_tag_completion from existing data...")
+        async with get_session() as session:
+            count = await CodeIngestor.backfill_completion(session)
+        typer.echo(f"Done. {count} tags marked as complete.")
+
+    asyncio.run(_run())
+
+
+@db_app.command(name="create-indexes")
+def create_indexes() -> None:
+    """Create BM25 and HNSW indexes on all tables."""
+    sql_path = Path(__file__).resolve().parents[2] / "infra" / "db" / "create_indexes.sql"
+    if not sql_path.exists():
+        typer.echo(f"Index SQL not found: {sql_path}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo("Creating BM25 and HNSW indexes (this may take a few minutes)...")
+    result = subprocess.run(
+        ["docker", "compose", "exec", "-T", "paradedb",
+         "psql", "-U", "vibenode", "-d", "vibenode", "-f", "/dev/stdin"],
+        input=sql_path.read_text(),
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        typer.echo(f"Error creating indexes:\n{result.stderr}", err=True)
+        raise typer.Exit(1)
+    typer.echo("Indexes created successfully.")
+    typer.echo(result.stdout)
