@@ -287,3 +287,73 @@ OFFSET ${offset_param}
 """.strip()
 
     return sql, params
+
+
+async def search_all(
+    conn,
+    query: str,
+    embedding: list[float],
+    entity_type: str | None = None,
+    filters: dict | None = None,
+    limit: int = 10,
+    offset: int = 0,
+    k: int = 60,
+    bm25_weight: float = 0.5,
+    vector_weight: float = 0.5,
+) -> tuple[list[dict], int]:
+    """Search across all tables (or a single entity type) using RRF.
+
+    Returns (results, total_count). Each result includes 'entity_type' field.
+    Skips tables that don't exist (Phase 1 tables).
+    """
+    from vibe_node.db.search_config import get_available_configs
+
+    available = await get_available_configs(conn)
+
+    if entity_type:
+        if entity_type not in available:
+            return [], 0
+        configs = {entity_type: available[entity_type]}
+    else:
+        configs = available
+
+    all_results = []
+
+    for etype, cfg in configs.items():
+        sql, params = build_rrf_query(
+            table=cfg["table"],
+            text_column=cfg["text_column"],
+            query=query,
+            embedding=embedding,
+            filters=filters or {},
+            filter_columns=cfg.get("filter_columns") or {},
+            limit=limit,
+            offset=0,  # fetch top N from each table, re-rank later
+            k=k,
+            bm25_weight=bm25_weight,
+            vector_weight=vector_weight,
+        )
+        try:
+            rows = await conn.fetch(sql, *params)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Search failed on %s: %s", cfg["table"], e)
+            continue
+
+        for row in rows:
+            r = dict(row)
+            r["entity_type"] = etype
+            title_col = cfg.get("title_column")
+            r["_title"] = r.get(title_col, "") if title_col else ""
+            preview_col = cfg["preview_column"]
+            preview = r.get(preview_col, "")
+            r["_preview"] = preview[:500] if preview else ""
+            all_results.append(r)
+
+    # Re-rank by RRF score across all tables
+    all_results.sort(key=lambda r: r.get("rrf_score", 0) or r.get("rrf_total", 0), reverse=True)
+    total = len(all_results)
+
+    # Apply pagination
+    paginated = all_results[offset:offset + limit]
+    return paginated, total
