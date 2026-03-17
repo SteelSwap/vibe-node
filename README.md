@@ -1,6 +1,7 @@
 # vibe-node
 
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
+[![Code: AGPL-3.0](https://img.shields.io/badge/Code-AGPL--3.0-blue.svg)](LICENSE)
+[![Data: CC-BY-SA-4.0](https://img.shields.io/badge/Data-CC--BY--SA--4.0-lightgrey.svg)](LICENSE-DATA)
 [![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](https://www.python.org/downloads/)
 [![Built with AI](https://img.shields.io/badge/built%20with-AI%20%28vibe%20coded%29-ff6d00.svg)]()
 [![Cardano](https://img.shields.io/badge/Cardano-node-0033AD.svg)](https://cardano.org)
@@ -17,23 +18,23 @@ This is not just a node — it's a public education in vibe coding with extreme 
 
 ## Current Status
 
-> **Phase 0 — Development Architecture** in progress. Building the knowledge base and dev infrastructure.
+> **Phase 0 — Development Architecture** nearing completion. Knowledge base operational, node implementation next.
 
 ### Phase 0: Dev Infrastructure
 
 | Component | Status |
 |-----------|--------|
 | Project scaffold (Python 3.14, uv, typer CLI) | Done |
-| Docker Compose stack (ParadeDB, vLLM, cardano-node, Ogmios) | In Progress |
-| Git submodules (cardano-node, cardano-ledger, ouroboros-network) | In Progress |
-| Database schema (SQLModel + ParadeDB init) | In Progress |
-| Spec ingestion pipeline (PaddleOCR, pandoc) | Not started |
-| Code indexing pipeline (tree-sitter-haskell) | Not started |
-| GitHub issues indexing | Not started |
-| Search infrastructure (BM25 + vector + RRF) | Not started |
+| Docker Compose stack (ParadeDB, Ollama, Mithril, cardano-node, Ogmios, PaddleOCR) | Done |
+| Git submodules (6 repos: cardano-node, cardano-ledger, ouroboros-network, ouroboros-consensus, plutus, formal-ledger-specs) | Done |
+| Database schema (7 tables, SQLModel + asyncpg) | Done |
+| Spec ingestion pipeline (LaTeX/pandoc, CDDL, Markdown, Agda, PDF/PaddleOCR) | Done |
+| Code indexing pipeline (tree-sitter-haskell, Agda parser, content-hash dedup) | Done |
+| GitHub issues & PRs ingestion (GraphQL, full discussion threads) | Done |
+| CLI commands (infra, ingest, db) | Done |
+| Documentation (4-tab MkDocs site with SteelSwap branding) | Done |
+| Search infrastructure (BM25 + vector + RRF fusion) | Not started |
 | MCP integrations (Search MCP, CrystalDB MCP) | Not started |
-| CLI commands (infra, ingest, db) | Not started |
-| Documentation (How We Build, Gap Analysis) | In Progress |
 
 ### Node Implementation (Phase 1+)
 
@@ -53,33 +54,51 @@ This is not just a node — it's a public education in vibe coding with extreme 
 git clone https://github.com/SteelSwap/vibe-node.git
 cd vibe-node
 uv sync
+
+# Start infrastructure
+uv run vibe-node infra up
+
+# Check status
+uv run vibe-node infra status
+
+# Ingest specs, code, and GitHub issues
+uv run vibe-node ingest specs
+uv run vibe-node ingest code --limit 1
+uv run vibe-node ingest issues --limit 10
+
+# Search the knowledge base
+uv run vibe-node db search "Ouroboros Praos VRF"
+
+# Run the node (not yet implemented)
 uv run vibe-node serve
-```
-
-### Development Infrastructure
-
-```bash
-# Start the full dev stack (requires Docker)
-docker compose up -d
-
-# Or CPU-only mode (no GPU required for vLLM):
-docker compose --profile cpu up -d
 ```
 
 ## Documentation
 
-Full documentation is built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/) and available in the `docs/` directory:
+Full documentation is built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/):
 
 ```bash
 uv run mkdocs serve
 ```
 
-- **[How We Build](docs/methodology/index.md)** — Vibe-coding methodology, toolchain, agent architecture
-- **[Gap Analysis](docs/gap-analysis/index.md)** — Spec vs. implementation divergences
-- **[Architecture](docs/architecture/overview.md)** — How the node is structured and why
-- **[Roadmap](docs/roadmap/tasks.md)** — 56 tasks across 9 modules for Phase 0
-- **[Development Log](docs/devlog/index.md)** — The journey, including dead ends and lessons learned
+- **[About](docs/about/index.md)** — The challenge, methodology, toolchain, and how we build
+- **[Specifications](docs/specs/index.md)** — Cardano specs and gap analysis
+- **[Development](docs/development/index.md)** — Roadmap, milestones, and progress
+- **[Reference](docs/reference/index.md)** — CLI, schema, architecture, and pipeline docs
 
-## License
+## Licensing
 
-[AGPL-3.0](LICENSE)
+This project uses a dual-license structure to reflect the two distinct work products it produces.
+
+| Component | License | File |
+|-----------|---------|------|
+| Source code | [AGPL-3.0](LICENSE) | `LICENSE` |
+| Database contents | [CC-BY-SA-4.0](LICENSE-DATA) | `LICENSE-DATA` |
+
+**Source code** (everything under `src/`, `tests/`, `infra/`, configuration files, CLI tooling, ingestion pipelines, etc.) is licensed under the GNU Affero General Public License v3.0.
+
+**Database contents** (the populated knowledge base produced by the ingestion pipelines — spec extractions, cross-references, test specifications, embeddings, and all other derived data) are a separate work product licensed under the Creative Commons Attribution-ShareAlike 4.0 International License. If you redistribute or build upon the database contents, you must provide attribution and share under the same or a compatible license.
+
+Relicensing of either component may be available on request. Contact SteelSwap for details.
+
+&copy; 2026 SteelSwap

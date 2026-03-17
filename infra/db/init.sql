@@ -68,13 +68,14 @@ CREATE TABLE IF NOT EXISTS code_chunks (
     line_end        INTEGER       NOT NULL,
     content         TEXT          NOT NULL,
     signature       TEXT,
+    content_hash    VARCHAR(64)   NOT NULL,
     embed_text      TEXT          NOT NULL,
     embedding       vector(1536),
     era             VARCHAR(32)   NOT NULL,
     metadata        JSONB,
 
     CONSTRAINT uq_code_chunks_identity
-        UNIQUE (repo, release_tag, file_path, function_name, line_start)
+        UNIQUE (repo, release_tag, file_path, function_name, content_hash)
 );
 
 CREATE INDEX IF NOT EXISTS idx_code_chunks_repo
@@ -85,6 +86,46 @@ CREATE INDEX IF NOT EXISTS idx_code_chunks_era
     ON code_chunks (era);
 CREATE INDEX IF NOT EXISTS idx_code_chunks_module_name
     ON code_chunks (module_name);
+CREATE INDEX IF NOT EXISTS idx_code_chunks_function_name
+    ON code_chunks (function_name);
+CREATE INDEX IF NOT EXISTS idx_code_chunks_content_hash
+    ON code_chunks (content_hash);
+
+-- ---------------------------------------------------------------------------
+-- code_tag_manifest: tracks which functions exist at each release tag.
+-- Enables versioned queries: "what was the codebase at tag X",
+-- "when was function Y added/removed", "what changed between X and Y".
+-- Populated from code_chunks during ingestion + retroactively.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS code_tag_manifest (
+    repo            VARCHAR(256)  NOT NULL,
+    release_tag     VARCHAR(64)   NOT NULL,
+    file_path       VARCHAR(1024) NOT NULL,
+    function_name   VARCHAR(256)  NOT NULL,
+    content_hash    VARCHAR(64)   NOT NULL,
+
+    PRIMARY KEY (repo, release_tag, file_path, function_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_code_manifest_function
+    ON code_tag_manifest (repo, function_name);
+CREATE INDEX IF NOT EXISTS idx_code_manifest_hash
+    ON code_tag_manifest (content_hash);
+CREATE INDEX IF NOT EXISTS idx_code_manifest_tag
+    ON code_tag_manifest (repo, release_tag);
+
+-- ---------------------------------------------------------------------------
+-- code_tag_completion: marks tags as fully processed.
+-- Only written after _process_tag finishes all files for a tag.
+-- Used to distinguish complete ingestion from partial (crash mid-tag).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS code_tag_completion (
+    repo TEXT NOT NULL,
+    release_tag TEXT NOT NULL,
+    chunk_count INTEGER NOT NULL DEFAULT 0,
+    completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (repo, release_tag)
+);
 
 -- ---------------------------------------------------------------------------
 -- github_issues: issue content with full discussion threads

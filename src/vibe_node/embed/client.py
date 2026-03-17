@@ -27,16 +27,23 @@ class EmbeddingClient:
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
-        self._client = httpx.AsyncClient(timeout=120.0)
+        self._client = httpx.AsyncClient(timeout=300.0)
 
-    async def embed(self, text: str) -> list[float]:
-        """Embed a single text string. Returns a vector."""
-        response = await self._client.post(
-            f"{self.base_url}/v1/embeddings",
-            json={"model": self.model, "input": text},
-        )
-        response.raise_for_status()
-        return response.json()["data"][0]["embedding"]
+    async def embed(self, text: str, retries: int = 2) -> list[float]:
+        """Embed a single text string. Returns a vector. Retries on timeout."""
+        for attempt in range(retries + 1):
+            try:
+                response = await self._client.post(
+                    f"{self.base_url}/v1/embeddings",
+                    json={"model": self.model, "input": text},
+                )
+                response.raise_for_status()
+                return response.json()["data"][0]["embedding"]
+            except httpx.ReadTimeout:
+                if attempt < retries:
+                    logger.warning("Embed timeout (attempt %d/%d), retrying...", attempt + 1, retries + 1)
+                    continue
+                raise
 
     async def embed_batch(
         self, texts: list[str], batch_size: int = 16

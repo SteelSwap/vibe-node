@@ -1,75 +1,82 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 280" font-family="Inter, -apple-system, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 300" font-family="Inter, -apple-system, sans-serif">
   <defs>
-    <linearGradient id="specGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#3b82f6"/>
-      <stop offset="100%" style="stop-color:#2563eb"/>
+    <linearGradient id="ssGrad" x1="0%" y1="0%" x2="100%" y2="100%" gradientTransform="rotate(110)">
+      <stop offset="0%" style="stop-color:#ED458E"/>
+      <stop offset="100%" style="stop-color:#F48020"/>
     </linearGradient>
-    <linearGradient id="implGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#8b5cf6"/>
-      <stop offset="100%" style="stop-color:#7c3aed"/>
+    <linearGradient id="specGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ED458E"/>
+      <stop offset="100%" style="stop-color:#c03070"/>
     </linearGradient>
-    <linearGradient id="testGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#06b6d4"/>
-      <stop offset="100%" style="stop-color:#0891b2"/>
+    <linearGradient id="implGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#d94080"/>
+      <stop offset="100%" style="stop-color:#E86040"/>
     </linearGradient>
-    <linearGradient id="gapGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#10b981"/>
-      <stop offset="100%" style="stop-color:#059669"/>
+    <linearGradient id="testGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#E86040"/>
+      <stop offset="100%" style="stop-color:#F48020"/>
     </linearGradient>
-    <filter id="shadow" x="-5%" y="-5%" width="110%" height="120%">
-      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.15"/>
+    <linearGradient id="gapGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#40c057"/>
+      <stop offset="100%" style="stop-color:#2ea043"/>
+    </linearGradient>
+    <filter id="glow">
+      <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#ED458E" flood-opacity="0.25"/>
     </filter>
-  </defs>
-
-  <!-- Background -->
-  <rect width="600" height="280" rx="16" fill="#0f172a"/>
-
-  <!-- Title -->
-  <text x="300" y="36" text-anchor="middle" fill="#e2e8f0" font-size="16" font-weight="600">The Development Cycle</text>
-
-  <!-- Step 1: Consult Spec -->
-  <rect x="40" y="70" width="120" height="80" rx="12" fill="url(#specGrad)" filter="url(#shadow)"/>
-  <text x="100" y="102" text-anchor="middle" fill="white" font-size="11" font-weight="600">1. CONSULT</text>
-  <text x="100" y="118" text-anchor="middle" fill="white" font-size="11" font-weight="600">SPEC</text>
-  <text x="100" y="138" text-anchor="middle" fill="#bfdbfe" font-size="9">Search MCP</text>
-
-  <!-- Arrow 1→2 -->
-  <path d="M 165 110 L 195 110" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
-
-  <!-- Step 2: Implement -->
-  <rect x="200" y="70" width="120" height="80" rx="12" fill="url(#implGrad)" filter="url(#shadow)"/>
-  <text x="260" y="102" text-anchor="middle" fill="white" font-size="11" font-weight="600">2. IMPLEMENT</text>
-  <text x="260" y="118" text-anchor="middle" fill="white" font-size="11" font-weight="600">AGAINST SPEC</text>
-  <text x="260" y="138" text-anchor="middle" fill="#ddd6fe" font-size="9">Trace to definitions</text>
-
-  <!-- Arrow 2→3 -->
-  <path d="M 325 110 L 355 110" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
-
-  <!-- Step 3: Test -->
-  <rect x="360" y="70" width="120" height="80" rx="12" fill="url(#testGrad)" filter="url(#shadow)"/>
-  <text x="420" y="102" text-anchor="middle" fill="white" font-size="11" font-weight="600">3. TEST VS</text>
-  <text x="420" y="118" text-anchor="middle" fill="white" font-size="11" font-weight="600">HASKELL NODE</text>
-  <text x="420" y="138" text-anchor="middle" fill="#a5f3fc" font-size="9">The oracle of truth</text>
-
-  <!-- Arrow 3→4 -->
-  <path d="M 420 155 L 420 175" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
-
-  <!-- Step 4: Document Gaps -->
-  <rect x="320" y="180" width="200" height="60" rx="12" fill="url(#gapGrad)" filter="url(#shadow)"/>
-  <text x="420" y="207" text-anchor="middle" fill="white" font-size="11" font-weight="600">4. DOCUMENT GAPS</text>
-  <text x="420" y="225" text-anchor="middle" fill="#a7f3d0" font-size="9">Spec vs. reality → errata</text>
-
-  <!-- Return arrow 4→1 -->
-  <path d="M 315 210 L 100 210 L 100 155" stroke="#64748b" stroke-width="2" fill="none" stroke-dasharray="6,3" marker-end="url(#arrowhead)"/>
-  <text x="200" y="200" text-anchor="middle" fill="#94a3b8" font-size="9">Next subsystem</text>
-
-  <!-- Arrowhead marker -->
-  <defs>
-    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-      <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
+    <filter id="softShadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#909296"/>
     </marker>
   </defs>
 
-  <!-- Subtitle -->
-  <text x="300" y="268" text-anchor="middle" fill="#64748b" font-size="10">Every function. Every protocol message. Every ledger rule.</text>
+  <!-- Background -->
+  <rect width="640" height="300" rx="16" fill="#1a1b1e"/>
+  <rect width="640" height="4" fill="url(#ssGrad)" rx="2"/>
+
+  <!-- Title -->
+  <text x="320" y="38" text-anchor="middle" fill="url(#ssGrad)" font-size="17" font-weight="800" letter-spacing="-0.02em">The Development Cycle</text>
+
+  <!-- Step 1: Consult Spec -->
+  <rect x="30" y="65" width="130" height="85" rx="12" fill="url(#specGrad)" filter="url(#softShadow)"/>
+  <text x="95" y="100" text-anchor="middle" fill="white" font-size="12" font-weight="700">1. CONSULT</text>
+  <text x="95" y="117" text-anchor="middle" fill="white" font-size="12" font-weight="700">SPEC</text>
+  <text x="95" y="138" text-anchor="middle" fill="#ffb3d0" font-size="9">Search MCP</text>
+
+  <!-- Arrow 1→2 -->
+  <path d="M 165 107 L 195 107" stroke="#909296" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Step 2: Implement -->
+  <rect x="200" y="65" width="130" height="85" rx="12" fill="url(#implGrad)" filter="url(#softShadow)"/>
+  <text x="265" y="100" text-anchor="middle" fill="white" font-size="12" font-weight="700">2. IMPLEMENT</text>
+  <text x="265" y="117" text-anchor="middle" fill="white" font-size="12" font-weight="700">AGAINST SPEC</text>
+  <text x="265" y="138" text-anchor="middle" fill="#ffd0b0" font-size="9">Trace to definitions</text>
+
+  <!-- Arrow 2→3 -->
+  <path d="M 335 107 L 365 107" stroke="#909296" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Step 3: Test -->
+  <rect x="370" y="65" width="130" height="85" rx="12" fill="url(#testGrad)" filter="url(#softShadow)"/>
+  <text x="435" y="100" text-anchor="middle" fill="white" font-size="12" font-weight="700">3. TEST VS</text>
+  <text x="435" y="117" text-anchor="middle" fill="white" font-size="12" font-weight="700">HASKELL NODE</text>
+  <text x="435" y="138" text-anchor="middle" fill="#ffe0c0" font-size="9">The oracle of truth</text>
+
+  <!-- Arrow 3→4 -->
+  <path d="M 435 155 L 435 180" stroke="#909296" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Step 4: Document Gaps -->
+  <rect x="330" y="185" width="210" height="55" rx="12" fill="url(#gapGrad)" filter="url(#softShadow)"/>
+  <text x="435" y="210" text-anchor="middle" fill="white" font-size="12" font-weight="700">4. DOCUMENT GAPS</text>
+  <text x="435" y="228" text-anchor="middle" fill="#a0f0b0" font-size="9">Spec vs. reality → errata</text>
+
+  <!-- Return arrow 4→1 -->
+  <path d="M 325 212 L 95 212 L 95 155" stroke="#909296" stroke-width="2" fill="none" stroke-dasharray="6,3" marker-end="url(#arrow)"/>
+  <text x="200" y="205" text-anchor="middle" fill="#909296" font-size="9">Next subsystem</text>
+
+  <!-- Bottom tagline -->
+  <text x="320" y="278" text-anchor="middle" fill="#909296" font-size="10" font-style="italic">Every function. Every protocol message. Every ledger rule.</text>
+
+  <!-- Decorative gradient line at bottom -->
+  <rect y="296" width="640" height="4" fill="url(#ssGrad)" rx="2"/>
 </svg>

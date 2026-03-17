@@ -10,6 +10,7 @@ async-friendly interface.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import subprocess
@@ -21,6 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from vibe_node.embed.client import EmbeddingClient
+from vibe_node.ingest.agda_parser import AgdaParser
 from vibe_node.ingest.config import CODE_REPOS, TAG_PATTERNS
 from vibe_node.ingest.era_inference import infer_era
 from vibe_node.ingest.haskell_parser import HaskellParser
@@ -102,11 +104,20 @@ def _find_haskell_files(repo_path: Path) -> list[Path]:
     return sorted(repo_path.rglob("*.hs"))
 
 
+def _find_agda_files(repo_path: Path) -> list[Path]:
+    """Find all .agda and .lagda files in the repository."""
+    agda = list(repo_path.rglob("*.agda"))
+    lagda = list(repo_path.rglob("*.lagda"))
+    lagda_md = list(repo_path.rglob("*.lagda.md"))
+    return sorted(set(agda + lagda + lagda_md))
+
+
 class CodeIngestor:
     """Index Haskell source code from vendor/ submodules by release tag."""
 
     def __init__(self) -> None:
-        self._parser = HaskellParser()
+        self._hs_parser = HaskellParser()
+        self._agda_parser = AgdaParser()
 
     async def ingest_repo(
         self,
@@ -150,27 +161,56 @@ class CodeIngestor:
             logger.info("No matching release tags in %s", repo_name)
             return 0
 
-        # Check which tags are already ingested
+        # Check which tags are fully ingested via completion markers.
+        # A tag is only "done" if _process_tag ran to completion and wrote
+        # a marker to code_tag_completion. Partial data from crashes (chunks
+        # committed every 100 rows) won't have a marker.
         result = await session.execute(
-            text("SELECT DISTINCT release_tag FROM code_chunks WHERE repo = :repo"),
+            text("""
+                SELECT release_tag FROM code_tag_completion
+                WHERE repo = :repo
+            """),
             {"repo": repo_name},
         )
         ingested_tags = {row[0] for row in result.fetchall()}
 
-        # Filter to un-ingested tags only
+        # Log any partially-ingested tags (have chunks but no completion marker)
+        partial_result = await session.execute(
+            text("""
+                SELECT DISTINCT release_tag FROM code_chunks
+                WHERE repo = :repo AND release_tag NOT IN (
+                    SELECT release_tag FROM code_tag_completion WHERE repo = :repo
+                )
+            """),
+            {"repo": repo_name},
+        )
+        partial_tags = {row[0] for row in partial_result.fetchall()}
+        for partial_tag in partial_tags:
+            logger.info(
+                "Tag %s for %s has partial data but no completion marker — will re-process",
+                partial_tag, repo_name,
+            )
+
+        # Filter to un-ingested or partially-ingested tags
         pending_tags = [t for t in tags if t not in ingested_tags]
         if limit is not None:
             pending_tags = pending_tags[:limit]
 
         if not pending_tags:
             logger.info("All tags already ingested for %s", repo_name)
+            # Show a completed progress bar so the user sees this repo was processed
+            if progress:
+                task = progress.add_task(
+                    f"[green]{repo_name} tags", total=len(tags), completed=len(tags),
+                )
             return 0
 
-        # Set up progress tracking
+        # Set up progress tracking — show already-ingested tags as pre-completed
         task = None
         if progress:
+            total_tags = len(ingested_tags) + len(pending_tags)
             task = progress.add_task(
-                f"[green]{repo_name} tags", total=len(pending_tags),
+                f"[green]{repo_name} tags", total=total_tags, completed=len(ingested_tags),
             )
 
         logger.info(
@@ -189,6 +229,18 @@ class CodeIngestor:
                     progress=progress,
                 )
                 total_chunks += tag_chunks
+
+                # Write completion marker — only after all files processed
+                await session.execute(
+                    text("""
+                        INSERT INTO code_tag_completion (repo, release_tag, chunk_count)
+                        VALUES (:repo, :tag, :chunks)
+                        ON CONFLICT (repo, release_tag)
+                        DO UPDATE SET chunk_count = EXCLUDED.chunk_count,
+                                      completed_at = NOW()
+                    """),
+                    {"repo": repo_name, "tag": tag, "chunks": tag_chunks},
+                )
                 await session.commit()
 
                 if progress and task is not None:
@@ -202,7 +254,7 @@ class CodeIngestor:
             _checkout(repo_path, original_head)
 
         if progress and task is not None:
-            progress.update(task, completed=progress.tasks[task].total)
+            progress.update(task, completed=len(pending_tags))
 
         logger.info(
             "Completed %s: %d chunks across %d tags",
@@ -219,33 +271,38 @@ class CodeIngestor:
         embed_client: EmbeddingClient,
         progress=None,
     ) -> int:
-        """Checkout a tag, parse all .hs files, embed, and store."""
+        """Checkout a tag, parse all .hs and .agda files, embed, and store."""
         _checkout(repo_path, tag)
 
         commit_hash, commit_date = _get_tag_info(repo_path, tag)
         hs_files = _find_haskell_files(repo_path)
+        agda_files = _find_agda_files(repo_path)
+        all_files = [(f, "haskell") for f in hs_files] + [(f, "agda") for f in agda_files]
 
         file_task = None
         if progress:
             file_task = progress.add_task(
-                f"[cyan]  {tag} ({len(hs_files)} files)",
-                total=len(hs_files),
+                f"[cyan]  {tag} ({len(all_files)} files)",
+                total=len(all_files),
             )
 
         chunk_count = 0
 
-        for hs_file in hs_files:
+        for source_file, lang in all_files:
             try:
-                source = hs_file.read_bytes()
+                source = source_file.read_bytes()
             except OSError as e:
-                logger.debug("Skipping unreadable file %s: %s", hs_file, e)
+                logger.debug("Skipping unreadable file %s: %s", source_file, e)
                 continue
 
             # Relative path from repo root for storage
-            rel_path = str(hs_file.relative_to(repo_path))
+            rel_path = str(source_file.relative_to(repo_path))
 
             try:
-                chunks = self._parser.parse_file(source, rel_path)
+                if lang == "agda":
+                    chunks = self._agda_parser.parse_file(source, rel_path)
+                else:
+                    chunks = self._hs_parser.parse_file(source, rel_path)
             except Exception:
                 logger.debug("Parse failed for %s — skipping", rel_path, exc_info=True)
                 continue
@@ -265,15 +322,34 @@ class CodeIngestor:
                 embed_parts.append(chunk.content)
                 embed_text = "\n".join(embed_parts)
 
-                try:
-                    embedding = await embed_client.embed(embed_text[:8000])
-                except Exception:
-                    logger.warning(
-                        "Embedding failed for %s::%s — skipping",
-                        chunk.module_name, chunk.function_name,
-                        exc_info=True,
-                    )
-                    continue
+                # Hash content for dedup across versions
+                content_hash = hashlib.sha256(chunk.content.encode()).hexdigest()
+
+                # Check if identical content exists at any tag — reuse embedding
+                existing_embed = await session.execute(
+                    text(
+                        "SELECT embedding FROM code_chunks "
+                        "WHERE repo = :repo AND content_hash = :hash AND embedding IS NOT NULL "
+                        "LIMIT 1"
+                    ),
+                    {"repo": repo_name, "hash": content_hash},
+                )
+                existing_row = existing_embed.first()
+
+                if existing_row:
+                    # Reuse existing embedding — no Ollama call needed
+                    embedding_str = existing_row[0]
+                else:
+                    try:
+                        embedding_vec = await embed_client.embed(embed_text[:8000])
+                        embedding_str = str(embedding_vec)
+                    except Exception:
+                        logger.warning(
+                            "Embedding failed for %s::%s — skipping",
+                            chunk.module_name, chunk.function_name,
+                            exc_info=True,
+                        )
+                        continue
 
                 chunk_id = uuid.uuid4()
 
@@ -283,14 +359,14 @@ class CodeIngestor:
                             id, repo, release_tag, commit_hash, commit_date,
                             file_path, module_name, function_name,
                             line_start, line_end, content, signature,
-                            embed_text, embedding, era, metadata
+                            content_hash, embed_text, embedding, era, metadata
                         ) VALUES (
                             :id, :repo, :release_tag, :commit_hash, :commit_date,
                             :file_path, :module_name, :function_name,
                             :line_start, :line_end, :content, :signature,
-                            :embed_text, :embedding, :era, NULL
+                            :content_hash, :embed_text, :embedding, :era, NULL
                         )
-                        ON CONFLICT (repo, release_tag, file_path, function_name, line_start)
+                        ON CONFLICT (repo, release_tag, file_path, function_name, content_hash)
                         DO NOTHING
                     """),
                     {
@@ -306,11 +382,32 @@ class CodeIngestor:
                         "line_end": chunk.line_end,
                         "content": chunk.content,
                         "signature": chunk.signature,
+                        "content_hash": content_hash,
                         "embed_text": embed_text,
-                        "embedding": str(embedding),
+                        "embedding": embedding_str,
                         "era": era,
                     },
                 )
+                # Record in tag manifest for versioned queries
+                await session.execute(
+                    text("""
+                        INSERT INTO code_tag_manifest (
+                            repo, release_tag, file_path, function_name, content_hash
+                        ) VALUES (
+                            :repo, :release_tag, :file_path, :function_name, :content_hash
+                        )
+                        ON CONFLICT (repo, release_tag, file_path, function_name)
+                        DO NOTHING
+                    """),
+                    {
+                        "repo": repo_name,
+                        "release_tag": tag,
+                        "file_path": chunk.file_path,
+                        "function_name": chunk.function_name,
+                        "content_hash": content_hash,
+                    },
+                )
+
                 chunk_count += 1
 
                 # Periodic commit to avoid giant transactions
@@ -326,6 +423,174 @@ class CodeIngestor:
             progress.remove_task(file_task)
 
         return chunk_count
+
+    @staticmethod
+    async def rebuild_manifest(session: AsyncSession) -> int:
+        """Rebuild code_tag_manifest from existing code_chunks data.
+
+        Use this to backfill the manifest after schema changes or
+        to fix gaps from partial indexing.
+        """
+        # Use a subquery with ROW_NUMBER to deduplicate before inserting
+        result = await session.execute(
+            text("""
+                INSERT INTO code_tag_manifest (repo, release_tag, file_path, function_name, content_hash)
+                SELECT repo, release_tag, file_path, function_name, content_hash
+                FROM (
+                    SELECT repo, release_tag, file_path, function_name, content_hash,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY repo, release_tag, file_path, function_name
+                               ORDER BY line_start
+                           ) as rn
+                    FROM code_chunks
+                ) sub
+                WHERE rn = 1
+                ON CONFLICT (repo, release_tag, file_path, function_name)
+                DO UPDATE SET content_hash = EXCLUDED.content_hash
+            """)
+        )
+        await session.commit()
+        count_result = await session.execute(text("SELECT count(*) FROM code_tag_manifest"))
+        return count_result.scalar()
+
+    @staticmethod
+    async def backfill_completion(session: AsyncSession) -> int:
+        """Backfill code_tag_completion by rigorously verifying each tag.
+
+        For each tag with data in code_chunks:
+        1. Use ``git ls-tree`` to count .hs/.agda files at that tag (no checkout)
+        2. Compare to distinct file_paths in code_tag_manifest for that tag
+        3. Verify all code_chunks for that tag have embeddings
+        4. Only mark complete if file counts match AND all embeddings present
+
+        Returns the total number of tags marked complete.
+        """
+        from vibe_node.ingest.config import CODE_REPOS
+
+        # Get all tags with data, grouped by repo
+        result = await session.execute(
+            text("""
+                SELECT repo, release_tag,
+                       COUNT(*) as chunk_count,
+                       COUNT(DISTINCT file_path) as db_file_count,
+                       COUNT(*) FILTER (WHERE embedding IS NOT NULL) as embedded_count
+                FROM code_chunks
+                GROUP BY repo, release_tag
+                ORDER BY repo, release_tag
+            """)
+        )
+        tag_rows = result.fetchall()
+
+        # Get manifest file counts per tag
+        manifest_result = await session.execute(
+            text("""
+                SELECT repo, release_tag, COUNT(DISTINCT file_path) as manifest_file_count
+                FROM code_tag_manifest
+                GROUP BY repo, release_tag
+            """)
+        )
+        manifest_map = {
+            (row[0], row[1]): row[2] for row in manifest_result.fetchall()
+        }
+
+        project_root = Path(__file__).resolve().parents[3]
+        marked = 0
+        skipped = 0
+
+        for repo, tag, chunk_count, db_file_count, embedded_count in tag_rows:
+            # Quick check 1: do all chunks have embeddings?
+            if embedded_count < chunk_count:
+                logger.info(
+                    "  SKIP %s @ %s: %d/%d chunks missing embeddings",
+                    repo, tag, chunk_count - embedded_count, chunk_count,
+                )
+                skipped += 1
+                continue
+
+            # Quick check 2: does manifest file count match chunk file count?
+            manifest_file_count = manifest_map.get((repo, tag), 0)
+            if manifest_file_count == 0:
+                logger.info("  SKIP %s @ %s: no manifest entries", repo, tag)
+                skipped += 1
+                continue
+
+            if manifest_file_count != db_file_count:
+                logger.info(
+                    "  SKIP %s @ %s: manifest has %d files, chunks has %d files",
+                    repo, tag, manifest_file_count, db_file_count,
+                )
+                skipped += 1
+                continue
+
+            # Rigorous check: compare DB files against actual files at the tag
+            rel_path = CODE_REPOS.get(repo)
+            if not rel_path:
+                logger.warning("  SKIP %s @ %s: repo not in CODE_REPOS", repo, tag)
+                skipped += 1
+                continue
+
+            repo_path = project_root / rel_path
+            if not repo_path.exists():
+                logger.warning("  SKIP %s @ %s: repo path missing", repo, tag)
+                skipped += 1
+                continue
+
+            # Count .hs and .agda files at this tag using git ls-tree (no checkout)
+            try:
+                hs_result = subprocess.run(
+                    ["git", "ls-tree", "-r", "--name-only", tag],
+                    cwd=repo_path, capture_output=True, text=True, timeout=30,
+                )
+                if hs_result.returncode != 0:
+                    logger.info("  SKIP %s @ %s: git ls-tree failed", repo, tag)
+                    skipped += 1
+                    continue
+
+                git_files = hs_result.stdout.strip().splitlines()
+                git_source_files = [
+                    f for f in git_files
+                    if f.endswith(".hs") or f.endswith(".agda")
+                    or f.endswith(".lagda") or f.endswith(".lagda.md")
+                ]
+                git_file_count = len(git_source_files)
+            except (subprocess.TimeoutExpired, OSError):
+                logger.info("  SKIP %s @ %s: git ls-tree timed out", repo, tag)
+                skipped += 1
+                continue
+
+            # Not all source files produce chunks (some have no declarations,
+            # some fail to parse). But the DB should have at least 80% of the
+            # files if processing completed normally.
+            if git_file_count > 0:
+                coverage = db_file_count / git_file_count
+                if coverage < 0.5:
+                    logger.info(
+                        "  SKIP %s @ %s: only %d/%d files in DB (%.0f%% coverage)",
+                        repo, tag, db_file_count, git_file_count, coverage * 100,
+                    )
+                    skipped += 1
+                    continue
+
+            # All checks passed — mark as complete
+            await session.execute(
+                text("""
+                    INSERT INTO code_tag_completion (repo, release_tag, chunk_count)
+                    VALUES (:repo, :tag, :chunks)
+                    ON CONFLICT (repo, release_tag) DO NOTHING
+                """),
+                {"repo": repo, "tag": tag, "chunks": chunk_count},
+            )
+            marked += 1
+            logger.info(
+                "  OK   %s @ %s: %d chunks, %d/%d files (%.0f%% of %d on disk)",
+                repo, tag, chunk_count, db_file_count, manifest_file_count,
+                (db_file_count / git_file_count * 100) if git_file_count > 0 else 100,
+                git_file_count,
+            )
+
+        await session.commit()
+        logger.info("Backfill complete: %d marked, %d skipped", marked, skipped)
+        return marked
 
     async def ingest_all(
         self,

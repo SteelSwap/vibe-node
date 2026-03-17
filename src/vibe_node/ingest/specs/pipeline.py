@@ -18,11 +18,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from vibe_node.embed.client import EmbeddingClient
-from vibe_node.ingest.specs.chunker import SpecChunk, chunk_cddl, chunk_markdown
+from vibe_node.ingest.specs.chunker import chunk_cddl, chunk_markdown
+from vibe_node.ingest.specs.git_history import discover_spec_commits, get_file_at_commit
 from vibe_node.ingest.specs.converters.agda import convert_agda
 from vibe_node.ingest.specs.converters.cddl import convert_cddl
 from vibe_node.ingest.specs.converters.latex import convert_latex
 from vibe_node.ingest.specs.converters.markdown import convert_markdown
+from vibe_node.ingest.specs.converters.pdf import convert_pdf
 from vibe_node.ingest.specs.sources import SPEC_SOURCES, SpecSource
 
 logger = logging.getLogger(__name__)
@@ -85,6 +87,31 @@ def _write_cache(cache_file: Path, content: str) -> None:
     logger.debug("Cached: %s", cache_file)
 
 
+def _ensure_papers_downloaded() -> None:
+    """Auto-download research papers if data/pdf/ is empty or missing."""
+    pdf_dir = Path("data/pdf")
+    if pdf_dir.exists() and any(pdf_dir.glob("*.pdf")):
+        return
+
+    logger.info("No PDFs found in data/pdf/ — downloading research papers...")
+    pdf_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        import httpx
+        from vibe_node.ingest.papers import PAPERS
+
+        for paper in PAPERS:
+            dest = pdf_dir / paper.filename
+            if dest.exists():
+                continue
+            logger.info("  Downloading %s", paper.filename)
+            resp = httpx.get(paper.url, follow_redirects=True, timeout=60.0)
+            resp.raise_for_status()
+            dest.write_bytes(resp.content)
+    except Exception as e:
+        logger.warning("Failed to download papers: %s", e)
+
+
 class SpecIngestor:
     """Ingests spec documents from configured sources."""
 
@@ -141,23 +168,31 @@ class SpecIngestor:
             if cached is not None:
                 converted = cached
             else:
-                # Read and convert
-                try:
-                    raw_content = file_path.read_text(encoding="utf-8", errors="replace")
-                except Exception as e:
-                    logger.warning("Failed to read %s: %s", file_path, e)
-                    if progress and task is not None:
-                        progress.update(task, advance=1)
-                    continue
-
                 # Convert based on format
-                if source.format == "latex":
-                    converted = convert_latex(raw_content, source_dir=file_path.parent)
-                elif source.format in CONVERTERS:
-                    converted = CONVERTERS[source.format](raw_content)
+                if source.format == "pdf":
+                    # PDFs are binary — pass file path, not text
+                    converted = convert_pdf(file_path)
+                    if not converted:
+                        if progress and task is not None:
+                            progress.update(task, advance=1)
+                        continue
                 else:
-                    logger.warning("Unknown format: %s", source.format)
-                    converted = raw_content
+                    # Text-based formats
+                    try:
+                        raw_content = file_path.read_text(encoding="utf-8", errors="replace")
+                    except Exception as e:
+                        logger.warning("Failed to read %s: %s", file_path, e)
+                        if progress and task is not None:
+                            progress.update(task, advance=1)
+                        continue
+
+                    if source.format == "latex":
+                        converted = convert_latex(raw_content, source_dir=file_path.parent)
+                    elif source.format in CONVERTERS:
+                        converted = CONVERTERS[source.format](raw_content)
+                    else:
+                        logger.warning("Unknown format: %s", source.format)
+                        converted = raw_content
 
                 # Cache the conversion
                 _write_cache(cache_file, converted)
@@ -273,6 +308,9 @@ class SpecIngestor:
             limit: Max files per source (for testing)
             progress: Rich Progress instance
         """
+        # Auto-download research papers if needed
+        _ensure_papers_downloaded()
+
         sources = SPEC_SOURCES
 
         if format_filter:
@@ -290,6 +328,163 @@ class SpecIngestor:
             results[key] = await self.ingest_source(
                 source, session, embed_client,
                 limit=limit, progress=progress,
+            )
+
+        return results
+
+    async def ingest_history(
+        self,
+        session: AsyncSession,
+        embed_client: EmbeddingClient,
+        format_filter: str | None = None,
+        source_filter: str | None = None,
+        limit: int | None = None,
+        progress=None,
+    ) -> dict[str, int]:
+        """Ingest historical versions of specs by walking git commit history.
+
+        For each spec source, discovers commits that modified spec files
+        and ingests the spec at each commit using git show (no checkout).
+
+        Args:
+            limit: Max commits per source to process
+        """
+        sources = SPEC_SOURCES
+
+        if format_filter:
+            sources = [s for s in sources if s.format == format_filter]
+        if source_filter:
+            sf = source_filter.lower()
+            sources = [
+                s for s in sources
+                if sf in s.source_repo.lower() or sf in s.era.lower() or sf in s.spec_glob.lower()
+            ]
+
+        # Skip PDF sources (no git history) and sources without submodules
+        sources = [s for s in sources if s.format != "pdf"]
+
+        results: dict[str, int] = {}
+        for source in sources:
+            key = f"{source.source_repo} ({source.format}/{source.era})"
+            commits = discover_spec_commits(
+                source.submodule_path,
+                source.spec_glob,
+                limit=limit,
+            )
+
+            if not commits:
+                results[key] = 0
+                continue
+
+            task = None
+            if progress:
+                task = progress.add_task(
+                    f"[yellow]{source.source_repo} history ({source.era})",
+                    total=len(commits),
+                )
+
+            total_chunks = 0
+            for commit in commits:
+                for file_path in commit.files_changed:
+                    # Check idempotency
+                    existing = await session.execute(
+                        text(
+                            "SELECT id FROM spec_documents "
+                            "WHERE source_repo = :repo AND source_path = :path "
+                            "AND commit_hash = :hash LIMIT 1"
+                        ),
+                        {
+                            "repo": source.source_repo,
+                            "path": file_path,
+                            "hash": commit.commit_hash,
+                        },
+                    )
+                    if existing.first():
+                        continue
+
+                    # Get file content at this commit (no checkout needed)
+                    content = get_file_at_commit(
+                        source.submodule_path,
+                        commit.commit_hash,
+                        file_path,
+                    )
+                    if not content:
+                        continue
+
+                    # Convert
+                    if source.format == "latex":
+                        from vibe_node.ingest.specs.converters.latex import convert_latex
+                        converted = convert_latex(content)
+                    elif source.format in CONVERTERS:
+                        converted = CONVERTERS[source.format](content)
+                    else:
+                        converted = content
+
+                    # Chunk
+                    if source.format == "cddl":
+                        chunks = chunk_cddl(converted, file_path, source.source_repo)
+                    else:
+                        chunks = chunk_markdown(converted, file_path, source.source_repo)
+
+                    if not chunks:
+                        continue
+
+                    chunk_type_override = None
+                    if source.format == "agda":
+                        chunk_type_override = "agda"
+
+                    for chunk in chunks:
+                        embedding = await embed_client.embed(chunk.embed_text[:8000])
+                        ct = chunk_type_override or chunk.chunk_type
+
+                        await session.execute(
+                            text("""
+                                INSERT INTO spec_documents (
+                                    id, document_title, section_title, subsection_title,
+                                    source_repo, source_path, era,
+                                    spec_version, commit_hash, commit_date,
+                                    content_markdown, content_plain, embed_text, embedding,
+                                    chunk_type, metadata, content_hash
+                                ) VALUES (
+                                    :id, :doc_title, :sec_title, :subsec_title,
+                                    :repo, :path, :era,
+                                    :version, :commit_hash, :commit_date,
+                                    :md, :plain, :embed_text, :embedding,
+                                    :chunk_type, NULL, :content_hash
+                                )
+                            """),
+                            {
+                                "id": str(uuid.uuid4()),
+                                "doc_title": chunk.document_title,
+                                "sec_title": chunk.section_title,
+                                "subsec_title": chunk.subsection_title,
+                                "repo": source.source_repo,
+                                "path": file_path,
+                                "era": source.era,
+                                "version": commit.commit_hash[:12],
+                                "commit_hash": commit.commit_hash,
+                                "commit_date": commit.commit_date,
+                                "md": chunk.content_markdown,
+                                "plain": chunk.content_plain,
+                                "embed_text": chunk.embed_text,
+                                "embedding": str(embedding),
+                                "chunk_type": ct,
+                                "content_hash": chunk.content_hash,
+                            },
+                        )
+                        total_chunks += 1
+
+                await session.commit()
+                if progress and task is not None:
+                    progress.update(task, advance=1)
+
+            if progress and task is not None:
+                progress.update(task, completed=len(commits))
+
+            results[key] = total_chunks
+            logger.info(
+                "History %s: %d chunks from %d commits",
+                key, total_chunks, len(commits),
             )
 
         return results

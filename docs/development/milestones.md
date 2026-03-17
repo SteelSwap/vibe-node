@@ -18,7 +18,7 @@ This page summarizes the project milestones tracked in [Plane](https://plane.so)
 
 ## Acceptance Criteria
 
-The final deliverable must satisfy all of [Pi Lanningham's challenge criteria](../index.md), verified over a 5-day testing window:
+The final deliverable must satisfy all of [Pi Lanningham's challenge criteria](../about/challenge.md), verified over a 5-day testing window:
 
 1. Sync from a recent mainnet Mithril snapshot or genesis to tip
 2. Produce valid blocks accepted by other nodes on preview/preprod

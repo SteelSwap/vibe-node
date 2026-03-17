@@ -9,3 +9,5 @@ build/
 .env
 site/
 data/
+snapshots/
+.worktrees/

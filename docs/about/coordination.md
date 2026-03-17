@@ -61,7 +61,7 @@ Each issue has:
 
 Plane is the source of truth for work coordination, but not everyone has access. The bridge to public visibility:
 
-- **`docs/roadmap/milestones.md`** — High-level milestone status
-- **`docs/roadmap/tasks.md`** — All tasks with status, organized by module
-- **`docs/devlog/`** — Narrative entries referencing Plane work items
+- **`docs/development/milestones.md`** — High-level milestone status
+- **`docs/development/tasks.md`** — All tasks with status, organized by module
+- **`docs/development/devlog/`** — Narrative entries referencing Plane work items
 - **Commit messages** — Reference the task context that drove each change
