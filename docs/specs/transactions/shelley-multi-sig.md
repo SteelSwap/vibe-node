@@ -2,7 +2,7 @@
 :::
 
 ::: landscape
-![Positioning of this Deliverable (outlined in red).](d3-depends.pdf)
+<!-- [Image from original LaTeX source: d3-depends.pdf] Positioning of this Deliverable (outlined in red). -->
 :::
 
 # Introduction {#sec:introduction}

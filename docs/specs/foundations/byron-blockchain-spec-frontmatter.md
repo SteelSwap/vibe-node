@@ -1002,7 +1002,7 @@ Figure [22](#fig:calculating-t){reference-type="ref" reference="fig:calculating-
 
 ::::: {#fig:calculating-t .figure latex-placement="ht"}
 ::: center
-![](calculating-t.png)
+<!-- [Image from original LaTeX source: calculating-t.png] -->
 :::
 
 ::: caption

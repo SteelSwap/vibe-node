@@ -8,17 +8,18 @@ We ingest and index specifications from 17+ sources across 6 repositories, cover
 
 All specs are searchable via the knowledge base — use `vibe-node db search "query"` to find relevant sections across all indexed documents.
 
-### Browse by Era
+### Browse by Subsystem
 
-- **[Byron](byron/index.md)** — 11 documents
-- **[Shelley](shelley/index.md)** — 32 documents
-- **[Mary / Allegra](shelley-ma/index.md)** — 8 documents
-- **[Alonzo](alonzo/index.md)** — 10 documents
-- **[Conway](conway/index.md)** — 35 documents
-- **[Plutus](plutus/index.md)** — 11 documents
-- **[Consensus](consensus/index.md)** — 49 documents
-- **[Networking](networking/index.md)** — 8 documents
-- **[Papers](papers/index.md)** — 2 documents
+- **[Foundations](foundations/index.md)** — Crypto primitives, notation, addresses, base types, introductions, properties & proofs (45 documents)
+- **[Serialization](serialization/index.md)** — CDDL schemas, CBOR encoding, flat serialization (7 documents)
+- **[Transactions](transactions/index.md)** — UTxO rules, transaction formats, witnesses, scripts, multi-asset, fees (18 documents)
+- **[Ledger](ledger/index.md)** — Ledger state transitions, delegation, protocol parameters, epoch/rewards, chain layer (26 documents)
+- **[Consensus](consensus/index.md)** — Ouroboros protocol, chain selection, Genesis, era-specific consensus (42 documents)
+- **[Storage](storage/index.md)** — ImmutableDB, VolatileDB, LedgerDB, ChainDB (6 documents)
+- **[Networking](networking/index.md)** — Multiplexer, miniprotocols, connection management (8 documents)
+- **[Plutus](plutus/index.md)** — Plutus Core grammar, CEK machine, builtins, cost models (9 documents)
+- **[Governance](governance/index.md)** — Conway governance, ratification, enactment, voting (4 documents)
+- **[Papers](papers/index.md)** — Full research papers (2 documents)
 
 ### Sources by Era
 

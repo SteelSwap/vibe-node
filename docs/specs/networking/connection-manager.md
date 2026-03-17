@@ -166,7 +166,7 @@ The *Connection Handler* drives through handshake negotiation and starts the mul
 
 - Handshake might error
 
-![Duplex connection running several mini-protocols](figure/node-to-node-ipc.png){#fig:protocol-diagram width="\\linewidth"}
+<!-- [Image from original LaTeX source: figure/node-to-node-ipc.png] Duplex connection running several mini-protocols -->
 
 The *Connection Handler* notifies the *Connection manager* about the result of a negotiation, which triggers a state transition. If we can run the connection in full-duplex mode, then it is possible to run the bundles of mini-protocols in both directions and otherwise only in one direction. So, Figure [1.2](#fig:protocol-diagram){reference-type="ref" reference="fig:protocol-diagram"} shows $6$ mini protocols running, $3$ in each direction. If we negotiated only a unidirectional connection, then we'd only be running $3$ (The direction is based on which peer established the connection).
 

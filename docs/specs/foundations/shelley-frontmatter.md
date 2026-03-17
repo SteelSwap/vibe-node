@@ -2,7 +2,7 @@
 :::
 
 ::: landscape
-![Positioning of this Deliverable (outlined in red).](d5-depends.pdf)
+<!-- [Image from original LaTeX source: d5-depends.pdf] Positioning of this Deliverable (outlined in red). -->
 :::
 
 # List of Contributors {#acknowledgements .unnumbered}

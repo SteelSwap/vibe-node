@@ -1,54 +1,74 @@
-# Consensus Specifications
+# Consensus
 
-**50 documents**
+Ouroboros consensus protocol, chain selection, chain sync, Genesis, era-specific consensus, and related technical documentation.
 
-- [2023 Jan Genesis Roadmap](2023-Jan-Genesis-roadmap.md)
-- [Abstract Protocol](AbstractProtocol.md)
-- [Adding a new Shelley-based era to consensus](AddingAnEra.md)
-- [Appendices](report.md)
-- [Bootstrap peers](BootstrapPeersIER.md)
-- [Byron](byron.md)
-- [Chain Database {#chaindb}](chaindb.md)
-- [Chain Selection {#chainsel}](chainselection.md)
-- [Chain sync client specification](ChainSync.md)
-- [Chain sync client {#chainsyncclient}](chainsyncclient.md)
-- [Componentdiagram](ComponentDiagram.md)
-- [Conclusions](conclusions.md)
-- [Consensus Protocol {#consensus}](protocol.md)
-- [Consensus benchmarks](Benchmarks.md)
-- [Consensus git process](GitProcess.md)
-- [Consensus style guide](StyleGuide.md)
-- [Dealing with extreme low-density chains {#low-density}](lowdensity.md)
-- [Epoch Boundary Blocks {#ebbs}](ebbs.md)
-- [Genesis 2.0.Tex](genesis-2.0.md)
-- [Genesis.Tex](genesis.md)
-- [Genesisdecomposition](GenesisDecomposition.md)
-- [Hardwonwisdom](HardWonWisdom.md)
-- [Immutable Database {#immutable}](immutabledb.md)
-- [Interface to the ledger {#ledger}](ledger.md)
-- [Introduction](index.md)
-- [Introduction](intro.md)
-- [Ledger Database {#ledgerdb}](ledgerdb.md)
+## Core Protocol
+
+- [Consensus Protocol](protocol.md)
+- [Abstract Protocol](abstract-protocol.md)
+- [Chain Selection](chainselection.md)
+- [What is Ouroboros Consensus?](what-is-ouroboros.md)
+- [Reaching Consensus (Testing)](reaching-consensus.md)
+
+## Chain Sync
+
+- [Chain Sync Client Specification](chainsync-spec.md)
+- [Chain Sync Client](chainsyncclient.md)
+
+## Genesis
+
+- [Ouroboros Genesis](genesis.md)
+- [Ouroboros Genesis (2)](genesis-2.md)
+- [Genesis Slides](genesis-2.0.md)
+- [Genesis Roadmap (2023)](genesis-roadmap.md)
+- [Genesis Decomposition](genesis-decomposition.md)
+
+## Era-Specific
+
+- [Byron Consensus](byron.md)
+- [Shelley Consensus](shelley.md)
+- [Adding a New Era](adding-an-era.md)
+- [Epoch Boundary Blocks](ebbs.md)
+
+## Servers & Mempool
+
+- [Mini Protocol Servers](servers.md)
 - [Mempool](mempool.md)
-- [Mini protocol servers {#servers}](servers.md)
-- [Misc stuff. To clean up. {#hfc:misc}](misc-2.md)
-- [Miscellaneous](misc.md)
-- [Non-functional requirements {#nonfunctional}](nonfunctional.md)
-- [Ouroboros Genesis {#genesis}](genesis-2.md)
-- [Overview](overview.md)
-- [Overview {#hfc}](overview-2.md)
-- [Overview {#storage}](overview-3.md)
-- [Profiling tips & tricks](ProfilingTipsAndTricks.md)
-- [Query versioning](QueryVersioning.md)
-- [Reaching consensus {#testing:consensus}](consensus.md)
-- [References](References.md)
-- [Sanity checks](SanityChecks.md)
-- [Second Draft of this whole document](VersioningSchemeDecision.md)
-- [Serialisation abstractions {#serialisation}](serialisation.md)
-- [Shelley](shelley.md)
-- [Technical design decisions {#technical}](technical.md)
-- [The new organization](ReleaseProcess.md)
-- [The storage layer {#testing:storage}](storage.md)
+
+## Ledger Interface
+
+- [Interface to the Ledger](ledger-interface.md)
+
+## Low-Level & Time
+
+- [Low-Density Chains](lowdensity.md)
 - [Time](time.md)
-- [Volatile Database {#volatile}](volatiledb.md)
-- [What is Ouroboros Consensus?](index-2.md)
+- [Bootstrap Peers](bootstrap-peers.md)
+
+## Overviews & Architecture
+
+- [Overview](overview.md)
+- [Hard Fork Combinator Overview](overview-hfc.md)
+- [Hard Fork Combinator Misc](misc-hfc.md)
+- [Component Diagram](component-diagram.md)
+- [Consensus Layer Report](report.md)
+- [Introduction](intro.md)
+- [Conclusions](conclusions.md)
+- [Non-Functional Requirements](nonfunctional.md)
+- [Miscellaneous](misc.md)
+
+## Technical Decisions & Process
+
+- [Technical Design Decisions](technical.md)
+- [Query Versioning](query-versioning.md)
+- [Versioning Scheme Decision](versioning-scheme.md)
+- [Sanity Checks](sanity-checks.md)
+
+## Development Process (Reference)
+
+- [Benchmarks](benchmarks.md)
+- [Profiling Tips & Tricks](profiling-tips.md)
+- [Git Process](git-process.md)
+- [Release Process](release-process.md)
+- [Style Guide](style-guide.md)
+- [References](references.md)

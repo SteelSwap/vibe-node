@@ -2,7 +2,7 @@
 :::
 
 ::: landscape
-![Positioning of this Deliverable (outlined in red).](d4-depends.pdf)
+<!-- [Image from original LaTeX source: d4-depends.pdf] Positioning of this Deliverable (outlined in red). -->
 :::
 
 ***Note: this document is subject to change. In particular, it may be necessary to include a simplified fees calculation in the incentivised TestNet, where all the fees accrue to the Treasury. Also note that some terms and symbols that were used in SL-D1 have been changed in this document in order to simplify the explanations that are given here. These are outlined in Appendix [4](#app:diffs){reference-type="ref" reference="app:diffs"}.***
@@ -267,25 +267,25 @@ This example is taken from the internal spreadsheet calculator at <https://docs.
 
 ### Key Parameters {#key-parameters .unnumbered}
 
-![image](RCT1.pdf){height="6in"}
+<!-- [Image from original LaTeX source] -->
 
-![image](RCT2.pdf){width="120%"}
+<!-- [Image from original LaTeX source] -->
 
 This diagram shows the key parameters and settings for the rewards system, including the rewards that are distributed from the reserves at each epoch. We assume a Treasury Top Slice of 10% and the target number of StakePools to be 100. The ADA in circulation and reserves are the values as of September 24$^{th}$ 2019, rounded to the nearest ADA1bn. We further assume a *monetary expansion rate* of 10% and that the TestNet will run for 180 days (this is used to calculate the initial values of the ADA in circulation and in reserve for the full incentives scheme). After the Treasury Top Slice is taken, the total rewards per Epoch (or Day) that will be distributed to the StakePools is ***ADA 3,452,054.79***.
 :::
 
 ### StakePool Parameters {#stakepool-parameters .unnumbered}
 
-![image](RCT3.pdf){width="120%"}
+<!-- [Image from original LaTeX source] -->
 
 This diagram shows the StakePool-specific parameters, including the total controlled ADA and the division by owner(s) and delegators. Here, 98.71% of the StakePool ADA is owned by delegators. We choose a *margin* for the pool charges of 2.00% of the net income, and a daily *cost* of ***ADA 256.41*** (\$10). The gross reward to the StakePool is precisely the expected reward, since it controls exactly the required percentage of stake (1.00%, corresponding to the limit set from the $N^{\textit{Pools}}$ parameter). This is reduced in line with the StakePool's *actual performance* as observed by the system (here assumed to be 90%), giving a *penalty* that amounts to ***ADA 3452.05*** per day.
 
 ### Calculated Rewards {#calculated-rewards .unnumbered}
 
 ::: minipage
-![image](RCT4.pdf){width="120%"}
+<!-- [Image from original LaTeX source] -->
 
-![image](RCT5.pdf){width="120%"}
+<!-- [Image from original LaTeX source] -->
 :::
 
 This diagram shows the corresponding rewards that accrue to the owner(s) and delegators, plus a calculation of the total income that is received by the owners. We will assume that the average and actual gross rewards are the same, i.e. if the StakePool controls 1% of the total ADA in circulation, it will produce exactly 1% of the blocks, and it would therefore receive exactly 1% of the total rewards as its *average gross rewards*. The *actual gross rewards*, $R^{\textit{Gross}}$ reduce this by its *actual performance* in epoch $E$, giving 0.9% of the total rewards. In total, the owners and delegators to this StakePool would receive a net reward that was equivalent to 7.11% per year (the "staking yield"). We assume that the owners have agreed an equal distribution of rewards. If there were 4 owners for the StakePool, each would then receive 25% of the owner rewards, i.e. $\textbf{\emph{ADA{}~{158,121.42}}} \div 4 ~~=~~ \textbf{\emph{ADA{}~{39,530.355}}}$. Similarly, a delegator contributing 10% of the delegated stake would receive 10% of the delegator reward, i.e., $\textbf{\emph{ADA{}~{12,096,288.83}}} \div 10 ~~=~~ \textbf{\emph{ADA{}~{1,209,628.8883}}}$. If we assume that the pool operating cost is accurate, then the net income to the pool owner(s) would be the sum of the pool charges and the rewards, i.e. ***ADA 367,140.88*** or a net return of 18.36% of the owners' stake.
@@ -399,8 +399,8 @@ In the MainNet, the gross rewards distribution will depend on the current MainNe
 
 ::::: {.figure latex-placement="h!"}
 ::: center
-![image](AdaPerYear.pdf){width="75%"}\
-![image](Rewards.pdf){width="75%"}
+<!-- [Image from original LaTeX source] -->\
+<!-- [Image from original LaTeX source] -->
 :::
 
 ::: caption
@@ -543,31 +543,31 @@ This example is taken from the internal calculator at <https://docs.google.com/s
 ### Key Parameters {#key-parameters-1 .unnumbered}
 
 ::: minipage
-![image](RCM0.pdf)
+<!-- [Image from original LaTeX source] -->
 
-![image](RCM1.pdf)
+<!-- [Image from original LaTeX source] -->
 :::
 
 This diagram shows the key parameters and settings for the rewards system, including the initially circulating and reserve ADA. The monetary expansion rate is calculated as described above. The number of days per Epoch is set to 5, the influence factor to 0.1, the system performance to 99%, the average transaction fees to ***ADA 2,000*** and the expected rewards rate to 0.05. These parameters are used as part of the monetary expansion rate calculation.
 
 ### Circulation and Distribution {#circulation-and-distribution .unnumbered}
 
-![image](RCM2.pdf){width="160%"}
+<!-- [Image from original LaTeX source] -->
 
 The upper part of this diagram shows the ADA that is distributed for Epoch E, assuming the overall system performance of 99%, retained deposits of ***ADA 500*** and transaction fees of ***ADA 2,000***. The total distribution for the Epoch is ***ADA 56,051,291.02***. These are reduced by the Treasury Top Slice and the influence factor to give the rewards that are distributed to the pools of ***ADA 46,323,360.35***. The lower part of the diagram shows the ADA in circulation and the reserves at the start and end of the Epoch.
 
 ### StakePool Parameters {#stakepool-parameters-1 .unnumbered}
 
-![image](RCM3.pdf){width="125%"}
+<!-- [Image from original LaTeX source] -->
 
 This diagram shows the StakePool-specific parameters, including the total controlled ADA and the division by owner(s) and delegators. In the MainNet, 99.37% of the StakePool ADA is owned by delegators. The StakePool receives all of its optimal rewards, since it controls exactly the required percentage of stake (1.00%, corresponding to the limit set from the $N^{\textit{Pools}}$ parameter).
 
 ### Calculated Rewards {#calculated-rewards-1 .unnumbered}
 
 ::: minipage
-![image](RCM4.pdf){width="120%"}
+<!-- [Image from original LaTeX source] -->
 
-![image](RCM5.pdf){width="120%"}
+<!-- [Image from original LaTeX source] -->
 :::
 
 This diagram shows the corresponding rewards that accrue to the owner(s) and delegators, plus a calculation of the total income that is received by the owners. As before, we will assume that the average and actual gross rewards are the same, i.e. if the StakePool controls 1% of the total ADA in circulation, it will produce exactly 1% of the blocks, that it has 100% performance, and will therefore receive exactly 1% of the rewards. In total, the owners and delegators to this StakePool would receive a net reward that was equivalent to 8.33% per year (the "staking yield"), representing a 17% better return than with the simplified scheme. The final rows calculate the *non-myopic* rewards (i.e. long-term rewards that ensure a stable and well-functioning system). As described in [@delegation_design], these values will be used to guide stakeholder behaviour through a ranking system that will encourage convergence to the $N^{\textit{Pools}}$ best-performing pools. For this pool, which is *saturated*, the non-myopic rewards are identical to the *optimal rewards*. Rewards will be returned as described in Section [2.4](#sec:rewards-return){reference-type="ref" reference="sec:rewards-return"}. In the MainNet, when multiple owners are involved, this return could be through a multi-signature transaction [@shelley_multisig], according to an agreed formula.
@@ -575,9 +575,9 @@ This diagram shows the corresponding rewards that accrue to the owner(s) and del
 ### Delegator Rewards {#delegator-rewards .unnumbered}
 
 ::: minipage
-![image](RCM6.pdf){width="120%"}
+<!-- [Image from original LaTeX source] -->
 
-![image](RCM7.pdf){width="120%"}
+<!-- [Image from original LaTeX source] -->
 :::
 
 This diagram shows the rewards that a stakeholder would receive over time if they delegated ***ADA 1,000,000*** to the sample pool under the assumptions used above. In total, this would represent 0.65% of the stake that is delegated to the incentivised TestNet pool, or 0.32% of the stake that is delegated to the MainNet pool. Overall, the staking yield would be 7.11% for the simplified scheme, or 8.33% for the full scheme, representing a return of ***ADA 70K***-***ADA 80K*** over a year.
