@@ -294,9 +294,49 @@ The memory requirement (match or beat Haskell) is met by:
 
 **SQLite** remains available for metadata storage (peer lists, configuration) where its stdlib availability and zero-dependency nature are valuable.
 
+## Leios Concurrency Considerations
+
+!!! warning "LMDB's Single-Writer Limitation"
+    LMDB supports **many concurrent readers but only one writer** at a time. This is fine for Praos (one block every ~20 seconds, sequential validation), but Ouroboros Leios introduces significantly higher concurrency:
+
+    - Multiple **input blocks (IBs)** can arrive concurrently within a slot
+    - **Endorser blocks (EBs)** reference multiple IBs, requiring parallel validation
+    - Transaction throughput increases substantially
+    - The Haskell team is already developing an LSM-tree backend to replace LMDB
+
+### Impact on Our Architecture
+
+The hybrid architecture (LMDB + Arrow) partially mitigates this:
+
+- **Arrow in-memory layer absorbs concurrent reads** — validation threads can read the Arrow UTxO table concurrently without hitting LMDB's read lock
+- **Batch writes to LMDB** — instead of writing per-transaction, accumulate mutations in Arrow and flush to LMDB in batches (reducing write contention)
+- **LMDB remains viable for Praos** — our initial implementation targets Praos. The single-writer limit won't be a bottleneck until Leios lands.
+
+### Migration Path for Leios
+
+When Leios arrives, we have options:
+
+| Option | Concurrent Writes | Read Perf | Complexity |
+|--------|------------------|-----------|------------|
+| **Keep LMDB + batched writes** | Moderate (batch coalescing) | Excellent | Low |
+| **Switch to LSM-tree** | High (memtable + compaction) | Good | Medium |
+| **DuckDB for UTxO state** | High (MVCC) | Moderate | Medium |
+| **Arrow-native storage (Lance/Delta)** | High (append-only + compaction) | Good | High |
+
+**Our approach:** Design the storage abstraction layer (`vibe.core.storage`) with a clean interface so the persistence backend can be swapped without changing the node logic. Start with LMDB for Praos conformance (matches Haskell, simplest to verify). When Leios requirements are concrete, switch the backend behind the abstraction.
+
+The key insight: **don't optimize for Leios now, but don't lock ourselves in either.** The `vibe.core.storage` abstraction should expose:
+- `get(key) → value` (point read)
+- `batch_put([(key, value)])` (batch write)
+- `batch_delete([key])` (batch delete)
+- `snapshot() → handle` (consistent snapshot for readers)
+
+Any backend that implements this interface can be swapped in.
+
 ## Future Considerations
 
-- **LSM-tree backend**: The Haskell team is developing an LSM-tree backend to replace LMDB for LedgerDB. We should monitor this and evaluate when it ships. LSM trees offer better write amplification characteristics at the cost of read performance.
+- **LSM-tree backend**: The Haskell team is developing an LSM-tree backend to replace LMDB for LedgerDB. Monitor this closely — when it ships, evaluate whether we should switch simultaneously.
+- **Lance / Delta Lake**: Arrow-native storage formats that support concurrent writes and time travel. Could be the Leios-ready backend if DuckDB's OLAP overhead is too high for the hot path.
 - **Arrow Flight for N2C queries**: Local state queries (node-to-client miniprotocol) could potentially serve Arrow-formatted results directly, enabling efficient analytical queries from wallets and tools.
 - **Compression**: LMDB doesn't compress data. If disk footprint becomes a concern, we can add application-level compression (LZ4 for values) while keeping keys uncompressed for ordered traversal. Arrow/Feather supports built-in compression (LZ4, ZSTD).
 
