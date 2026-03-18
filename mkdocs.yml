@@ -35,6 +35,20 @@ theme:
     - content.code.copy
     - content.code.annotate
 
+not_in_nav: |
+  /specs/foundations/*.md
+  /specs/serialization/*.md
+  /specs/transactions/*.md
+  /specs/ledger/*.md
+  /specs/consensus/*.md
+  /specs/storage/*.md
+  /specs/networking/*.md
+  /specs/plutus/*.md
+  /specs/governance/*.md
+  /specs/papers/*.md
+  /superpowers/**
+  /development/devlog/phase0-wave3.md
+
 nav:
   - Home: index.md
   - About:
@@ -47,6 +61,16 @@ nav:
   - Specifications:
     - Overview: specs/index.md
     - Gap Analysis: specs/gap-analysis.md
+    - Foundations: specs/foundations/index.md
+    - Serialization: specs/serialization/index.md
+    - Transactions: specs/transactions/index.md
+    - Ledger: specs/ledger/index.md
+    - Consensus: specs/consensus/index.md
+    - Storage: specs/storage/index.md
+    - Networking: specs/networking/index.md
+    - Plutus: specs/plutus/index.md
+    - Governance: specs/governance/index.md
+    - Papers: specs/papers/index.md
   - Development:
     - Overview: development/index.md
     - Milestones: development/milestones.md
@@ -55,6 +79,7 @@ nav:
       - Journal: development/devlog/index.md
       - "Phase 0, Wave 1 — Foundation": development/devlog/phase0-wave1.md
       - "Phase 0, Wave 2 — Ingestion & CLI": development/devlog/phase0-wave2.md
+      - "Phase 0, Wave 3 — Search & MCP": development/devlog/phase0-wave3.md
   - Reference:
     - Overview: reference/index.md
     - CLI Reference: reference/cli-reference.md
@@ -89,6 +114,7 @@ extra_css:
   - stylesheets/extra.css
 
 extra_javascript:
+  - javascripts/mathjax.js
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 extra:

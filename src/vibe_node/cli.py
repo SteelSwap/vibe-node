@@ -418,42 +418,22 @@ def code(
     asyncio.run(run())
 
 
-@db_app.command(name="rebuild-manifest")
-def rebuild_manifest() -> None:
-    """Rebuild the code_tag_manifest table from existing code_chunks data."""
-    import asyncio
+@db_app.command(name="export-specs")
+def export_specs_cmd() -> None:
+    """Export pre-converted spec markdown to docs/specs/ organized by era.
 
-    async def _run():
-        from vibe_node.db.session import get_session
-        from vibe_node.ingest.code import CodeIngestor
-
-        typer.echo("Rebuilding code_tag_manifest from code_chunks...")
-        async with get_session() as session:
-            count = await CodeIngestor.rebuild_manifest(session)
-        typer.echo(f"Done. Manifest has {count} entries.")
-
-    asyncio.run(_run())
-
-
-@db_app.command(name="backfill-completion")
-def backfill_completion() -> None:
-    """Backfill code_tag_completion markers from existing data.
-
-    Run this once after upgrading to populate completion markers for
-    tags that were fully ingested before the marker was added.
+    Reads era metadata from the database, then copies pre-converted markdown
+    from data/specs/ to docs/specs/{era}/ with clean filenames and index pages.
     """
-    import asyncio
+    from vibe_node.export_specs import export_specs
 
-    async def _run():
-        from vibe_node.db.session import get_session
-        from vibe_node.ingest.code import CodeIngestor
-
-        typer.echo("Backfilling code_tag_completion from existing data...")
-        async with get_session() as session:
-            count = await CodeIngestor.backfill_completion(session)
-        typer.echo(f"Done. {count} tags marked as complete.")
-
-    asyncio.run(_run())
+    typer.echo("Exporting spec documents to docs/specs/...")
+    stats = export_specs()
+    if not stats:
+        typer.echo("No documents exported.", err=True)
+        raise typer.Exit(1)
+    total = sum(stats.values())
+    typer.echo(f"\nDone: {total} documents across {len(stats)} categories.")
 
 
 @db_app.command(name="create-indexes")

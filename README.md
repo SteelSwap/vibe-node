@@ -18,35 +18,20 @@ This is not just a node — it's a public education in vibe coding with extreme 
 
 ## Current Status
 
-> **Phase 0 — Development Architecture** nearing completion. Knowledge base operational, node implementation next.
+> **Phase 0 — Development Architecture: COMPLETE.**
+> Phase 1 — Research & Analysis is next. Node implementation begins in Phase 2.
 
-### Phase 0: Dev Infrastructure
-
-| Component | Status |
-|-----------|--------|
-| Project scaffold (Python 3.14, uv, typer CLI) | Done |
-| Docker Compose stack (ParadeDB, Ollama, Mithril, cardano-node, Ogmios, PaddleOCR) | Done |
-| Git submodules (6 repos: cardano-node, cardano-ledger, ouroboros-network, ouroboros-consensus, plutus, formal-ledger-specs) | Done |
-| Database schema (7 tables, SQLModel + asyncpg) | Done |
-| Spec ingestion pipeline (LaTeX/pandoc, CDDL, Markdown, Agda, PDF/PaddleOCR) | Done |
-| Code indexing pipeline (tree-sitter-haskell, Agda parser, content-hash dedup) | Done |
-| GitHub issues & PRs ingestion (GraphQL, full discussion threads) | Done |
-| CLI commands (infra, ingest, db) | Done |
-| Documentation (4-tab MkDocs site with SteelSwap branding) | Done |
-| Search infrastructure (BM25 + vector + RRF fusion) | Not started |
-| MCP integrations (Search MCP, CrystalDB MCP) | Not started |
-
-### Node Implementation (Phase 1+)
-
-| Component | Status |
-|-----------|--------|
-| Networking / Multiplexer | Not started |
-| Chain Sync | Not started |
-| Block Fetch | Not started |
-| Ledger Validation | Not started |
-| Consensus (Ouroboros Praos) | Not started |
-| Block Production | Not started |
-| Node-to-Client protocols | Not started |
+| Component | Status | Description |
+|-----------|--------|-------------|
+| Docker Compose Stack | Complete | ParadeDB, Ollama, Mithril, cardano-node, Ogmios, PaddleOCR |
+| Spec Ingestion | Complete | LaTeX, Markdown, CDDL, Literate Agda, PDF via PaddleOCR |
+| Code Indexing | Complete | tree-sitter Haskell + Agda, content-hash dedup, versioned by release tag |
+| GitHub Ingestion | Complete | Issues, PRs, comments via GraphQL from 7 repos |
+| Search Infrastructure | Complete | BM25 + HNSW indexes, RRF fusion, composable templates |
+| Search MCP | Complete | 6 read-only tools (search, find_similar, get_related, coverage, get_entity, compare_versions) |
+| CLI | Complete | infra, ingest, db subcommands |
+| Documentation | Complete | 4-tab MkDocs with SteelSwap branding |
+| Node Implementation | Phase 2+ | Not started — Phase 1 (Research & Analysis) is next |
 
 ## Quick Start
 
@@ -68,9 +53,6 @@ uv run vibe-node ingest issues --limit 10
 
 # Search the knowledge base
 uv run vibe-node db search "Ouroboros Praos VRF"
-
-# Run the node (not yet implemented)
-uv run vibe-node serve
 ```
 
 ## Documentation

@@ -12,8 +12,19 @@ This is not just a node. It's a public demonstration that AI-assisted developmen
 
 ## Current Status
 
-!!! warning "Phase 0 — Development Architecture"
-    Building the knowledge base and dev infrastructure. Spec ingestion, code indexing, and GitHub issue tracking are operational. Node implementation has not yet started.
+!!! success "Phase 0 — Development Architecture: COMPLETE"
+    The knowledge base, search infrastructure, MCP integrations, CLI, and documentation are all operational. **Phase 1 — Research & Analysis** is next, followed by node implementation in Phase 2.
+
+| Component | Status |
+|-----------|--------|
+| Docker Compose Stack (ParadeDB, Ollama, Mithril, cardano-node, Ogmios, PaddleOCR) | :material-check-circle: Complete |
+| Spec Ingestion (LaTeX, Markdown, CDDL, Literate Agda, PDF) | :material-check-circle: Complete |
+| Code Indexing (tree-sitter Haskell + Agda, versioned by release tag) | :material-check-circle: Complete |
+| GitHub Ingestion (Issues, PRs, comments from 7 repos) | :material-check-circle: Complete |
+| Search Infrastructure (BM25 + HNSW, RRF fusion) | :material-check-circle: Complete |
+| Search MCP (6 tools) + CrystalDB MCP | :material-check-circle: Complete |
+| CLI (infra, ingest, db subcommands) | :material-check-circle: Complete |
+| Node Implementation | :material-clock-outline: Phase 2+ |
 
 ## Quick Start
 
@@ -26,8 +37,13 @@ uv sync
 # Start infrastructure
 uv run vibe-node infra up
 
-# Run the node (not yet implemented)
-uv run vibe-node serve
+# Ingest the knowledge base
+uv run vibe-node ingest specs
+uv run vibe-node ingest code --limit 1
+uv run vibe-node ingest issues --limit 10
+
+# Search
+uv run vibe-node db search "Ouroboros Praos VRF"
 ```
 
 ## Documentation

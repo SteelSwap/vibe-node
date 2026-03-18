@@ -1,7 +1,7 @@
 # Database Schema
 
 !!! info "License: CC-BY-SA-4.0"
-    The **contents** of the database (spec extractions, cross-references, test specifications, embeddings, and all other data produced by the ingestion pipelines) are licensed under [Creative Commons Attribution-ShareAlike 4.0 International](../LICENSE-DATA). If you redistribute or build upon the database contents, you must provide attribution to SteelSwap and share under the same or a compatible license. The database schema definitions and source code remain under [AGPL-3.0](../LICENSE).
+    The **contents** of the database (spec extractions, cross-references, test specifications, embeddings, and all other data produced by the ingestion pipelines) are licensed under [Creative Commons Attribution-ShareAlike 4.0 International](https://github.com/SteelSwap/vibe-node/blob/main/LICENSE-DATA). If you redistribute or build upon the database contents, you must provide attribution to SteelSwap and share under the same or a compatible license. The database schema definitions and source code remain under [AGPL-3.0](https://github.com/SteelSwap/vibe-node/blob/main/LICENSE).
 
 ParadeDB (PostgreSQL 17) with pg_search (BM25) and pgvector extensions. All tables use `vector(1536)` for Jina Code 1.5B embeddings.
 
