@@ -21,9 +21,12 @@ ingest_app = typer.Typer(help="Data ingestion commands.", invoke_without_command
 # Import infra commands and extra db commands from cli_infra
 from vibe_node.cli_infra import infra_app, register_db_extras
 
+research_app = typer.Typer(help="Research and analysis commands.", invoke_without_command=True)
+
 app.add_typer(db_app, name="db")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(infra_app, name="infra")
+app.add_typer(research_app, name="research")
 
 # Register snapshot, restore, search on the db app
 register_db_extras(db_app)
@@ -470,3 +473,90 @@ def create_indexes() -> None:
         raise typer.Exit(1)
     typer.echo("Indexes created successfully.")
     typer.echo(result.stdout)
+
+
+# ===========================================================================
+# Research commands
+# ===========================================================================
+
+
+@research_app.callback(invoke_without_command=True)
+def research_callback(ctx: typer.Context):
+    """Research and analysis commands."""
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+
+
+@research_app.command(name="extract-rules")
+def extract_rules(
+    subsystem: str = typer.Argument(help="Subsystem to extract rules for"),
+    limit: int | None = typer.Option(None, "--limit", "-n", help="Max spec chunks to process"),
+) -> None:
+    """Run the PydanticAI rule extraction and linking pipeline for a subsystem.
+
+    Extracts spec rules, finds implementing code and related discussions,
+    detects spec-vs-code gaps, and proposes Hypothesis tests.
+
+    Requires ANTHROPIC_API_KEY environment variable.
+    """
+    import asyncio
+    import os
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        typer.echo(
+            "ANTHROPIC_API_KEY not set. Get one at https://console.anthropic.com/",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+
+    async def _run():
+        from vibe_node.db.pool import get_pool, close_pool
+        from vibe_node.research.pipeline import run_pipeline
+
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            # Count chunks for progress bar
+            terms = {
+                "networking": ["ouroboros-network", "network", "multiplexer"],
+                "serialization": ["cddl", "cbor"],
+                "ledger": ["ledger", "utxo", "delegation"],
+                "consensus": ["ouroboros", "praos", "consensus"],
+                "plutus": ["plutus", "script", "cost-model"],
+                "mempool": ["mempool"],
+                "storage": ["immutable", "volatile", "storage"],
+            }.get(subsystem, [subsystem])
+
+            chunk_ids = set()
+            for term in terms:
+                rows = await conn.fetch(
+                    "SELECT id FROM spec_documents WHERE content_markdown ILIKE $1 LIMIT 50",
+                    f"%{term}%",
+                )
+                for row in rows:
+                    chunk_ids.add(row["id"])
+
+            total = min(len(chunk_ids), limit) if limit else len(chunk_ids)
+            typer.echo(f"Processing {total} spec chunks for subsystem={subsystem}...")
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("{task.completed}/{task.total}"),
+                TimeElapsedColumn(),
+            ) as progress:
+                task = progress.add_task(f"[green]{subsystem}", total=total)
+                stats = await run_pipeline(conn, subsystem, limit=limit, progress=progress)
+
+        await close_pool()
+
+        typer.echo(f"\n=== Pipeline Complete ===")
+        typer.echo(f"  Chunks processed:  {stats['chunks_processed']}")
+        typer.echo(f"  Rules extracted:   {stats['rules_extracted']}")
+        typer.echo(f"  Links created:     {stats['links_created']}")
+        typer.echo(f"  Gaps found:        {stats['gaps_found']}")
+        typer.echo(f"  Tests proposed:    {stats['tests_proposed']}")
+
+    asyncio.run(_run())
