@@ -85,6 +85,7 @@ nav:
     - CLI Reference: reference/cli-reference.md
     - Database Schema: reference/schema.md
     - Architecture: reference/architecture.md
+    - Package Structure: reference/package-structure.md
     - Development Workflow: reference/workflow.md
     - Node Subsystems:
       - Overview: reference/subsystems/index.md
