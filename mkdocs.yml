@@ -86,6 +86,7 @@ nav:
     - Database Schema: reference/schema.md
     - Architecture: reference/architecture.md
     - Package Structure: reference/package-structure.md
+    - Library Audit: reference/library-audit.md
     - Development Workflow: reference/workflow.md
     - Node Subsystems:
       - Overview: reference/subsystems/index.md
