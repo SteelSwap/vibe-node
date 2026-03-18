@@ -211,6 +211,19 @@ When adding new documentation:
 
 Development log entries are organized by phase and wave, with per-module sections and an "Issues Encountered & Fixed" table documenting problems and their solutions.
 
+## Community Contributions
+
+### Cardano Blueprint
+We contribute back to the [Cardano Blueprint](https://cardano-scaling.github.io/cardano-blueprint/) — a collaborative protocol documentation project. Our spec analysis, gap analysis, and cross-referencing work produces findings valuable to the broader community. When we discover spec gaps, undocumented behaviors, or useful mappings between specs and code, format them as contributions to the Blueprint.
+
+### Antithesis / Moog
+[Moog](https://cardano-foundation.github.io/moog/) is the Cardano Foundation's integration with the Antithesis autonomous testing platform. Our property-based tests (Hypothesis) should be structured so they can run both locally AND on Antithesis. Reference implementation: [Ouroboros Leios Antithesis tests](https://github.com/input-output-hk/ouroboros-leios/tree/main/antithesis).
+
+When designing test specifications, consider:
+- Tests must be deterministic given the same random seed
+- Property invariants should be expressible as assertions Antithesis can discover violations of
+- Test structure should follow the Leios pattern for Antithesis compatibility
+
 ## Project Standards
 
 - **License**: AGPL-3.0
