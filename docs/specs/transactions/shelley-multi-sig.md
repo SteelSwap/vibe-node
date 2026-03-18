@@ -1,7 +1,7 @@
 
 
 
-![Positioning of this Deliverable (outlined in red).](d3-depends.pdf)
+*[Image from original source]*
 
 # Introduction
 Under some circumstances, multiple signatures may be required to authorise a transaction, for example, where an account is held in joint names or is a business account that is held by several business partners. Depending on the account, it may be that authorisation is required by all signatories or by a single signatory. This specification for a simple multi-signature scheme on the formal specification for the Shelley Cardano Ledger [@shelley_spec]. The main changes from that document are:

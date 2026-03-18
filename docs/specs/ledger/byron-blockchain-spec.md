@@ -914,7 +914,7 @@ Figure 22 gives the bound on the likelihood of threshold violation for $t$ in ou
 
 
 ::: center
-![](calculating-t.png)
+*[Image from original source]*
 
 **Probability of generating an invalid chain for values of $t\in\left[
         \frac{1}{4}, \frac{1}{5} \right]$.**

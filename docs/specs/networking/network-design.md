@@ -311,7 +311,7 @@ The high level consensus design following the various considerations above consi
 
 Each of these components is illustrated in the diagram below, which illustrates the key data flows between the components. (The diagram also distinguishes between passive state and active threads that interact with the state, but this distinction is unimportant for the high level summary.)
 
-![image](./media/image8.png){width="6.27083in" height="7.25347in"}
+*[Image from original source]*
 
 The validation and chain selection functionalities of Ouroboros are in four separate places:
 
@@ -1251,7 +1251,7 @@ The approach to mitigation of bearer-level DoS attacks is to defend *core* nodes
 
 The IP address of the core node is not published[^89], making it difficult to attack; and if relays are attacked they can be replaced with new ones having different IP addresses (which can be published to other nodes via mechanisms such as dynamic DNS). This is embodied in the figure below:
 
-![image](./media/image5.png){width="6.26772in" height="3.61111in"}
+*[Image from original source]*
 
 ## Development approach
 
@@ -1744,11 +1744,11 @@ The table 4 represents the default case -- i.e. no special action on the code a
 
 The figure below shows the window size over a four-minute run:
 
-![image](./media/image1.png){width="6.27083in" height="3.88889in"}
+*[Image from original source]*
 
 The following figure shows the contemporaneous round trip (as reported from TCP):
 
-![image](./media/image4.png){width="6.27083in" height="3.88889in"}
+*[Image from original source]*
 
 Note that the outliers in round trip time are (most likely) relating to those packets that were at the end of the round trip time / window closing -- most ACKs would have been triggered by the "two packet rule"; if an odd number of packets arrived just before a pause, its acknowledgement would be dependent on the ACK timeout (\~40ms).
 
@@ -1983,12 +1983,12 @@ This component is independent of typed-protocols (or any protocol library), and 
 ##### Incoming Data path (Ingress path)
 
  \
-![image](./media/image2.png){width="6.27083in" height="2.875in"}
+*[Image from original source]*
 
 ##### Outgoing Data Path (Egress Path)
 
  \
-![image](./media/image6.png){width="6.27083in" height="2.59722in"}
+*[Image from original source]*
 
 ### Ouroboros-Network
 
