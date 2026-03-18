@@ -1,6 +1,6 @@
 # Base Types
 sec:base-types
-\mathsf{LedgerModule}{BaseTypes}, in which we define some of the most basic types used throughout the ledger.
+\LedgerModule{BaseTypes}, in which we define some of the most basic types used throughout the ledger.
 
 
 figure*[h]

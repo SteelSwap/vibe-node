@@ -1,47 +1,32 @@
 # Ledger
 
-Ledger state transitions, delegation, protocol parameters, epoch boundaries, rewards, chain rules, and update mechanisms across all eras.
+Ledger state transitions, delegation, protocol parameters, epoch/rewards, chain layer, updates, incentives.
 
-## Ledger State Transitions
+**26 documents**
 
-- [Blockchain Interface [Byron]](byron-blockchain-interface.md)
-- [Ledger State Transition [Shelley]](shelley-ledger.md)
-- [Ledger Spec Appendix [Shelley]](shelley-ledger-spec-appendix.md)
+- [Blockchain layer [Alonzo]](alonzo-chain.md)
+- [Rewards and the Epoch Boundary [Alonzo]](alonzo-epoch.md)
 - [Ledger State Transition [Alonzo]](alonzo-ledger.md)
-- [Ledger [Conway]](conway-ledger.md)
-
-## Blockchain / Chain Layer
-
-- [Blockchain Layer [Shelley]](shelley-chain.md)
-- [Blockchain Layer [Alonzo]](alonzo-chain.md)
-- [Blockchain Layer [Conway]](conway-chain.md)
-
-## Delegation & Certificates
-
-- [Delegation [Byron]](byron-delegation.md)
-- [Delegation [Shelley]](shelley-delegation.md)
-- [Certificates [Conway]](conway-certs.md)
-
-## Protocol Parameters
-
-- [Protocol Parameters [Shelley]](shelley-protocol-parameters.md)
 - [Protocol Parameters [Alonzo]](alonzo-protocol-parameters.md)
-- [Protocol Parameters [Conway]](conway-pparams.md)
-- [Protocol Parameters Update [Conway]](conway-new-pp.md)
-- [Update Proposal Mechanism [Conway]](conway-ppup.md)
-
-## Epoch Boundary & Rewards
-
-- [Rewards and Epoch Boundary [Shelley]](shelley-epoch.md)
-- [Rewards and Epoch Boundary [Mary/Allegra]](mary-epoch.md)
-- [Rewards and Epoch Boundary [Alonzo]](alonzo-epoch.md)
+- [Blockchain interface [Byron]](byron-blockchain-interface.md)
+- [List of Contributors [Byron]](byron-blockchain-spec.md)
+- [Delegation [Byron]](byron-delegation.md)
+- [Update mechanism [Byron]](byron-update-mechanism.md)
+- [Certificates [Conway]](conway-certs.md)
+- [Blockchain Layer [Conway]](conway-chain.md)
 - [Epoch Boundary [Conway]](conway-epoch.md)
+- [Ledger [Conway]](conway-ledger.md)
+- [Protocol Parameters Update [Conway]](conway-new-pp.md)
+- [Protocol Parameters [Conway]](conway-pparams.md)
+- [Update Proposal Mechanism [Conway]](conway-ppup.md)
 - [Rewards [Conway]](conway-rewards.md)
-- [Incentives [Shelley]](shelley-incentives.md)
-- [Leader Value Calculation [Shelley]](shelley-leader-value.md)
-
-## Update Mechanisms
-
-- [Update Mechanism [Byron]](byron-update-mechanism.md)
-- [Update Proposal Mechanism [Shelley]](shelley-update.md)
+- [Blockchain layer [Shelley]](shelley-chain.md)
+- [Delegation [Shelley]](shelley-delegation.md)
+- [Rewards and the Epoch Boundary [Shelley]](shelley-epoch.md)
+- [Introduction [Shelley]](shelley-incentives.md)
+- [Shelley Ledger Spec [Shelley]](shelley-ledger-spec.md)
+- [Ledger State Transition [Shelley]](shelley-ledger.md)
+- [Rewards and the Epoch Boundary [Mary/Allegra]](shelley-ma-epoch.md)
+- [Protocol Parameters [Shelley]](shelley-protocol-parameters.md)
 - [Software Updates [Shelley]](shelley-software-updates.md)
+- [Update Proposal Mechanism [Shelley]](shelley-update.md)

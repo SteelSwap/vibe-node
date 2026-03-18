@@ -1,9 +1,9 @@
 % If the module name changes, change the following macro to match!
-\mathsf{EpochPropConstRwds}{Epoch/Properties/ConstRwds}
+\EpochPropConstRwds{Epoch/Properties/ConstRwds}
 
 
 claim[%
-  \mathsf{EpochPropConstRwds}.lagda{\mathsf{EpochPropConstRwds}{}}:
+  \EpochPropConstRwds.lagda{\EpochPropConstRwds{}}:
    rule leaves rewards unchanged%
   ]
   itemize
@@ -19,7 +19,7 @@ dom-rwds-const : {e : Epoch} (es es' : NewEpochState)
 dom-rwds-const es es' step = dom (RewardsOf es) ≡ dom (RewardsOf es')
 ```
     \item Proof. To appear (in the
-      \mathsf{EpochPropConstRwds}.lagda{\mathsf{EpochPropConstRwds}{}} module
+      \EpochPropConstRwds.lagda{\EpochPropConstRwds{}} module
       of the \repourl{formal ledger repository}).
   itemize
 claim

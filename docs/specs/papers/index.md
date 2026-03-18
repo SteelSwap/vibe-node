@@ -1,6 +1,8 @@
-# Research Papers
+# Papers
 
-Full research papers on Cardano's formal specification and consensus storage layer.
+Full research papers converted from PDF.
 
-- [Formal Specification of the Cardano Blockchain Ledger, Mechanized in Agda (2024)](cardano-ledger-formal-agda-2024.md)
-- [Cardano Consensus and Storage Layer — IOHK Technical Report](consensus-storage-report.md)
+**2 documents**
+
+- [Cardano Ledger Formal Agda (2024)](cardano-ledger-formal-agda-2024.md)
+- [Consensus Storage Report](consensus-storage-report.md)

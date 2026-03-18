@@ -1,9 +1,9 @@
 % If the module name changes, change the following macro to match!
-\mathsf{EpochPropGov}{Epoch/Properties/GovDepsMatch}
+\EpochPropGov{Epoch/Properties/GovDepsMatch}
 
 
 lemma[%
-  \mathsf{EpochPropGov}.lagda{\mathsf{EpochPropGov}{}}:
+  \EpochPropGov.lagda{\EpochPropGov{}}:
   govDepsMatch is invariant of  rule%
   ]
   lem:EpochGovDepsMatch
@@ -20,7 +20,7 @@ lemma[%
     let removed' be the union of the governance actions in the removed field of the ratify
     state of eps and the orphaned governance actions in the  of eps.
     Let $G$ be the set
-    $\{\mathsf{GovActionDeposit}{~id} : \ab{id} ∈ proj₁~\mathsf{AgdaFunction}{removed'}\}$.
+    $\{\GovActionDeposit{~id} : \ab{id} ∈ proj₁~\AgdaFunction{removed'}\}$.
     Assume: $G$ is a subset of the set of deposits
     of (the governance state of) eps.
     \item Formally.
@@ -31,7 +31,7 @@ lemma[%
     → govDepsMatch (eps .ls) → govDepsMatch (eps' .ls)
 ```
     \item Proof. See the
-      \mathsf{EpochPropGov}.lagda{\mathsf{EpochPropGov}{}}
+      \EpochPropGov.lagda{\EpochPropGov{}}
       module in the \repourl{formal ledger repository}.
   itemize
 lemma

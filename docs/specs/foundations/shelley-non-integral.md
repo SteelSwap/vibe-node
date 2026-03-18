@@ -21,7 +21,7 @@ The transcendental exponential function is used in reward and refund calculation
 
 The domain for the exponential function are the non-negative reals, more precisely the distribution parameter $\lambda \in (0, \infty)$ multiplied by a discrete non-negative duration $\delta$.
 
-The domain of the base of the exponentiation in $\mathsf{poolReward}$ are the non-negative reals resulting from the calculation in $\mathsf{movingAvg}$, the exponent $\gamma$ is a constant taken from the protocol parameters.
+The domain of the base of the exponentiation in $\fun{poolReward}$ are the non-negative reals resulting from the calculation in $\fun{movingAvg}$, the exponent $\gamma$ is a constant taken from the protocol parameters.
 
 ## Implementation of Non-Integer Calculations
 The large part consists of multiplication and division which can easily be done using fractional arithmetic to the desired precision. The precision necessary is bounded by the ability to represent a single lovelace in all calculations.

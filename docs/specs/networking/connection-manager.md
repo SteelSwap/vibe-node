@@ -14,6 +14,7 @@ hot transitions). If peer sharing is enabled, the incoming address will eventual
 
 
 **Main components**
+
 Using a TCP connection in both directions rather than two independent TCP connections is suitable for efficient use of network resources, but more importantly, it is crucial to support certain essential scenarios where one node is behind a firewall that blocks incoming TCP connections. For example, it is good practice to have a block-producing node behind a firewall while deploying relay nodes outside of it. If the node behind the firewall can establish an outbound TCP connection to its relays but still has those relays select the block-producing node as an upstream peer, which means that node operators do not need to configure any holes and/or port forwarding in the firewall. If we were only to support running mini-protocols in one direction, then this scenario would require a hole in the firewall to allow the relays to establish incoming connections to the block-producing node. That would be both less secure and also require additional configuration.
 
 Consider, however, what is required to make this scenario work.
@@ -38,9 +39,9 @@ A consequence of all this is that we cannot use a classic client/server design. 
 
 Although actual TCP connections must be a shared resource, we do not wish to Intermingle the code to handle the inbound and outbound directions. As noted above, the selection of upstream (outbound) peers is quite complicated, and we would not want to add to that complexity by mixing it with a lot of other concerns, and vice versa. To minimise complexity, it would be preferable if the code that manages the outbound side would be completely unaware of the inbound side and vice versa. Yet, we still want the inbound and outbound sides to opportunistically share TCP connections where possible. This appears to be eminently achievable given that we are using multiplexing to run mini-protocols in either direction and concurrency for mini-protocol handlers to achieve a degree of modularity.
 
-The use of a single TCP connection helps simplify exception processing and mitigate poor peer performance in a timely manner (whether connection-related or otherwise). This is covered in more detail in 1.3.
+The use of a single TCP connection helps simplify exception processing and mitigate poor peer performance in a timely manner (whether connection-related or otherwise). This is covered in more detail in 1.3{reference-type="ref+label" reference="sec:exceptions"}.
 
-These ideas lead to the design illustrated in 1.1. In this design, there is an outbound and inbound side -- which are completely unaware of each other -- mediated by a shared *connection manager* component.
+These ideas lead to the design illustrated in 1.1{reference-type="ref+label" reference="tik:components"}. In this design, there is an outbound and inbound side -- which are completely unaware of each other -- mediated by a shared *connection manager* component.
 
 The connection manager is there to manage the underlying TCP connection resources. It has to provide an interface to the outbound side to enable the use of connections in an outbound direction. Correspondingly, it must provide an interface to the inbound side to enable the use of connections in an inbound direction. Internally, it must deal with connections being used in a unidirectional or duplex way, as well as the transitions between them. Of course, it can be the case that connections are no longer required in either direction, and such connections should be closed in an orderly manner. This must be the responsibility of the connection manager since it is the only component that can see both inbound and outbound sides to be able to see that a connection is no longer needed in either direction and, hence, not needed at all.
 
@@ -112,7 +113,7 @@ All the mini-protocols have the property that agency starts with the client/init
 
 The inbound governor gets informed of new connections that should be monitored either via the server or by the connection manager. The server informs the governor about fresh inbound connections. The connection manager informs the governor about connections that started due to a request for an outbound connection -- at least for those connections that are to be available to use in duplex mode.
 
-As illustrated in 1.1, both the connection manager and server components communicate with the inbound governor directly. They do this to inform the inbound governor about new connections so that it can start to run and monitor the server-side protocols. The server notifies about new connections established inbound, while the connection manager acquires new connections established outbound (at least the duplex ones) through the connection manager API. A slight simplification would be to have only one of these routes of notification.
+As illustrated in 1.1{reference-type="ref+label" reference="tik:components"}, both the connection manager and server components communicate with the inbound governor directly. They do this to inform the inbound governor about new connections so that it can start to run and monitor the server-side protocols. The server notifies about new connections established inbound, while the connection manager acquires new connections established outbound (at least the duplex ones) through the connection manager API. A slight simplification would be to have only one of these routes of notification.
 
 The inbound governor
 
@@ -159,7 +160,7 @@ The *Connection Handler* drives through handshake negotiation and starts the mul
 
 - Handshake might error
 
-<!-- [Image from original LaTeX source: figure/node-to-node-ipc.png] Duplex connection running several mini-protocols -->
+![Duplex connection running several mini-protocols](figure/node-to-node-ipc.png){#fig:protocol-diagram width="\\linewidth"}
 
 The *Connection Handler* notifies the *Connection manager* about the result of a negotiation, which triggers a state transition. If we can run the connection in full-duplex mode, then it is possible to run the bundles of mini-protocols in both directions and otherwise only in one direction. So, Figure 1.2 shows $6$ mini protocols running, $3$ in each direction. If we negotiated only a unidirectional connection, then we'd only be running $3$ (The direction is based on which peer established the connection).
 
@@ -332,6 +333,7 @@ In this specification, we represent `OutboundState`^$\tau$^` Unidirectional`, wh
 
 
 ***Outbound* (blue & violet) and *inbound* (green & violet) connection states and allowed transitions.**
+
 Figure 1.3 shows all the transitions between `ConnectionState`s. Blue and Violet states represent states of an *Outbound* connection, and Green and Violet states represent states of an *Inbound* connection. Dashed arrows indicate asynchronous transitions that are triggered, either by a remote node or by the connection manager itself.
 
 Note that the vertical symmetry in the graph corresponds to the local vs remote state of the connection, see table 1.1. The symmetry is only broken by `InboundIdleState`^$\tau$^` dataFlow`, which does not have a corresponding local equivalent. This is simply because, locally, we immediately know when we will start initiator protocols, and the implementation is supposed to do that promptly. This, however, cannot be assumed to be the case on the inbound side.
@@ -355,18 +357,16 @@ For *node-to-client* server, it will be even simpler, as there we only allow for
 
 
 **Sub-graph of inbound states.**
+
 ### Transitions
 
-#### [Reserve]{.sans-serif}
-
+#### [Reserve]
 When *connection manager* is asked for an outbound connection, it reserves a slot in its state for that connection. If any other thread asks for the same outbound connection, the *connection manager* will raise an exception in that thread. Reservation is done to guarantee exclusiveness for state transitions to a single outbound thread.
 
-#### [Connected]{.sans-serif}
-
+#### [Connected]
 This transition is executed once an outbound connection successfully performs the `connect` system call.
 
-#### [Accepted]{.sans-serif} and [Overwritten]{.sans-serif}
-
+#### [Accepted]{.sans-serif} and [Overwritten]
 Transition driven by the `accept` system call. Once it returns, the *connection manager* might either not know about such connection or, there might be one in `ReservedOutboundState`. The [Accepted]{.sans-serif} transition represents the former situation, while the [Overwritten]{.sans-serif} transition captures the latter.
 
 Let us note that if [Overwritten]{.sans-serif} transition happened, then on the outbound side, the scheduled `connect` call will fail. In this case, the *p2p governor* will recover, putting the peer in a queue of failed peers and will either try to connect to another peer or reconnect to that peer after some time, in which case it would re-use the accepted connection (assuming that a duplex connection was negotiated).
@@ -449,8 +449,7 @@ This transition is driven by the local *p2p governor* when it promotes a *cold* 
 ::: detail
 This transition is done by `requestOutboundConnection`.
 
-#### [TimeoutExpired]{.sans-serif}
-
+#### [TimeoutExpired]
 This transition is triggered when the protocol idleness timeout expires while the connection is in `OutboundState`^$\tau$^` Duplex`. The server starts this timeout when it triggers [DemotedToCold]{.sans-serif}^[dataFlow]{.sans-serif}^~[Remote]{.sans-serif}~ transition. The connection manager tracks the state of this timeout so we can decide if a connection in the outbound state can terminate or if it needs to wait for that timeout to expire.
 
 ::: detail
@@ -533,8 +532,7 @@ Whenever an outbound connection is requested, we notify the server about a new c
 #### [Commit]{.sans-serif}^[Unidirectional]{.sans-serif}^~[Local]{.sans-serif}~, [Commit]{.sans-serif}^[Duplex]{.sans-serif}^~[Local]{.sans-serif}~
 As previous two transitions, these also are triggered after *protocol idle timeout*, but this time, they are triggered on the outbound side. This transition will reset the connection, and the timeout ensures that the remote end can clear its ingress queue before the [TCP]{.sans-serif} reset arrives. For a more detailed analysis, see 1.8.6 section.
 
-#### [Terminate]{.sans-serif}
-
+#### [Terminate]
 After a connection is closed, we keep it in `TerminatingState`^$\tau$^ for the duration of *wait time timeout*. When the timeout expires, the connection is forgotten.
 
 #### Connecting to oneself
@@ -555,8 +553,7 @@ Let us note that these connections effectively only add delay, and thus they wil
 
 These transitions are not indicated in the figure 1.3, instead they are shown bellow in figure 1.5.
 
-##### [SelfConn]{.sans-serif} and [SelfConn$^{-1}$]{.sans-serif}
-
+##### [SelfConn]{.sans-serif} and [SelfConn$^{-1}$]
 We allow transitioning between
 
 - `UnnegotiatedState Outbound` and
@@ -565,8 +562,7 @@ We allow transitioning between
 
 or the other way. This transition is not guaranteed as on some systems in such case, the outbound and inbound addresses (as returned by the `accept` call) can be different. Whether [SelfConn]{.sans-serif} or [SelfConn$^{-1}$]{.sans-serif} will happen depending on the race between the inbound and outbound sides.
 
-##### [SelfConn']{.sans-serif} and [SelfConn'$^{-1}$]{.sans-serif}
-
+##### [SelfConn']{.sans-serif} and [SelfConn'$^{-1}$]
 We also allow transitioning between
 
 - `InboundIdleState`^$\tau$^` dataFlow` and
@@ -577,6 +573,7 @@ After the handshake is negotiated, there is a race between inbound and outbound 
 
 
 **Extra transitions when connecting to onself**
+
 ### Protocol errors
 
 If a mini-protocol errors, on either side, the connection will be reset and put in `TerminatedState`. This can happen in any connection state.
@@ -632,6 +629,7 @@ Figure 1.6 shows outbound connection state evolution, e.g. the flow graph of `r
 
 
 ***Outbound* connection flow graph**
+
 #### `OutboundState Duplex` and `DuplexState`
 
 Once an outbound connection negotiates `Duplex` data flow, it transfers to `OutboundState Duplex`. At this point, we need to start responder protocols. This means that the *connection manager* needs a way to inform the server (which accepts and monitors inbound connections) to start the protocols and monitor that connection. This connection will transition to `DuplexState` only once we notice incoming traffic on any of *established* protocols. Since this connection might have been established via TCP simultaneous open, this transition to `DuplexState` can also trigger [Prune]{.sans-serif} transitions if the number of inbound connections becomes above the limit.
@@ -743,8 +741,9 @@ Initial states for inbound connection are either:
 
   To make sure that this case is uncommon, we need to guarantee that the *connection manager* does not block between putting the connection in the `ReservedOutboundState` and calling the `connect` system call.
 
-:::: {.figure latex-placement="h"}
+
 ***Inbound* connection flow graph, where both bordered states: `ReservedOutboundState` and `UnnegotiatedState Inbound` are initial states.**
+
 #### Connection manager methods
 
 The following tables show transitions of the following connection manager methods:
@@ -858,6 +857,7 @@ If the *protocol idle timeout* on the `InboundIdleState`^$\tau$^` Duplex` expire
 
 
 **Transitions classified by connection manager method.**
+
 ## Server
 
 The server consists of an accept loop and an *inbound protocol governor*. The accept loop is using `includeInboundConnnection` on incoming connections, while the *inbound protocol governor* tracks the state of the responder side of all mini-protocols and it is responsible for starting and restarting mini-protocols, as well as detecting if they are used to support:
@@ -919,58 +919,49 @@ Both [Commit]{.sans-serif}^[Unidirectional]{.sans-serif}^~[Remote]{.sans-serif}~
 
 *Inbound protocol governor* keeps track of the responder side of the protocol for both inbound and outbound duplex connections. Unidirectional outbound connections are not tracked by *inbound protocol governor*. The server and connection manager are responsible for notifying it about new connections once negotiated. Figure 1.8 presents the state machine that drives changes to connection states tracked by *inbound protocol governor*. As in the connection manager case, there is an implicit transition from every state to the terminating state, representing mux or mini-protocol failures.
 
-::::: {#fig:inbgov-state-machine .figure latex-placement="h!"}
+
 ::: center
 
 **Inbound protocol governor state machine**
-:::::
 
 ### States
 
 States of the inbound governor are similar to the outbound governor, but there are crucial differences.
 
-#### [RemoteCold]{.sans-serif}
-
+#### [RemoteCold]
 The remote cold state signifies that the remote peer is not using the connection, however the only reason why the inbound governor needs to track that connection is because the outbound side of this connection is used. The inbound governor will wait until any of the responder mini-protocols wakes up ([AwakeRemote]{.sans-serif}) or the mux will be shut down ([MuxTerminated]{.sans-serif}).
 
 #### [RemoteIdle]{.sans-serif}^$\tau$^
 
 The [RemoteIdle]{.sans-serif}^$\tau$^ state is the initial state of each new connection ([NewConnection]{.sans-serif}). An active connection will become [RemoteIdle]{.sans-serif}^$\tau$^ once the inbound governor detects that all responder mini-protocols terminated ([WaitIdleRemote]{.sans-serif}). When a connection enters this state, an idle timeout is started. If no activity is detected on the responders, the connection will either be closed by the connection manager and forgotten by the inbound governor or progress to the [RemoteCold]{.sans-serif} state. This depends on whether the connection is used (*warm* or *hot*) or not (*cold*) by the outbound side.
 
-#### [RemoteWarm]{.sans-serif}
-
+#### [RemoteWarm]
 A connection dwells in [RemoteWarm]{.sans-serif} if there are strictly only any warm or established responder protocols running. Note also that an established protocol is one that may run in both hot and warm states, but cannot be the only type running to maintain hot state once all proper hot protocols have terminated. In other words, the connection must be demoted in that case.
 
-#### [RemoteHot]{.sans-serif}
-
+#### [RemoteHot]
 A connection enters [RemoteHot]{.sans-serif} state once any hot responder protocol has started. In particular, if a hot responder is the first to start, the state cycles through [RemoteWarm]{.sans-serif} first. Once all hot responders terminate, the connection will be put in [RemoteWarm]{.sans-serif} regardless of whether there are any warm or established responders left. In the latter case, if there aren't any other protocols running, the connection will then follow up with further demotion to [RemoteIdle]{.sans-serif}^$\tau$^.
 
 ### Transitions
 
-#### [NewConnection]{.sans-serif}
-
+#### [NewConnection]
 Inbound and outbound duplex connections are passed to the inbound governor. They are then put in [RemoteIdle]{.sans-serif}^$\tau$^ state.
 
-#### [CommitRemote]{.sans-serif}
-
+#### [CommitRemote]
 Once the [RemoteIdle]{.sans-serif}^$\tau$^ timeout expires, the inbound governor will call `unregisterInboundConnection`. The connection will either be forgotten or kept in [RemoteCold]{.sans-serif} state depending on the returned value.
 
-#### [AwakeRemote]{.sans-serif}
-
+#### [AwakeRemote]
 While a connection was put in [RemoteIdle]{.sans-serif}^$\tau$^ state, it is possible that the remote end will start using it. When the inbound governor detects that any of the responders is active, it will put that connection in [RemoteWarm]{.sans-serif} state.
 
 ::: detail
 The inbound governor calls `promotedToWarmRemote` to notify the connection manager about the state change.
 
-#### [WaitIdleRemote]{.sans-serif}
-
+#### [WaitIdleRemote]
 [WaitIdleRemote]{.sans-serif} transition happens once all mini-protocol is terminated.
 
 ::: detail
 The inbound governor calls `demotedToColdRemote`. If it returns `TerminatedConnection` the connection will be forgotten (as in [MuxTerminated]{.sans-serif} transition), if it returns `OperationSuccess` it will register a idle timeout.
 
-#### [MiniProtocolTerminated]{.sans-serif}
-
+#### [MiniProtocolTerminated]
 When any of the mini-protocols terminates, the inbound governor will restart the responder and update the internal state of the connection (e.g. update the stm transaction, which tracks the state of the mini-protocol).
 
 ::: detail
@@ -978,18 +969,15 @@ The implementation distinguishes two situations: whether the mini-protocol termi
 
 The inbound governor does not notify the connection manager about a terminating responder mini-protocol.
 
-#### [MuxTerminated]{.sans-serif}
-
+#### [MuxTerminated]
 The inbound governor monitors the multiplexer. As soon as it exists, the connection will be forgotten.
 
 The inbound governor does not notify the connection manager about the termination of the connection, as it can detect this by itself.
 
-#### [PromotedToHotRemote]{.sans-serif}
-
+#### [PromotedToHotRemote]
 The inbound governor detects when any *hot* mini-protocols have started. In such case a [RemoteWarm]{.sans-serif} connection is put in [RemoteHot]{.sans-serif} state.
 
-#### [DemotedToWarmRemote]{.sans-serif}
-
+#### [DemotedToWarmRemote]
 Dually to [PromotedToHotRemote]{.sans-serif} state transition, as soon as all of the *hot* mini-protocols terminate, the connection will transition to [RemoteWarm]{.sans-serif} state.
 
 [^1]: Originally transaction submission protocol had agency start with the responder/server side. A later protocol update reversed the initial agency so that they are now all consistent.

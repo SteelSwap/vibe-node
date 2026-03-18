@@ -137,8 +137,8 @@ figure[h!]
   rule B indicates that B appears among the premises of A; a dotted arrow represents
   a dependency in the sense that the output of the target node is an input to the
   source node, either as part of the source state, the environment or the event
-    (\mathsf{ConwayColor}~rules added in Conway;
-     \mathsf{BabbageColor}~rules modified in Conway; dotted ellipses represent rules
+    (\ConwayColor~rules added in Conway;
+     \BabbageColor~rules modified in Conway; dotted ellipses represent rules
   that are not yet formalized in Agda).
   }
   fig:latest-sts-diagram

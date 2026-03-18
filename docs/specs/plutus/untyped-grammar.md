@@ -1,5 +1,5 @@
 # The grammar of Plutus Core
-This section presents the grammar of Plutus Core in a Lisp-like form. This is intended as a specification of the abstract syntax of the language; it may also by used by tools as a concrete syntax for working with Plutus Core programs, but this is a secondary use and we do not make any guarantees of its completeness when used in this way. The primary concrete form of Plutus Core programs is the binary format described in Appendix appendix:flat-serialisation.
+This section presents the grammar of Plutus Core in a Lisp-like form. This is intended as a specification of the abstract syntax of the language; it may also by used by tools as a concrete syntax for working with Plutus Core programs, but this is a secondary use and we do not make any guarantees of its completeness when used in this way. The primary concrete form of Plutus Core programs is the binary format described in Appendix \[appendix:flat-serialisation\].
 
 ## Lexical grammar
 ::: minipage
@@ -48,7 +48,7 @@ For simplicity, **we assume throughout that the body of a Plutus Core program is
 
 #### Iterated applications.
 
-An application of a term $M$ to a term $N$ is represented by $\appU{M}{N}$. We may occasionally write $\appU{M}{N_1 \ldots N_k}$ or $\appU{M}{\overline{N}}$ as an abbreviation for an iterated application $\mathtt{[}\ldots\mathtt{[[}M\;N_1\mathtt{]}\;N_2\mathtt{]}\ldots$ $N_k\mathtt{]}$, and tools may also use this as concrete syntax.
+An application of a term $M$ to a term $N$ is represented by $\appU{M}{N}$. We may occasionally write $\appU{M}{N_1 \ldots N_k}$ or $\appU{M}{\repetition{N}}$ as an abbreviation for an iterated application $\mathtt{[}\ldots\mathtt{[[}M\;N_1\mathtt{]}\;N_2\mathtt{]}\ldots$ $N_k\mathtt{]}$, and tools may also use this as concrete syntax.
 
 #### Constructors and case analysis.
 
@@ -56,17 +56,17 @@ Plutus Core supports creating structured data using $\keyword{constr}$ and decon
 
 #### Constructor tags.
 
-Constructor tags can in principle be any natural number. In practice, since they cannot be dynamically constructed, we can limit them to a fixed size without having to worry about overflow. So we limit them to 64 bits, although this is currently only enforced in the binary format (see Section sec:flat-term-encodings).
+Constructor tags can in principle be any natural number. In practice, since they cannot be dynamically constructed, we can limit them to a fixed size without having to worry about overflow. So we limit them to 64 bits, although this is currently only enforced in the binary format (see Section \[sec:flat-term-encodings\]).
 
 #### Built-in types and functions.
 
-The language is parameterised by a set $\mathsf{Uni}$ of *built-in types* (we sometimes refer to $\mathsf{Uni}$ as the *universe*) and a set $\mathsf{Fun}$ of *built-in functions* (*builtins* for short), both of which are sets of Names. Briefly, the built-in types represent sets of constants such as integers or strings; constant expressions $\con{\tn}{c}$ represent values of the built-in types (the integer 123 or the string `"string"`, for example), and built-in functions are functions operating on these values, and possibly also general Plutus Core terms. Precise details are given in Section sec:specify-builtins.
+The language is parameterised by a set $\Uni$ of *built-in types* (we sometimes refer to $\Uni$ as the *universe*) and a set $\Fun$ of *built-in functions* (*builtins* for short), both of which are sets of Names. Briefly, the built-in types represent sets of constants such as integers or strings; constant expressions $\con{\tn}{c}$ represent values of the built-in types (the integer 123 or the string `"string"`, for example), and built-in functions are functions operating on these values, and possibly also general Plutus Core terms. Precise details are given in Section \[sec:specify-builtins\].
 
-See Section sec:cardano-builtins for a description of the types and functions which have already been deployed on the Cardano blockchain (or will be in the near future).
+See Section \[sec:cardano-builtins\] for a description of the types and functions which have already been deployed on the Cardano blockchain (or will be in the near future).
 
 #### De Bruijn indices.
 
-The grammar defines names to be textual strings, but occasionally (specifically in Appendix appendix:flat-serialisation) we want to use de Bruijn indices ([@deBruijn], [@Barendregt C.3]), and for this we redefine names to be natural numbers. In de Bruijn terms, $\lambda$-expressions do not need to bind a variable, but in order to re-use our existing syntax we arbitrarily use 0 for the bound variable, so that all $\lambda$-expressions are of the form `(lam 0 `$M$`)`; other variables (ie, those not appearing immediately after a `lam` binder) are represented by natural number greater than zero.
+The grammar defines names to be textual strings, but occasionally (specifically in Appendix \[appendix:flat-serialisation\]) we want to use de Bruijn indices ([@deBruijn], [@Barendregt C.3]), and for this we redefine names to be natural numbers. In de Bruijn terms, $\lambda$-expressions do not need to bind a variable, but in order to re-use our existing syntax we arbitrarily use 0 for the bound variable, so that all $\lambda$-expressions are of the form `(lam 0 `$M$`)`; other variables (ie, those not appearing immediately after a `lam` binder) are represented by natural number greater than zero.
 
 #### Name suffixes.
 

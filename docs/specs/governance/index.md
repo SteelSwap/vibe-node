@@ -1,13 +1,10 @@
 # Governance
 
-Conway-era governance actions, ratification, enactment, and voting.
+Conway governance, ratification, enactment, voting.
 
-## Governance
+**4 documents**
 
-- [Governance [Conway]](conway-governance.md)
-- [Governance Actions [Conway]](conway-governance-actions.md)
-
-## Ratification & Enactment
-
-- [Ratification [Conway]](conway-ratify.md)
 - [Enactment [Conway]](conway-enact.md)
+- [Governance [Conway]](conway-gov.md)
+- [Governance Actions [Conway]](conway-governance-actions.md)
+- [Ratification [Conway]](conway-ratify.md)

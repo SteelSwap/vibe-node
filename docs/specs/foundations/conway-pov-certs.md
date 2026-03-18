@@ -1,9 +1,9 @@
 % If the module name changes, change the following macro to match!
-\mathsf{CertsPoV}{Certs/Properties/PoV}
+\CertsPoV{Certs/Properties/PoV}
 
 
 theorem[%
-  \mathsf{CertsPoV}.lagda{\mathsf{CertsPoV}{}}:
+  \CertsPoV.lagda{\CertsPoV{}}:
    rule preserves value%
   ]thm:CERTS-PoV
   itemize
@@ -20,7 +20,7 @@ theorem[%
       → getCoin s₁ ≡ getCoin sₙ + getCoin (wdrlsOf Γ)
 ```
     \item Proof. See the
-      \mathsf{CertsPoV}.lagda{\mathsf{CertsPoV}{}}
+      \CertsPoV.lagda{\CertsPoV{}}
       module in the \repourl{formal ledger repository}.
   itemize
 theorem

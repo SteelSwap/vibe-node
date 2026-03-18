@@ -1,6 +1,6 @@
 # Byron
 
-Some details specific to the Byron ledger. EBBs already discussed at length in ebbs.
+Some details specific to the Byron ledger. EBBs already discussed at length in \[ebbs\]{reference-type="ref+label" reference="ebbs"}.
 
 The Byron specification can be found at <https://github.com/input-output-hk/cardano-ledger-specs>.
 
@@ -38,9 +38,8 @@ The general mechanism for updating protocol parameters in Byron is as follows:
 
     When a candidate is adopted, all record of other proposals/votes/endorsements---regardless of their state---is discarded. The explanation for this is that such proposals would now be interpreted as an update to the newly adopted parameter values, whereas they were validated as an update to the previously adopted parameter values.
 
-The diagram shown in 1.1 summarises the progress of a proposal that's eventually adopted. For other proposals, the path short circuits to a "rejected/discarded" status at some point.
+The diagram shown in 1.1{reference-type="ref+label" reference="byron:update-process"} summarises the progress of a proposal that's eventually adopted. For other proposals, the path short circuits to a "rejected/discarded" status at some point.
 
-::::: {#byron:update-process .figure}
 
 ------------------------------------------------------------------------
 
@@ -49,7 +48,6 @@ The diagram shown in 1.1 summarises the progress of a proposal that's eventually
 ------------------------------------------------------------------------
 
 **[]{#byron:update-process label="byron:update-process"}Byron update proposal process**
-:::::
 
 ### Initiating the hard fork
 Proposals to initiate the hard fork can be submitted and voted on before all core nodes are ready. After all, once a proposal is stably confirmed, it will effectively remain so indefinitely until nodes endorse it (or it gets superseded by another proposal). This means that nodes can vote to initiate the hard fork, *then* wait for everybody to update their software, and once updated, the proposal is endorsed and eventually the hard fork is initiated.

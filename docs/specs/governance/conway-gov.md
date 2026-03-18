@@ -1,6 +1,6 @@
 # Governance
 sec:governance
-\mathsf{LedgerModule}{Gov}, where we define the types required for ledger governance.
+\LedgerModule{Gov}, where we define the types required for ledger governance.
 
 The behavior of  is similar to that of a queue.  New proposals are
 appended at the end, but any proposal can be removed at the epoch boundary.  However,
@@ -127,7 +127,7 @@ defs:enactable shows some of the functions used to determine whether certain
 actions are enactable in a given state.  Specifically, allEnactable passes
 the GovState to getAidPairsList to obtain a list of
 GovActionID-pairs which is then passed to enactable. The latter uses the
-\mathsf{AgdaUnderscore}{connectsto} function to check
+\AgdaUnderscore{connectsto} function to check
 whether the list of GovActionID-pairs connects the proposed action to a previously
 enacted one.
 

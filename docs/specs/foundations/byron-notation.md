@@ -5,15 +5,15 @@ Natural Numbers
 
 Booleans
 
-:   The set $\mathbb{B}$ denotes the set of booleans $\{\mathit{True}, \mathit{False}\}$.
+:   The set $\mathbb{B}$ denotes the set of booleans $\{\var{True}, \var{False}\}$.
 
 Powerset
 
-:   Given a set $\mathsf{X}$, $\mathbb{P}~\mathsf{X}$ is the set of all the subsets of $X$.
+:   Given a set $\type{X}$, $\powerset{\type{X}}$ is the set of all the subsets of $X$.
 
 Sequences
 
-:   Given a set $\mathsf{X}$, $\mathsf{X}^{*}$ is the set of sequences having elements taken from $\mathsf{X}$. The empty sequence is denoted by $\epsilon$, and given a sequence $\Lambda$, $\Lambda; \mathsf{x}$ is the sequence that results from appending $\mathsf{x} \in \mathsf{X}$ to $\Lambda$.
+:   Given a set $\type{X}$, $\seqof{\type{X}}$ is the set of sequences having elements taken from $\type{X}$. The empty sequence is denoted by $\epsilon$, and given a sequence $\Lambda$, $\Lambda; \type{x}$ is the sequence that results from appending $\type{x} \in \type{X}$ to $\Lambda$.
 
 Functions
 
@@ -29,11 +29,11 @@ Maps and partial functions
 
 Domain and range
 
-:   Given a relation $R \in \mathbb{P}~(A \times B)$, $\dom~R \in \mathbb{P}~A$ refers to the domain of $R$, and $\range~R \in \mathbb{P}~B$ refers to the range of $R$. Note that (partial) functions (and hence maps) are also relations, so we will be using $\dom$ and $\range$ on functions.
+:   Given a relation $R \in \powerset{(A \times B)}$, $\dom~R \in \powerset{A}$ refers to the domain of $R$, and $\range~R \in \powerset{B}$ refers to the range of $R$. Note that (partial) functions (and hence maps) are also relations, so we will be using $\dom$ and $\range$ on functions.
 
 Domain and range operations
 
-:   Given a relation $R \in \mathbb{P}~(A \times B)$ we make use of the *domain-restriction*, *domain-exclusion*, and *range-restriction* operators, which are defined in 1. Note that a map $A \mapsto B$ can be seen as a relation, which means that these operators can be applied to maps as well.
+:   Given a relation $R \in \powerset{(A \times B)}$ we make use of the *domain-restriction*, *domain-exclusion*, and *range-restriction* operators, which are defined in 1{reference-type="ref+label" reference="fig:domain-and-range-ops"}. Note that a map $A \mapsto B$ can be seen as a relation, which means that these operators can be applied to maps as well.
 
 Integer ranges
 
@@ -41,19 +41,19 @@ Integer ranges
 
 Domain and range operations on sequences
 
-:   We overload the $\lhd$, $\mathbin{\rlap{\lhd}/}$, and $\rhd$ to operate over sequences. So for instance given $S \in A^{*}$, and $R \in (A \times B)^{*}$: $S \lhd R$ denotes the sequence $[ (a, b) \mid (a, b) \in R, a \in S]$.
+:   We overload the $\restrictdom$, $\subtractdom$, and $\restrictrange$ to operate over sequences. So for instance given $S \in \seqof{A}$, and $R \in \seqof{(A \times B)}$: $S \restrictdom R$ denotes the sequence $[ (a, b) \mid (a, b) \in R, a \in S]$.
 
 Wildcard variables
 
-:   When a variable is not needed in a term, we replace it by $\underline{\phantom{a}}$ to make it explicit that we do not use this variable in the scope of the given term.
+:   When a variable is not needed in a term, we replace it by $\wcard$ to make it explicit that we do not use this variable in the scope of the given term.
 
 Implicit existential quantifications
 
-:   Given a predicate $P \in X \to \mathbb{B}$, we use $P \underline{\phantom{a}}$ as a shorthand notation for $\exists x \cdot P~x$.
+:   Given a predicate $P \in X \to \mathbb{B}$, we use $P \wcard$ as a shorthand notation for $\exists x \cdot P~x$.
 
 Pattern matching in premises
 
-:   In the inference-rules premises use $\mathit{patt} \mathrel{\mathop:}= \mathit{exp}$ to pattern-match an expression $\mathit{exp}$ with a certain pattern $\mathit{patt}$. For instance, we use $\Lambda'; x \mathrel{\mathop:}= \Lambda$ to be able to deconstruct a sequence $\Lambda$ in its last element, and prefix. If an expression does not match the given pattern, then the premise does not hold, and the rule cannot trigger.
+:   In the inference-rules premises use $\var{patt} \leteq \var{exp}$ to pattern-match an expression $\var{exp}$ with a certain pattern $\var{patt}$. For instance, we use $\Lambda'; x \leteq \Lambda$ to be able to deconstruct a sequence $\Lambda$ in its last element, and prefix. If an expression does not match the given pattern, then the premise does not hold, and the rule cannot trigger.
 
 Ceiling
 
@@ -61,15 +61,15 @@ Ceiling
 
 
 $$\begin{align*}
-    \mathit{S} \lhd \mathit{R}
+    \var{S} \restrictdom \var{R}
     & = \{ (a, b) \mid (a, b) \in R, ~ a \in S \}
     & \text{domain restriction}
     \\
-    S \mathbin{\rlap{\lhd}/} R
+    S \subtractdom R
     & = \{ (a, b) \mid (a, b) \in R, ~ a \notin S \}
     & \text{domain exclusion}
     \\
-    R \rhd S
+    R \restrictrange S
     & = \{ (a, b) \mid (a, b) \in R, ~ b \in S \}
     & \text{range restriction}
 \end{align*}$$

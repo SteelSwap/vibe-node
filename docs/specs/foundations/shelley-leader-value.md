@@ -1,18 +1,18 @@
 # Leader Value Calculation
 This section details how we determine whether a node is entitled to lead (under the Praos protocol) given the output of its verifiable random function calculation.
 
-::: figure
+
 *Values associated with the leader value calculations* $$\begin{equation*}
   \begin{array}{rlr}
-    \mathit{certNat} & \{n | n \in \N, n \in [0,2^{256})\} & \text{Certified natural value from VRF} \\
-    \mathit{f} & [0,1] & \text{Active slot coefficient} \\
+    \var{certNat} & \{n | n \in \N, n \in [0,2^{256})\} & \text{Certified natural value from VRF} \\
+    \var{f} & [0,1] & \text{Active slot coefficient} \\
     \sigma & [0,1] & \text{Stake proportion}
   \end{array}
 \end{equation*}$$
 
 ## Computing the leader value
 
-The verifiable random function gives us a 32-byte random output. We interpret this as a natural number $\mathit{certNat}$ in the range $[0,2^{256})$.
+The verifiable random function gives us a 32-byte random output. We interpret this as a natural number $\var{certNat}$ in the range $[0,2^{256})$.
 
 ## Node eligibility
 
@@ -30,14 +30,14 @@ We carry out all computations using fixed precision arithmetic (specifically, we
 As such, we define the following:
 
 $$\begin{align*}
-  q & = \frac{2^{256}}{2^{256} - \mathit{certNat}} \\
+  q & = \frac{2^{256}}{2^{256} - \var{certNat}} \\
   c & = \ln{(1 - f)}
 \end{align*}$$
 
 and define the function *checkLeaderVal* as follows:
 
 $$\begin{equation*}
-  \mathsf{checkLeaderVal}~\mathit{certNat}~\sigma~\mathit{f} =
+  \fun{checkLeaderVal}~\var{certNat}~\sigma~\var{f} =
     \left\{
       \begin{array}{lr}
         \mathsf{True}, & f = 1 \\

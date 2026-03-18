@@ -1,19 +1,13 @@
 # Serialization
 
-CDDL schemas, CBOR encoding specifications, and flat serialization formats.
+CDDL schemas, CBOR encoding, flat serialization, bootstrap witnesses.
 
-## CDDL Schemas
+**7 documents**
 
-- [Byron CDDL Schema](byron-cddl.md)
-- [Shelley CDDL Schema](shelley-cddl.md)
-- [CBOR Serialization Specification [Shelley]](shelley-cbor-spec.md)
-- [Network CDDL Definitions](network-cddl.md)
-
-## Plutus Serialization
-
-- [Data CBOR Encoding [Plutus]](plutus-data-cbor.md)
-- [Flat Serialisation [Plutus]](plutus-flat-serialisation.md)
-
-## Consensus Serialization
-
-- [Serialisation Abstractions [Consensus]](consensus-serialisation.md)
+- [Byron Cddl Schema [Byron]](byron-cddl-schema.md)
+- [Serialising `data` Objects Using the CBOR Format [Plutus]](plutus-data-cbor.md)
+- [Serialising Plutus Core Terms and Programs Using the `flat` Format [Plutus]](plutus-flat-serialisation.md)
+- [Bootstrap Witnesses [Shelley]](shelley-bootstrap-witnesses.md)
+- [Shelley Cddl Schema [Shelley]](shelley-cddl-schema.md)
+- [CBOR Serialization Specification [Shelley]](shelley-cddl.md)
+- [Implementation of [Shelley]](shelley-txsize.md)

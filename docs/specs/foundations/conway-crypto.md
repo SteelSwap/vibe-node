@@ -1,6 +1,6 @@
 # Cryptographic Primitives
 sec:cryptographic-primitives
-\mathsf{LedgerModule}{Crypto}, in which we rely on a public key signing scheme
+\LedgerModule{Crypto}, in which we rely on a public key signing scheme
 for verification of spending.
 
 fig:defs:crypto shows some of the types,

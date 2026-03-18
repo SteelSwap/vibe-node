@@ -8,6 +8,7 @@ Genesis chain selection rule A candidate chain is preferred over our current cha
 
 - If the intersection *is* **more than $k$** blocks back, and the candidate chain is **denser** (contains more blocks) than our chain in a region of $s$ slots starting at the intersection.
 
+
 :::: frame
 ### The Genesis Rule
 
@@ -17,6 +18,7 @@ Alternative genesis rule A candidate chain is preferred over our current chain i
 - The intersection between the candidate chain and our chain is **at least $s$ slots** back, and the candidate chain is denser in a window of $s$ slots at the intersection, or
 
 - The intersection between the candidate chain and our chain is **no more than $k$ blocks** back, and the candidate chain is strictly **longer** than our chain.
+
 
 ::::::::: frame
 ### Fundamental Assumptions within the Consensus Layer
@@ -37,7 +39,6 @@ This invariant is used to
 
 - ...
 
-
 :::: onlyenv
 \<2\>
 
@@ -54,7 +55,6 @@ Without this invariant, the previous invariant (never roll back more than $k$ bl
 
 - ...
 
-
 :::: onlyenv
 \<3\>
 
@@ -65,12 +65,12 @@ Invariant The strict extension of a chain is always preferred over that chain.
 
 - (I *think* this one is compatible with Genesis.)
 
-:::::::::
 
 :::: frame
 Towards an Alternative
 
 ::: center
+
 
 ::::: frame
 ### Towards an Alternative
@@ -88,7 +88,6 @@ Assumptions:
 - We can **detect when** we should delay because the genesis condition might apply.\
   (We will come back to this.)\
 
-:::::
 
 :::: frame
 ### Choosing between forks: at genesis
@@ -97,12 +96,14 @@ Assumptions:
 
 ::: center
 
+
 :::: frame
 ### Common prefix: at genesis
 
 ### Common prefix: general case
 
 ::: center
+
 
 ::::: frame
 ### Insufficient peers
@@ -111,7 +112,6 @@ Assumptions:
 
 ::: center
 
-:::::
 
 ::::: frame
 ### Insufficient blocks
@@ -120,12 +120,12 @@ Assumptions:
 
 ::: center
 
-:::::
 
 :::: frame
 ### Threshold for sufficient blocks
 
 ::: center
+
 
 :::: frame
 ### Detecting when to delay
@@ -146,6 +146,7 @@ Assumptions:
 **Delay if more than $s$ slots from the wallclock.**\
 (If wallclock slot unknown, must be more than $(3k/f) > s$ slots.)
 
+
 :::: frame
 ### Generalising delay mode
 
@@ -156,7 +157,6 @@ Assumptions:
 
 - **Can still apply genesis condition**, independent of \# blocks\
   (justified by alternative genesis rule)
-
 
 :::: frame
 ### Header/Body split: choosing between forks
@@ -174,7 +174,6 @@ Assumptions:
 - Header validation (as separate from block validation) critical.\
   (So far was "merely" required to guard against DoS attacks.)
 
-
 :::: frame
 ### Header/Body split: common prefix
 
@@ -183,7 +182,6 @@ Assumptions:
 - Blocks from common prefix will be validated by chain database before adoption.
 
 - If found to be invalid, something went horribly wrong and we are eclipsed by an attacker after all. Disconnect from all peers and start over.
-
 
 ::: frame
 ### Open questions
@@ -204,4 +202,3 @@ Assumptions:
 ::: center
 
 $A$ is preferred over $B$, and $B$ is preferred over $A$!
-

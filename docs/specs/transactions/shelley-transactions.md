@@ -1,23 +1,23 @@
 # Transactions
-Transactions are defined in Figure 1. A transaction body, $\mathsf{TxBody}$, is made up of eight pieces:
+Transactions are defined in Figure 1. A transaction body, $\TxBody$, is made up of eight pieces:
 
 - A set of transaction inputs. This derived type identifies an output from a previous transaction. It consists of a transaction id and an index to uniquely identify the output.
 
-- An indexed collection of transaction outputs. The $\mathsf{TxOut}$ type is an address paired with a coin value.
+- An indexed collection of transaction outputs. The $\TxOut$ type is an address paired with a coin value.
 
-- A list of certificates, which will be explained in detail in Section sec:delegation-shelley.
+- A list of certificates, which will be explained in detail in Section \[sec:delegation-shelley\].
 
 - A transaction fee. This value will be added to the fee pot and eventually handed out as stake rewards.
 
 - A time to live. A transaction will be deemed invalid if processed after this slot.
 
-- A mapping of reward account withdrawals. The type $\mathsf{Wdrl}$ is a finite map that maps a reward address to the coin value to be withdrawn. The coin value must be equal to the full value contained in the account. Explicitly stating these values ensures that error messages can be precise about why a transaction is invalid. For reward calculation rules, see Section sec:reward-overview, and for the rule for collecting rewards, see Section sec:utxo-trans.
+- A mapping of reward account withdrawals. The type $\Wdrl$ is a finite map that maps a reward address to the coin value to be withdrawn. The coin value must be equal to the full value contained in the account. Explicitly stating these values ensures that error messages can be precise about why a transaction is invalid. For reward calculation rules, see Section \[sec:reward-overview\], and for the rule for collecting rewards, see Section \[sec:utxo-trans\].
 
-- An optional update proposals for the protocol parameters. The update system will be explained in Section sec:update.
+- An optional update proposals for the protocol parameters. The update system will be explained in Section \[sec:update\].
 
 - An optional metadata hash.
 
-A transaction, $\mathsf{Tx}$, consists of:
+A transaction, $\Tx$, consists of:
 
 - The transaction body.
 
@@ -29,119 +29,121 @@ A transaction, $\mathsf{Tx}$, consists of:
 
   - Optional metadata.
 
-Additionally, the $\mathsf{UTxO}$ type will be used by the ledger state to store all the unspent transaction outputs. It is a finite map from transaction inputs to transaction outputs that are available to be spent.
+Additionally, the $\UTxO$ type will be used by the ledger state to store all the unspent transaction outputs. It is a finite map from transaction inputs to transaction outputs that are available to be spent.
 
-Finally, $\mathsf{txid}$ computes the transaction id of a given transaction. This function must produce a unique id for each unique transaction body.
+Finally, $\fun{txid}$ computes the transaction id of a given transaction. This function must produce a unique id for each unique transaction body.
 
 
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
-      \mathit{gkey} & \mathsf{VKeyGen} & \text{genesis public keys}\\
-      \mathit{gkh} & \mathsf{KeyHashGen} & \text{genesis key hash}\\
-      \mathit{txid} & \mathsf{TxId} & \text{transaction id}\\
-      \mathit{m} & \mathsf{MetaDatum} & \text{metadatum}\\
-      \mathit{mdh} & \mathsf{MetaDataHash} & \text{hash of transaction metadata}\\
+      \var{gkey} & \VKeyGen & \text{genesis public keys}\\
+      \var{gkh} & \KeyHashGen & \text{genesis key hash}\\
+      \var{txid} & \TxId & \text{transaction id}\\
+      \var{m} & \MetaDatum & \text{metadatum}\\
+      \var{mdh} & \MetaDataHash & \text{hash of transaction metadata}\\
     \end{array}
 \end{equation*}$$ *Derived types* $$\begin{equation*}
     \begin{array}{rllr}
-      (\mathit{txid}, \mathit{ix})
-      & \mathsf{TxIn}
-      & \mathsf{TxId} \times \mathsf{Ix}
+      (\var{txid}, \var{ix})
+      & \TxIn
+      & \TxId \times \Ix
       & \text{transaction input}
       \\
-      (\mathit{addr}, c)
-      & \mathsf{TxOut}
-      & \mathsf{Addr} \times \mathsf{Coin}
+      (\var{addr}, c)
+      & \type{TxOut}
+      & \Addr \times \Coin
       & \text{transaction output}
       \\
-      \mathit{utxo}
-      & \mathsf{UTxO}
-      & \mathsf{TxIn} \mapsto \mathsf{TxOut}
+      \var{utxo}
+      & \UTxO
+      & \TxIn \mapsto \TxOut
       & \text{unspent tx outputs}
       \\
-      \mathit{wdrl}
-      & \mathsf{Wdrl}
-      & \mathsf{AddrRWD} \mapsto \mathsf{Coin}
+      \var{wdrl}
+      & \Wdrl
+      & \AddrRWD \mapsto \Coin
       & \text{reward withdrawal}
       \\
-      \mathit{md}
-      & \mathsf{MetaData}
-      & \N \mapsto \mathsf{MetaDatum}
+      \var{md}
+      & \MetaData
+      & \N \mapsto \MetaDatum
       & \text{metadata}
     \end{array}
 \end{equation*}$$ *Derived types (update system)* $$\begin{equation*}
     \begin{array}{rllr}
-      \mathit{pup}
-      & \mathsf{ProposedPPUpdates}
-      & \mathsf{KeyHashGen} \mapsto \mathsf{PParamsUpdate}
+      \var{pup}
+      & \ProposedPPUpdates
+      & \KeyHashGen \mapsto \PParamsUpdate
       & \text{proposed updates}
       \\
-      \mathit{up}
-      & \mathsf{Update}
-      & \mathsf{ProposedPPUpdates} \times \mathsf{Epoch}
+      \var{up}
+      & \Update
+      & \ProposedPPUpdates \times \Epoch
       & \text{update proposal}
     \end{array}
 \end{equation*}$$ *Transaction Types* $$\begin{equation*}
     \begin{array}{rll}
-      \mathit{txbody}
-      & \mathsf{TxBody}
+      \var{txbody}
+      & \TxBody
       & \begin{array}{l}
-        \mathbb{P}~\mathsf{TxIn} \times (\mathsf{Ix} \mapsto \mathsf{TxOut}) \times \mathsf{DCert}^{*}
-        \times \mathsf{Coin} \times \mathsf{Slot} \times \mathsf{Wdrl}
-        \\ ~~~~\times \mathsf{Update}^? \times \mathsf{MetaDataHash}^?
+        \powerset{\TxIn} \times (\Ix \mapsto \TxOut) \times \seqof{\DCert}
+        \times \Coin \times \Slot \times \Wdrl
+        \\ ~~~~\times \Update^? \times \MetaDataHash^?
         \end{array}
       \\
-      \mathit{wit} & \mathsf{TxWitness} & (\mathsf{VKey} \mapsto \mathsf{Sig}) \times (\mathsf{HashScr} \mapsto \mathsf{Script})
+      \var{wit} & \TxWitness & (\VKey \mapsto \Sig) \times (\HashScr \mapsto \Script)
       \\
-      \mathit{tx}
-      & \mathsf{Tx}
-      & \mathsf{TxBody} \times \mathsf{TxWitness} \times \mathsf{MetaData}^?
+      \var{tx}
+      & \Tx
+      & \TxBody \times \TxWitness \times \MetaData^?
     \end{array}
 \end{equation*}$$ *Accessor Functions* $$\begin{equation*}
     \begin{array}{rlr}
-      \mathsf{txins} & \mathsf{Tx} \to \mathbb{P}~\mathsf{TxIn} & \text{transaction inputs} \\
-      \mathsf{txouts} & \mathsf{Tx} \to (\mathsf{Ix} \mapsto \mathsf{TxOut}) & \text{transaction outputs} \\
-      \mathsf{txcerts} & \mathsf{Tx} \to \mathsf{DCert}^{*} & \text{delegation certificates} \\
-      \mathsf{txfee} & \mathsf{Tx} \to \mathsf{Coin} & \text{transaction fee} \\
-      \mathsf{txttl} & \mathsf{Tx} \to \mathsf{Slot} & \text{time to live} \\
-      \mathsf{txwdrls} & \mathsf{Tx} \to \mathsf{Wdrl} & \text{withdrawals} \\
-      \mathsf{txbody} & \mathsf{Tx} \to \mathsf{TxBody} & \text{transaction body}\\
-      \mathsf{txwitsVKey} & \mathsf{Tx} \to (\mathsf{VKey} \mapsto \mathsf{Sig}) & \text{VKey witnesses} \\
-      \mathsf{txwitsScript} & \mathsf{Tx} \to (\mathsf{HashScr} \mapsto \mathsf{Script}) & \text{script witnesses}\\
-      \mathsf{txup} & \mathsf{Tx} \to \mathsf{Update}^? & \text{protocol parameter update}\\
-      \mathsf{txMD} & \mathsf{Tx} \to \mathsf{MetaData}^? & \text{metadata}\\
-      \mathsf{txMDhash} & \mathsf{Tx} \to \mathsf{MetaDataHash}^? & \text{metadata hash}\\
+      \fun{txins} & \Tx \to \powerset{\TxIn} & \text{transaction inputs} \\
+      \fun{txouts} & \Tx \to (\Ix \mapsto \TxOut) & \text{transaction outputs} \\
+      \fun{txcerts} & \Tx \to \seqof{\DCert} & \text{delegation certificates} \\
+      \fun{txfee} & \Tx \to \Coin & \text{transaction fee} \\
+      \fun{txttl} & \Tx \to \Slot & \text{time to live} \\
+      \fun{txwdrls} & \Tx \to \Wdrl & \text{withdrawals} \\
+      \fun{txbody} & \Tx \to \TxBody & \text{transaction body}\\
+      \fun{txwitsVKey} & \Tx \to (\VKey \mapsto \Sig) & \text{VKey witnesses} \\
+      \fun{txwitsScript} & \Tx \to (\HashScr \mapsto \Script) & \text{script witnesses}\\
+      \fun{txup} & \Tx \to \Update^? & \text{protocol parameter update}\\
+      \fun{txMD} & \Tx \to \MetaData^? & \text{metadata}\\
+      \fun{txMDhash} & \Tx \to \MetaDataHash^? & \text{metadata hash}\\
     \end{array}
 \end{equation*}$$ *Abstract Functions* $$\begin{equation*}
     \begin{array}{rlr}
-      \mathsf{txid}~ & \mathsf{TxBody} \to \mathsf{TxId} & \text{compute transaction id}\\
-      \mathsf{validateScript} & \mathsf{Script} \to \mathsf{Tx} \to \mathsf{Bool} & \text{script interpreter}\\
-      \mathsf{hashMD} & \mathsf{MetaData} \to \mathsf{MetaDataHash} & \text{hash the metadata}\\
-      \mathsf{bootstrapAttrSize} & \mathsf{AddrBS} \to \N & \text{bootstrap attribute size}\\
+      \txid{} & \TxBody \to \TxId & \text{compute transaction id}\\
+      \fun{validateScript} & \Script \to \Tx \to \Bool & \text{script interpreter}\\
+      \fun{hashMD} & \MetaData \to \MetaDataHash & \text{hash the metadata}\\
+      \fun{bootstrapAttrSize} & \AddrBS \to \N & \text{bootstrap attribute size}\\
     \end{array}
 \end{equation*}$$
 
 **Definitions used in the UTxO transition system**
+
 *Helper Functions* $$\begin{align*}
-    \mathsf{txinsVKey} & \in \powerset \mathsf{TxIn} \to \mathsf{UTxO} \to \powerset\mathsf{TxIn} & \text{VKey Tx inputs}\\
-    \mathsf{txinsVKey} & ~\mathit{txins}~\mathit{utxo} =
-    \mathit{txins} \cap \dom (\mathit{utxo} \rhd (\mathsf{AddrVKey} \times Coin))
+    \fun{txinsVKey} & \in \powerset \TxIn \to \UTxO \to \powerset\TxIn & \text{VKey Tx inputs}\\
+    \fun{txinsVKey} & ~\var{txins}~\var{utxo} =
+    \var{txins} \cap \dom (\var{utxo} \restrictrange (\AddrVKey \times Coin))
     \\
     \\
-    \mathsf{txinsScript} & \in \powerset \mathsf{TxIn} \to \mathsf{UTxO} \to \powerset\mathsf{TxIn} & \text{Script Tx inputs}\\
-    \mathsf{txinsScript} & ~\mathit{txins}~\mathit{utxo} =
-                        \mathit{txins} \cap \dom (\mathit{utxo} \rhd (\mathsf{AddrScr} \times Coin))
+    \fun{txinsScript} & \in \powerset \TxIn \to \UTxO \to \powerset\TxIn & \text{Script Tx inputs}\\
+    \fun{txinsScript} & ~\var{txins}~\var{utxo} =
+                        \var{txins} \cap \dom (\var{utxo} \restrictrange (\AddrScr \times Coin))
 \end{align*}$$ $$\begin{align*}
-    \mathsf{validateScript} & \in\mathsf{Script}\to\mathsf{Tx}\to\mathsf{Bool} & \text{validate
+    \fun{validateScript} & \in\Script\to\Tx\to\Bool & \text{validate
                                                       script} \\
-    \mathsf{validateScript} & ~\mathit{msig}~\mathit{tx}=
+    \fun{validateScript} & ~\var{msig}~\var{tx}=
                            \begin{cases}
-                             \mathsf{evalMultiSigScript}~msig~vhks & \text{if}~msig \in\mathsf{MSig} \\
+                             \fun{evalMultiSigScript}~msig~vhks & \text{if}~msig \in\MSig \\
                              \mathsf{False} & \text{otherwise}
                            \end{cases} \\
-                         & ~~~~\where \mathit{vhks}\mathrel{\mathop:}= \{\mathsf{hashKey}~vk \vert
-                           vk \in \dom(\mathsf{txwitsVKey}~\mathit{tx})\}
+                         & ~~~~\where \var{vhks}\leteq \{\fun{hashKey}~vk \vert
+                           vk \in \dom(\fun{txwitsVKey}~\var{tx})\}
 \end{align*}$$
 
 **Helper Functions for Transaction Inputs**
-Figure 2 shows the helper functions $\mathsf{txinsVKey}$ and $\mathsf{txinsScript}$ which partition the set of transaction inputs of the transaction into those that are locked with a private key and those that are locked via a script. It also defines $\mathsf{validateScript}$, which validates the multisignature scripts.
+
+Figure 2 shows the helper functions $\fun{txinsVKey}$ and $\fun{txinsScript}$ which partition the set of transaction inputs of the transaction into those that are locked with a private key and those that are locked via a script. It also defines $\fun{validateScript}$, which validates the multisignature scripts.

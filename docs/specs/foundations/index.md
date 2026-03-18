@@ -1,75 +1,52 @@
 # Foundations
 
-Cryptographic primitives, notation, addresses, base types, introductions, frontmatter, properties, and proofs across all eras.
+Crypto primitives, notation, addresses, base types, introductions, frontmatter, properties and proofs.
 
-## Cryptographic Primitives
+**46 documents**
 
-- [Cryptographic Primitives [Byron]](byron-crypto-primitives.md)
-- [Cryptographic Primitives [Shelley]](shelley-crypto-primitives.md)
-- [Cryptographic Details [Shelley]](shelley-crypto-details.md)
-- [Cryptographic Primitives [Conway]](conway-crypto.md)
-
-## Notation
-
-- [Notation [Byron]](byron-notation.md)
-- [Notation [Shelley]](shelley-notation.md)
+- [List of Contributors [Alonzo]](alonzo-frontmatter.md)
 - [Notation [Alonzo]](alonzo-notation.md)
-
-## Addresses
-
-- [Addresses [Shelley]](shelley-address.md)
-- [Addresses [Conway]](conway-address.md)
-
-## Base Types
-
-- [Base Types [Conway]](conway-base-types.md)
-
-## Introductions
-
-- [Introduction [Byron]](byron-intro.md)
-- [Introduction [Shelley]](shelley-intro.md)
-- [Introduction [Conway]](conway-intro.md)
-- [Scripts & Multi-Currency Introduction [Shelley]](shelley-scripts-multicurrency-intro.md)
-
-## Frontmatter & Contributors
-
-- [Contributors [Byron]](byron-frontmatter.md)
-- [Contributors [Byron Blockchain Spec]](byron-blockchain-spec-frontmatter.md)
-- [Contributors [Shelley]](shelley-frontmatter.md)
-- [Contributors [Alonzo]](alonzo-frontmatter.md)
-- [Contributors [Mary/Allegra]](mary-frontmatter.md)
-
-## STS & Structural
-
-- [Transition Rule Dependencies [Shelley]](shelley-sts-overview.md)
-- [Bootstrap Witnesses [Shelley]](shelley-bootstrap-witnesses.md)
-- [Non-Integral Calculations [Shelley]](shelley-non-integral.md)
-
-## Properties & Proofs
-
-- [Transition Systems Properties [Byron]](byron-properties.md)
-- [Properties [Shelley]](shelley-properties.md)
-- [Proofs [Shelley]](shelley-proofs.md)
-- [Preservation of Value Proofs [Shelley]](shelley-hand-proofs.md)
 - [Properties of the Goguen Ledger [Alonzo]](alonzo-properties.md)
-- [Properties [Conway]](conway-properties.md)
-- [UTxO Properties [Conway]](conway-properties-2.md)
+- [Cryptographic primitives [Byron]](byron-crypto-primitives.md)
+- [List of Contributors [Byron]](byron-frontmatter.md)
+- [Introduction [Byron]](byron-intro.md)
+- [Notation [Byron]](byron-notation.md)
+- [Transition Systems Properties [Byron]](byron-properties.md)
+- [Addresses [Conway]](conway-address.md)
+- [Base Types [Conway]](conway-base-types.md)
+- [Conway Change Pp Group [Conway]](conway-change-pp-group.md)
+- [Conway Const Rwds [Conway]](conway-const-rwds.md)
+- [Conway Cred Deps Equal Dom Rwds [Conway]](conway-cred-deps-equal-dom-rwds.md)
+- [Cryptographic Primitives [Conway]](conway-crypto.md)
+- [Conway Epoch Step [Conway]](conway-epoch-step.md)
+- [Conway Gov Deps Match Chain [Conway]](conway-gov-deps-match-chain.md)
+- [Conway Gov Deps Match Epoch [Conway]](conway-gov-deps-match-epoch.md)
+- [Conway Gov Deps Match [Conway]](conway-gov-deps-match.md)
+- [Introduction [Conway]](conway-introduction.md)
+- [Conway Min Spend [Conway]](conway-min-spend.md)
+- [Conway No Prop Same Dreps [Conway]](conway-no-prop-same-dreps.md)
+- [Conway Pov Certs [Conway]](conway-pov-certs.md)
+- [Conway Pov Lemmas [Conway]](conway-pov-lemmas.md)
+- [Conway Pov Utxo [Conway]](conway-pov-utxo.md)
+- [Conway Pov [Conway]](conway-pov.md)
+- [Conway Pparams Well Formed [Conway]](conway-pparams-well-formed.md)
+- [UTxO [Conway]](conway-properties-utxo.md)
+- [Conway Properties [Conway]](conway-properties.md)
 - [Value Set [Conway]](conway-value-set.md)
-
-## Conway Agda Property Modules
-
-- [ChangePPGroup [Conway]](conway-change-pp-group.md)
-- [ConstRwds [Conway]](conway-const-rwds.md)
-- [CredDepsEqualDomRwds [Conway]](conway-cred-deps-equal-dom-rwds.md)
-- [EpochStep [Conway]](conway-epoch-step.md)
-- [GovDepsMatch [Conway]](conway-gov-deps-match.md)
-- [GovDepsMatch (2) [Conway]](conway-gov-deps-match-2.md)
-- [GovDepsMatch (3) [Conway]](conway-gov-deps-match-3.md)
-- [MinSpend [Conway]](conway-min-spend.md)
-- [NoPropSameDReps [Conway]](conway-no-prop-same-dreps.md)
-- [PParamsWellFormed [Conway]](conway-pparams-well-formed.md)
-- [Preservation of Value [Conway]](conway-pov.md)
-- [Preservation of Value (2) [Conway]](conway-pov-2.md)
-- [Preservation of Value (3) [Conway]](conway-pov-3.md)
-- [PoV Lemmas [Conway]](conway-pov-lemmas.md)
-- [VoteDelegsVDeleg [Conway]](conway-vote-delegs-vdeleg.md)
+- [Conway Vote Delegs Vdeleg [Conway]](conway-vote-delegs-vdeleg.md)
+- [Formally Verified Behaviours [Plutus]](plutus-formal-verification.md)
+- [Introduction [Plutus]](plutus-introduction.md)
+- [Some basic notation [Plutus]](plutus-notation.md)
+- [Addresses [Shelley]](shelley-address.md)
+- [Cryptographic Details [Shelley]](shelley-crypto-details.md)
+- [Cryptographic primitives [Shelley]](shelley-crypto-primitives.md)
+- [List of Contributors [Shelley]](shelley-frontmatter.md)
+- [Preservation of Value [Shelley]](shelley-hand-proofs.md)
+- [Introduction [Shelley]](shelley-intro.md)
+- [Leader Value Calculation [Shelley]](shelley-leader-value.md)
+- [List of Contributors [Mary/Allegra]](shelley-ma-frontmatter.md)
+- [Non-Integral Calculations [Shelley]](shelley-non-integral.md)
+- [Notation [Shelley]](shelley-notation.md)
+- [Proofs [Shelley]](shelley-proofs.md)
+- [Properties [Shelley]](shelley-properties.md)
+- [Transition Rule Dependencies [Shelley]](shelley-sts-overview.md)

@@ -20,7 +20,7 @@ Are they really needed? Consensus doesn't really look ahead anymore? (Headers ar
 Other thought: what if we split slots into \"microslots\", 20 microslots to a slot. Now the slot/time mapping is *always* known, and for Shelley etc we don't actually need to know the global microslot, all we care about is the microslot within a slot (and hence is independent of when Shelley starts). This would make time conversion no longer state dependent.
 
 ## Eliminating forecasting
-This is a stronger version of 1.5, where we eliminate *all* forecasting. Specifically, this means that we don't do header validation anymore, relying on the chain DB to do block validation. This would be an important simplification of the consensus layer, but we'd need to analyse what the "benefit" of this simplification is for an attacker. Personally, I think it'll be okay.
+This is a stronger version of 1.5{reference-type="ref+label" reference="future:eliminating-safezones"}, where we eliminate *all* forecasting. Specifically, this means that we don't do header validation anymore, relying on the chain DB to do block validation. This would be an important simplification of the consensus layer, but we'd need to analyse what the "benefit" of this simplification is for an attacker. Personally, I think it'll be okay.
 
 The most important analysis we need to do here is how this affects the memory usage of the chain sync client. Note that we already skip the ahead-of-time check, which we don't do until we have the full block and validate it. We should discuss that somewhere as well.
 
@@ -28,7 +28,7 @@ The most important analysis we need to do here is how this affects the memory us
 Avoid type errors such as trying to apply a ledger to a block instead of an era (or an era instead of crypto, or..).
 
 ## Relax requirements on time conversions
-Perhaps it would be okay if time conversions we strictly relative to a ledger state, rather than "absolute" (time:ledgerrestrictions).
+Perhaps it would be okay if time conversions we strictly relative to a ledger state, rather than "absolute" (\[time:ledgerrestrictions\]{reference-type="ref+label" reference="time:ledgerrestrictions"}).
 
 ## Configuration
 
@@ -36,7 +36,7 @@ What a mess.
 
 ## Specialised chain selection data structure
 
-In chainsel:spec we describe how chain selection is implemented. However, in an ideal world this would mean we have some kind of specialised data structure supporting
+In \[chainsel:spec\]{reference-type="ref+label" reference="chainsel:spec"} we describe how chain selection is implemented. However, in an ideal world this would mean we have some kind of specialised data structure supporting
 
 - Efficient insertion of new blocks
 
@@ -45,7 +45,7 @@ In chainsel:spec we describe how chain selection is implemented. However, in an 
 It's however not at all clear what such a data structure would look like if we don't want to hard-code the specific chain selection rule.
 
 ## Dealing with clock changes
-When the user changes their system clock, blocks that we previously adopted into our current chain might now be ahead of the system clock (chainsel:infuture) and should not be part of the chain anymore, and vice versa.
+When the user changes their system clock, blocks that we previously adopted into our current chain might now be ahead of the system clock (\[chainsel:infuture\]{reference-type="ref+label" reference="chainsel:infuture"}) and should not be part of the chain anymore, and vice versa.
 
 When the system clock of a node is moved *forward*, we should run chain selection again because some blocks that we stored because they were in the future may now become valid. Since this could be any number of blocks, on any fork, probably easiest to just do a full chain selection cycle (starting from the tip of the immutable database).
 
@@ -55,4 +55,4 @@ Unlike the data corruption case, here we should really endeavour to get to a sta
 
 It is therefore good to keep in mind that the overlap between the immutable DB and volatile DB does make it a bit easier to deal with relatively small clock changes; it may be worth ensuring that, say, the overlap is at least a few days so that we can deal with people turning back their clock a day or two without having to truncate the immutable database. Indeed, in a first implementation, this may be the *only* thing we support, though we will eventually have to lift that restriction.
 
-Right now, we do nothing special when the clock moves forward (we will discover discover the now valid blocks on the next call to `addBlock` (chainsel:addblock). When the clock is reset *backwards*, the node will currently (intentionally) crash, we make no attempt to try and reset the state (the current slot number moving backwards might cause difficulties in many places). Unfortunately, if the clock is moved so far back that blocks in the *immutable database* are now considered to be ahead of the wall clock, we will not currently detect this (time:imm-tip-in-future).
+Right now, we do nothing special when the clock moves forward (we will discover discover the now valid blocks on the next call to `addBlock` (\[chainsel:addblock\]{reference-type="ref+label" reference="chainsel:addblock"}). When the clock is reset *backwards*, the node will currently (intentionally) crash, we make no attempt to try and reset the state (the current slot number moving backwards might cause difficulties in many places). Unfortunately, if the clock is moved so far back that blocks in the *immutable database* are now considered to be ahead of the wall clock, we will not currently detect this (\[time:imm-tip-in-future\]{reference-type="ref+label" reference="time:imm-tip-in-future"}).

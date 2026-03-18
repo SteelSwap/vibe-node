@@ -8,7 +8,7 @@
 
 Previously supported versions of the *node-to-node protocol* are listed in table 2.1.
 
-::::: {#table:historical-node-to-node-protocol-versions .figure latex-placement="h"}
+
 ::: center
   **version**        **description**
   ------------------ -----------------------------------------------------------------------
@@ -27,13 +27,12 @@ Previously supported versions of the *node-to-node protocol* are listed in table
   `NodeToNodeV_13`   Disabled peer sharing for buggy V11 & V12 and for InitiatorOnly nodes
 
 **Node-to-node protocol versions**
-:::::
 
 ## Node-to-client protocol
 
 Previously supported versions of the *node-to-client protocol* are listed in table 2.2.
 
-::::: {#table:historical-node-to-client-protocol-versions .figure latex-placement="h"}
+
 ::: center
   **version**          **description**
   -------------------- ------------------------------------------------------
@@ -54,7 +53,6 @@ Previously supported versions of the *node-to-client protocol* are listed in tab
   `NodeToClientV_15`   internal changes
 
 **Node-to-client protocol versions**
-:::::
 
 [^1]: `duncan@well-typed.com`, `duncan.coutts@iohk.io`
 

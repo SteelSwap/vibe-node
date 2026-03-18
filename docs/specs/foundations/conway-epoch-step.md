@@ -1,8 +1,8 @@
 % If the module name changes, change the following macro to match!
-\mathsf{ChainPropEpoch}{Chain/Properties/EpochStep}
+\ChainPropEpoch{Chain/Properties/EpochStep}
 
 claim[%
-  \mathsf{ChainPropEpoch}.lagda{\mathsf{ChainPropEpoch}{}}:
+  \ChainPropEpoch.lagda{\ChainPropEpoch{}}:
   New enact state only if new epoch%
   ]\
 
@@ -23,7 +23,7 @@ enact-change⇒newEpoch b {cs} h es≢es' = epoch (b .slot) ≡ sucᵉ (LastEpoc
 ```
 AgdaMultiCode
     \item Proof. To appear (in the
-      \mathsf{ChainPropEpoch}.lagda{\mathsf{ChainPropEpoch}{}}
+      \ChainPropEpoch.lagda{\ChainPropEpoch{}}
       module of the \repourl{formal ledger repository}).
   itemize
 claim

@@ -1,6 +1,6 @@
 # Ledger
 sec:ledger
-\mathsf{LedgerModule}{Ledger}, where the entire state transformation of the
+\LedgerModule{Ledger}, where the entire state transformation of the
 ledger state caused by a valid transaction can now be given as a combination of the
 previously defined transition systems.
 

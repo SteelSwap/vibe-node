@@ -1,6 +1,6 @@
 # Blockchain Layer
 sec:blockchain-layer
-\mathsf{LedgerModule}{Chain}
+\LedgerModule{Chain}
 
 figure*[h]
 AgdaMultiCode

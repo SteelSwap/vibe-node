@@ -1,39 +1,24 @@
 # Transactions
 
-Transaction formats, UTxO rules, witnesses, scripts, multi-signature, multi-asset, and fee calculation across all eras.
+UTxO rules, transaction formats, witnesses, scripts, multi-asset, fees, token algebra.
 
-## UTxO Rules
+**18 documents**
 
-- [UTxO [Byron]](byron-utxo.md)
-- [UTxO [Shelley]](shelley-utxo.md)
-- [UTxO [Mary/Allegra]](mary-utxo.md)
+- [Alonzo Goguen Changes [Alonzo]](alonzo-goguen-changes.md)
+- [Transactions [Alonzo]](alonzo-transactions.md)
 - [UTxO [Alonzo]](alonzo-utxo.md)
+- [UTxO [Byron]](byron-utxo.md)
+- [Fee Calculation [Conway]](conway-fees.md)
+- [Scripts [Conway]](conway-script.md)
+- [Token Algebras [Conway]](conway-token-algebra.md)
+- [Transactions [Conway]](conway-transaction.md)
 - [UTxO [Conway]](conway-utxo.md)
 - [Witnessing [Conway]](conway-utxow.md)
-
-## Transaction Formats
-
+- [Appendix A: Example MPS Language [Mary/Allegra]](shelley-ma-mps-language.md)
+- [Appendix B: Outstanding Design Decisions [Mary/Allegra]](shelley-ma-multi-asset.md)
+- [Transactions [Mary/Allegra]](shelley-ma-transactions.md)
+- [UTxO [Mary/Allegra]](shelley-ma-utxo.md)
+- [Introduction [Shelley]](shelley-multi-sig.md)
+- [Introduction [Shelley]](shelley-scripts-multicurrency.md)
 - [Transactions [Shelley]](shelley-transactions.md)
-- [Transactions [Mary/Allegra]](mary-transactions.md)
-- [Transactions [Alonzo]](alonzo-transactions.md)
-- [Transactions [Conway]](conway-transaction.md)
-
-## Scripts & Multi-Signature
-
-- [Multi-Sig Scripts [Shelley]](shelley-multi-sig.md)
-- [Scripts [Conway]](conway-script.md)
-- [MPS Language Example [Mary/Allegra]](mary-mps-language.md)
-
-## Multi-Asset
-
-- [Multi-Asset Support [Mary/Allegra]](mary-multi-asset.md)
-- [Token Algebras [Conway]](conway-token-algebra.md)
-
-## Fees & Size
-
-- [Fee Calculation [Conway]](conway-fees.md)
-- [Transaction Size Implementation [Shelley]](shelley-txsize.md)
-
-## Era Transitions
-
-- [Goguen Changes Appendix [Alonzo]](alonzo-goguen-changes.md)
+- [UTxO [Shelley]](shelley-utxo.md)

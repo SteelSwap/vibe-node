@@ -1,24 +1,12 @@
 # Plutus
 
-Plutus Core language specification, CEK machine, builtins, grammar, reduction, and formal verification.
+Plutus Core grammar, CEK machine, builtins, cost models.
 
-## Introduction & Notation
+**6 documents**
 
-- [Introduction](introduction.md)
-- [Notation](notation.md)
-- [Preliminaries](plutus-core-specification.md)
-
-## Untyped Plutus Core
-
-- [Grammar](untyped-grammar.md)
-- [Values](untyped-values.md)
-- [Term Reduction](untyped-reduction.md)
-
-## Execution
-
+- [Interpretation of Built-in Types and Functions](builtins.md)
+- [Typed Plutus Core](plutus-core-specification.md)
 - [The CEK Machine](untyped-cek-machine.md)
-- [Built-in Types and Functions](builtins.md)
-
-## Verification
-
-- [Formally Verified Behaviours](formal-verification.md)
+- [The Grammar of Plutus Core](untyped-grammar.md)
+- [Term Reduction](untyped-reduction.md)
+- [Untyped Values](untyped-values.md)

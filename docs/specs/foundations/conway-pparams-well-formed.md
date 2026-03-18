@@ -1,9 +1,9 @@
 % If the module name changes, change the following macro to match!
-\mathsf{ChainPropWF}{Chain/Properties/PParamsWellFormed}
+\ChainPropWF{Chain/Properties/PParamsWellFormed}
 
 
 claim[%
-  \mathsf{ChainPropWF}.lagda{\mathsf{ChainPropWF}{}}:
+  \ChainPropWF.lagda{\ChainPropWF{}}:
   Well-formedness of  is a  invariant%
   ]
   itemize
@@ -26,7 +26,7 @@ pp-wellFormed-invariant : Type
 pp-wellFormed-invariant = LedgerInvariant _⊢_⇀⦇_,CHAIN⦈_ pp-wellFormed
 ```
     \item Proof. To appear (in the
-      \mathsf{ChainPropWF}.lagda{\mathsf{ChainPropWF}{}} module
+      \ChainPropWF.lagda{\ChainPropWF{}} module
       of the \repourl{formal ledger repository}).
   itemize
 claim

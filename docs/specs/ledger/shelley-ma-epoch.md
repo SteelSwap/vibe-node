@@ -1,8 +1,11 @@
 # Rewards and the Epoch Boundary
-In order to handle rewards and staking, we must change filter the UTxO for Ada-only values before performing any calculations. We also use the overloaded $\sum$ symbol for monoid addition here.
+In order to handle rewards and staking, we must change the stake distribution calculation function to add up only the Ada in the UTxO before performing any calculations. In Figure 1 below, we do so using the function $\fun{utxoAda}$, which returns the amount of Ada tokens in an address.
 
 
-*Stake Distribution (using functions and maps as relations)* $$\begin{align*}
+*Helper function* $$\begin{align*}
+    & \fun{utxoAda} \in \UTxO \to \Addr \to \Coin \\
+    & \fun{utxoAda}~{\var{utxo}}~\var{addr} ~=~\sum_{\var{out} \in \range \var{utxo}, \fun{getAddr}~\var{out} = \var{addr}} \fun{getCoin}~\var{out}
+\end{align*}$$ *Stake Distribution (using functions and maps as relations)* $$\begin{align*}
       & \fun{stakeDistr} \in \UTxO \to \DState \to \PState \to \type{Stake}\\
       & \fun{stakeDistr}~{utxo}~{dstate}~{pstate} =
       (\dom{\var{activeDelegs}})\restrictdom\left(\sum\var{stakeRelation}\right)\\

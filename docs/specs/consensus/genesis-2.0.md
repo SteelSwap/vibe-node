@@ -7,17 +7,18 @@ Density rule A candidate chain is preferred over our current chain if it is dens
 ::: alertblock
 Genesis window size The genesis window size $s$ will be set to $s = 3k/f$.
 
-:::::
 
 :::: frame
 ### Fragment selection
 
 ::: center
 
+
 :::: frame
 ### Fragment selection
 
 ::: center
+
 
 ::: frame
 Known density
@@ -44,7 +45,6 @@ Unfortunately, requires unbounded lookahead:
 
 ::: center
 
-:::::
 
 :::: frame
 Preferred Prefix
@@ -63,6 +63,7 @@ $$\begin{equation*}
 ::: alertblock
 Preferred prefix Given a set $\mathcal{S}$ of chain fragments, all anchored at the same point, a preferred prefix is a prefix $\Pi$ of one of the fragments in $\mathcal{S}$, such that $\Pi$ is guaranteed to be a prefix of a preferred fragment in the lookahead-closure of $\mathcal{S}$.
 
+
 ::::: frame
 Prefix selection
 
@@ -71,7 +72,6 @@ Step 1: Resolve initial fork
 
 ::: center
 
-:::::
 
 ::::: frame
 Prefix selection
@@ -81,7 +81,6 @@ Step 2: Adopt common prefix
 
 ::: center
 
-:::::
 
 ::::: frame
 Prefix selection
@@ -91,8 +90,8 @@ Step 2: Adopt common prefix (special case)
 
 ::: center
 
+
 Smooth transition to longest chain rule.
-:::::
 
 ::: frame
 Maximum rollback
@@ -144,4 +143,3 @@ When up to date:
 - Danger of being eclipsed same as in Praos (very small, provided not too long)
 
 - Not entirely clear when to conclude we no longer up to date. Proposal from Frisby: "as long as we stay connected to our current peers".
-

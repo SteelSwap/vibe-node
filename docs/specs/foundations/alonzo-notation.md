@@ -9,16 +9,16 @@ $\mathbb{H}$
 
 Aggregated Addition
 
-:   Given a type $\mathsf{FM}~\in~ \powerset(\mathsf{X} \times \mathsf{Y})$, where addition is defined on terms of type $\mathsf{Y}$, and a term $\mathit{fm} \in \mathsf{FM}$, we overload the $\sum$ notation as follows: $$\sum_{(x, y)\in\mathit{fm}} (x,y) :=
-        \{ x\mapsto \sum_{(x,y)\in\mathit{fm}} y \}$$
+:   Given a type $\type{FM}~\in~ \powerset(\type{X} \times \type{Y})$, where addition is defined on terms of type $\type{Y}$, and a term $\var{fm} \in \type{FM}$, we overload the $\sum$ notation as follows: $$\sum_{(x, y)\in\var{fm}} (x,y) :=
+        \{ x\mapsto \sum_{(x,y)\in\var{fm}} y \}$$
 
-    In the case $\mathsf{Y}~=~\mathsf{A}\mapsto\mathsf{B}$ is itself a finite map, and addition is defined on terms of type $\mathsf{B}$, we interpret $$\sum_{(x, (a\mapsto b))\in\mathit{fm}} (x,a\mapsto b) :=
-        \{ x \mapsto (a\mapsto \sum_{(x,a\mapsto b)\in\mathit{fm}} b) \}$$
+    In the case $\type{Y}~=~\type{A}\mapsto\type{B}$ is itself a finite map, and addition is defined on terms of type $\type{B}$, we interpret $$\sum_{(x, (a\mapsto b))\in\var{fm}} (x,a\mapsto b) :=
+        \{ x \mapsto (a\mapsto \sum_{(x,a\mapsto b)\in\var{fm}} b) \}$$
 
-    We define $\sum$ on a set of the form $$\mathsf{FM} \subseteq \{ x \mapsto y \vert x \in \mathsf{X}, y \in \mathsf{Y} \}$$
+    We define $\sum$ on a set of the form $$\type{FM} \subseteq \{ x \mapsto y \vert x \in \mathsf{X}, y \in \mathsf{Y} \}$$
 
-    in a similar way, $$\sum_{(x\mapsto y)\in\mathit{fm}} x \mapsto y :=
-        \{ x\mapsto \sum_{x\mapsto y\in\mathit{fm}} y \}$$
+    in a similar way, $$\sum_{(x\mapsto y)\in\var{fm}} x \mapsto y :=
+        \{ x\mapsto \sum_{x\mapsto y\in\var{fm}} y \}$$
 
     We use the $+$ to denote this overloaded addition operation also.
 

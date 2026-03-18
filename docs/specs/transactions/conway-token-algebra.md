@@ -1,6 +1,6 @@
 # Token Algebras
 sec:token-algebra
-\mathsf{LedgerModule}{TokenAlgebra}.
+\LedgerModule{TokenAlgebra}.
 
 figure*[h]
 AgdaMultiCode

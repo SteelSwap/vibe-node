@@ -1,29 +1,15 @@
 # Networking
 
-Network architecture, multiplexer, miniprotocols, connection management, and peer sharing.
+Multiplexer, miniprotocols, connection management, system architecture.
 
-## Architecture
+**9 documents**
 
-- [System Architecture](architecture.md)
-- [Network Design](network-design.md)
-- [Overview](intro.md)
-
-## Multiplexer
-
-- [Multiplexing Mini-Protocols](mux.md)
-
-## Mini Protocols
-
-- [Mini Protocols](miniprotocols.md)
-
-## Connection Management
-
+- [System Architecture (Overview)](architecture.md)
 - [Connection Manager State Machine](connection-manager.md)
-
-## Limits & Constraints
-
+- [System Architecture (Introduction)](intro.md)
 - [Time and Size Limits](limits.md)
-
-## Misc
-
-- [Design Discussion](rest.md)
+- [Mini Protocols](miniprotocols.md)
+- [Multiplexing Mini-Protocols](mux.md)
+- [Network Design Annexes](network-design.md)
+- [Historical Protocol Versions](network-spec.md)
+- [CDDL Specification of Protocol Messages](rest.md)

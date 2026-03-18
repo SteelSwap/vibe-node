@@ -1,6 +1,6 @@
 # Scripts
 sec:scripts
-\mathsf{LedgerModule}{Script}, in which we define  scripts.  
+\LedgerModule{Script}, in which we define  scripts.  
 
  scripts can verify the presence of keys and whether a transaction happens in a certain slot
 interval.  The scripts are executed as part of the regular witnessing.

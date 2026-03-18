@@ -1,5 +1,4 @@
 # List of Contributors
-
 Damian Nadales, Yun Lu.
 
 # Introduction
@@ -32,7 +31,7 @@ Filtering on sequences
 
 Option type
 
-:   An option type in type $A$ is denoted as $A^? = A + \mathsf{Diamond}$. The $A$ case corresponds to a case when there is a value of type $A$ and the $\mathsf{Diamond}$ case corresponds to a case when there is no value.
+:   An option type in type $A$ is denoted as $A^? = A + \Diamond$. The $A$ case corresponds to a case when there is a value of type $A$ and the $\Diamond$ case corresponds to a case when there is no value.
 
 Union override
 
@@ -98,12 +97,14 @@ We define a general update interface to abstract over the various update state t
 \end{equation*}$$
 
 **Update interface processing types and functions**
+
 *Update interface processing transitions* $$\begin{equation*}
     \_ \vdash \mathit{\_} \xlongrightarrow[\textsc{bupi}]{\_} \mathit{\_} \subseteq
     \mathbb{P}~(\mathsf{UPIEnv}\times \mathsf{UPIState}\times \mathsf{UpdatePayload}\times \mathsf{UPIState})
 \end{equation*}$$
 
 **Update interface processing transition-system types**
+
 $$\begin{equation*}
     \inference
     { \Gamma \vdash \mathit{us}
@@ -142,7 +143,7 @@ $$\begin{equation*}
       \xlongrightarrow[\textsc{bupi}]{
         \left(
           \begin{array}{l}
-            \mathsf{Diamond}\\
+            \Diamond\\
             \mathit{votes} \\
             \mathit{end}
           \end{array}
@@ -153,6 +154,7 @@ $$\begin{equation*}
 \end{equation*}$$
 
 **Update interface processing rules**
+
 # Permissive BFT
 
 The majority of this specification is concerned with the processing of the *ledger*; that is, the content (contained in both the block header and the block body). In addition, however, we must also concern ourselves with the protocol used to transmit the blocks and whether, according to that protocol, we may validly extend the chain with a new block (assuming that block forms a valid extension to the chain under the ledger rules).
@@ -177,7 +179,7 @@ This section therefore will describe the section of the rules concerned with the
 
 ## Counting signed blocks
 
-To guard against the compromise of a minority of the genesis keys, we require that in the rolling window of the last $k$ blocks, where $k$ is the chain stability parameter, the number of blocks signed by keys that $sk_s$ delegated to is no more than a threshold $k \cdot t$, where $t$ is a constant that will be picked in the range $1/5 \leq t \leq 1/4$. Initial research suggests setting $t=0.22$ as a good value. Specifically, given $k=2160$, we would allow a single genesis key to issue (via delegates) $475$ blocks (since $2160 \cdot 0.22 = 475.2$), but a $476^{\text{th}}$ block would be rejected. See Appendix 9 for the background on this value. The abstract constant (nullary functions) related to the protocol are defined in 5.
+To guard against the compromise of a minority of the genesis keys, we require that in the rolling window of the last $k$ blocks, where $k$ is the chain stability parameter, the number of blocks signed by keys that $sk_s$ delegated to is no more than a threshold $k \cdot t$, where $t$ is a constant that will be picked in the range $1/5 \leq t \leq 1/4$. Initial research suggests setting $t=0.22$ as a good value. Specifically, given $k=2160$, we would allow a single genesis key to issue (via delegates) $475$ blocks (since $2160 \cdot 0.22 = 475.2$), but a $476^{\text{th}}$ block would be rejected. See Appendix 9 for the background on this value. The abstract constant (nullary functions) related to the protocol are defined in 5{reference-type="ref+label" reference="fig:defs:proto-abstract-funcs"}.
 
 
 *Abstract functions* $$\begin{equation*}
@@ -189,6 +191,7 @@ To guard against the compromise of a minority of the genesis keys, we require th
 \end{equation*}$$
 
 **Protocol abstract functions**
+
 Figure 7 gives the rules for signature counting. We verify that the key that delegates to the signer of this block has not already signed more than its allowed threshold of blocks. If there are no delegators for the given key, or if there is more than one delegator, the rule will fail to trigger. We then update the sequence of signers, and drop those elements that fall outside the size of the moving window ($k$).
 
 
@@ -207,6 +210,7 @@ Figure 7 gives the rules for signature counting. We verify that the key that del
 \end{equation*}$$
 
 **Block signature count transition-system types**
+
 $$\begin{equation*}
     \inference
     {
@@ -225,6 +229,7 @@ $$\begin{equation*}
 \end{equation*}$$
 
 **Block signature count rules**
+
 ## Permissive BFT Header Processing
 
 During PBFT processing of the block header, we do the following:
@@ -255,6 +260,7 @@ During PBFT processing of the block header, we do the following:
 \end{equation*}$$
 
 **Permissive BFT types and functions**
+
 *Permissive BFT environments* $$\begin{equation*}
     \mathsf{PBFTEnv}=
     \left(
@@ -280,6 +286,7 @@ During PBFT processing of the block header, we do the following:
 \end{equation*}$$
 
 **Permissive BFT transition-system types**
+
 $$\begin{equation*}
     \inference
     {
@@ -318,11 +325,12 @@ $$\begin{equation*}
 \end{equation*}$$
 
 **Permissive BFT rules**
+
 # Epoch transitions
 
 During each block transition, we must determine whether that block sits on an epoch boundary and, if so, carry out various actions which are done on that boundary. In the BFT era, the only computation carried out at the epoch boundary is the update of protocol versions.
 
-We rely on a function $\mathsf{sEpoch}$, whose type is given in 11, to determine the epoch corresponding to a given slot. We do not provide an implementation for such function in this specification, but in practice a possible way of implementing such function is to rely on map from the epochs to their corresponding length (given in number of slots they contain). Such a map would also be required by the database layer to find the requisite epoch file to look up a given block. We envision that an implementation may of course choose a more compact representation for this partial function that only records the changes in epoch length, rather than storing a length for each epoch. In addition, we rely on abstract constant (nullary function) $\mathit{ngk}$, which determines the number of genesis keys.
+We rely on a function $\mathsf{sEpoch}$, whose type is given in 11{reference-type="ref+label" reference="fig:defs:epoch"}, to determine the epoch corresponding to a given slot. We do not provide an implementation for such function in this specification, but in practice a possible way of implementing such function is to rely on map from the epochs to their corresponding length (given in number of slots they contain). Such a map would also be required by the database layer to find the requisite epoch file to look up a given block. We envision that an implementation may of course choose a more compact representation for this partial function that only records the changes in epoch length, rather than storing a length for each epoch. In addition, we rely on abstract constant (nullary function) $\mathit{ngk}$, which determines the number of genesis keys.
 
 It is also worth noticing that in the Byron era, the number of slots per-epoch is fixed to $10 \cdot k$, where $k$ is the chain stability parameter.
 
@@ -339,6 +347,7 @@ Figure 13 determines when an epoch change has occurred and updates the update st
 \end{equation*}$$
 
 **Epoch transition types and functions**
+
 *Epoch transition environments* $$\begin{align*}
     & \mathsf{ETEnv}
       = \left(
@@ -362,6 +371,7 @@ Figure 13 determines when an epoch change has occurred and updates the update st
 \end{equation*}$$
 
 **Epoch transition transition-system types**
+
 $$\begin{equation*}
     \inference
     {
@@ -410,6 +420,7 @@ $$\begin{equation*}
 \end{equation*}$$
 
 **Epoch transition rules**
+
 # Block processing
 We delineate here between processing the header and body of a block. It's useful to make this distinction since we may process headers ahead of the block body, and we have less context available to process headers - in particular, we must be able to process block headers without the recent history of block bodies.
 
@@ -428,9 +439,10 @@ We delineate here between processing the header and body of a block. It's useful
 \end{equation*}$$
 
 **Basic Block-related Types and Functions**
+
 ## Block header processing
 
-Processing headers doesn't require any changes to the state, so we simply check predicates. Figure eq:func:header-is-valid gives the validity predicate for a header. We verify that the block header does not exceed the maximum size specified in the protocol parameters. The $\mathsf{maxHeaderSize}{}$ protocol parameter is defined in [@byron_ledger_spec].
+Processing headers doesn't require any changes to the state, so we simply check predicates. Figure \[eq:func:header-is-valid\] gives the validity predicate for a header. We verify that the block header does not exceed the maximum size specified in the protocol parameters. The $\mathsf{maxHeaderSize}{}$ protocol parameter is defined in [@byron_ledger_spec].
 
 
 *Abstract types* $$\begin{equation*}
@@ -446,16 +458,17 @@ Processing headers doesn't require any changes to the state, so we simply check 
 \end{equation*}$$
 
 **Block header processing types and functions**
-:::: {.figure latex-placement="ht"}
+
 $$\begin{equation}
     \label{eq:func:header-is-valid}
     \mathsf{headerIsValid}~\mathit{us}~\mathit{bh} = \mathsf{maxHeaderSize}\mapsto \mathit{s_{max}} \in \mathsf{pps}~\mathit{us} \Rightarrow \mathsf{bHeaderSize} ~ bh \leq \mathit{s_{max}}
 \end{equation}$$
 
 **Block header validity functions**
+
 ## Block body processing
 
-During processing of the block body, we perform two main functions: verification of the body integrity using the proofs contained in the block header, and update of the various state components. These rules are given in 18, where the types and the functions used there are defined in 17. The UTxO, delegation, and update state as well as the $\mathsf{maxBlockSize}{}$ protocol parameter are defined in [@byron_ledger_spec].
+During processing of the block body, we perform two main functions: verification of the body integrity using the proofs contained in the block header, and update of the various state components. These rules are given in 18{reference-type="ref+label" reference="fig:rules:bbody"}, where the types and the functions used there are defined in 17{reference-type="ref+label" reference="fig:ts-types:bbody"}. The UTxO, delegation, and update state as well as the $\mathsf{maxBlockSize}{}$ protocol parameter are defined in [@byron_ledger_spec].
 
 Verification is done independently for the three components of the body payload: UTxO, delegation and update. Each of these three has a hash in the block header. Note that Byron-era block payload also has an additional component: the VSS payload. This part of the block is unnecessary during the BFT era, and hence we do not verify it.
 
@@ -487,6 +500,7 @@ In addition to block verification, we also process the three components of the p
 \end{equation*}$$
 
 **Block body processing types and functions**
+
 *Block body processing environments* $$\begin{equation*}
     \mathsf{BBEnv}=
     \left(
@@ -515,6 +529,7 @@ In addition to block verification, we also process the three components of the p
 \end{equation*}$$
 
 **Block body processing transition-system types**
+
 $$\begin{equation*}
     \inference
     { \mathsf{maxBlockSize}\mapsto \mathit{b_{max}} \in \mathit{pps} && \mathsf{bSize} ~ b \leq \mathit{b_{max}} \\
@@ -587,6 +602,7 @@ $$\begin{equation*}
 \end{equation*}$$
 
 **Block body processing rules**
+
 # Blockchain extension
 Figure 21 captures the central chain extension rule. This has two variants, depending on whether the block in question is an epoch boundary block. Epoch boundary blocks are not required during the BFT era, but whilst they are not distributed, epoch boundary blocks must still be processed since their hash forms part of the chain. Since we do not care about the contents of an epoch boundary block, we check that it does not exceed some suitably large size, and otherwise simply update the header hash to the block hash.
 
@@ -594,7 +610,7 @@ If the block is not an epoch boundary block, then we process:
 
 - a potential epoch change according to the rules in figure 13,
 
-- the header using the validity predicate of equation eq:func:header-is-valid, and
+- the header using the validity predicate of equation \[eq:func:header-is-valid\], and
 
 - the body according to the rules in figure 18.
 
@@ -607,6 +623,7 @@ If the block is not an epoch boundary block, then we process:
 \end{equation*}$$
 
 **Blockchain Extension Types and Functions**
+
 *Chain extension environments* $$\begin{equation*}
     \mathsf{CEEnv}
     = \left(
@@ -636,6 +653,7 @@ If the block is not an epoch boundary block, then we process:
 \end{equation*}$$
 
 **Blockchain extension transition-system types**
+
 $$\begin{equation*}
     \inference
     { \mathsf{bIsEBB} ~ b & \mathsf{bSize} ~ b \leq 2^{21} &
@@ -778,6 +796,7 @@ $$\begin{equation*}
 \end{equation*}$$
 
 **Blockchain extension rules**
+
 # Transition systems properties
 ## Header only validation
 The following transition system is used in the properties enunciated in this section.
@@ -893,14 +912,12 @@ Appealing to Boole's inequality again, we may multiply this by the number of epo
 
 Figure 22 gives the bound on the likelihood of threshold violation for $t$ in our plausible range: from this we can see that the likelihood decreases to a negligible level around $0.21$, and so we choose the value of $t=0.22$, giving an upper bound on the likelihood around $6e-10$. Increasing $t$ beyond this point gives no decrease in the likelihood of violation.
 
-::::: {#fig:calculating-t .figure latex-placement="ht"}
+
 ::: center
-<!-- [Image from original LaTeX source: calculating-t.png] -->
+![](calculating-t.png)
 
-::: caption
-Probability of generating an invalid chain for values of $t\in\left[
-        \frac{1}{4}, \frac{1}{5} \right]$.
+**Probability of generating an invalid chain for values of $t\in\left[
+        \frac{1}{4}, \frac{1}{5} \right]$.**
 
-:::::
 
 [^1]: *i.e. the component $\mathit{s_{last}}$ of $s$ equals $t$*

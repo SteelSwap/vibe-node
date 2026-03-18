@@ -4,15 +4,15 @@ We begin with some notation which will be used throughout the document.
 ## Sets
 - $\N = \{0,1,2,3,\ldots\}$.
 
-- $\mathsf{Nplus} = \{1,2,3,\ldots\}$.
+- $\Nplus = \{1,2,3,\ldots\}$.
 
 - The symbol $\disj$ denotes a disjoint union of sets; for emphasis we often use this to denote the union of sets which we know to be disjoint.
 
-- Given a set $X$, $X^*$ denotes the set of finite sequences of elements of $X$: $$X^* = \bigdisj{\{X^n: n \in \N\}}$$ and $X^+$ denotes the set of nonempty finite sequences of elements of $X$: $$X^+ = \bigdisj{\{X^n: n \in \mathsf{Nplus}\}}.$$ We will sometimes write elements of $X^+$ in the form $(x|x_1,\ldots,x_n)$ with $n \geq 0$.
+- Given a set $X$, $X^*$ denotes the set of finite sequences of elements of $X$: $$X^* = \bigdisj{\{X^n: n \in \N\}}$$ and $X^+$ denotes the set of nonempty finite sequences of elements of $X$: $$X^+ = \bigdisj{\{X^n: n \in \Nplus\}}.$$ We will sometimes write elements of $X^+$ in the form $(x|x_1,\ldots,x_n)$ with $n \geq 0$.
 
-- $\mathsf{Nab}{a}{b} = \{n \in \N: a \leq n \leq b\}$.
+- $\Nab{a}{b} = \{n \in \N: a \leq n \leq b\}$.
 
-- $\B = \mathsf{Nab}{0}{255}$, the set of 8-bit bytes.
+- $\B = \Nab{0}{255}$, the set of 8-bit bytes.
 
 - $\B^*$ is the set of all bytestrings.
 
@@ -45,7 +45,7 @@ We begin with some notation which will be used throughout the document.
 
 - Given a list $L = [x_1, \ldots, x_n]$ and an object $x$, we denote the list $[x_1, \ldots, x_n, x]$ by $L \snoc x$.
 
-- Given a syntactic category $V$, the symbol $\overline{V}$ denotes a possibly empty list $[V_1,\ldots, V_n]$ of elements $V_i \in V$.
+- Given a syntactic category $V$, the symbol $\repetition{V}$ denotes a possibly empty list $[V_1,\ldots, V_n]$ of elements $V_i \in V$.
 
 ## Bytestrings and bitstrings
 We make frequent use of bytestrings and bitstrings and for the sake of conciseness we occasionally use special notation. We also define conversion functions between bytestrings and bitstrings

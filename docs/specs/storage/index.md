@@ -1,18 +1,12 @@
 # Storage
 
-ImmutableDB, VolatileDB, LedgerDB, ChainDB, and storage layer architecture.
+ImmutableDB, VolatileDB, LedgerDB, ChainDB from ouroboros-consensus.
 
-## Overview
+**6 documents**
 
-- [Storage Layer Overview](overview.md)
-
-## Databases
-
-- [Immutable Database](immutabledb.md)
-- [Volatile Database](volatiledb.md)
-- [Ledger Database](ledgerdb.md)
 - [Chain Database](chaindb.md)
-
-## Testing
-
-- [Storage Layer Testing](storage-testing.md)
+- [Immutable Database](immutabledb.md)
+- [Ledger Database](ledgerdb.md)
+- [Serialisation abstractions](serialisation.md)
+- [The storage layer](storage-overview.md)
+- [Volatile Database](volatiledb.md)

@@ -1,9 +1,9 @@
 % If the module name changes, change the following macro to match!
-\mathsf{CertsPoVL}{Certs/Properties/PoVLemmas}
+\CertsPoVL{Certs/Properties/PoVLemmas}
 
 
 lemma[%
-  \mathsf{CertsPoVL}.lagda{\mathsf{CertsPoVL}{}}:  rule preserves value%
+  \CertsPoVL.lagda{\CertsPoVL{}}:  rule preserves value%
   ]
   itemize
     \item Informally.
@@ -18,14 +18,14 @@ lemma[%
     → getCoin s ≡ getCoin s'
 ```
     \item Proof. See the
-      \mathsf{CertsPoVL}.lagda{\mathsf{CertsPoVL}{}}
+      \CertsPoVL.lagda{\CertsPoVL{}}
       module in the \repourl{formal ledger repository}.
   itemize
 lemma
 
 
 lemma[%
-  \mathsf{CertsPoVL}.lagda{\mathsf{CertsPoVL}{}}:  rule preserves value%
+  \CertsPoVL.lagda{\CertsPoVL{}}:  rule preserves value%
   ]
   itemize
     \item Informally.
@@ -45,14 +45,14 @@ lemma[%
       → getCoin s ≡ getCoin s' + getCoin (CertEnv.wdrls Γ)
 ```
     \item Proof. See the
-      \mathsf{CertsPoVL}.lagda{\mathsf{CertsPoVL}{}}
+      \CertsPoVL.lagda{\CertsPoVL{}}
       module in the \repourl{formal ledger repository}.
   itemize
 lemma
 
 
 lemma[%
-  \mathsf{CertsPoVL}.lagda{\mathsf{CertsPoVL}{}}: iteration of  rule preserves value%
+  \CertsPoVL.lagda{\CertsPoVL{}}: iteration of  rule preserves value%
   ]
   itemize
     \item Informally.
@@ -67,7 +67,7 @@ lemma[%
       → getCoin s₁ ≡ getCoin sₙ
 ```
     \item Proof. See the
-      \mathsf{CertsPoVL}.lagda{\mathsf{CertsPoVL}{}}
+      \CertsPoVL.lagda{\CertsPoVL{}}
       module in the \repourl{formal ledger repository}.
   itemize
 lemma

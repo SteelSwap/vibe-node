@@ -12,7 +12,7 @@ We also define a function $\args{}$ which extracts the arguments which $b$ has r
 \end{array}$$
 
 ## Term reduction
-We define the semantics of Plutus Core using contextual semantics (or reduction semantics): see [@Felleisen-Hieb] or [@Felleisen-Semantics-Engineering] or [@Harper:PFPL 5.3], for example. We use $A$ to denote a partial application of a built-in function as in Section sec:uplc-values above. For builtin evaluation, we instantiate the set $\mathsf{Inputs}$ of Section sec:builtin-inputs to be the set of Plutus Core values. Thus all builtins take values as arguments and return a value or $\errorX$. Since values are terms here, we can take $\reify{V} = V$.
+We define the semantics of Plutus Core using contextual semantics (or reduction semantics): see [@Felleisen-Hieb] or [@Felleisen-Semantics-Engineering] or [@Harper:PFPL 5.3], for example. We use $A$ to denote a partial application of a built-in function as in Section \[sec:uplc-values\] above. For builtin evaluation, we instantiate the set $\Inputs$ of Section \[sec:builtin-inputs\] to be the set of Plutus Core values. Thus all builtins take values as arguments and return a value or $\errorX$. Since values are terms here, we can take $\reify{V} = V$.
 
 The notation $[V/x]M$ below denotes substitution of the value $V$ for the variable $x$ in $M$. This is *capture-avoiding* in that substitution is not performed on occurrences of $x$ inside subterms of $M$ of the form $\lamU{x}{N}$.
 
@@ -21,12 +21,12 @@ $$\begin{array}{lrclr}
         \textrm{Frame} & f  & ::=   & \inAppLeftFrame{M}                                       & \textrm{left application}\\
                        &   &     & \inAppRightFrame{V}                                         & \textrm{right application}\\
                        &   &     & \inForceFrame                                               & \textrm{force}\\
-                       &   &     & \inConstrFrame{i}{\overline{V}}{\overline{M}}           & \textrm{constructor argument}\\
-                       &   &     & \inCaseFrame{\overline{M}}                                & \textrm{case scrutinee}
+                       &   &     & \inConstrFrame{i}{\repetition{V}}{\repetition{M}}           & \textrm{constructor argument}\\
+                       &   &     & \inCaseFrame{\repetition{M}}                                & \textrm{case scrutinee}
     \end{array}$$
 
 **Grammar of reduction frames for Plutus Core**
-::::::::::::: {#fig:untyped-reduction .figure}
+
 ::: prooftree
 
 ::: prooftree
@@ -46,16 +46,16 @@ $$\begin{array}{lrclr}
 ::: prooftree
 
 **Reduction via contextual semantics**
-:::::::::::::
 
-
-$$\mathsf{Eval}'(b, [V_1, \ldots, V_n]) =
+$$\Eval'(b, [V_1, \ldots, V_n]) =
   \begin{cases}
-    \errorU  & \text{if $\mathsf{Eval}(b,[V_1, \ldots, V_n]) = \errorX$}\\
-    V & \text{if $\mathsf{Eval}(b,[V_1, \ldots, V_n]) = (V|)$}\\
-    [V \overline{V^{\prime}}] & \text{if $\mathsf{Eval}(b,[V_1, \ldots, V_n]) = (V|\overline{V^{\prime}})$ with $\overline{V^{\prime}}$ nonempty.}
+    \errorU  & \text{if $\Eval(b,[V_1, \ldots, V_n]) = \errorX$}\\
+    V & \text{if $\Eval(b,[V_1, \ldots, V_n]) = (V|)$}\\
+    [V \repetition{V^{\prime}}] & \text{if $\Eval(b,[V_1, \ldots, V_n]) = (V|\repetition{V^{\prime}})$ with $\repetition{V^{\prime}}$ nonempty.}
   \end{cases}$$
 
 **Built-in function application**
+
 **Term reduction for Plutus Core**
-It can be shown that any closed Plutus Core term whose evaluation terminates yields either `(error)` or a value. Recall from Section sec:grammar-notes that we require the body of every Plutus Core program to be closed.
+
+It can be shown that any closed Plutus Core term whose evaluation terminates yields either `(error)` or a value. Recall from Section \[sec:grammar-notes\] that we require the body of every Plutus Core program to be closed.

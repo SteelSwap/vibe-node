@@ -4,6 +4,6 @@ Figure 1 shows all STS rules, the sub-rules they use and possible dependencies.
 An arrow with a dotted line from one node to another represents a dependency in the sense that the output of the target rule is an input to the source one, either as part of the source state, the environment or the signal. In most cases these dependencies are between sub-rules of a rule. In the case of recursive rules, the sub-rule can also have a dependency on the super-rule. Those recursively call themselves while traversing the input signal sequence until reaching the base case with an empty input sequence.
 
 
-*[STS rule dependency diagram from original LaTeX source]*
+![](rules){width="\\textwidth"}
 
 **STS Rules, Sub-Rules and Dependencies**

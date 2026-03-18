@@ -1,9 +1,9 @@
 % If the module name changes, change the following macro to match!
-\mathsf{EpochPropConstDReps}{Epoch/Properties/NoPropSameDReps}
+\EpochPropConstDReps{Epoch/Properties/NoPropSameDReps}
 
 
 claim[%
-  \mathsf{EpochPropConstDReps}.lagda{\mathsf{EpochPropConstDReps}{}}:
+  \EpochPropConstDReps.lagda{\EpochPropConstDReps{}}:
   DReps unchanged if no gov proposals%
   ]
   itemize
@@ -18,7 +18,7 @@ prop≡∅⇒activeDReps-const e es es' =
   GovStateOf es ≡ [] → activeDReps e es ≡ᵉ activeDReps (sucᵉ e) es'
 ```
     \item Proof. To appear (in the
-      \mathsf{EpochPropConstDReps}.lagda{\mathsf{EpochPropConstDReps}{}} module
+      \EpochPropConstDReps.lagda{\EpochPropConstDReps{}} module
       of the \repourl{formal ledger repository}).
   itemize
 claim

@@ -10,15 +10,14 @@ There are two protocols which support different sets of mini-protocols:
 
 Chain-sync mini-protocol (the node-to-node version) is used to replicate a remote chain of headers; block-fetch mini-protocol to download blocks and tx-submission to disseminate transactions across the network.
 
-::::: {#node-diagram-concurrency .figure}
+
 ::: center
 
 **Cardano Node**
-:::::
 
 Figure 1.1 illustrates the design of a node. Circles represents threads that run one of the mini-protocols. Each mini-protocols communicate with a remote node over the network. Threads communicate by means of shared mutable variables, which are represented by boxes in Figure 1.1. We heavily use [Software transactional memory](https://en.wikipedia.org/wiki/Software_transactional_memory) (STM), which is a mechanism for safe and lock-free concurrent access to mutable state (see [@stm:harris2006]).
 
-The ouroboros-network supports multiplexing mini-protocols, which allows us to run the node-to-node or the node-to-client protocol on a single bearer, e.g. a TCP connection; other bearers are also supported. This means that chain-sync, block-fetch and tx-submission mini-protocols will share a single TCP connection. The multiplexer and its framing are described in Chapter chapter:multiplexer.
+The ouroboros-network supports multiplexing mini-protocols, which allows us to run the node-to-node or the node-to-client protocol on a single bearer, e.g. a TCP connection; other bearers are also supported. This means that chain-sync, block-fetch and tx-submission mini-protocols will share a single TCP connection. The multiplexer and its framing are described in Chapter \[chapter:multiplexer\].
 
 ## Congestion Control
 
