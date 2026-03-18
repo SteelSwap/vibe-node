@@ -27,28 +27,38 @@ from vibe_node.research.models import (
 logger = logging.getLogger(__name__)
 
 # Model configuration — supports Anthropic API or AWS Bedrock.
-# Bedrock format: "bedrock:anthropic.claude-opus-4-6-v1"
+# Bedrock format: "bedrock:us.anthropic.claude-opus-4-6-v1"
 # Anthropic format: "anthropic:claude-sonnet-4-20250514"
 # Override via environment variables.
-EXTRACTION_MODEL = os.environ.get("EXTRACTION_MODEL", "bedrock:anthropic.claude-opus-4-6-v1")
-LINKING_MODEL = os.environ.get("LINKING_MODEL", "bedrock:anthropic.claude-sonnet-4-6-v1")
+EXTRACTION_MODEL = os.environ.get("EXTRACTION_MODEL", "bedrock:us.anthropic.claude-opus-4-6-v1")
+LINKING_MODEL = os.environ.get("LINKING_MODEL", "bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0")
 
 
 def _get_model(model_str: str):
     """Create a PydanticAI model, handling Bedrock bearer token auth.
 
-    If AWS_BEARER_TOKEN is set, creates a BedrockProvider with api_key.
-    Otherwise falls back to default auth (env vars, AWS profile, etc).
+    Supports:
+    - AWS_BEARER_TOKEN or AWS_BEARER_TOKEN_BEDROCK for gateway auth
+    - BEDROCK_BASE_URL for custom gateway endpoints
+    - Standard AWS credentials (access key, profile, etc.)
+
+    PydanticAI natively checks AWS_BEARER_TOKEN_BEDROCK, but we also
+    accept AWS_BEARER_TOKEN for convenience.
     """
-    bearer_token = os.environ.get("AWS_BEARER_TOKEN")
+    bearer_token = os.environ.get("AWS_BEARER_TOKEN") or os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
     region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+    base_url = os.environ.get("BEDROCK_BASE_URL")
 
     if bearer_token and model_str.startswith("bedrock:"):
         from pydantic_ai.models.bedrock import BedrockConverseModel
         from pydantic_ai.providers.bedrock import BedrockProvider
 
         model_name = model_str.removeprefix("bedrock:")
-        provider = BedrockProvider(api_key=bearer_token, region_name=region)
+        provider = BedrockProvider(
+            api_key=bearer_token,
+            region_name=region,
+            base_url=base_url,
+        )
         return BedrockConverseModel(model_name, provider=provider)
 
     return model_str  # Let PydanticAI resolve it via string
@@ -130,7 +140,7 @@ def get_extraction_agent() -> Agent:
     if _extraction_agent is None:
         _extraction_agent = Agent(
             model=_get_model(EXTRACTION_MODEL),
-            result_type=ExtractionResult,
+            output_type=ExtractionResult,
             system_prompt=EXTRACTION_SYSTEM_PROMPT,
         )
     return _extraction_agent
@@ -141,7 +151,7 @@ def get_link_eval_agent() -> Agent:
     if _link_eval_agent is None:
         _link_eval_agent = Agent(
             model=_get_model(LINKING_MODEL),
-            result_type=LinkDecision,
+            output_type=LinkDecision,
             system_prompt=LINKING_SYSTEM_PROMPT,
         )
     return _link_eval_agent
@@ -152,7 +162,7 @@ def get_analysis_agent() -> Agent:
     if _analysis_agent is None:
         _analysis_agent = Agent(
             model=_get_model(EXTRACTION_MODEL),
-            result_type=AnalysisResult,
+            output_type=AnalysisResult,
             system_prompt=ANALYSIS_SYSTEM_PROMPT,
         )
     return _analysis_agent
@@ -188,10 +198,10 @@ async def stage1_extract(
         f"Extract all rules, definitions, and equations from this spec chunk:\n\n{context}",
     )
     # Override the chunk metadata in case the agent changed them
-    result.data.spec_chunk_id = str(spec_chunk_id)
-    result.data.era = era
-    result.data.subsystem = subsystem
-    return result.data
+    result.output.spec_chunk_id = str(spec_chunk_id)
+    result.output.era = era
+    result.output.subsystem = subsystem
+    return result.output
 
 
 async def stage2_search(
@@ -283,7 +293,7 @@ async def stage3_evaluate_link(
         f"Similarity: {candidate.similarity:.3f}"
     )
     result = await get_link_eval_agent().run(prompt)
-    return result.data
+    return result.output
 
 
 async def stage4_analyze(
@@ -302,7 +312,7 @@ async def stage4_analyze(
         prompt += "\nNo implementing code found — propose tests based on the spec rule alone."
 
     result = await get_analysis_agent().run(prompt)
-    return result.data
+    return result.output
 
 
 async def run_pipeline(
