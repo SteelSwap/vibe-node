@@ -1,8 +1,8 @@
 % If the module name changes, change the following macro to match!
-\CertsVDelegs{Certs/Properties/VoteDelegsVDeleg}
+\mathsf{CertsVDelegs}{Certs/Properties/VoteDelegsVDeleg}
 
 claim[%
-  \CertsVDelegs.lagda{\CertsVDelegs{}}:
+  \mathsf{CertsVDelegs}.lagda{\mathsf{CertsVDelegs}{}}:
    by  constructor% 
   ]thm:VDelegsInRegDReps
   itemize
@@ -28,7 +28,7 @@ voteDelegsVDeleg :  DState → Type
 voteDelegsVDeleg d = range (voteDelegsOf d) ⊆ mapˢ (credVoter DRep) (dom (voteDelegsOf d))
 ```
     \item Proof. To appear in the
-      \CertsVDelegs.lagda{\CertsVDelegs{}}
+      \mathsf{CertsVDelegs}.lagda{\mathsf{CertsVDelegs}{}}
       module in the \repourl{formal ledger repository}.
   itemize
 claim

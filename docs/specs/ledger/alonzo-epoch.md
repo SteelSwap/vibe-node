@@ -3,20 +3,20 @@ In order to handle rewards and staking, we must change filter the UTxO for Ada-o
 
 
 *Stake Distribution (using functions and maps as relations)* $$\begin{align*}
-      & \fun{stakeDistr} \in \UTxO \to \DState \to \PState \to \type{Stake}\\
-      & \fun{stakeDistr}~{utxo}~{dstate}~{pstate} =
-      (\dom{\var{activeDelegs}})\restrictdom\left(\sum\var{stakeRelation}\right)\\
+      & \mathsf{stakeDistr} \in \mathsf{UTxO} \to \mathsf{DState} \to \mathsf{PState} \to \mathsf{Stake}\\
+      & \mathsf{stakeDistr}~{utxo}~{dstate}~{pstate} =
+      (\mathrm{dom}~\mathit{activeDelegs})\lhd\left(\sum\mathit{stakeRelation}\right)\\
       & \where \\
-      & ~~~~ (\var{stdelegs},~\var{rewards},~\var{delegations},~\var{ptrs},~\wcard,~\wcard)
-        = \var{dstate} \\
-      & ~~~~ (\var{stpools},~\wcard,~\wcard,~\wcard,~\wcard) = \var{pstate} \\
-      & ~~~~ \var{stakeRelation} = \left(
-        \left(\fun{stakeCred_b}^{-1}\cup\left(\fun{addrPtr}\circ\var{ptr}\right)^{-1}\right)
-        \circ\left(\fun{utxoAda}~{\var{utxo}}\right)
+      & ~~~~ (\mathit{stdelegs},~\mathit{rewards},~\mathit{delegations},~\mathit{ptrs},~\underline{\phantom{a}},~\underline{\phantom{a}})
+        = \mathit{dstate} \\
+      & ~~~~ (\mathit{stpools},~\underline{\phantom{a}},~\underline{\phantom{a}},~\underline{\phantom{a}},~\underline{\phantom{a}}) = \mathit{pstate} \\
+      & ~~~~ \mathit{stakeRelation} = \left(
+        \left(\mathsf{stakeCred_b}^{-1}\cup\left(\mathsf{addrPtr}\circ\mathit{ptr}\right)^{-1}\right)
+        \circ\left(\mathsf{utxoAda}~{\mathit{utxo}}\right)
         \right)
-        \cup \left(\fun{stakeCred_r}^{-1}\circ\var{rewards}\right) \\
-      & ~~~~ \var{activeDelegs} =
-               (\dom{stdelegs}) \restrictdom \var{delegations} \restrictrange (\dom{stpools}) \\
+        \cup \left(\mathsf{stakeCred_r}^{-1}\circ\mathit{rewards}\right) \\
+      & ~~~~ \mathit{activeDelegs} =
+               (\mathrm{dom}~stdelegs) \lhd \mathit{delegations} \rhd (\mathrm{dom}~stpools) \\
 \end{align*}$$
 
 **Stake Distribution Function**

@@ -1,8 +1,8 @@
 % If the module name changes, change the following macro to match!
-\ChainPropCredDeps{Chain/Properties/CredDepsEqualDomRwds}
+\mathsf{ChainPropCredDeps}{Chain/Properties/CredDepsEqualDomRwds}
 
 claim[%
-  \ChainPropCredDeps.lagda{\ChainPropCredDeps{}}:
+  \mathsf{ChainPropCredDeps}.lagda{\mathsf{ChainPropCredDeps}{}}:
   Equality of credential depsoits is a  invariant%
   ]
   itemize
@@ -32,7 +32,7 @@ credDeposits≡dom-rwds-inv : Type
 credDeposits≡dom-rwds-inv = LedgerInvariant _⊢_⇀⦇_,CHAIN⦈_ credDeposits≡dom-rwds
 ```
     \item Proof. To appear (in the
-      \ChainPropCredDeps.lagda{\ChainPropCredDeps{}} module
+      \mathsf{ChainPropCredDeps}.lagda{\mathsf{ChainPropCredDeps}{}} module
       of the \repourl{formal ledger repository}).
   itemize
 claim

@@ -1,10 +1,10 @@
 
 % If the module name changes, change the following macro to match!
-\ChangePPGroup{GovernanceActions/Properties/ChangePPGroup}
+\mathsf{ChangePPGroup}{GovernanceActions/Properties/ChangePPGroup}
 
 
 claim[%
-  \ChangePPGroup.lagda{\ChangePPGroup{}}:
+  \mathsf{ChangePPGroup}.lagda{\mathsf{ChangePPGroup}{}}:
   PParam updates have non-empty groups%
   ]
   itemize
@@ -22,7 +22,7 @@ ChangePPHasGroup : {tx : Tx} {p : GovProposal} (pu : PParamsUpdate)
 ChangePPHasGroup pu _ _ = updateGroups pu ≢ ∅
 ```
     \item Proof. To appear (in the
-      \ChangePPGroup.lagda{\ChangePPGroup{}} module
+      \mathsf{ChangePPGroup}.lagda{\mathsf{ChangePPGroup}{}} module
       of the \repourl{formal ledger repository}).
   itemize
 claim

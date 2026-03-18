@@ -1,6 +1,6 @@
 # Rewards
 sec:rewards
-\LedgerModule{Rewards}
+\mathsf{LedgerModule}{Rewards}
 
 This section defines how rewards for stake pools and their delegators
 are calculated and paid out.

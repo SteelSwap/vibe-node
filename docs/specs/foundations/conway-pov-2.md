@@ -1,8 +1,8 @@
 % If the module name changes, change the following macro to match!
-\UtxoPoV{Utxo/Properties/PoV}
+\mathsf{UtxoPoV}{Utxo/Properties/PoV}
 
 
-lemma[\UtxoPoV.lagda{\UtxoPoV{}}:  rule preserves value]
+lemma[\mathsf{UtxoPoV}.lagda{\mathsf{UtxoPoV}{}}:  rule preserves value]
   itemize
     \item Informally.
     Let s and s' be s, let tx~:~ be
@@ -12,9 +12,9 @@ lemma[\UtxoPoV.lagda{\UtxoPoV{}}:  rule preserves value]
     coin values of s and txwdrls.  If tx is not valid, then the coin
     values of s and s' are equal.  
     We can express this concisely as follows:
-    \[\AgdaField{getCoin~s} + \AgdaField{getCoin~txwdrls}
-      · \AgdaFunction{χ} (\ab{tx~.isValid})
-      ≡ \AgdaField{getCoin s'},\]
+    \[\mathsf{AgdaField}{getCoin~s} + \mathsf{AgdaField}{getCoin~txwdrls}
+      · \mathsf{AgdaFunction}{χ} (\ab{tx~.isValid})
+      ≡ \mathsf{AgdaField}{getCoin s'},\]
     where $χ~:~Bool~→~{0, 1}$ is the characteristic function,
     which returns 0 for false and 1 for true.
     \item Formally.
@@ -25,7 +25,7 @@ UTXOpov : {Γ : UTxOEnv} {tx : Tx} {s s' : UTxOState}
   → getCoin s + getCoin (wdrlsOf tx) * χ (tx .isValid) ≡ getCoin s'
 ```
   \item Proof. See the
-  \UtxoPoV.lagda{\UtxoPoV{}} module
+  \mathsf{UtxoPoV}.lagda{\mathsf{UtxoPoV}{}} module
   in the \repourl{formal ledger repository}.
   itemize
 lemma

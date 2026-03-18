@@ -1,6 +1,6 @@
 # Fee Calculation
 sec:fees
-\LedgerModule{Fees}, where we define the functions used to compute the
+\mathsf{LedgerModule}{Fees}, where we define the functions used to compute the
 fees associated with reference scripts.
 
 The function ~(fig:scriptsCost) calculates the fee for reference scripts in a

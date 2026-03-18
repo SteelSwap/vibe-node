@@ -26,7 +26,7 @@ The notation $f: X \rightharpoonup Y$ indicates that $f$ is a partial map from $
 
 ##### Encoders and decoders.
 
-Recall that $\B = \Nab{0}{255}$, the set of integral values that can be represented in a single byte, and that we identify bytestrings with elements of $\B^*$. We will describe the CBOR encoding of the `data` type by defining families of encoding functions (or *encoders*) $$\e_X : X \rightarrow \B^*$$ and decoding functions (or *decoders*) $$\d_X : \B^* \rightharpoonup \B^* \times X$$
+Recall that $\B = \mathsf{Nab}{0}{255}$, the set of integral values that can be represented in a single byte, and that we identify bytestrings with elements of $\B^*$. We will describe the CBOR encoding of the `data` type by defining families of encoding functions (or *encoders*) $$\e_X : X \rightarrow \B^*$$ and decoding functions (or *decoders*) $$\d_X : \B^* \rightharpoonup \B^* \times X$$
 
 for various sets $X$, such as the set $\Z$ of integers and the set of all `data` items. The encoding function $\e_X$ takes an element $x \in
 X$ and converts it to a bytestring, and the decoding function $\d_X$ takes a bytestring $s$, decodes some initial prefix of $s$ to a value $x \in X$, and returns the remainder of $s$ together with $x$. Decoders for complex types will often be built up from decoders for simpler types. Decoders are *partial* functions because they can fail, for instance, if there is insufficient input, or if the input is not well formed, or if a decoded value is outside some specified range.
@@ -46,8 +46,8 @@ We use this to define for each $k \geq 1$ a partial function $\intToBS_k: \N \ri
 We also define inverse functions $\bsToInt_k: \B^* \rightharpoonup \N$ which decode a $k$-byte natural number from the start of a bytestring, failing if there is insufficient input: $$\bsToInt_k(s) = (s', \sum_{i=0}^{k-1}256^ib_i) \qquad \text{if $s = [b_{k-1},
     \ldots, b_0] \cdot s'$}.$$
 
-We now define an encoder $\eHead: \Nab{0}{7} \times
-\Nab{0}{2^{64}-1} \rightarrow \B^*$ which takes a major type and a natural number and encodes them as a CBOR head using the standard encoding:
+We now define an encoder $\eHead: \mathsf{Nab}{0}{7} \times
+\mathsf{Nab}{0}{2^{64}-1} \rightarrow \B^*$ which takes a major type and a natural number and encodes them as a CBOR head using the standard encoding:
 
 $$\eHead(m,n) =
   \begin{cases}
@@ -59,7 +59,7 @@ $$\eHead(m,n) =
   \end{cases}$$
 
 The corresponding decoder $\dHead: \B^* \rightharpoonup \B^* \times
-\Nab{0}{7} \times \Nab{0}{2^{64}-1}$ is given by
+\mathsf{Nab}{0}{7} \times \mathsf{Nab}{0}{2^{64}-1}$ is given by
 
 $$\dHead(n \cdot s) =
   \begin{cases}
@@ -74,7 +74,7 @@ This function is undefined if the input is the empty bytestring $\epsilon$, if t
 
 ##### Heads for indefinite-length items.
 
-The functions $\eHead$ and $\dHead$ defined above are used for a number of purposes. One use is to encode integers less than 64 bits, where the argument of the head is the relevant integer. Another use is for "definite-length" encodings of items such as bytestrings and lists, where the head contains the length $n$ of the object and is followed by some encoding of the object itself (for example a sequence of $n$ bytes for a bytestring or a sequence of $n$ encoded objects for the elements of a list). It is also possible to have "indefinite-length" encodings of objects such as lists and arrays, which do not specify the length of an object in advance: instead a special head with argument 31 is emitted, followed by the encodings of the individual items; the end of the sequence is marked by a "break" byte with value 255. We define an encoder $\eIndef: \Nab{2}{5} \rightarrow \B^*$ and a decoder $\dIndef: \B^* \rightharpoonup \B^* \times \Nab{2}{5}$ which deal with indefinite heads for a given major type:
+The functions $\eHead$ and $\dHead$ defined above are used for a number of purposes. One use is to encode integers less than 64 bits, where the argument of the head is the relevant integer. Another use is for "definite-length" encodings of items such as bytestrings and lists, where the head contains the length $n$ of the object and is followed by some encoding of the object itself (for example a sequence of $n$ bytes for a bytestring or a sequence of $n$ encoded objects for the elements of a list). It is also possible to have "indefinite-length" encodings of objects such as lists and arrays, which do not specify the length of an object in advance: instead a special head with argument 31 is emitted, followed by the encodings of the individual items; the end of the sequence is marked by a "break" byte with value 255. We define an encoder $\eIndef: \mathsf{Nab}{2}{5} \rightarrow \B^*$ and a decoder $\dIndef: \B^* \rightharpoonup \B^* \times \mathsf{Nab}{2}{5}$ which deal with indefinite heads for a given major type:
 
 $$\begin{align*}
   \eIndef(m) &= [32m+31]\\
@@ -134,7 +134,7 @@ This looks for either a single block or an indefinite-length list of blocks, in 
 
 ## Encoding and decoding integers
 
-As with bytestrings we use a specialised encoding scheme for integers which prohibits encodings with overly-long sequences of arbitrary data. We encode integers in $\Nab{-2^{64}}{2^{64}-1}$ as normal (see  [@rfc8949-CBOR § 3.1]: the major type is 0 for positive integers and 1 for negative ones) and larger ones by emitting a CBOR tag (major type 6; argument 2 for positive numbers and 3 for negative numbers) to indicate the sign, then converting the integer to a bytestring and emitting that using the encoder defined above. This encoding scheme is the same as the standard one except for the size limitations.
+As with bytestrings we use a specialised encoding scheme for integers which prohibits encodings with overly-long sequences of arbitrary data. We encode integers in $\mathsf{Nab}{-2^{64}}{2^{64}-1}$ as normal (see  [@rfc8949-CBOR § 3.1]: the major type is 0 for positive integers and 1 for negative ones) and larger ones by emitting a CBOR tag (major type 6; argument 2 for positive numbers and 3 for negative numbers) to indicate the sign, then converting the integer to a bytestring and emitting that using the encoder defined above. This encoding scheme is the same as the standard one except for the size limitations.
 
 We firstly define conversion functions $\itos : \N \rightarrow
 \B^*$ and $\stoi: \B^* \rightarrow \N$ by $$\itos(n) =
@@ -240,4 +240,4 @@ $$\dcTag(s) =
 
 Note that the decoders for `List` and `Constr` accept both definite-length and indefinite-length lists of encoded `data` values, but the decoder for `Map` only accepts definite-length lists (and the length is the number of *pairs* in the map). This is consistent with CBOR's standard encoding of arrays and lists (major type 4) and maps (major type 5).
 
-Note also that the encoder $\ecTag$ accepts arbitrary integer values for `Constr` tags, but (for compatibility with [@CBOR-alternatives]) the decoder $\dcTag$ only accepts tags in $\Nab{0}{2^{64}-1}$. This means that some valid Plutus Core programs can be serialised but not deserialised, and is the reason for the recommendation in Section sec:built-in-types-1 that only constructor tags between 0 and $2^{64}-1$ should be used.
+Note also that the encoder $\ecTag$ accepts arbitrary integer values for `Constr` tags, but (for compatibility with [@CBOR-alternatives]) the decoder $\dcTag$ only accepts tags in $\mathsf{Nab}{0}{2^{64}-1}$. This means that some valid Plutus Core programs can be serialised but not deserialised, and is the reason for the recommendation in Section sec:built-in-types-1 that only constructor tags between 0 and $2^{64}-1$ should be used.

@@ -3,121 +3,121 @@ The transition rules for unspent transaction outputs are presented in Figure 4.
 
 - we define the protocol parameters as an abstract type, this type is made concrete in Section sec:update, where the update mechanism is discussed.
 
-- The lovelace supply cap ($\fun{lovelaceCap}$) is treated as an abstract function in this specification. In the actual system this value equals $$45 \times 10^{15}$$
+- The lovelace supply cap ($\mathsf{lovelaceCap}$) is treated as an abstract function in this specification. In the actual system this value equals $$45 \times 10^{15}$$
 
-Functions on the types introduced in 4 are defined in 2. In particular, note that in function $\fun{minfee}$ we make use of the fact that the $\Lovelace$ type is an alias for the set of the integers numbers ($\mathbb{Z}$).
+Functions on the types introduced in 4 are defined in 2. In particular, note that in function $\mathsf{minfee}$ we make use of the fact that the $\mathsf{Lovelace}$ type is an alias for the set of the integers numbers ($\mathbb{Z}$).
 
-Rule eq:utxo-bootstrap, models the fact that the **reserves** of the system are set to: $$\fun{lovelaceCap} - \balance{utxo_0}$$ The Lovelace amount $45 \times 10^{15}$ is the initial money supply in the system.
+Rule eq:utxo-bootstrap, models the fact that the **reserves** of the system are set to: $$\mathsf{lovelaceCap} - \mathsf{balance}~utxo_0$$ The Lovelace amount $45 \times 10^{15}$ is the initial money supply in the system.
 
 
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
-      \var{tx} & \Tx & \text{transaction}\\
+      \mathit{tx} & \mathsf{Tx} & \text{transaction}\\
       %
-      \var{txid} & \TxId & \text{transaction id}\\
+      \mathit{txid} & \mathsf{TxId} & \text{transaction id}\\
       %
-      ix & \Ix & \text{transaction index}\\
+      ix & \mathsf{Ix} & \text{transaction index}\\
       %
-      \var{addr} & \Addr & \text{address}\\
+      \mathit{addr} & \mathsf{Addr} & \text{address}\\
       %
-      \var{pps} & \type{PParams}& \text{protocol parameters}
+      \mathit{pps} & \mathsf{PParams}& \text{protocol parameters}
     \end{array}
 \end{equation*}$$ *Derived types* $$\begin{equation*}
     \begin{array}{rlrlr}
-      \ell & \Lovelace
+      \ell & \mathsf{Lovelace}
       & n  & \mathbb{Z}
       & \text{currency value}
       \\
-      \var{txin}
-      & \TxIn
-      & (\var{txid}, \var{ix})
-      & \TxId \times \Ix
+      \mathit{txin}
+      & \mathsf{TxIn}
+      & (\mathit{txid}, \mathit{ix})
+      & \mathsf{TxId} \times \mathsf{Ix}
       & \text{transaction input}
       \\
-      \var{txout}
-      & \type{TxOut}
-      & (\var{addr}, c)
-      & \Addr \times \Lovelace
+      \mathit{txout}
+      & \mathsf{TxOut}
+      & (\mathit{addr}, c)
+      & \mathsf{Addr} \times \mathsf{Lovelace}
       & \text{transaction output}
       \\
-      \var{utxo}
-      & \UTxO
+      \mathit{utxo}
+      & \mathsf{UTxO}
       & m
-      & \TxIn \mapsto \TxOut
+      & \mathsf{TxIn} \mapsto \mathsf{TxOut}
       & \text{unspent tx outputs}
     \end{array}
 \end{equation*}$$ *Abstract Functions* $$\begin{equation*}
     \begin{array}{rlr}
-      \txid{} & \Tx \to \TxId & \text{compute transaction id}\\
+      \mathsf{txid}~ & \mathsf{Tx} \to \mathsf{TxId} & \text{compute transaction id}\\
       %
-      \fun{txbody} & \Tx \to \powerset{\TxIn} \times (\Ix \mapsto \TxOut)
+      \mathsf{txbody} & \mathsf{Tx} \to \mathbb{P}~\mathsf{TxIn} \times (\mathsf{Ix} \mapsto \mathsf{TxOut})
                                   & \text{transaction body}\\
       %
-      \fun{a} & \type{PParams}\to \mathbb{Z} & \text{minimum fee constant}\\
+      \mathsf{a} & \mathsf{PParams}\to \mathbb{Z} & \text{minimum fee constant}\\
       %
-      \fun{b} & \type{PParams}\to \mathbb{Z} & \text{minimum fee factor}\\
+      \mathsf{b} & \mathsf{PParams}\to \mathbb{Z} & \text{minimum fee factor}\\
       %
-      \fun{txSize} & \Tx \to \mathbb{Z} & \text{abstract size of a transaction}\\
+      \mathsf{txSize} & \mathsf{Tx} \to \mathbb{Z} & \text{abstract size of a transaction}\\
       %
-      \fun{lovelaceCap} & \Lovelace & \text{lovelace supply cap}
+      \mathsf{lovelaceCap} & \mathsf{Lovelace} & \text{lovelace supply cap}
     \end{array}
 \end{equation*}$$ *Constraints* $$\begin{equation}
     \label{eq:txid-injective}
-    \forall \var{tx_i}, \var{tx_j} \cdot
-    \txid{\var{tx_i}} = \txid{\var{tx_j}} \Rightarrow \var{tx_i} = \var{tx_j}
+    \forall \mathit{tx_i}, \mathit{tx_j} \cdot
+    \mathsf{txid}~\mathit{tx_i} = \mathsf{txid}~\mathit{tx_j} \Rightarrow \mathit{tx_i} = \mathit{tx_j}
 \end{equation}$$
 
 **Definitions used in the UTxO transition system**
 $$\begin{align*}
-    & \fun{txins} \in \Tx \to \powerset{\TxIn}
+    & \mathsf{txins} \in \mathsf{Tx} \to \mathbb{P}~\mathsf{TxIn}
     & \text{transaction inputs} \\
-    & \txins{tx} = \var{inputs} \where \txbody{tx} = (\var{inputs}, ~\wcard)
-    \nextdef
-    & \fun{txouts} \in \Tx \to \UTxO
+    & \mathsf{txins}~tx = \mathit{inputs} \where \mathsf{txbody}~tx = (\mathit{inputs}, ~\underline{\phantom{a}})
+    \\[0.5em]
+    & \mathsf{txouts} \in \mathsf{Tx} \to \mathsf{UTxO}
     & \text{transaction outputs as UTxO} \\
-    & \fun{txouts} ~ \var{tx} =
-      \left\{ (\fun{txid} ~ \var{tx}, \var{ix}) \mapsto \var{txout} ~
+    & \mathsf{txouts} ~ \mathit{tx} =
+      \left\{ (\mathsf{txid} ~ \mathit{tx}, \mathit{ix}) \mapsto \mathit{txout} ~
       \middle| \begin{array}{lcl}
-                 (\_, \var{outputs}) & = & \txbody{tx} \\
-                 \var{ix} \mapsto \var{txout} & \in & \var{outputs}
+                 (\_, \mathit{outputs}) & = & \mathsf{txbody}~tx \\
+                 \mathit{ix} \mapsto \mathit{txout} & \in & \mathit{outputs}
                \end{array}
       \right\}
-    \nextdef
-    & \fun{balance} \in \UTxO \to \mathbb{Z}
+    \\[0.5em]
+    & \mathsf{balance} \in \mathsf{UTxO} \to \mathbb{Z}
     & \text{UTxO balance} \\
-    & \fun{balance} ~ utxo = \sum_{(~\wcard ~ \mapsto (\wcard, ~c)) \in \var{utxo}} c\\
-   \nextdef
+    & \mathsf{balance} ~ utxo = \sum_{(~\underline{\phantom{a}} ~ \mapsto (\underline{\phantom{a}}, ~c)) \in \mathit{utxo}} c\\
+   \\[0.5em]
    %
-    & \fun{minfee} \in \type{PParams}\to \Tx \to \mathbb{Z} & \text{minimum fee}\\
-    & \fun{minfee}~\var{pps}~\var{tx} =
-      \fun{a}~\var{pps} + \fun{b}~\var{pps} * \fun{txSize}~\var{tx}
+    & \mathsf{minfee} \in \mathsf{PParams}\to \mathsf{Tx} \to \mathbb{Z} & \text{minimum fee}\\
+    & \mathsf{minfee}~\mathit{pps}~\mathit{tx} =
+      \mathsf{a}~\mathit{pps} + \mathsf{b}~\mathit{pps} * \mathsf{txSize}~\mathit{tx}
 \end{align*}$$
 
 **Functions used in UTxO rules**
 *UTxO environments* $$\begin{equation*}
-    \UTxOEnv =
+    \mathsf{UTxOEnv} =
     \left(
       \begin{array}{rlr}
-        \var{utxo_0} & \UTxO & \text{genesis UTxO}\\
-        \var{pps} & \type{PParams}& \text{protocol parameters map}
+        \mathit{utxo_0} & \mathsf{UTxO} & \text{genesis UTxO}\\
+        \mathit{pps} & \mathsf{PParams}& \text{protocol parameters map}
       \end{array}
     \right)
 \end{equation*}$$
 
 *UTxO states* $$\begin{equation*}
-    \UTxOState =
+    \mathsf{UTxOState} =
     \left(
       \begin{array}{rlr}
-        \var{utxo} & \UTxO & \text{unspent transaction outputs}\\
-        \var{reserves} & \Lovelace & \text{system's reserves}
+        \mathit{utxo} & \mathsf{UTxO} & \text{unspent transaction outputs}\\
+        \mathit{reserves} & \mathsf{Lovelace} & \text{system's reserves}
       \end{array}
     \right)
 \end{equation*}$$
 
 *UTxO transitions* $$\begin{equation*}
     \_ \vdash
-    \var{\_} \trans{utxo}{\_} \var{\_}
-    \subseteq \powerset (\UTxOEnv \times \UTxOState \times \Tx \times \UTxOState)
+    \mathit{\_} \xrightarrow[\mathsf{utxo}]{}{\_} \mathit{\_}
+    \subseteq \powerset (\mathsf{UTxOEnv} \times \mathsf{UTxOState} \times \mathsf{Tx} \times \mathsf{UTxOState})
 \end{equation*}$$
 
 **UTxO transition-system types**
@@ -132,23 +132,23 @@ $$\begin{equation}
         pps
       \end{array}\right)}
       \vdash
-      \trans{utxo}{}
+      \xrightarrow[\mathsf{utxo}]{}{}
       \left(
         \begin{array}{l}
-          \var{utxo_0}\\
-          \fun{lovelaceCap} - \balance{utxo_0}
+          \mathit{utxo_0}\\
+          \mathsf{lovelaceCap} - \mathsf{balance}~utxo_0
         \end{array}
       \right)
     }
 \end{equation}$$ $$\begin{equation}
 \label{eq:utxo-inductive}
     \inference
-    { \txins{tx} \subseteq \dom \var{utxo}\\
-      \var{fee} \leteq \balance{(\txins{tx} \restrictdom \var{utxo})} - \balance{(\txouts{tx})}
-      & \minfee{pps}{tx} \leq \var{fee}\\
-      \txins{tx} \neq \emptyset
-      & \txouts{tx} \neq \emptyset
-      & \forall \wcard \mapsto (\wcard, c) \in \txouts{tx} \cdot 0 < c
+    { \mathsf{txins}~tx \subseteq \dom \mathit{utxo}\\
+      \mathit{fee} \mathrel{\mathop:}= \mathsf{balance}~(\mathsf{txins}~tx \lhd \mathit{utxo}) - \mathsf{balance}~(\mathsf{txouts}~tx)
+      & \mathsf{minfee}~pps~tx \leq \mathit{fee}\\
+      \mathsf{txins}~tx \neq \emptyset
+      & \mathsf{txouts}~tx \neq \emptyset
+      & \forall \underline{\phantom{a}} \mapsto (\underline{\phantom{a}}, c) \in \mathsf{txouts}~tx \cdot 0 < c
     }
     {
       {\left(\begin{array}{l}
@@ -158,15 +158,15 @@ $$\begin{equation}
       \vdash
       \left(
           \begin{array}{l}
-            \var{utxo}\\
-            \var{reserves}
+            \mathit{utxo}\\
+            \mathit{reserves}
           \end{array}
       \right)
-      \trans{utxo}{tx}
+      \xrightarrow[\mathsf{utxo}]{}{tx}
       \left(
         \begin{array}{l}
-          (\txins{tx} \subtractdom \var{utxo}) \cup \txouts{tx}\\
-          \var{reserves + \var{fee}}
+          (\mathsf{txins}~tx \mathbin{\rlap{\lhd}/} \mathit{utxo}) \cup \mathsf{txouts}~tx\\
+          \mathit{reserves + \mathit{fee}}
         \end{array}
       \right)
     }
@@ -183,37 +183,37 @@ Rule eq:utxo-inductive specifies under which conditions a transaction can be ap
 
 - All the transaction outputs must be positive. We do not allow $0$ value outputs to be consistent with the current implementation.
 
-- If the above conditions hold, then the new state will not have the inputs spent in transaction $\var{tx}$ and it will have the new outputs in $\var{tx}$.
+- If the above conditions hold, then the new state will not have the inputs spent in transaction $\mathit{tx}$ and it will have the new outputs in $\mathit{tx}$.
 
 ## Witnesses
-The rules for witnesses are presented in Figure 8. In the initial rules note that $\var{utxoEnv}$ and $\var{utxoSt}$ are tuples, where $\var{utxoEnv} \in \UTxOEnv$ and $\var{utxoSt} \in \UTxOState$. The definitions used in Rule eq:utxo-witness-inductive are given in Figure 5. Note that Rule eq:utxo-witness-inductive uses the transition relation defined in Figure 4. The main reason for doing this is to define the rules incrementally, modeling different aspects in isolation to keep the rules as simple as possible. Also note that the $\trans{utxo}{}$ relation could have been defined in terms of $\trans{utxow}{}$ (thus composing the rules in a different order). The choice here is arbitrary.
+The rules for witnesses are presented in Figure 8. In the initial rules note that $\mathit{utxoEnv}$ and $\mathit{utxoSt}$ are tuples, where $\mathit{utxoEnv} \in \mathsf{UTxOEnv}$ and $\mathit{utxoSt} \in \mathsf{UTxOState}$. The definitions used in Rule eq:utxo-witness-inductive are given in Figure 5. Note that Rule eq:utxo-witness-inductive uses the transition relation defined in Figure 4. The main reason for doing this is to define the rules incrementally, modeling different aspects in isolation to keep the rules as simple as possible. Also note that the $\xrightarrow[\mathsf{utxo}]{}{}$ relation could have been defined in terms of $\xrightarrow[\mathsf{utxow}]{}{}$ (thus composing the rules in a different order). The choice here is arbitrary.
 
 
 *Abstract functions* $$\begin{equation*}
     \begin{array}{rlr}
-      \fun{wits} & \Tx \to \powerset{(\VKey \times \Sig)}
+      \mathsf{wits} & \mathsf{Tx} \to \mathbb{P}~(\mathsf{VKey} \times \mathsf{Sig})
       & \text{witnesses of a transaction}\\
-      \fun{hash_{vkey}} & \Addr \mapsto \KeyHash
+      \mathsf{hash_{vkey}} & \mathsf{Addr} \mapsto \mathsf{KeyHash}
       & \text{hash of a verifying key in an address}\\
     \end{array}
 \end{equation*}$$
 
 **Definitions used in the UTxO transition system with witnesses**
 $$\begin{align*}
-    & \addr{}{} \in \UTxO \to \TxIn \mapsto \Addr & \text{addresses of inputs}\\
-    & \addr{utxo} = \{ i \mapsto a \mid i \mapsto (a, \wcard) \in \var{utxo} \} \\
-    \nextdef
-    & \fun{addr_h} \in \UTxO \to \TxIn \mapsto \KeyHash & \text{verifying key hashes}\\
-    & \fun{addr_h}~utxo = \{ i \mapsto h \mid i \mapsto (a, \wcard) \in \var{utxo}
-      \wedge a \mapsto h \in \fun{hash_{vkey}} \}
+    & \mathsf{addr}~{} \in \mathsf{UTxO} \to \mathsf{TxIn} \mapsto \mathsf{Addr} & \text{addresses of inputs}\\
+    & \mathsf{addr}~utxo = \{ i \mapsto a \mid i \mapsto (a, \underline{\phantom{a}}) \in \mathit{utxo} \} \\
+    \\[0.5em]
+    & \mathsf{addr_h} \in \mathsf{UTxO} \to \mathsf{TxIn} \mapsto \mathsf{KeyHash} & \text{verifying key hashes}\\
+    & \mathsf{addr_h}~utxo = \{ i \mapsto h \mid i \mapsto (a, \underline{\phantom{a}}) \in \mathit{utxo}
+      \wedge a \mapsto h \in \mathsf{hash_{vkey}} \}
 \end{align*}$$
 
 **Functions used in rules witnesses**
 *UTxO with witness transitions* $$\begin{equation*}
-    \var{\_} \vdash
-    \var{\_} \trans{utxow}{\_} \var{\_}
+    \mathit{\_} \vdash
+    \mathit{\_} \xrightarrow[\mathsf{utxow}]{}{\_} \mathit{\_}
     \subseteq \powerset
-    (\UTxOEnv \times \UTxOState \times (\Tx \times \powerset{(\VKey \times \Sig)}) \times \UTxOState)
+    (\mathsf{UTxOEnv} \times \mathsf{UTxOState} \times (\mathsf{Tx} \times \mathbb{P}~(\mathsf{VKey} \times \mathsf{Sig})) \times \mathsf{UTxOState})
 \end{equation*}$$
 
 **UTxO with witness transition-system types**
@@ -225,9 +225,9 @@ $$\begin{equation}
          utxoEnv
       \end{array}}
       \vdash
-      \trans{\hyperref[fig:rules:utxo]{utxo}}{}
+      \xrightarrow[\mathsf{\hyperref[fig:rules:utxo]{utxo}}]{}{}
       \left(
-        \var{utxoSt}
+        \mathit{utxoSt}
       \right)
     }
     {
@@ -235,47 +235,47 @@ $$\begin{equation}
          utxoEnv
       \end{array}}
       \vdash
-      \trans{utxow}{}
+      \xrightarrow[\mathsf{utxow}]{}{}
       \left(
-        \var{utxoSt}
+        \mathit{utxoSt}
       \right)
     }
 \end{equation}$$ $$\begin{equation}
     \label{eq:utxo-witness-inductive}
     \inference
-    { \var{utxoEnv}
+    { \mathit{utxoEnv}
       \vdash
       {\left(
         \begin{array}{l}
-          \var{utxo}\\
-          \var{reserves}
+          \mathit{utxo}\\
+          \mathit{reserves}
         \end{array}
       \right)}
-      \trans{\hyperref[fig:rules:utxo]{utxo}}{tx}
+      \xrightarrow[\mathsf{\hyperref[fig:rules:utxo]{utxo}}]{}{tx}
       {\left(
         \begin{array}{l}
-          \var{utxo'}\\
-          \var{reserves'}
+          \mathit{utxo'}\\
+          \mathit{reserves'}
         \end{array}
       \right)}
-      & \var{maxTxSize} \mapsto \var{t} \in \var{pps} & \fun{txSize}~\var{tx} \leq t \\ ~ \\
-      & \forall i \in \txins{tx} \cdot \exists (\var{vk}, \sigma) \in \wits{\var{tx}}
+      & \mathit{maxTxSize} \mapsto \mathit{t} \in \mathit{pps} & \mathsf{txSize}~\mathit{tx} \leq t \\ ~ \\
+      & \forall i \in \mathsf{txins}~tx \cdot \exists (\mathit{vk}, \sigma) \in \mathsf{wits}~\mathit{tx}
       \cdot
-      \mathcal{V}^\sigma_{\var{vk}}~{\serialised{\txbody{tx}}}
-      \wedge  \fun{addr_h}~{utxo}~i = \hash{vk}\\
+      \mathcal{V}^\sigma_{\mathit{vk}}~{\lbrack\!\lbrack \mathit{\mathsf{txbody}~tx} \rbrack\!\rbrack}
+      \wedge  \mathsf{addr_h}~{utxo}~i = \mathrm{hash}~vk\\
     }
-    {\var{utxoEnv} \vdash
+    {\mathit{utxoEnv} \vdash
       \left(
         \begin{array}{l}
-          \var{utxo}\\
-          \var{reserves}
+          \mathit{utxo}\\
+          \mathit{reserves}
         \end{array}
       \right)
-      \trans{utxow}{tx}
+      \xrightarrow[\mathsf{utxow}]{}{tx}
       \left(
         \begin{array}{l}
-          \var{utxo'}\\
-          \var{reserves'}
+          \mathit{utxo'}\\
+          \mathit{reserves'}
         \end{array}
       \right)
     }
@@ -283,7 +283,7 @@ $$\begin{equation}
 
 **UTxO with witnesses inference rules**
 ## Transaction sequences
-9 models the application of a sequence of transactions. For the sake of concision we omit the types of this transition system, since they are the same as the ones of $\trans{utxow}{}$.
+9 models the application of a sequence of transactions. For the sake of concision we omit the types of this transition system, since they are the same as the ones of $\xrightarrow[\mathsf{utxow}]{}{}$.
 
 
 $$\begin{equation}
@@ -294,9 +294,9 @@ $$\begin{equation}
          utxoEnv
       \end{array}}
       \vdash
-      \trans{\hyperref[fig:rules:utxo]{utxow}}{}
+      \xrightarrow[\mathsf{\hyperref[fig:rules:utxo]{utxow}}]{}{}
       \left(
-        \var{utxoSt}
+        \mathit{utxoSt}
       \right)
     }
     {
@@ -304,25 +304,25 @@ $$\begin{equation}
          utxoEnv
       \end{array}}
       \vdash
-      \trans{utxows}{}
+      \xrightarrow[\mathsf{utxows}]{}{}
       \left(
-        \var{utxoSt}
+        \mathit{utxoSt}
       \right)
     }
 \end{equation}$$ $$\begin{equation}
     \label{eq:rule:utxow-seq-base}
     \inference
     {}
-    {\var{utxoEnv} \vdash \var{utxoSt} \trans{utxows}{\epsilon} \var{utxoSt}}
+    {\mathit{utxoEnv} \vdash \mathit{utxoSt} \xrightarrow[\mathsf{utxows}]{}{\epsilon} \mathit{utxoSt}}
 \end{equation}$$ $$\begin{equation}
     \label{eq:rule:utxow-seq-ind}
     \inference
     {
-      \var{utxoEnv} \vdash \var{utxoSt} \trans{utxows}{\Gamma} \var{utxoSt'}
+      \mathit{utxoEnv} \vdash \mathit{utxoSt} \xrightarrow[\mathsf{utxows}]{}{\Gamma} \mathit{utxoSt'}
       &
-      \var{utxoEnv} \vdash \var{utxoSt'} \trans{\hyperref[fig:rules:utxow]{utxow}}{\var{tx}} \var{utxoSt''}
+      \mathit{utxoEnv} \vdash \mathit{utxoSt'} \xrightarrow[\mathsf{\hyperref[fig:rules:utxow]{utxow}}]{}{\mathit{tx}} \mathit{utxoSt''}
     }
-    {\var{utxoEnv} \vdash \var{utxoSt} \trans{utxows}{\Gamma;\var{tx}} \var{utxoSt''}}
+    {\mathit{utxoEnv} \vdash \mathit{utxoSt} \xrightarrow[\mathsf{utxows}]{}{\Gamma;\mathit{tx}} \mathit{utxoSt''}}
 \end{equation}$$
 
 **UTxO sequence rules**

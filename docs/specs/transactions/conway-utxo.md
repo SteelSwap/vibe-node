@@ -1,6 +1,6 @@
 # UTxO
 sec:utxo
-\LedgerModule{Utxo}, where we define types and functions needed for the
+\mathsf{LedgerModule}{Utxo}, where we define types and functions needed for the
 UTxO transition system.
 
 ## Accounting

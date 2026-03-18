@@ -11,72 +11,72 @@ There are several restrictions on a certificate posted on the blockchain:
 
 4.  Any given key can issue at most one certificate in a given slot.
 
-5.  The epochs in the certificates must refer to the current or to the next epoch. We do not want to allow certificates from past epochs so that a delegation certificate cannot be replayed. On the other hand if we allow certificates with arbitrary future epochs, then a malicious key can issue a delegation certificate per-slot, setting the epoch to a sufficiently large value. This will cause a blow up in the size of the ledger state since we will not be able to clean $\var{eks}$ (we only clean past epochs). Also note that we do not check the relation between the certificate epoch and the slot in which the certificate becomes active. This would bring additional complexity without any obvious benefit.
+5.  The epochs in the certificates must refer to the current or to the next epoch. We do not want to allow certificates from past epochs so that a delegation certificate cannot be replayed. On the other hand if we allow certificates with arbitrary future epochs, then a malicious key can issue a delegation certificate per-slot, setting the epoch to a sufficiently large value. This will cause a blow up in the size of the ledger state since we will not be able to clean $\mathit{eks}$ (we only clean past epochs). Also note that we do not check the relation between the certificate epoch and the slot in which the certificate becomes active. This would bring additional complexity without any obvious benefit.
 
 6.  Certificates do not become active immediately, but they require a certain number of slots till they become stable in all the nodes.
 
-These conditions are formalized in 3. Rule eq:rule:delegation-scheduling determines when a certificate can become "scheduled". The definitions used in these rules are presented in 1, and the types of the system induced by $\trans{sdeleg}{\wcard}$ are presented in 2. Here and in the remaining rules we will be using $k$ as an abstract constant that gives us the chain stability parameter.
+These conditions are formalized in 3. Rule eq:rule:delegation-scheduling determines when a certificate can become "scheduled". The definitions used in these rules are presented in 1, and the types of the system induced by $\xrightarrow[\mathsf{sdeleg}]{}{\underline{\phantom{a}}}$ are presented in 2. Here and in the remaining rules we will be using $k$ as an abstract constant that gives us the chain stability parameter.
 
 
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
-      c & \DCert & \text{delegation certificate}\\
-      \var{vk_g} & \VKeyGen & \text{genesis verification key}\\
+      c & \mathsf{DCert} & \text{delegation certificate}\\
+      \mathit{vk_g} & \mathsf{VKeyGen} & \text{genesis verification key}\\
     \end{array}
 \end{equation*}$$
 
 *Derived types* $$\begin{equation*}
     \begin{array}{rlrlr}
-      \var{e} & \Epoch & n & \mathbb{N} & \text{epoch}\\
-      \var{s} & \Slot & s & \mathbb{N} & \text{slot}\\
-      \var{d} & \SlotCount & s & \mathbb{N} & \text{slot}
+      \mathit{e} & \mathsf{Epoch} & n & \mathbb{N} & \text{epoch}\\
+      \mathit{s} & \mathsf{Slot} & s & \mathbb{N} & \text{slot}\\
+      \mathit{d} & \mathsf{SlotCount} & s & \mathbb{N} & \text{slot}
     \end{array}
 \end{equation*}$$
 
 *Constraints* $$\begin{align*}
-    \VKeyGen \subseteq \VKey
+    \mathsf{VKeyGen} \subseteq \mathsf{VKey}
 \end{align*}$$
 
 *Abstract functions* $$\begin{equation*}
     \begin{array}{rlr}
-      \fun{dbody} & \DCert \to (\VKey \times \Epoch)
+      \mathsf{dbody} & \mathsf{DCert} \to (\mathsf{VKey} \times \mathsf{Epoch})
       & \text{body of the delegation certificate}\\
-      \fun{dwit} & \DCert \to (\VKeyGen \times \Sig)
+      \mathsf{dwit} & \mathsf{DCert} \to (\mathsf{VKeyGen} \times \mathsf{Sig})
       & \text{witness for the delegation certificate}\\
-      \fun{dwho} & \DCert \mapsto (\VKeyGen \times \VKey)
+      \mathsf{dwho} & \mathsf{DCert} \mapsto (\mathsf{VKeyGen} \times \mathsf{VKey})
       & \text{who delegates to whom in the certificate}\\
-      \fun{depoch} & \DCert \mapsto \Epoch
+      \mathsf{depoch} & \mathsf{DCert} \mapsto \mathsf{Epoch}
       & \text{certificate epoch}\\
-      \var{k} & \mathbb{N} & \text{chain stability parameter}
+      \mathit{k} & \mathbb{N} & \text{chain stability parameter}
     \end{array}
 \end{equation*}$$
 
 **Delegation scheduling definitions**
 *Delegation scheduling environments* $$\begin{equation*}
-    \DSEnv =
+    \mathsf{DSEnv} =
     \left(
       \begin{array}{rlr}
-        \mathcal{K} & \powerset{\VKeyGen} & \text{allowed delegators}\\
-        \var{e} & \Epoch & \text{epoch}\\
-        \var{s} & \Slot & \text{slot}\\
+        \mathcal{K} & \mathbb{P}~\mathsf{VKeyGen} & \text{allowed delegators}\\
+        \mathit{e} & \mathsf{Epoch} & \text{epoch}\\
+        \mathit{s} & \mathsf{Slot} & \text{slot}\\
       \end{array}
     \right)
 \end{equation*}$$
 
 *Delegation scheduling states* $$\begin{equation*}
-    \DSState
+    \mathsf{DSState}
     = \left(
       \begin{array}{rlr}
-        \var{sds} & \seqof{(\Slot \times (\VKeyGen \times \VKey))} & \text{scheduled delegations}\\
-        \var{eks} & \powerset{(\Epoch \times \VKeyGen)} & \text{key-epoch delegations}
+        \mathit{sds} & (\mathsf{Slot} \times (\mathsf{VKeyGen} \times \mathsf{VKey}))^{*} & \text{scheduled delegations}\\
+        \mathit{eks} & \mathbb{P}~(\mathsf{Epoch} \times \mathsf{VKeyGen}) & \text{key-epoch delegations}
       \end{array}
     \right)
 \end{equation*}$$
 
 *Delegation scheduling transitions* $$\begin{equation*}
-    \var{\_} \vdash
-    \var{\_} \trans{sdeleg}{\_} \var{\_}
-    \subseteq \powerset (\DSEnv \times \DSState \times \DCert \times \DSState)
+    \mathit{\_} \vdash
+    \mathit{\_} \xrightarrow[\mathsf{sdeleg}]{}{\_} \mathit{\_}
+    \subseteq \powerset (\mathsf{DSEnv} \times \mathsf{DSState} \times \mathsf{DCert} \times \mathsf{DSState})
 \end{equation*}$$
 
 **Delegation scheduling transition-system types**
@@ -84,9 +84,9 @@ $$\begin{equation}
     \label{eq:sdeleg-bootstrap}
     \inference
     {
-      \var{sds_0} \leteq \epsilon
+      \mathit{sds_0} \mathrel{\mathop:}= \epsilon
       &
-      \var{eks_0} \leteq \emptyset
+      \mathit{eks_0} \mathrel{\mathop:}= \emptyset
     }
     {
       {\left(\begin{array}{l}
@@ -95,11 +95,11 @@ $$\begin{equation}
         s
       \end{array}\right)}
       \vdash
-      \trans{sdeleg}{}
+      \xrightarrow[\mathsf{sdeleg}]{}{}
       \left(
         \begin{array}{l}
-          \var{sds_0}\\
-          \var{eks_0}
+          \mathit{sds_0}\\
+          \mathit{eks_0}
         \end{array}
       \right)
     }
@@ -107,11 +107,11 @@ $$\begin{equation}
     \label{eq:rule:delegation-scheduling}
     \inference
     {
-      (\var{vk_s},~ \sigma) \leteq \dwit{c}
-      & \verify{vk_s}{\serialised{\dbody{c}}}{\sigma} & vk_s \in \mathcal{K}\\ ~ \\
-      (\var{vk_s},~ \var{vk_d}) \leteq \dwho{c} & e_d \leteq \depoch{c}
-      & (e_d,~ \var{vk_s}) \notin \var{eks} & 0 \leq e_d - e \leq 1 \\ ~ \\
-      d \leteq 2 \cdot k & (s + d,~ (\var{vk_s},~ \wcard)) \notin \var{sds}\\
+      (\mathit{vk_s},~ \sigma) \mathrel{\mathop:}= \mathsf{dwit}~c
+      & \mathsf{verify}~vk_s~\lbrack\!\lbrack \mathit{\mathsf{dbody}~c} \rbrack\!\rbrack~\sigma & vk_s \in \mathcal{K}\\ ~ \\
+      (\mathit{vk_s},~ \mathit{vk_d}) \mathrel{\mathop:}= \mathsf{dwho}~c & e_d \mathrel{\mathop:}= \mathsf{depoch}~c
+      & (e_d,~ \mathit{vk_s}) \notin \mathit{eks} & 0 \leq e_d - e \leq 1 \\ ~ \\
+      d \mathrel{\mathop:}= 2 \cdot k & (s + d,~ (\mathit{vk_s},~ \underline{\phantom{a}})) \notin \mathit{sds}\\
     }
     {
       {\left(\begin{array}{l}
@@ -123,17 +123,17 @@ $$\begin{equation}
       {
         \left(
           \begin{array}{l}
-            \var{sds}\\
-            \var{eks}
+            \mathit{sds}\\
+            \mathit{eks}
           \end{array}
         \right)
       }
-      \trans{sdeleg}{c}
+      \xrightarrow[\mathsf{sdeleg}]{}{c}
       {
         \left(
           \begin{array}{l}
-            \var{sds}; (s + d,~ (\var{vk_s},~ \var{vk_d}))\\
-            \var{eks} \cup \{(e_d,~ \var{vk_s})\}
+            \mathit{sds}; (s + d,~ (\mathit{vk_s},~ \mathit{vk_d}))\\
+            \mathit{eks} \cup \{(e_d,~ \mathit{vk_s})\}
           \end{array}
         \right)
       }
@@ -143,11 +143,11 @@ $$\begin{equation}
 **Delegation scheduling rules**
 The rules in Figure 6 model the activation of delegation certificates. Once a scheduled certificate becomes active (see sec:delegation-interface-rules), the delegation map is changed by it only if:
 
-- The delegating key ($\var{vk_s}$) did not activate a delegation certificate in a slot greater or equal than the certificate slot ($s$). This check is performed to avoid having the constraint that the delegation certificates have to be activated in slot order.
+- The delegating key ($\mathit{vk_s}$) did not activate a delegation certificate in a slot greater or equal than the certificate slot ($s$). This check is performed to avoid having the constraint that the delegation certificates have to be activated in slot order.
 
-- The key being delegated to ($\var{vk_d}$) has not been delegated by another key (injectivity constraint).
+- The key being delegated to ($\mathit{vk_d}$) has not been delegated by another key (injectivity constraint).
 
-The reason why we check that the delegation map is injective is to avoid a potential risk (during the OBFT era) in which a malicious node gets control of a genesis key $\var{vk_m}$ that issued the maximum number of blocks in a given window. By delegating to another key $\var{vk_d}$, which was already delegated to by some other key $\var{vk_g}$, the malicious node could prevent $\var{vk_g}$ from issuing blocks. Even though the delegation certificates take several slots to become effective, the malicious node could calculate when the certificate would become active, and issue a delegation certificate at the right time.
+The reason why we check that the delegation map is injective is to avoid a potential risk (during the OBFT era) in which a malicious node gets control of a genesis key $\mathit{vk_m}$ that issued the maximum number of blocks in a given window. By delegating to another key $\mathit{vk_d}$, which was already delegated to by some other key $\mathit{vk_g}$, the malicious node could prevent $\mathit{vk_g}$ from issuing blocks. Even though the delegation certificates take several slots to become effective, the malicious node could calculate when the certificate would become active, and issue a delegation certificate at the right time.
 
 As an additional advantage, by having an injective delegation map, we are able to simplify our specification when it comes to counting the blocks issued by (delegates of) genesis keys.
 
@@ -159,29 +159,29 @@ Finally, note that we do not want to reject a scheduled delegation that would vi
 $$\begin{align*}
     & \unionoverrideRight \in (A \mapsto B) \to (A \mapsto B) \to (A \mapsto B)
     & \text{union override}\\
-    & d_0 \unionoverrideRight d_1 = d_1 \cup (\dom d_1 \subtractdom d_0)
+    & d_0 \unionoverrideRight d_1 = d_1 \cup (\dom d_1 \mathbin{\rlap{\lhd}/} d_0)
 \end{align*}$$
 
 **Functions used in delegation rules**
 *Delegation environments* $$\begin{equation*}
-    \DEnv =
+    \mathsf{DEnv} =
     \left(
       \begin{array}{rlr}
-        \mathcal{K} & \powerset{\VKeyGen} & \text{allowed delegators}
+        \mathcal{K} & \mathbb{P}~\mathsf{VKeyGen} & \text{allowed delegators}
       \end{array}
     \right)
 \end{equation*}$$
 
 *Delegation states* $$\begin{align*}
-    & \DState
+    & \mathsf{DState}
       = \left(
         \begin{array}{rlr}
-          \var{dms} & \VKeyGen \mapsto \VKey & \text{delegation map}\\
-          \var{dws} & \VKeyGen \mapsto \Slot & \text{when last delegation occurred}\\
+          \mathit{dms} & \mathsf{VKeyGen} \mapsto \mathsf{VKey} & \text{delegation map}\\
+          \mathit{dws} & \mathsf{VKeyGen} \mapsto \mathsf{Slot} & \text{when last delegation occurred}\\
         \end{array}\right)
 \end{align*}$$ *Delegation transitions* $$\begin{equation*}
-    \_ \vdash \_ \trans{adeleg}{\_} \_ \in
-    \powerset (\DEnv \times \DState \times (\Slot \times (\VKeyGen \times \VKey)) \times \DState)
+    \_ \vdash \_ \xrightarrow[\mathsf{adeleg}]{}{\_} \_ \in
+    \powerset (\mathsf{DEnv} \times \mathsf{DState} \times (\mathsf{Slot} \times (\mathsf{VKeyGen} \times \mathsf{VKey})) \times \mathsf{DState})
 \end{equation*}$$
 
 **Delegation transition-system types**
@@ -189,19 +189,19 @@ $$\begin{equation}
     \label{eq:adeleg-bootstrap}
     \inference
     {
-      \var{dms_0} \leteq \Set{k \mapsto k}{k \in \mathcal{K}} &
-      \var{dws_0} \leteq \Set{k \mapsto 0}{k \in \mathcal{K}}
+      \mathit{dms_0} \mathrel{\mathop:}= \mathsf{Set}{k \mapsto k}{k \in \mathcal{K}} &
+      \mathit{dws_0} \mathrel{\mathop:}= \mathsf{Set}{k \mapsto 0}{k \in \mathcal{K}}
     }
     {
       \left(
         \mathcal{K}
       \right)
       \vdash
-      \trans{adeleg}{}
+      \xrightarrow[\mathsf{adeleg}]{}{}
       \left(
         \begin{array}{l}
-          \var{dms_0}\\
-          \var{dws_0}
+          \mathit{dms_0}\\
+          \mathit{dws_0}
         \end{array}
       \right)
     }
@@ -209,44 +209,44 @@ $$\begin{equation}
 \label{eq:rule:delegation-change}
     \inference
     {
-      \var{vk_d} \notin \range~\var{dms} & (\var{vk_s} \mapsto s_p \in \var{dws} \Rightarrow s_p < s)
+      \mathit{vk_d} \notin \range~\mathit{dms} & (\mathit{vk_s} \mapsto s_p \in \mathit{dws} \Rightarrow s_p < s)
     }
     {
       \left(\mathcal{K}\right)
       \vdash
       \left(
       \begin{array}{r}
-        \var{dms}\\
-        \var{dws}
+        \mathit{dms}\\
+        \mathit{dws}
       \end{array}
       \right)
-      \trans{adeleg}{(s,~ (vk_s,~ vk_d))}
+      \xrightarrow[\mathsf{adeleg}]{}{(s,~ (vk_s,~ vk_d))}
       \left(
       \begin{array}{lcl}
-        \var{dms} & \unionoverrideRight & \{\var{vk_s} \mapsto \var{vk_d}\}\\
-        \var{dws} & \unionoverrideRight & \{\var{vk_s} \mapsto s \}
+        \mathit{dms} & \unionoverrideRight & \{\mathit{vk_s} \mapsto \mathit{vk_d}\}\\
+        \mathit{dws} & \unionoverrideRight & \{\mathit{vk_s} \mapsto s \}
       \end{array}
       \right)
     }
 \end{equation}$$ $$\begin{equation}
 \label{eq:rule:delegation-nop}
     \inference
-    {\var{vk_d} \in \range~\var{dms} \vee (\var{vk_s} \mapsto s_p  \in \var{dws}  \wedge s \leq s_p)
+    {\mathit{vk_d} \in \range~\mathit{dms} \vee (\mathit{vk_s} \mapsto s_p  \in \mathit{dws}  \wedge s \leq s_p)
     }
     {
       \left(\mathcal{K}\right)
       \vdash
       \left(
       \begin{array}{r}
-        \var{dms}\\
-        \var{dws}
+        \mathit{dms}\\
+        \mathit{dws}
       \end{array}
       \right)
-      \trans{adeleg}{(s,~ (\var{vk_s},~ \var{vk_d}))}
+      \xrightarrow[\mathsf{adeleg}]{}{(s,~ (\mathit{vk_s},~ \mathit{vk_d}))}
       \left(
       \begin{array}{lcl}
-        \var{dms}\\
-        \var{dws}
+        \mathit{dms}\\
+        \mathit{dws}
       \end{array}
       \right)
     }
@@ -261,53 +261,53 @@ $$\begin{equation}
     \inference
     {
       {\begin{array}{l}
-         \var{delegEnv}
+         \mathit{delegEnv}
       \end{array}}
       \vdash
-      \trans{\hyperref[eq:sdeleg-bootstrap]{sdeleg}}{}
-      \var{delegSt}
+      \xrightarrow[\mathsf{\hyperref[eq:sdeleg-bootstrap]{sdeleg}}]{}{}
+      \mathit{delegSt}
     }
     {
       {\begin{array}{l}
-         \var{delegEnv}
+         \mathit{delegEnv}
       \end{array}}
       \vdash
-      \trans{sdelegs}{}
-      \var{delegSt}
+      \xrightarrow[\mathsf{sdelegs}]{}{}
+      \mathit{delegSt}
     }
 \end{equation}$$ $$\begin{equation}
     \label{eq:rule:delegation-scheduling-seq-base}
     \inference
     {}
     {
-      \var{delegEnv}
+      \mathit{delegEnv}
       \vdash
-      \var{delegSt}
-      \trans{sdelegs}{\epsilon}
-      \var{delegSt}
+      \mathit{delegSt}
+      \xrightarrow[\mathsf{sdelegs}]{}{\epsilon}
+      \mathit{delegSt}
     }
 \end{equation}$$ $$\begin{equation}
     \label{eq:rule:delegation-scheduling-seq-ind}
     \inference
     {
-      \var{delegEnv}
+      \mathit{delegEnv}
       \vdash
-      \var{delegSt}
-      \trans{sdelegs}{\Gamma}
-      \var{delegSt'}
+      \mathit{delegSt}
+      \xrightarrow[\mathsf{sdelegs}]{}{\Gamma}
+      \mathit{delegSt'}
       &
-      \var{delegEnv}
+      \mathit{delegEnv}
       \vdash
-      \var{delegSt'}
-      \trans{\hyperref[fig:rules:delegation-scheduling]{sdeleg}}{c}
-      \var{delegSt''}
+      \mathit{delegSt'}
+      \xrightarrow[\mathsf{\hyperref[fig:rules:delegation-scheduling]{sdeleg}}]{}{c}
+      \mathit{delegSt''}
     }
     {
-      \var{delegEnv}
+      \mathit{delegEnv}
       \vdash
-      \var{delegSt}
-      \trans{sdelegs}{\Gamma; c}
-      \var{delegSt''}
+      \mathit{delegSt}
+      \xrightarrow[\mathsf{sdelegs}]{}{\Gamma; c}
+      \mathit{delegSt''}
     }
 \end{equation}$$
 
@@ -316,53 +316,53 @@ $$\begin{equation}
     \inference
     {
       {\begin{array}{l}
-         \var{delegEnv}
+         \mathit{delegEnv}
       \end{array}}
       \vdash
-      \trans{\hyperref[eq:adeleg-bootstrap]{adeleg}}{}
-      \var{delegSt}
+      \xrightarrow[\mathsf{\hyperref[eq:adeleg-bootstrap]{adeleg}}]{}{}
+      \mathit{delegSt}
     }
     {
       {\begin{array}{l}
-         \var{delegEnv}
+         \mathit{delegEnv}
       \end{array}}
       \vdash
-      \trans{adelegs}{}
-      \var{delegSt}
+      \xrightarrow[\mathsf{adelegs}]{}{}
+      \mathit{delegSt}
     }
 \end{equation}$$ $$\begin{equation}
     \label{eq:rule:delegation-seq-base}
     \inference
     {}
     {
-      \var{delegEnv}
+      \mathit{delegEnv}
       \vdash
-      \var{delegSt}
-      \trans{adelegs}{\epsilon}
-      \var{delegSt}
+      \mathit{delegSt}
+      \xrightarrow[\mathsf{adelegs}]{}{\epsilon}
+      \mathit{delegSt}
     }
 \end{equation}$$ $$\begin{equation}
     \label{eq:rule:delegation-seq-ind}
     \inference
     {
-      \var{delegEnv}
+      \mathit{delegEnv}
       \vdash
-      \var{delegSt}
-      \trans{adelegs}{\Gamma}
-      \var{delegSt'}
+      \mathit{delegSt}
+      \xrightarrow[\mathsf{adelegs}]{}{\Gamma}
+      \mathit{delegSt'}
       &
-      \var{delegEnv}
+      \mathit{delegEnv}
       \vdash
-      \var{delegSt'}
-      \trans{\hyperref[fig:rules:delegation]{adeleg}}{c}
-      \var{delegSt''}
+      \mathit{delegSt'}
+      \xrightarrow[\mathsf{\hyperref[fig:rules:delegation]{adeleg}}]{}{c}
+      \mathit{delegSt''}
     }
     {
-      \var{delegEnv}
+      \mathit{delegEnv}
       \vdash
-      \var{delegSt}
-      \trans{adelegs}{\Gamma; c}
-      \var{delegSt''}
+      \mathit{delegSt}
+      \xrightarrow[\mathsf{adelegs}]{}{\Gamma; c}
+      \mathit{delegSt''}
     }
 \end{equation}$$
 

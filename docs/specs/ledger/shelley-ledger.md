@@ -19,27 +19,27 @@ The ledger state consists of:
 
 
 *Ledger environment* $$\begin{equation*}
-    \LEnv =
+    \mathsf{LEnv} =
     \left(
       \begin{array}{rlr}
-        \var{slot} & \Slot & \text{current slot}\\
-        \var{txIx} & \Ix & \text{transaction index}\\
-        \var{pp} & \PParams & \text{protocol parameters}\\
-        \var{acnt} & \Acnt & \text{accounting state}
+        \mathit{slot} & \mathsf{Slot} & \text{current slot}\\
+        \mathit{txIx} & \mathsf{Ix} & \text{transaction index}\\
+        \mathit{pp} & \mathsf{PParams} & \text{protocol parameters}\\
+        \mathit{acnt} & \mathsf{Acnt} & \text{accounting state}
       \end{array}
     \right)
 \end{equation*}$$ *Ledger state* $$\begin{equation*}
-    \LState =
+    \mathsf{LState} =
     \left(
       \begin{array}{rlr}
-        \var{utxoSt} & \UTxOState & \text{UTxO state}\\
-        \var{dpstate} & \DPState & \text{delegation and pool state}\\
+        \mathit{utxoSt} & \mathsf{UTxOState} & \text{UTxO state}\\
+        \mathit{dpstate} & \mathsf{DPState} & \text{delegation and pool state}\\
       \end{array}
     \right)
 \end{equation*}$$ *Ledger transitions* $$\begin{equation*}
     \_ \vdash
-    \var{\_} \trans{ledger}{\_} \var{\_}
-    \subseteq \powerset (\LEnv \times \LState \times \Tx \times \LState)
+    \mathit{\_} \xrightarrow[\mathsf{ledger}]{}{\_} \mathit{\_}
+    \subseteq \powerset (\mathsf{LEnv} \times \mathsf{LState} \times \mathsf{Tx} \times \mathsf{LState})
 \end{equation*}$$
 
 **Ledger transition-system types**
@@ -52,50 +52,50 @@ $$\begin{equation}
     {
       {
         \begin{array}{c}
-          \var{slot} \\
-          \var{txIx} \\
-          \var{pp} \\
-          \var{tx}\\
-          \var{acnt}
+          \mathit{slot} \\
+          \mathit{txIx} \\
+          \mathit{pp} \\
+          \mathit{tx}\\
+          \mathit{acnt}
         \end{array}
       }
       \vdash
-      dpstate \trans{\hyperref[fig:rules:delegation-sequence]{delegs}}{
-        \fun{txcerts}~\var{(\txbody{tx})}} dpstate'
+      dpstate \xrightarrow[\mathsf{\hyperref[fig:rules:delegation-sequence]{delegs}}]{}{
+        \mathsf{txcerts}~\mathit{(\mathsf{txbody}~tx)}} dpstate'
       \\~\\
-      (\var{dstate}, \var{pstate}) \leteq \var{dpstate} \\
-      (\_, \_, \_, \_, \var{genDelegs}, \_) \leteq \var{dstate} \\
-      (\var{poolParams}, \_, \_) \leteq \var{pstate} \\
+      (\mathit{dstate}, \mathit{pstate}) \mathrel{\mathop:}= \mathit{dpstate} \\
+      (\_, \_, \_, \_, \mathit{genDelegs}, \_) \mathrel{\mathop:}= \mathit{dstate} \\
+      (\mathit{poolParams}, \_, \_) \mathrel{\mathop:}= \mathit{pstate} \\
       \\~\\
       {
         \begin{array}{c}
-        \var{slot} \\
-        \var{pp} \\
-        \var{poolParams} \\
-        \var{genDelegs} \\
+        \mathit{slot} \\
+        \mathit{pp} \\
+        \mathit{poolParams} \\
+        \mathit{genDelegs} \\
         \end{array}
       }
-      \vdash \var{utxoSt} \trans{\hyperref[fig:rules:utxow-shelley]{utxow}}{tx} \var{utxoSt'}
+      \vdash \mathit{utxoSt} \xrightarrow[\mathsf{\hyperref[fig:rules:utxow-shelley]{utxow}}]{}{tx} \mathit{utxoSt'}
     }
     {
       \begin{array}{c}
-        \var{slot} \\
-        \var{txIx} \\
-        \var{pp} \\
-        \var{acnt}
+        \mathit{slot} \\
+        \mathit{txIx} \\
+        \mathit{pp} \\
+        \mathit{acnt}
       \end{array}
       \vdash
       \left(
         \begin{array}{ll}
-          \var{utxoSt} \\
-          \var{dpstate} \\
+          \mathit{utxoSt} \\
+          \mathit{dpstate} \\
         \end{array}
       \right)
-      \trans{ledger}{tx}
+      \xrightarrow[\mathsf{ledger}]{}{tx}
       \left(
         \begin{array}{ll}
-          \varUpdate{utxoSt'} \\
-          \varUpdate{dpstate'} \\
+          \mathsf{varUpdate}~utxoSt' \\
+          \mathsf{varUpdate}~dpstate' \\
         \end{array}
       \right)
     }
@@ -107,8 +107,8 @@ The transition system $\mathsf{LEDGER}$ in Figure 2 is iterated in $\mathsf{LED
 
 *Ledger Sequence transitions* $$\begin{equation*}
     \_ \vdash
-    \var{\_} \trans{ledgers}{\_} \var{\_}
-    \subseteq \powerset ((\Slot\times\PParams\times\Coin) \times \LState \times \seqof{\Tx} \times \LState)
+    \mathit{\_} \xrightarrow[\mathsf{ledgers}]{}{\_} \mathit{\_}
+    \subseteq \powerset ((\mathsf{Slot}\times\mathsf{PParams}\times\mathsf{Coin}) \times \mathsf{LState} \times \mathsf{Tx}^{*} \times \mathsf{LState})
 \end{equation*}$$
 
 **Ledger Sequence transition-system types**
@@ -118,11 +118,11 @@ $$\begin{equation}
     { }
     {
       \begin{array}{r}
-        \var{slot}\\
-        \var{pp}\\
-        \var{acnt}
+        \mathit{slot}\\
+        \mathit{pp}\\
+        \mathit{acnt}
       \end{array}
-      \vdash \var{ls} \trans{ledgers}{\epsilon} \varUpdate{\var{ls'}}
+      \vdash \mathit{ls} \xrightarrow[\mathsf{ledgers}]{}{\epsilon} \mathsf{varUpdate}~\mathit{ls'}
     }
 \end{equation}$$
 
@@ -132,39 +132,39 @@ $$\begin{equation}
     {
       {
         \begin{array}{r}
-          \var{slot}\\
-          \var{pp}\\
-          \var{acnt}
+          \mathit{slot}\\
+          \mathit{pp}\\
+          \mathit{acnt}
         \end{array}
       }
       \vdash
-      \var{ls}
-      \trans{ledgers}{\Gamma}
-      \var{ls'}
+      \mathit{ls}
+      \xrightarrow[\mathsf{ledgers}]{}{\Gamma}
+      \mathit{ls'}
       &
       {
         \begin{array}{r}
-          \var{slot}\\
+          \mathit{slot}\\
           \mathsf{len}~\Gamma - 1\\
-          \var{pp}\\
-          \var{acnt}
+          \mathit{pp}\\
+          \mathit{acnt}
         \end{array}
       }
       \vdash
-        \var{ls'}
-        \trans{\hyperref[fig:rules:ledger]{ledger}}{\var{tx}}
-        \var{ls''}
+        \mathit{ls'}
+        \xrightarrow[\mathsf{\hyperref[fig:rules:ledger]{ledger}}]{}{\mathit{tx}}
+        \mathit{ls''}
     }
     {
       \begin{array}{r}
-        \var{slot}\\
-        \var{pp}\\
-        \var{acnt}
+        \mathit{slot}\\
+        \mathit{pp}\\
+        \mathit{acnt}
       \end{array}
     \vdash
-      \var{ls}
-      \trans{ledgers}{\Gamma;~\var{tx}}
-      \varUpdate{\var{ls''}}
+      \mathit{ls}
+      \xrightarrow[\mathsf{ledgers}]{}{\Gamma;~\mathit{tx}}
+      \mathsf{varUpdate}~\mathit{ls''}
     }
 \end{equation}$$
 

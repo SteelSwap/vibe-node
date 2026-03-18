@@ -1,8 +1,8 @@
 % If the module name changes, change the following macro to match!
-\LedgerPropGov{Ledger/Properties/GovDepsMatch}
+\mathsf{LedgerPropGov}{Ledger/Properties/GovDepsMatch}
 
 
-lemma[\LedgerPropGov.lagda{\LedgerPropGov{}}: govDepsMatch is invariant of  rule%
+lemma[\mathsf{LedgerPropGov}.lagda{\mathsf{LedgerPropGov}{}}: govDepsMatch is invariant of  rule%
   ]lem:LedgerGovDepsMatch
   \nopagebreak
   itemize
@@ -19,7 +19,7 @@ lemma[\LedgerPropGov.lagda{\LedgerPropGov{}}: govDepsMatch is invariant of  rule
 LEDGER-govDepsMatch :  LedgerInvariant _⊢_⇀⦇_,LEDGER⦈_ govDepsMatch
 ```
   \item Proof. See the
-    \LedgerPropGov.lagda{\LedgerPropGov{}}
+    \mathsf{LedgerPropGov}.lagda{\mathsf{LedgerPropGov}{}}
     module in the \repourl{formal ledger repository}.
 
   itemize

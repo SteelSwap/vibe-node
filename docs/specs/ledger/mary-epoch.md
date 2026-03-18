@@ -1,25 +1,25 @@
 # Rewards and the Epoch Boundary
-In order to handle rewards and staking, we must change the stake distribution calculation function to add up only the Ada in the UTxO before performing any calculations. In Figure 1 below, we do so using the function $\fun{utxoAda}$, which returns the amount of Ada tokens in an address.
+In order to handle rewards and staking, we must change the stake distribution calculation function to add up only the Ada in the UTxO before performing any calculations. In Figure 1 below, we do so using the function $\mathsf{utxoAda}$, which returns the amount of Ada tokens in an address.
 
 
 *Helper function* $$\begin{align*}
-    & \fun{utxoAda} \in \UTxO \to \Addr \to \Coin \\
-    & \fun{utxoAda}~{\var{utxo}}~\var{addr} ~=~\sum_{\var{out} \in \range \var{utxo}, \fun{getAddr}~\var{out} = \var{addr}} \fun{getCoin}~\var{out}
+    & \mathsf{utxoAda} \in \mathsf{UTxO} \to \mathsf{Addr} \to \mathsf{Coin} \\
+    & \mathsf{utxoAda}~{\mathit{utxo}}~\mathit{addr} ~=~\sum_{\mathit{out} \in \range \mathit{utxo}, \mathsf{getAddr}~\mathit{out} = \mathit{addr}} \mathsf{getCoin}~\mathit{out}
 \end{align*}$$ *Stake Distribution (using functions and maps as relations)* $$\begin{align*}
-      & \fun{stakeDistr} \in \UTxO \to \DState \to \PState \to \type{Stake}\\
-      & \fun{stakeDistr}~{utxo}~{dstate}~{pstate} =
-      (\dom{\var{activeDelegs}})\restrictdom\left(\sum\var{stakeRelation}\right)\\
+      & \mathsf{stakeDistr} \in \mathsf{UTxO} \to \mathsf{DState} \to \mathsf{PState} \to \mathsf{Stake}\\
+      & \mathsf{stakeDistr}~{utxo}~{dstate}~{pstate} =
+      (\mathrm{dom}~\mathit{activeDelegs})\lhd\left(\sum\mathit{stakeRelation}\right)\\
       & \where \\
-      & ~~~~ (\var{stdelegs},~\var{rewards},~\var{delegations},~\var{ptrs},~\wcard,~\wcard)
-        = \var{dstate} \\
-      & ~~~~ (\var{stpools},~\wcard,~\wcard,~\wcard,~\wcard) = \var{pstate} \\
-      & ~~~~ \var{stakeRelation} = \left(
-        \left(\fun{stakeCred_b}^{-1}\cup\left(\fun{addrPtr}\circ\var{ptr}\right)^{-1}\right)
-        \circ\left(\fun{utxoAda}~{\var{utxo}}\right)
+      & ~~~~ (\mathit{stdelegs},~\mathit{rewards},~\mathit{delegations},~\mathit{ptrs},~\underline{\phantom{a}},~\underline{\phantom{a}})
+        = \mathit{dstate} \\
+      & ~~~~ (\mathit{stpools},~\underline{\phantom{a}},~\underline{\phantom{a}},~\underline{\phantom{a}},~\underline{\phantom{a}}) = \mathit{pstate} \\
+      & ~~~~ \mathit{stakeRelation} = \left(
+        \left(\mathsf{stakeCred_b}^{-1}\cup\left(\mathsf{addrPtr}\circ\mathit{ptr}\right)^{-1}\right)
+        \circ\left(\mathsf{utxoAda}~{\mathit{utxo}}\right)
         \right)
-        \cup \left(\fun{stakeCred_r}^{-1}\circ\var{rewards}\right) \\
-      & ~~~~ \var{activeDelegs} =
-               (\dom{stdelegs}) \restrictdom \var{delegations} \restrictrange (\dom{stpools}) \\
+        \cup \left(\mathsf{stakeCred_r}^{-1}\circ\mathit{rewards}\right) \\
+      & ~~~~ \mathit{activeDelegs} =
+               (\mathrm{dom}~stdelegs) \lhd \mathit{delegations} \rhd (\mathrm{dom}~stpools) \\
 \end{align*}$$
 
 **Stake Distribution Function**

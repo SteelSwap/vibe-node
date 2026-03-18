@@ -1,6 +1,6 @@
 # Ratification
 sec:ratification
-\LedgerModule{Ratify}
+\mathsf{LedgerModule}{Ratify}
 
 Governance actions are ratified through on-chain votes.
 Different kinds of governance actions have different ratification requirements

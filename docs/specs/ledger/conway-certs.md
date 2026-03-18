@@ -1,6 +1,6 @@
 # Certificates
 sec:certificates
-\LedgerModule{Certs}.
+\mathsf{LedgerModule}{Certs}.
 
 
 figure*[ht]

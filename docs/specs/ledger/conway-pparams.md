@@ -1,6 +1,6 @@
 # Protocol Parameters
 sec:protocol-parameters
-\LedgerModule{PParams}, in which we define the adjustable protocol
+\mathsf{LedgerModule}{PParams}, in which we define the adjustable protocol
 parameters of the Cardano ledger.  
 
 Protocol parameters are used in block validation and

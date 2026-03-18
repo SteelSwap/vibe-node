@@ -1,6 +1,6 @@
 # Epoch Boundary
 sec:epoch-boundary
-\LedgerModule{Epoch}
+\mathsf{LedgerModule}{Epoch}
 
 NoConway
 figure*[ht]

@@ -1,9 +1,9 @@
 % If the module name changes, change the following macro to match!
-\ChainPropGov{Chain/Properties/GovDepsMatch}
+\mathsf{ChainPropGov}{Chain/Properties/GovDepsMatch}
 
 
 theorem[%
-  \ChainPropGov.lagda{\ChainPropGov{}}:
+  \mathsf{ChainPropGov}.lagda{\mathsf{ChainPropGov}{}}:
   govDepsMatch is invariant of  rule%
   ]\
   thm:ChainGovDepsMatch
@@ -39,7 +39,7 @@ theorem[%
             \item the orphaned governance actions in the  of eps.
           itemize
           Let $G$ be the set
-          $\{\GovActionDeposit{~id} : \ab{id} ∈ proj₁~\AgdaFunction{removed'}\}$.
+          $\{\mathsf{GovActionDeposit}{~id} : \ab{id} ∈ proj₁~\mathsf{AgdaFunction}{removed'}\}$.
           $G$ is a subset of the set of deposits of the chain state cs;
           that is,\\[4pt]
           map~(GovActionDeposit~$∘$~proj₁)~removed'~$⊆$~
@@ -61,7 +61,7 @@ theorem[%
     →  govDepsMatch csLState → govDepsMatch (LStateOf nes)
 ```
     \item Proof.  See the
-      \ChainPropGov.lagda{\ChainPropGov{}}
+      \mathsf{ChainPropGov}.lagda{\mathsf{ChainPropGov}{}}
        module in the \repourl{formal ledger repository}.
   itemize
 theorem

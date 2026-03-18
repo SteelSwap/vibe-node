@@ -9,30 +9,30 @@ Stake pool retirement is handled a bit differently than stake deregistration. St
 
 Delegation requires the following to be tracked by the ledger state: the registered stake credentials, the delegation map from registered stake credentials to stake pools, pointers associated with stake credentials, the registered stake pools and upcoming stake pool retirements. Additionally, the blockchain protocol rewards eligible stake and so we must also include a mapping from active stake credentials to rewards.
 
-Finally, there are two types of delegation certificates available only to the genesis keys. The genesis keys will still be used for update proposals at the beginning of the Shelley era, and so there must be a way to maintain the delegation of these keys to their cold keys. This mapping is also maintained by the delegation state. There is also a mechanism to transfer rewards directly from either the reserves pot or the treasury pot to a reward address. While technically everybody can post such a certificate, the transaction that contains it must be signed by $\Quorum$-many genesis key delegates.
+Finally, there are two types of delegation certificates available only to the genesis keys. The genesis keys will still be used for update proposals at the beginning of the Shelley era, and so there must be a way to maintain the delegation of these keys to their cold keys. This mapping is also maintained by the delegation state. There is also a mechanism to transfer rewards directly from either the reserves pot or the treasury pot to a reward address. While technically everybody can post such a certificate, the transaction that contains it must be signed by $\mathsf{Quorum}$-many genesis key delegates.
 
 ## Delegation Definitions
 In 1 we give the delegation primitives. Here we introduce the following primitive datatypes used in delegation:
 
-- $\DCertRegKey$: a stake credential registration certificate.
+- $\mathsf{DCertRegKey}$: a stake credential registration certificate.
 
-- $\DCertDeRegKey$: a stake credential de-registration certificate.
+- $\mathsf{DCertDeRegKey}$: a stake credential de-registration certificate.
 
-- $\DCertDeleg$: a stake credential delegation certificate.
+- $\mathsf{DCertDeleg}$: a stake credential delegation certificate.
 
-- $\DCertRegPool$: a stake pool registration certificate.
+- $\mathsf{DCertRegPool}$: a stake pool registration certificate.
 
-- $\DCertRetirePool$: a stake pool retirement certificate.
+- $\mathsf{DCertRetirePool}$: a stake pool retirement certificate.
 
-- $\DCertGen$: a genesis key delegation certificate.
+- $\mathsf{DCertGen}$: a genesis key delegation certificate.
 
-- $\DCertMir$: a move instantaneous rewards certificate.
+- $\mathsf{DCertMir}$: a move instantaneous rewards certificate.
 
-- $\DCert$: any one of of the seven certificate types above.
+- $\mathsf{DCert}$: any one of of the seven certificate types above.
 
 The following derived types are introduced:
 
-- $\PoolParam$ represents the parameters found in a stake pool registration certificate that must be tracked:
+- $\mathsf{PoolParam}$ represents the parameters found in a stake pool registration certificate that must be tracked:
 
   - the pool owners.
 
@@ -52,89 +52,89 @@ The following derived types are introduced:
 
   The idea of pool owners is explained in Section 4.4.4 of [@delegation_design]. The pool cost and margin indicate how much more of the rewards pool leaders get than the members. The pool pledge is explained in Section 5.1 of [@delegation_design]. The pool reward account is where all pool rewards go. The pool relays and metadata url are explained in Sections 3.4.4 and 4.2 of [@delegation_design].
 
-Accessor functions for certificates and pool parameters are also defined, but only the $\cwitness{}$ accessor function needs explanation. It does the following:
+Accessor functions for certificates and pool parameters are also defined, but only the $\mathsf{cwitness}~$ accessor function needs explanation. It does the following:
 
-- For a $\DCertRegKey$ certificate, $\fun{cwitness}$ is not defined as stake key registrations do not require a witness.
+- For a $\mathsf{DCertRegKey}$ certificate, $\mathsf{cwitness}$ is not defined as stake key registrations do not require a witness.
 
-- For a $\DCertDeRegKey$ certificate, $\fun{cwitness}$ returns the hashkey of the key being de-registered.
+- For a $\mathsf{DCertDeRegKey}$ certificate, $\mathsf{cwitness}$ returns the hashkey of the key being de-registered.
 
-- For a $\DCertDeleg$ certificate, $\fun{cwitness}$ returns the hashkey of the key that is delegating (and not the key to which the stake in being delegated to).
+- For a $\mathsf{DCertDeleg}$ certificate, $\mathsf{cwitness}$ returns the hashkey of the key that is delegating (and not the key to which the stake in being delegated to).
 
-- For a $\DCertRegPool$ certificate, $\fun{cwitness}$ returns the hashkey of the key of the pool operator.
+- For a $\mathsf{DCertRegPool}$ certificate, $\mathsf{cwitness}$ returns the hashkey of the key of the pool operator.
 
-- For a $\DCertRetirePool$ certificate, $\fun{cwitness}$ returns the hashkey of the key of the pool operator.
+- For a $\mathsf{DCertRetirePool}$ certificate, $\mathsf{cwitness}$ returns the hashkey of the key of the pool operator.
 
-- For a $\DCertGen$ certificate, $\fun{cwitness}$ returns the hashkey of the genesis key.
+- For a $\mathsf{DCertGen}$ certificate, $\mathsf{cwitness}$ returns the hashkey of the genesis key.
 
-- For a $\DCertMir$ certificate, $\fun{cwitness}$ is not defined as there is no single core node or genesis key that posts the certificate.
+- For a $\mathsf{DCertMir}$ certificate, $\mathsf{cwitness}$ is not defined as there is no single core node or genesis key that posts the certificate.
 
 
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
-      \var{url} & \URL & \text{a url}\\
-      \var{mp} & \MIRPot & \text{either $\ReservesMIR$ or $\TreasuryMIR$}\\
+      \mathit{url} & \mathsf{URL} & \text{a url}\\
+      \mathit{mp} & \mathsf{MIRPot} & \text{either $\mathsf{ReservesMIR}$ or $\mathsf{TreasuryMIR}$}\\
     \end{array}
 \end{equation*}$$ *Delegation Certificate types* $$\begin{equation*}
   \begin{array}{rcl}
-    \DCert &=& \DCertRegKey \uniondistinct \DCertDeRegKey \uniondistinct \DCertDeleg \\
-                &\hfill\uniondistinct\;&
-                \DCertRegPool \uniondistinct \DCertRetirePool \uniondistinct
-                                         \DCertGen\\
-           &\hfill\uniondistinct\;& \DCertMir
+    \mathsf{DCert} &=& \mathsf{DCertRegKey} \uplus \mathsf{DCertDeRegKey} \uplus \mathsf{DCertDeleg} \\
+                &\hfill\uplus\;&
+                \mathsf{DCertRegPool} \uplus \mathsf{DCertRetirePool} \uplus
+                                         \mathsf{DCertGen}\\
+           &\hfill\uplus\;& \mathsf{DCertMir}
   \end{array}
 \end{equation*}$$ *Derived types* $$\begin{equation*}
     \begin{array}{lclr}
-      \PoolMD
+      \mathsf{PoolMD}
       & ~=~
-      & \URL \times \type{PoolMDHash}
+      & \mathsf{URL} \times \mathsf{PoolMDHash}
       & \text{stake pool metadata} \\
       %
-      \PoolParam
+      \mathsf{PoolParam}
       & ~=~
-      & \powerset{\KeyHash} \times \Coin \times \unitInterval \times \Coin
+      & \mathbb{P}~\mathsf{KeyHash} \times \mathsf{Coin} \times [0,~1] \times \mathsf{Coin}
       & \text{stake pool parameters} \\
-      & & \qquad \times \AddrRWD \times \KeyHash_{vrf} \\
-      & & \qquad \seqof{\URL} \times \PoolMD^?
+      & & \qquad \times \mathsf{AddrRWD} \times \mathsf{KeyHash}_{vrf} \\
+      & & \qquad \mathsf{URL}^{*} \times \mathsf{PoolMD}^?
     \end{array}
 \end{equation*}$$ *Certificate Accessor functions* $$\begin{equation*}
     \begin{array}{rlr}
-      \cwitness{} & \DCert\setminus(\DCertRegKey\cup\DCertMir) \to \Credential & \text{certificate witness} \\
-      \fun{regCred} & \DCertRegKey \to \Credential & \text{registered credential} \\
-      \fun{dpool} & \DCertDeleg \to \KeyHash
+      \mathsf{cwitness}~ & \mathsf{DCert}\setminus(\mathsf{DCertRegKey}\cup\mathsf{DCertMir}) \to \mathsf{Credential} & \text{certificate witness} \\
+      \mathsf{regCred} & \mathsf{DCertRegKey} \to \mathsf{Credential} & \text{registered credential} \\
+      \mathsf{dpool} & \mathsf{DCertDeleg} \to \mathsf{KeyHash}
                                             & \text{pool being delegated to}
       \\
-      \fun{poolParam} & \DCertRegPool \to \PoolParam
+      \mathsf{poolParam} & \mathsf{DCertRegPool} \to \mathsf{PoolParam}
                                             & \text{stake pool}
       \\
-      \fun{retire} & \DCertRetirePool \to \Epoch
+      \mathsf{retire} & \mathsf{DCertRetirePool} \to \mathsf{Epoch}
                                             & \text{epoch of pool retirement}
       \\
-      \fun{genesisDeleg} & \DCertGen \to (\KeyHashGen,~\KeyHash,~\KeyHash_{vrf})
+      \mathsf{genesisDeleg} & \mathsf{DCertGen} \to (\mathsf{KeyHashGen},~\mathsf{KeyHash},~\mathsf{KeyHash}_{vrf})
                                             & \text{genesis delegation}
       \\
-      \fun{moveRewards} & \DCertMir \to (\StakeCredential \mapsto \Coin)
+      \mathsf{moveRewards} & \mathsf{DCertMir} \to (\mathsf{StakeCredential} \mapsto \mathsf{Coin})
                                             & \text{moved inst. rewards}
       \\
-      \fun{mirPot} & \DCertMir \to \MIRPot & \text{pot for inst. rewards}
+      \mathsf{mirPot} & \mathsf{DCertMir} \to \mathsf{MIRPot} & \text{pot for inst. rewards}
     \end{array}
 \end{equation*}$$ *Pool Parameter Accessor functions* $$\begin{equation*}
   \begin{array}{rlr}
-    \fun{poolOwners} & \PoolParam \to \powerset{\KeyHash}
+    \mathsf{poolOwners} & \mathsf{PoolParam} \to \mathbb{P}~\mathsf{KeyHash}
                      & \text{stake pool owners}
     \\
-    \fun{poolCost} & \PoolParam \to \Coin
+    \mathsf{poolCost} & \mathsf{PoolParam} \to \mathsf{Coin}
                      & \text{stake pool cost}
     \\
-    \fun{poolMargin} & \PoolParam \to \unitInterval
+    \mathsf{poolMargin} & \mathsf{PoolParam} \to [0,~1]
                      & \text{stake pool margin}
     \\
-    \fun{poolPledge} & \PoolParam \to \Coin
+    \mathsf{poolPledge} & \mathsf{PoolParam} \to \mathsf{Coin}
                      & \text{stake pool pledge}
     \\
-    \fun{poolRAcnt} & \PoolParam \to \AddrRWD
+    \mathsf{poolRAcnt} & \mathsf{PoolParam} \to \mathsf{AddrRWD}
                      & \text{stake pool reward account}
     \\
-    \fun{poolVRF} & \PoolParam \to \KeyHash_{vrf}
+    \mathsf{poolVRF} & \mathsf{PoolParam} \to \mathsf{KeyHash}_{vrf}
                   & \text{stake pool VRF key hash}
     \\
   \end{array}
@@ -144,96 +144,96 @@ Accessor functions for certificates and pool parameters are also defined, but on
 ## Delegation Transitions
 In 2 we give the delegation and stake pool state transition types. We define two separate parts of the ledger state.
 
-- $\DState$ keeps track of the delegation state, consisting of:
+- $\mathsf{DState}$ keeps track of the delegation state, consisting of:
 
-  - $\var{rewards}$ stores the rewards accumulated by stake credentials. These are represented by a finite map from reward addresses to the accumulated rewards.
+  - $\mathit{rewards}$ stores the rewards accumulated by stake credentials. These are represented by a finite map from reward addresses to the accumulated rewards.
 
-  - $\var{delegations}$ stores the delegation relation, mapping stake credentials to the pool to which is delegates.
+  - $\mathit{delegations}$ stores the delegation relation, mapping stake credentials to the pool to which is delegates.
 
-  - $\var{ptrs}$ maps stake credentials to the position of the registration certificate in the blockchain. This is needed to lookup the stake hashkey of a pointer address.
+  - $\mathit{ptrs}$ maps stake credentials to the position of the registration certificate in the blockchain. This is needed to lookup the stake hashkey of a pointer address.
 
-  - $\var{fGenDelegs}$ are the future genesis keys delegations. This variable is needed because genesis keys can only update their delegation with a delay of $\StabilityWindow$ slots after submitting the certificate (this is necessary for header validation, see Section sec:chain)
+  - $\mathit{fGenDelegs}$ are the future genesis keys delegations. This variable is needed because genesis keys can only update their delegation with a delay of $\mathsf{StabilityWindow}$ slots after submitting the certificate (this is necessary for header validation, see Section sec:chain)
 
-  - $\var{genDelegs}$ maps genesis key hashes to hashes of the cold key delegates.
+  - $\mathit{genDelegs}$ maps genesis key hashes to hashes of the cold key delegates.
 
-  - $\var{i_{rwd}}$ stores two maps of stake credentials to $\Coin$, which is used for moving instantaneous rewards at the epoch boundary. One map corresponds to rewards taken from the reserves, and the other corresponds to rewards taken from the treasury.
+  - $\mathit{i_{rwd}}$ stores two maps of stake credentials to $\mathsf{Coin}$, which is used for moving instantaneous rewards at the epoch boundary. One map corresponds to rewards taken from the reserves, and the other corresponds to rewards taken from the treasury.
 
-- $\PState$ keeps track of the stake pool information:
+- $\mathsf{PState}$ keeps track of the stake pool information:
 
-  - $\var{poolParams}$ tracks the parameters associated with each stake pool, such as their costs and margin.
+  - $\mathit{poolParams}$ tracks the parameters associated with each stake pool, such as their costs and margin.
 
-  - When changes are made to the pool parameters late in an epoch, they are staged in $\var{fPoolParams}$. These parameters will be updated by another transition (namely $\mathsf{EPOCH}$) when the next epoch starts.
+  - When changes are made to the pool parameters late in an epoch, they are staged in $\mathit{fPoolParams}$. These parameters will be updated by another transition (namely $\mathsf{EPOCH}$) when the next epoch starts.
 
-  - $\var{retiring}$ tracks stake pool retirements, using a map from hashkeys to the epoch in which it will retire.
+  - $\mathit{retiring}$ tracks stake pool retirements, using a map from hashkeys to the epoch in which it will retire.
 
-The operational certificates counters $\var{cs}$ in the stake pool state are a tool to ensure that blocks containing outdated certificates are rejected. These certificates are part of the block header. For a discussion of why this additional mechanism is needed, see the document [@delegation_design], and for the relevant rules, see Section sec:oper-cert-trans.
+The operational certificates counters $\mathit{cs}$ in the stake pool state are a tool to ensure that blocks containing outdated certificates are rejected. These certificates are part of the block header. For a discussion of why this additional mechanism is needed, see the document [@delegation_design], and for the relevant rules, see Section sec:oper-cert-trans.
 
-The environment for the state transition for $\DState$ contains the current slot number, the index for the current certificate pointer, and the account state. The environment for the state transition for $\PState$ contains the current slot number and the protocol parameters.
+The environment for the state transition for $\mathsf{DState}$ contains the current slot number, the index for the current certificate pointer, and the account state. The environment for the state transition for $\mathsf{PState}$ contains the current slot number and the protocol parameters.
 
 
 *Delegation Types* $$\begin{equation*}
     \begin{array}{rclclr}
-      \var{stakeCred} & \in &  \StakeCredential & = & (\KeyHash_{stake} \uniondistinct
-                                       \HashScr) \\
-      \var{fGenDelegs} & \in &  \FutGenesisDelegation & =
-                       & (\Slot\times\KeyHashGen)\mapsto(\KeyHash\times\KeyHash_{vrf}) \\
-      \var{ir} & \in &  \InstantaneousRewards & =
-               & (\StakeCredential \mapsto \Coin) \\
-               & & & & ~~~~\times(\StakeCredential \mapsto \Coin) \\
+      \mathit{stakeCred} & \in &  \mathsf{StakeCredential} & = & (\mathsf{KeyHash}_{stake} \uplus
+                                       \mathsf{HashScr}) \\
+      \mathit{fGenDelegs} & \in &  \mathsf{FutGenesisDelegation} & =
+                       & (\mathsf{Slot}\times\mathsf{KeyHashGen})\mapsto(\mathsf{KeyHash}\times\mathsf{KeyHash}_{vrf}) \\
+      \mathit{ir} & \in &  \mathsf{InstantaneousRewards} & =
+               & (\mathsf{StakeCredential} \mapsto \mathsf{Coin}) \\
+               & & & & ~~~~\times(\mathsf{StakeCredential} \mapsto \mathsf{Coin}) \\
     \end{array}
 \end{equation*}$$ *Delegation States* $$\begin{equation*}
     \begin{array}{l}
-    \DState =
+    \mathsf{DState} =
     \left(\begin{array}{rlr}
-            \var{rewards} & \StakeCredential \mapsto \Coin & \text{rewards}\\
-            \var{delegations} & \StakeCredential \mapsto \KeyHash_{pool} & \text{delegations}\\
-            \var{ptrs} & \Ptr \mapsto \StakeCredential & \text{pointer to stake credential}\\
-            \var{fGenDelegs} & \FutGenesisDelegation & \text{future genesis key delegations}\\
-            \var{genDelegs} & \GenesisDelegation & \text{genesis key delegations}\\
-            \var{i_{rwd}} & \InstantaneousRewards & \text{instantaneous rewards}\\
+            \mathit{rewards} & \mathsf{StakeCredential} \mapsto \mathsf{Coin} & \text{rewards}\\
+            \mathit{delegations} & \mathsf{StakeCredential} \mapsto \mathsf{KeyHash}_{pool} & \text{delegations}\\
+            \mathit{ptrs} & \mathsf{Ptr} \mapsto \mathsf{StakeCredential} & \text{pointer to stake credential}\\
+            \mathit{fGenDelegs} & \mathsf{FutGenesisDelegation} & \text{future genesis key delegations}\\
+            \mathit{genDelegs} & \mathsf{GenesisDelegation} & \text{genesis key delegations}\\
+            \mathit{i_{rwd}} & \mathsf{InstantaneousRewards} & \text{instantaneous rewards}\\
           \end{array}
       \right)
       \\
     \\
-    \PState =
+    \mathsf{PState} =
     \left(\begin{array}{rlr}
-      \var{poolParams} & \KeyHash_{pool} \mapsto \PoolParam
+      \mathit{poolParams} & \mathsf{KeyHash}_{pool} \mapsto \mathsf{PoolParam}
         & \text{registered pools to pool parameters}\\
-      \var{fPoolParams} & \KeyHash_{pool} \mapsto \PoolParam
+      \mathit{fPoolParams} & \mathsf{KeyHash}_{pool} \mapsto \mathsf{PoolParam}
         & \text{future pool parameters}\\
-      \var{retiring} & \KeyHash_{pool} \mapsto \Epoch & \text{retiring stake pools}\\
+      \mathit{retiring} & \mathsf{KeyHash}_{pool} \mapsto \mathsf{Epoch} & \text{retiring stake pools}\\
     \end{array}\right)
     \end{array}
 \end{equation*}$$ *Delegation Environment* $$\begin{equation*}
-    \DEnv =
+    \mathsf{DEnv} =
     \left(
       \begin{array}{rlr}
-        \var{slot} & \Slot & \text{slot}\\
-        \var{ptr} & \Ptr & \text{certificate pointer}\\
-        \var{acnt} & \Acnt & \text{accounting state}
+        \mathit{slot} & \mathsf{Slot} & \text{slot}\\
+        \mathit{ptr} & \mathsf{Ptr} & \text{certificate pointer}\\
+        \mathit{acnt} & \mathsf{Acnt} & \text{accounting state}
       \end{array}
     \right)
 \end{equation*}$$ *Pool Environment* $$\begin{equation*}
-    \PEnv =
+    \mathsf{PEnv} =
     \left(
       \begin{array}{rlr}
-        \var{slot} & \Slot & \text{slot}\\
-        \var{pp} & \PParams & \text{protocol parameters}\\
+        \mathit{slot} & \mathsf{Slot} & \text{slot}\\
+        \mathit{pp} & \mathsf{PParams} & \text{protocol parameters}\\
       \end{array}
     \right)
 \end{equation*}$$ *Delegation Transitions* $$\begin{equation*}
-    \_ \vdash \_ \trans{deleg}{\_} \_ \in
-      \powerset (\DEnv \times \DState \times \DCert \times \DState)
+    \_ \vdash \_ \xrightarrow[\mathsf{deleg}]{}{\_} \_ \in
+      \powerset (\mathsf{DEnv} \times \mathsf{DState} \times \mathsf{DCert} \times \mathsf{DState})
 \end{equation*}$$ $$\begin{equation*}
-    \_ \vdash \_ \trans{pool}{\_} \_ \in
-    \powerset (\PEnv \times \PState \times \DCert \times \PState)
+    \_ \vdash \_ \xrightarrow[\mathsf{pool}]{}{\_} \_ \in
+    \powerset (\mathsf{PEnv} \times \mathsf{PState} \times \mathsf{DCert} \times \mathsf{PState})
 \end{equation*}$$
 
 **Delegation Transitions**
 ## Delegation Rules
 The rules for registering and delegating stake credentials are given in 3. Note that section 5.2 of [@delegation_design] describes how a wallet would help a user choose a stake pool, though these concerns are independent of the ledger rules.
 
-- Stake credential registration is handled by eq:deleg-reg, since it contains the precondition that the certificate has type $\DCertRegKey$. All the equations in $\mathsf{DELEG}$ and $\mathsf{POOL}$ follow this same pattern of matching on certificate type.
+- Stake credential registration is handled by eq:deleg-reg, since it contains the precondition that the certificate has type $\mathsf{DCertRegKey}$. All the equations in $\mathsf{DELEG}$ and $\mathsf{POOL}$ follow this same pattern of matching on certificate type.
 
   There are also preconditions on registration that the hashkey associated with the certificate witness of the certificate is not already found in the current list of stake credentials or the current reward accounts. We expect that the stake credentials and the reward accounts contain the same key hashes, making one of the checks redundant.
 
@@ -259,9 +259,9 @@ The rules for registering and delegating stake credentials are given in 3. Note 
 
   - The delegation relation is updated so that the stake credential is delegated to the given stake pool. The use of union override here allows us to use the same rule to perform both an initial delegation and an update to an existing delegation.
 
-- Genesis key delegation is handled by eq:deleg-gen. There is a precondition that the genesis key is already in the mapping $\var{genDelegs}$. Genesis delegation causes the following state transformation:
+- Genesis key delegation is handled by eq:deleg-gen. There is a precondition that the genesis key is already in the mapping $\mathit{genDelegs}$. Genesis delegation causes the following state transformation:
 
-  - The future genesis delegation relation is updated with the new delegate to be adopted in $\StabilityWindow$-many slots.
+  - The future genesis delegation relation is updated with the new delegate to be adopted in $\mathsf{StabilityWindow}$-many slots.
 
 - Moving instantaneous rewards is handled by eq:deleg-mir-reserves and eq:deleg-mir-treasury. There is a precondition that the current slot is early enough in the current epoch and that the available reserves or treasury are sufficient to pay for the instantaneous rewards.
 
@@ -270,36 +270,36 @@ $$\begin{equation}
 \label{eq:deleg-reg}
     \inference[Deleg-Reg]
     {
-      \var{c}\in\DCertRegKey &
-      hk \leteq \fun{regCred}~{c} &
-      \var{hk} \notin \dom \var{rewards}
+      \mathit{c}\in\mathsf{DCertRegKey} &
+      hk \mathrel{\mathop:}= \mathsf{regCred}~{c} &
+      \mathit{hk} \notin \dom \mathit{rewards}
     }
     {
       \begin{array}{r}
-        \var{slot} \\
-        \var{ptr} \\
-        \var{acnt}
+        \mathit{slot} \\
+        \mathit{ptr} \\
+        \mathit{acnt}
       \end{array}
       \vdash
       \left(
         \begin{array}{r}
-        \var{rewards} \\
-        \var{delegations} \\
-        \var{ptrs} \\
-        \var{fGenDelegs} \\
-        \var{genDelegs} \\
-        \var{i_{rwd}}
+        \mathit{rewards} \\
+        \mathit{delegations} \\
+        \mathit{ptrs} \\
+        \mathit{fGenDelegs} \\
+        \mathit{genDelegs} \\
+        \mathit{i_{rwd}}
       \end{array}
       \right)
-      \trans{deleg}{\var{c}}
+      \xrightarrow[\mathsf{deleg}]{}{\mathit{c}}
       \left(
       \begin{array}{rcl}
-        \varUpdate{\var{rewards}} & \varUpdate{\union} & \varUpdate{\{\var{hk} \mapsto 0\}}\\
-        \var{delegations} \\
-        \varUpdate{\var{ptrs}} & \varUpdate{\union} & \varUpdate{\{ptr \mapsto \var{hk}\}} \\
-        \var{fGenDelegs} \\
-        \var{genDelegs} \\
-        \var{i_{rwd}}
+        \mathsf{varUpdate}~\mathit{rewards} & \mathsf{varUpdate}~\union & \varUpdate{\{\mathit{hk} \mapsto 0\}}\\
+        \mathit{delegations} \\
+        \mathsf{varUpdate}~\mathit{ptrs} & \mathsf{varUpdate}~\union & \varUpdate{\{ptr \mapsto \mathit{hk}\}} \\
+        \mathit{fGenDelegs} \\
+        \mathit{genDelegs} \\
+        \mathit{i_{rwd}}
       \end{array}
       \right)
     }
@@ -309,36 +309,36 @@ $$\begin{equation}
 \label{eq:deleg-dereg}
     \inference[Deleg-Dereg]
     {
-      \var{c}\in \DCertDeRegKey &
-      hk \leteq \cwitness{c} &
-      \var{hk} \mapsto 0 \in \var{rewards}
+      \mathit{c}\in \mathsf{DCertDeRegKey} &
+      hk \mathrel{\mathop:}= \mathsf{cwitness}~c &
+      \mathit{hk} \mapsto 0 \in \mathit{rewards}
     }
     {
       \begin{array}{r}
-        \var{slot} \\
-        \var{ptr} \\
-        \var{acnt}
+        \mathit{slot} \\
+        \mathit{ptr} \\
+        \mathit{acnt}
       \end{array}
       \vdash
       \left(
       \begin{array}{r}
-        \var{rewards} \\
-        \var{delegations} \\
-        \var{ptrs} \\
-        \var{fGenDelegs} \\
-        \var{genDelegs} \\
-        \var{i_{rwd}}
+        \mathit{rewards} \\
+        \mathit{delegations} \\
+        \mathit{ptrs} \\
+        \mathit{fGenDelegs} \\
+        \mathit{genDelegs} \\
+        \mathit{i_{rwd}}
       \end{array}
       \right)
-      \trans{deleg}{\var{c}}
+      \xrightarrow[\mathsf{deleg}]{}{\mathit{c}}
       \left(
       \begin{array}{rcl}
-        \varUpdate{\{\var{hk}\}} & \varUpdate{\subtractdom} & \varUpdate{\var{rewards}} \\
-        \varUpdate{\{\var{hk}\}} & \varUpdate{\subtractdom} & \varUpdate{\var{delegations}} \\
-        \varUpdate{\var{ptrs}} & \varUpdate{\subtractrange} & \varUpdate{\{\var{hk}\}} \\
-        \var{fGenDelegs} \\
-        \var{genDelegs} \\
-        \var{i_{rwd}}
+        \varUpdate{\{\mathit{hk}\}} & \varUpdate{\mathbin{\rlap{\lhd}/}} & \mathsf{varUpdate}~\mathit{rewards} \\
+        \varUpdate{\{\mathit{hk}\}} & \varUpdate{\mathbin{\rlap{\lhd}/}} & \mathsf{varUpdate}~\mathit{delegations} \\
+        \mathsf{varUpdate}~\mathit{ptrs} & \mathsf{varUpdate}~\subtractrange & \varUpdate{\{\mathit{hk}\}} \\
+        \mathit{fGenDelegs} \\
+        \mathit{genDelegs} \\
+        \mathit{i_{rwd}}
       \end{array}
       \right)
     }
@@ -348,35 +348,35 @@ $$\begin{equation}
 \label{eq:deleg-deleg}
     \inference[Deleg-Deleg]
     {
-      \var{c}\in \DCertDeleg & hk \leteq \cwitness{c} & hk \in \dom \var{rewards}
+      \mathit{c}\in \mathsf{DCertDeleg} & hk \mathrel{\mathop:}= \mathsf{cwitness}~c & hk \in \dom \mathit{rewards}
     }
     {
       \begin{array}{r}
-        \var{slot} \\
-        \var{ptr} \\
-        \var{acnt}
+        \mathit{slot} \\
+        \mathit{ptr} \\
+        \mathit{acnt}
       \end{array}
       \vdash
       \left(
       \begin{array}{r}
-        \var{rewards} \\
-        \var{delegations} \\
-        \var{ptrs} \\
-        \var{fGenDelegs} \\
-        \var{genDelegs} \\
-        \var{i_{rwd}}
+        \mathit{rewards} \\
+        \mathit{delegations} \\
+        \mathit{ptrs} \\
+        \mathit{fGenDelegs} \\
+        \mathit{genDelegs} \\
+        \mathit{i_{rwd}}
       \end{array}
       \right)
-      \trans{deleg}{c}
+      \xrightarrow[\mathsf{deleg}]{}{c}
       \left(
       \begin{array}{rcl}
-        \var{rewards} \\
-        \varUpdate{\var{delegations}} & \varUpdate{\unionoverrideRight}
-                                      & \varUpdate{\{\var{hk} \mapsto \dpool c\}} \\
-        \var{ptrs} \\
-        \var{fGenDelegs} \\
-        \var{genDelegs} \\
-        \var{i_{rwd}}
+        \mathit{rewards} \\
+        \mathsf{varUpdate}~\mathit{delegations} & \mathsf{varUpdate}~\unionoverrideRight
+                                      & \varUpdate{\{\mathit{hk} \mapsto \dpool c\}} \\
+        \mathit{ptrs} \\
+        \mathit{fGenDelegs} \\
+        \mathit{genDelegs} \\
+        \mathit{i_{rwd}}
       \end{array}
       \right)
     }
@@ -386,60 +386,60 @@ $$\begin{equation}
 \label{eq:deleg-gen}
     \inference[Deleg-Gen]
     {
-      \var{c}\in \DCertGen
-      & (\var{gkh},~\var{vkh},~\var{vrf})\leteq\fun{genesisDeleg}~{c}
+      \mathit{c}\in \mathsf{DCertGen}
+      & (\mathit{gkh},~\mathit{vkh},~\mathit{vrf})\mathrel{\mathop:}=\mathsf{genesisDeleg}~{c}
       \\
-      s'\leteq\var{slot}+\StabilityWindow
-      & \var{gkh}\in\dom{genDelegs}
+      s'\mathrel{\mathop:}=\mathit{slot}+\mathsf{StabilityWindow}
+      & \mathit{gkh}\in\mathrm{dom}~genDelegs
       \\~\\
       {
-        \begin{array}{ l  c  l \neq\var{gkh}\}} }
-          \var{cod} & \var{g} & \var{genDelegs} \\
-          \var{fod} & (\wcard,~\var{g}) & \var{fGenDelegs}
+        \begin{array}{ l  c  l \neq\mathit{gkh}\}} }
+          \mathit{cod} & \mathit{g} & \mathit{genDelegs} \\
+          \mathit{fod} & (\underline{\phantom{a}},~\mathit{g}) & \mathit{fGenDelegs}
         \end{array}
       }
       \\~\\
       {
         \begin{array}{ l  c  c  l }}
-          \var{currentOtherColdKeyHashes} & \var{k} & (\var{k},~\wcard) & \var{cod}\\
-          \var{currentOtherVrfKeyHashes}  & \var{v} & (\wcard,~\var{v}) & \var{cod}\\
-          \var{futureOtherColdKeyHashes}  & \var{k} & (\var{k},~\wcard) & \var{fod}\\
-          \var{futureOtherVrfKeyHashes}   & \var{v} & (\wcard,~\var{v}) & \var{fod}\\
+          \mathit{currentOtherColdKeyHashes} & \mathit{k} & (\mathit{k},~\underline{\phantom{a}}) & \mathit{cod}\\
+          \mathit{currentOtherVrfKeyHashes}  & \mathit{v} & (\underline{\phantom{a}},~\mathit{v}) & \mathit{cod}\\
+          \mathit{futureOtherColdKeyHashes}  & \mathit{k} & (\mathit{k},~\underline{\phantom{a}}) & \mathit{fod}\\
+          \mathit{futureOtherVrfKeyHashes}   & \mathit{v} & (\underline{\phantom{a}},~\mathit{v}) & \mathit{fod}\\
       \end{array}
       }
       \\
-      \var{vkh}\notin\var{currentOtherColdKeyHashes}\union\var{futureOtherColdKeyHashes} \\
-      \var{vrf}\notin\var{currentOtherVrfKeyHashes}\union\var{futureOtherVrfKeyHashes} \\
-      \var{fdeleg}\leteq\{(\var{s'},~\var{gkh}) \mapsto (\var{vkh},~\var{vrf})\}
+      \mathit{vkh}\notin\mathit{currentOtherColdKeyHashes}\union\mathit{futureOtherColdKeyHashes} \\
+      \mathit{vrf}\notin\mathit{currentOtherVrfKeyHashes}\union\mathit{futureOtherVrfKeyHashes} \\
+      \mathit{fdeleg}\mathrel{\mathop:}=\{(\mathit{s'},~\mathit{gkh}) \mapsto (\mathit{vkh},~\mathit{vrf})\}
     }
     {
       \begin{array}{r}
-        \var{slot} \\
-        \var{ptr} \\
-        \var{acnt}
+        \mathit{slot} \\
+        \mathit{ptr} \\
+        \mathit{acnt}
       \end{array}
       \vdash
       \left(
       \begin{array}{r}
-        \var{rewards} \\
-        \var{delegations} \\
-        \var{ptrs} \\
-        \var{fGenDelegs} \\
-        \var{genDelegs} \\
-        \var{i_{rwd}}
+        \mathit{rewards} \\
+        \mathit{delegations} \\
+        \mathit{ptrs} \\
+        \mathit{fGenDelegs} \\
+        \mathit{genDelegs} \\
+        \mathit{i_{rwd}}
       \end{array}
       \right)
-      \trans{deleg}{c}
+      \xrightarrow[\mathsf{deleg}]{}{c}
       \left(
       \begin{array}{rcl}
-        \var{rewards} \\
-        \var{delegations} \\
-        \var{ptrs} \\
-        \varUpdate{\var{fGenDelegs}}
-        & \varUpdate{\unionoverrideRight}
-        & \varUpdate{fdeleg} \\
-        \var{genDelegs} \\
-        \var{i_{rwd}}
+        \mathit{rewards} \\
+        \mathit{delegations} \\
+        \mathit{ptrs} \\
+        \mathsf{varUpdate}~\mathit{fGenDelegs}
+        & \mathsf{varUpdate}~\unionoverrideRight
+        & \mathsf{varUpdate}~fdeleg \\
+        \mathit{genDelegs} \\
+        \mathit{i_{rwd}}
       \end{array}
       \right)
     }
@@ -450,42 +450,42 @@ $$\begin{equation}
 \label{eq:deleg-mir-reserves}
     \inference[Deleg-Mir]
     {
-      \var{c}\in \DCertMir
+      \mathit{c}\in \mathsf{DCertMir}
       &
-      \fun{mirPot}~\var{c}=\ReservesMIR
+      \mathsf{mirPot}~\mathit{c}=\mathsf{ReservesMIR}
       \\
-      slot < \fun{firstSlot}~((\epoch{slot}) + 1) - \fun{StabilityWindow}\\
-      (\var{irReserves},~\var{irTreasury})\leteq\var{i_{rwd}}
+      slot < \mathsf{firstSlot}~((\mathsf{epoch}~slot) + 1) - \mathsf{StabilityWindow}\\
+      (\mathit{irReserves},~\mathit{irTreasury})\mathrel{\mathop:}=\mathit{i_{rwd}}
       &
-      \var{combinedR}\leteq\var{irReserves}\unionoverrideRight(\fun{moveRewards}~\var{c}) \\
-      \sum\limits_{\wcard\mapsto\var{val}\in\var{combinedR}} val \leq\var{reserves}
+      \mathit{combinedR}\mathrel{\mathop:}=\mathit{irReserves}\unionoverrideRight(\mathsf{moveRewards}~\mathit{c}) \\
+      \sum\limits_{\underline{\phantom{a}}\mapsto\mathit{val}\in\mathit{combinedR}} val \leq\mathit{reserves}
     }
     {
       \begin{array}{r}
-        \var{slot} \\
-        \var{ptr} \\
-        \var{acnt}
+        \mathit{slot} \\
+        \mathit{ptr} \\
+        \mathit{acnt}
       \end{array}
       \vdash
       \left(
       \begin{array}{r}
-        \var{rewards} \\
-        \var{delegations} \\
-        \var{ptrs} \\
-        \var{fGenDelegs} \\
-        \var{genDelegs} \\
-        \var{i_{rwd}}
+        \mathit{rewards} \\
+        \mathit{delegations} \\
+        \mathit{ptrs} \\
+        \mathit{fGenDelegs} \\
+        \mathit{genDelegs} \\
+        \mathit{i_{rwd}}
       \end{array}
       \right)
-      \trans{deleg}{c}
+      \xrightarrow[\mathsf{deleg}]{}{c}
       \left(
       \begin{array}{c}
-        \var{rewards} \\
-        \var{delegations} \\
-        \var{ptrs} \\
-        \var{fGenDelegs}\\
-        \var{genDelegs} \\
-        (\varUpdate{\var{combinedR}},~\var{irTreasury}) \\
+        \mathit{rewards} \\
+        \mathit{delegations} \\
+        \mathit{ptrs} \\
+        \mathit{fGenDelegs}\\
+        \mathit{genDelegs} \\
+        (\mathsf{varUpdate}~\mathit{combinedR},~\mathit{irTreasury}) \\
       \end{array}
       \right)
     }
@@ -495,42 +495,42 @@ $$\begin{equation}
 \label{eq:deleg-mir-treasury}
     \inference[Deleg-Mir]
     {
-      \var{c}\in \DCertMir
+      \mathit{c}\in \mathsf{DCertMir}
       &
-      \fun{mirPot}~\var{c}=\TreasuryMIR
+      \mathsf{mirPot}~\mathit{c}=\mathsf{TreasuryMIR}
       \\
-      slot < \fun{firstSlot}~((\epoch{slot}) + 1) - \fun{StabilityWindow}\\
-      (\var{irReserves},~\var{irTreasury})\leteq\var{i_{rwd}}
+      slot < \mathsf{firstSlot}~((\mathsf{epoch}~slot) + 1) - \mathsf{StabilityWindow}\\
+      (\mathit{irReserves},~\mathit{irTreasury})\mathrel{\mathop:}=\mathit{i_{rwd}}
       &
-      \var{combinedT}\leteq\var{irTreasury}\unionoverrideRight(\fun{moveRewards}~\var{c}) \\
-      \sum\limits_{\wcard\mapsto\var{val}\in\var{combinedT}} val \leq\var{treasury}
+      \mathit{combinedT}\mathrel{\mathop:}=\mathit{irTreasury}\unionoverrideRight(\mathsf{moveRewards}~\mathit{c}) \\
+      \sum\limits_{\underline{\phantom{a}}\mapsto\mathit{val}\in\mathit{combinedT}} val \leq\mathit{treasury}
     }
     {
       \begin{array}{r}
-        \var{slot} \\
-        \var{ptr} \\
-        \var{acnt}
+        \mathit{slot} \\
+        \mathit{ptr} \\
+        \mathit{acnt}
       \end{array}
       \vdash
       \left(
       \begin{array}{r}
-        \var{rewards} \\
-        \var{delegations} \\
-        \var{ptrs} \\
-        \var{fGenDelegs} \\
-        \var{genDelegs} \\
-        \var{i_{rwd}}
+        \mathit{rewards} \\
+        \mathit{delegations} \\
+        \mathit{ptrs} \\
+        \mathit{fGenDelegs} \\
+        \mathit{genDelegs} \\
+        \mathit{i_{rwd}}
       \end{array}
       \right)
-      \trans{deleg}{c}
+      \xrightarrow[\mathsf{deleg}]{}{c}
       \left(
       \begin{array}{c}
-        \var{rewards} \\
-        \var{delegations} \\
-        \var{ptrs} \\
-        \var{fGenDelegs}\\
-        \var{genDelegs} \\
-        (\var{irReserves},~\varUpdate{\var{combinedT}}) \\
+        \mathit{rewards} \\
+        \mathit{delegations} \\
+        \mathit{ptrs} \\
+        \mathit{fGenDelegs}\\
+        \mathit{genDelegs} \\
+        (\mathit{irReserves},~\mathsf{varUpdate}~\mathit{combinedT}) \\
       \end{array}
       \right)
     }
@@ -555,7 +555,7 @@ The DELEG rule has ten possible predicate failures:
 
 - In the case of insufficient reserves to pay the instantaneous rewards, there is a *InsufficientForInstantaneousRewards* failure.
 
-- In the case that a MIR certificate is issued during the last $\StabilityWindow$-many slots of the epoch, there is a *MIRCertificateTooLateinEpoch* failure.
+- In the case that a MIR certificate is issued during the last $\mathsf{StabilityWindow}$-many slots of the epoch, there is a *MIRCertificateTooLateinEpoch* failure.
 
 - In the case of a genesis key delegation certificate, if the VRF key is in the range of the genesis delegation mapping, there is a *DuplicateGenesisVRF* failure.
 
@@ -570,15 +570,15 @@ In the pool rules, the stake pool is identified with the hashkey of the pool ope
 
   - The pool's parameters are stored.
 
-- Stake pool parameter updates are handled by eq:pool-rereg. This rule, which also matches on the certificate type $\type{DCertRegPool}$, is distinguished from eq:pool-reg by the requirement that the pool be registered.
+- Stake pool parameter updates are handled by eq:pool-rereg. This rule, which also matches on the certificate type $\mathsf{DCertRegPool}$, is distinguished from eq:pool-reg by the requirement that the pool be registered.
 
-  Unlike the initial stake pool registrations, the pool parameters will not change until the next epoch, after stake distribution snapshots are taken. This gives delegators an entire epoch to respond to changes in stake pool parameters. The staging is achieved by adding updates to the mapping $\var{fPoolParams}$, which will override $\var{poolParam}$ with new values in the $\mathsf{EPOCH}$ transition (see Figure fig:rules:epoch).
+  Unlike the initial stake pool registrations, the pool parameters will not change until the next epoch, after stake distribution snapshots are taken. This gives delegators an entire epoch to respond to changes in stake pool parameters. The staging is achieved by adding updates to the mapping $\mathit{fPoolParams}$, which will override $\mathit{poolParam}$ with new values in the $\mathsf{EPOCH}$ transition (see Figure fig:rules:epoch).
 
-  This rule also ends stake pool retirements. Note that $\var{poolParams}$ is **not** updated. The registration creation slot does does not change.
+  This rule also ends stake pool retirements. Note that $\mathit{poolParams}$ is **not** updated. The registration creation slot does does not change.
 
-- Stake pool retirements are handled by eq:pool-ret. Given a slot number $\var{slot}$, the application of this rule requires that the planned retirement epoch $\var{e}$ stated in the certificate is in the future, i.e. after $\var{cepoch}$ (the epoch of the current slot number in this context) and that it is no more than than $\emax$ epochs after the current one. It is also required that the pool be registered. Note that imposing the $\emax$ constraint on the system is not strictly necessary. However, forcing stake pools to announce their retirement a shorter time in advance will curb the growth of the $\var{retiring}$ list in the ledger state.
+- Stake pool retirements are handled by eq:pool-ret. Given a slot number $\mathit{slot}$, the application of this rule requires that the planned retirement epoch $\mathit{e}$ stated in the certificate is in the future, i.e. after $\mathit{cepoch}$ (the epoch of the current slot number in this context) and that it is no more than than $\emax$ epochs after the current one. It is also required that the pool be registered. Note that imposing the $\emax$ constraint on the system is not strictly necessary. However, forcing stake pools to announce their retirement a shorter time in advance will curb the growth of the $\mathit{retiring}$ list in the ledger state.
 
-  The pools scheduled for retirement must be removed from the $\var{retiring}$ state variable at the end of the epoch they are scheduled to retire in. This non-signaled transition (triggered, instead, directly by a change of current slot number in the environment), along with all other transitions that take place at the epoch boundary, are described in Section sec:epoch.
+  The pools scheduled for retirement must be removed from the $\mathit{retiring}$ state variable at the end of the epoch they are scheduled to retire in. This non-signaled transition (triggered, instead, directly by a change of current slot number in the environment), along with all other transitions that take place at the epoch boundary, are described in Section sec:epoch.
 
   Reregistration causes the following state transformation:
 
@@ -589,33 +589,33 @@ $$\begin{equation}
 \label{eq:pool-reg}
     \inference[Pool-Reg]
     {
-      \var{c}\in\DCertRegPool
-      & \var{hk} \leteq \cwitness{c}
-      & \var{pool} \leteq \poolParam{c}
+      \mathit{c}\in\mathsf{DCertRegPool}
+      & \mathit{hk} \mathrel{\mathop:}= \mathsf{cwitness}~c
+      & \mathit{pool} \mathrel{\mathop:}= \mathsf{poolParam}~c
       \\
-      hk \notin \dom \var{poolParams}
-      & \fun{poolCost}~\var{pool}\geq\fun{minPoolCost}~\var{pp}
+      hk \notin \dom \mathit{poolParams}
+      & \mathsf{poolCost}~\mathit{pool}\geq\mathsf{minPoolCost}~\mathit{pp}
     }
     {
       \begin{array}{r}
-        \var{slot} \\
-        \var{pp} \\
+        \mathit{slot} \\
+        \mathit{pp} \\
       \end{array}
       \vdash
       \left(
       \begin{array}{r}
-        \var{poolParams} \\
-        \var{fPoolParams} \\
-        \var{retiring} \\
+        \mathit{poolParams} \\
+        \mathit{fPoolParams} \\
+        \mathit{retiring} \\
       \end{array}
       \right)
-      \trans{pool}{c}
+      \xrightarrow[\mathsf{pool}]{}{c}
       \left(
       \begin{array}{rcl}
-        \varUpdate{\var{poolParams}} & \varUpdate{\union}
-                                    & \varUpdate{\{\var{hk} \mapsto \var{pool}\}} \\
-       \var{fPoolParams} \\
-       \var{retiring} \\
+        \mathsf{varUpdate}~\mathit{poolParams} & \mathsf{varUpdate}~\union
+                                    & \varUpdate{\{\mathit{hk} \mapsto \mathit{pool}\}} \\
+       \mathit{fPoolParams} \\
+       \mathit{retiring} \\
       \end{array}
       \right)
     }
@@ -625,33 +625,33 @@ $$\begin{equation}
 \label{eq:pool-rereg}
     \inference[Pool-reReg]
     {
-      \var{c}\in\DCertRegPool
-      & \var{hk} \leteq \cwitness{c}
-      & \var{pool} \leteq \poolParam{c}
+      \mathit{c}\in\mathsf{DCertRegPool}
+      & \mathit{hk} \mathrel{\mathop:}= \mathsf{cwitness}~c
+      & \mathit{pool} \mathrel{\mathop:}= \mathsf{poolParam}~c
       \\
-      hk \in \dom \var{poolParams}
-      & \fun{poolCost}~\var{pool}\geq\fun{minPoolCost}~\var{pp}
+      hk \in \dom \mathit{poolParams}
+      & \mathsf{poolCost}~\mathit{pool}\geq\mathsf{minPoolCost}~\mathit{pp}
     }
     {
       \begin{array}{r}
-        \var{slot} \\
-        \var{pp} \\
+        \mathit{slot} \\
+        \mathit{pp} \\
       \end{array}
       \vdash
       \left(
         \begin{array}{r}
-          \var{poolParams} \\
-          \var{fPoolParams} \\
-          \var{retiring} \\
+          \mathit{poolParams} \\
+          \mathit{fPoolParams} \\
+          \mathit{retiring} \\
         \end{array}
       \right)
-      \trans{pool}{c}
+      \xrightarrow[\mathsf{pool}]{}{c}
       \left(
         \begin{array}{rcl}
-          \var{poolParams} \\
-          \varUpdate{\var{fPoolParams}} & \varUpdate{\unionoverrideRight}
-                                        & \varUpdate{\{\var{hk} \mapsto \var{pool}\}}\\
-          \varUpdate{\{\var{hk}\}} & \varUpdate{\subtractdom} & \varUpdate{\var{retiring}} \\
+          \mathit{poolParams} \\
+          \mathsf{varUpdate}~\mathit{fPoolParams} & \mathsf{varUpdate}~\unionoverrideRight
+                                        & \varUpdate{\{\mathit{hk} \mapsto \mathit{pool}\}}\\
+          \varUpdate{\{\mathit{hk}\}} & \varUpdate{\mathbin{\rlap{\lhd}/}} & \mathsf{varUpdate}~\mathit{retiring} \\
         \end{array}
       \right)
     }
@@ -661,33 +661,33 @@ $$\begin{equation}
 \label{eq:pool-ret}
     \inference[Pool-Retire]
     {
-    \var{c} \in \DCertRetirePool
-    & hk \leteq \cwitness{c}
-    & \var{hk} \in \dom \var{poolParams} \\
-    \var{e} \leteq \retire{c}
-    & \var{cepoch} \leteq \epoch{slot}
-    & \var{cepoch} < \var{e} \leq \var{cepoch} + (\fun{emax}~{pp})
+    \mathit{c} \in \mathsf{DCertRetirePool}
+    & hk \mathrel{\mathop:}= \mathsf{cwitness}~c
+    & \mathit{hk} \in \dom \mathit{poolParams} \\
+    \mathit{e} \mathrel{\mathop:}= \mathsf{retire}~c
+    & \mathit{cepoch} \mathrel{\mathop:}= \mathsf{epoch}~slot
+    & \mathit{cepoch} < \mathit{e} \leq \mathit{cepoch} + (\mathsf{emax}~{pp})
   }
   {
     \begin{array}{r}
-      \var{slot} \\
-      \var{pp} \\
+      \mathit{slot} \\
+      \mathit{pp} \\
     \end{array}
     \vdash
     \left(
       \begin{array}{r}
-        \var{poolParams} \\
-        \var{fPoolParams} \\
-        \var{retiring} \\
+        \mathit{poolParams} \\
+        \mathit{fPoolParams} \\
+        \mathit{retiring} \\
       \end{array}
     \right)
-    \trans{pool}{c}
+    \xrightarrow[\mathsf{pool}]{}{c}
     \left(
       \begin{array}{rcl}
-        \var{poolParams} \\
-        \var{fPoolParams} \\
-        \varUpdate{\var{retiring}} & \varUpdate{\unionoverrideRight}
-                                   & \varUpdate{\{\var{hk} \mapsto \var{e}\}} \\
+        \mathit{poolParams} \\
+        \mathit{fPoolParams} \\
+        \mathsf{varUpdate}~\mathit{retiring} & \mathsf{varUpdate}~\unionoverrideRight
+                                   & \varUpdate{\{\mathit{hk} \mapsto \mathit{e}\}} \\
       \end{array}
     \right)
   }
@@ -709,27 +709,27 @@ We now combine the delegation and pool transition systems. Figure 6 gives the s
 
 
 *Delegation and Pool Combined Environment* $$\begin{equation*}
-    \DPEnv =
+    \mathsf{DPEnv} =
     \left(
       \begin{array}{rlr}
-        \var{slot} & \Slot & \text{slot}\\
-        \var{ptr} & \Ptr & \text{certificate pointer}\\
-        \var{pp} & \PParams & \text{protocol parameters}\\
-        \var{acnt} & \Acnt & \text{accounting state}
+        \mathit{slot} & \mathsf{Slot} & \text{slot}\\
+        \mathit{ptr} & \mathsf{Ptr} & \text{certificate pointer}\\
+        \mathit{pp} & \mathsf{PParams} & \text{protocol parameters}\\
+        \mathit{acnt} & \mathsf{Acnt} & \text{accounting state}
       \end{array}
     \right)
 \end{equation*}$$ *Delegation and Pool Combined State* $$\begin{equation*}
-    \DPState =
+    \mathsf{DPState} =
     \left(
       \begin{array}{rlr}
-        \var{dstate} & \DState & \text{delegation state}\\
-        \var{pstate} & \PState & \text{pool state}\\
+        \mathit{dstate} & \mathsf{DState} & \text{delegation state}\\
+        \mathit{pstate} & \mathsf{PState} & \text{pool state}\\
       \end{array}
     \right)
 \end{equation*}$$ *Delegation and Pool Combined Transition* $$\begin{equation*}
-    \_ \vdash \_ \trans{delpl}{\_} \_ \in
+    \_ \vdash \_ \xrightarrow[\mathsf{delpl}]{}{\_} \_ \in
       \powerset (
-        \DPEnv \times \DPState \times \DCert \times \DPState)
+        \mathsf{DPEnv} \times \mathsf{DPState} \times \mathsf{DCert} \times \mathsf{DPState})
 \end{equation*}$$
 
 **Delegation and Pool Combined Transition Type**
@@ -743,32 +743,32 @@ Figure 7, gives the rules for the combined transition. Note that for any given 
       &
       {
         \begin{array}{r}
-          \var{slot} \\
-          \var{ptr} \\
-          \var{acnt}
+          \mathit{slot} \\
+          \mathit{ptr} \\
+          \mathit{acnt}
         \end{array}
       }
-      \vdash \var{dstate} \trans{\hyperref[fig:delegation-rules]{deleg}}{c} \var{dstate'}
+      \vdash \mathit{dstate} \xrightarrow[\mathsf{\hyperref[fig:delegation-rules]{deleg}}]{}{c} \mathit{dstate'}
     }
     {
       \begin{array}{r}
-        \var{slot} \\
-        \var{ptr} \\
-        \var{pp} \\
-        \var{acnt}
+        \mathit{slot} \\
+        \mathit{ptr} \\
+        \mathit{pp} \\
+        \mathit{acnt}
       \end{array}
       \vdash
       \left(
       \begin{array}{r}
-        \var{dstate} \\
-        \var{pstate}
+        \mathit{dstate} \\
+        \mathit{pstate}
       \end{array}
       \right)
-      \trans{delpl}{c}
+      \xrightarrow[\mathsf{delpl}]{}{c}
       \left(
       \begin{array}{rcl}
-        \varUpdate{\var{dstate'}} \\
-        \var{pstate}
+        \mathsf{varUpdate}~\mathit{dstate'} \\
+        \mathit{pstate}
       \end{array}
       \right)
     }
@@ -779,31 +779,31 @@ Figure 7, gives the rules for the combined transition. Note that for any given 
     &
     {
       \begin{array}{r}
-        \var{slot} \\
-        \var{pp} \\
+        \mathit{slot} \\
+        \mathit{pp} \\
       \end{array}
     }
-    \vdash \var{pstate} \trans{\hyperref[fig:pool-rules]{pool}}{c} \var{pstate'}
+    \vdash \mathit{pstate} \xrightarrow[\mathsf{\hyperref[fig:pool-rules]{pool}}]{}{c} \mathit{pstate'}
     }
     {
       \begin{array}{r}
-        \var{slot} \\
-        \var{ptr} \\
-        \var{pp} \\
-        \var{acnt}
+        \mathit{slot} \\
+        \mathit{ptr} \\
+        \mathit{pp} \\
+        \mathit{acnt}
       \end{array}
       \vdash
       \left(
       \begin{array}{r}
-        \var{dstate} \\
-        \var{pstate}
+        \mathit{dstate} \\
+        \mathit{pstate}
       \end{array}
       \right)
-      \trans{delpl}{c}
+      \xrightarrow[\mathsf{delpl}]{}{c}
       \left(
       \begin{array}{rcl}
-        \var{dstate} \\
-        \varUpdate{\var{pstate'}}
+        \mathit{dstate} \\
+        \mathsf{varUpdate}~\mathit{pstate'}
       \end{array}
       \right)
     }
@@ -816,20 +816,20 @@ Figure 8 defines the types for the delegation certificate sequence transition.
 
 
 *Certificate Sequence Environment* $$\begin{equation*}
-    \DPSEnv =
+    \mathsf{DPSEnv} =
     \left(
       \begin{array}{rlr}
-        \var{slot} & \Slot & \text{slot}\\
-        \var{txIx} & \Ix & \text{transaction index}\\
-        \var{pp} & \PParams & \text{protocol parameters}\\
-        \var{tx} & \Tx & \text{transaction} \\
-        \var{acnt} & \Acnt & \text{accounting state}
+        \mathit{slot} & \mathsf{Slot} & \text{slot}\\
+        \mathit{txIx} & \mathsf{Ix} & \text{transaction index}\\
+        \mathit{pp} & \mathsf{PParams} & \text{protocol parameters}\\
+        \mathit{tx} & \mathsf{Tx} & \text{transaction} \\
+        \mathit{acnt} & \mathsf{Acnt} & \text{accounting state}
       \end{array}
     \right)
 \end{equation*}$$ $$\begin{equation*}
-    \_ \vdash \_ \trans{delegs}{\_} \_ \in
+    \_ \vdash \_ \xrightarrow[\mathsf{delegs}]{}{\_} \_ \in
     \powerset (
-    \DPSEnv \times \DPState \times \seqof{\DCert} \times \DPState)
+    \mathsf{DPSEnv} \times \mathsf{DPState} \times \mathsf{DCert}^{*} \times \mathsf{DPState})
 \end{equation*}$$
 
 **Delegation sequence transition type**
@@ -848,60 +848,60 @@ $$\begin{equation}
     \label{eq:delegs-base}
     \inference[Seq-delg-base]
     {
-      \var{wdrls} \leteq \txwdrls{(\txbody{tx})}
+      \mathit{wdrls} \mathrel{\mathop:}= \mathsf{txwdrls}~(\mathsf{txbody}~tx)
       &
-      \var{wdrls} \subseteq \var{rewards}
+      \mathit{wdrls} \subseteq \mathit{rewards}
       \\
-      \var{rewards'} \leteq \var{rewards} \unionoverrideRight \{(w, 0) \mid w \in \dom \var{wdrls}\}
+      \mathit{rewards'} \mathrel{\mathop:}= \mathit{rewards} \unionoverrideRight \{(w, 0) \mid w \in \dom \mathit{wdrls}\}
     }
     {
       \begin{array}{c}
-        \var{slot} \\
-        \var{txIx} \\
-        \var{pp} \\
-        \var{tx} \\
-        \var{acnt}
+        \mathit{slot} \\
+        \mathit{txIx} \\
+        \mathit{pp} \\
+        \mathit{tx} \\
+        \mathit{acnt}
       \end{array}
       \vdash
       \left(
       \begin{array}{c}
         \left(
         \begin{array}{r}
-          \var{rewards} \\
-          \var{delegations} \\
-          \var{ptrs} \\
-          \var{fGenDelegs} \\
-          \var{genDelegs} \\
-          \var{i_{rwd}}
+          \mathit{rewards} \\
+          \mathit{delegations} \\
+          \mathit{ptrs} \\
+          \mathit{fGenDelegs} \\
+          \mathit{genDelegs} \\
+          \mathit{i_{rwd}}
         \end{array}
         \right) \\~\\
         \left(
         \begin{array}{c}
-          \var{poolParams} \\
-          \var{fPoolParams} \\
-          \var{retiring} \\
+          \mathit{poolParams} \\
+          \mathit{fPoolParams} \\
+          \mathit{retiring} \\
         \end{array}
         \right) \\
       \end{array}
       \right)
-      \trans{delegs}{\epsilon}
+      \xrightarrow[\mathsf{delegs}]{}{\epsilon}
       \left(
       \begin{array}{c}
         \left(
         \begin{array}{c}
-          \varUpdate{\var{rewards'}} \\
-          \var{delegations} \\
-          \var{ptrs} \\
-          \var{fGenDelegs} \\
-          \var{genDelegs} \\
-          \var{i_{rwd}}
+          \mathsf{varUpdate}~\mathit{rewards'} \\
+          \mathit{delegations} \\
+          \mathit{ptrs} \\
+          \mathit{fGenDelegs} \\
+          \mathit{genDelegs} \\
+          \mathit{i_{rwd}}
         \end{array}
         \right) \\~\\
         \left(
         \begin{array}{c}
-          \var{poolParams} \\
-          \var{fPoolParams} \\
-          \var{retiring} \\
+          \mathit{poolParams} \\
+          \mathit{fPoolParams} \\
+          \mathit{retiring} \\
         \end{array}
         \right) \\
       \end{array}
@@ -915,47 +915,47 @@ $$\begin{equation}
     {
         {
           \begin{array}{c}
-            \var{slot}\\
-            \var{txIx}\\
-            \var{pp}\\
-            \var{tx}\\
-            \var{acnt}
+            \mathit{slot}\\
+            \mathit{txIx}\\
+            \mathit{pp}\\
+            \mathit{tx}\\
+            \mathit{acnt}
           \end{array}
         }
       \vdash
-      \var{dpstate}
-      \trans{delegs}{\Gamma}
-      \var{dpstate'}
+      \mathit{dpstate}
+      \xrightarrow[\mathsf{delegs}]{}{\Gamma}
+      \mathit{dpstate'}
     \\~\\~\\
-      \var{c}\in\DCertDeleg \Rightarrow \fun{dpool}~{c} \in \dom \var{poolParams} \\
-      ptr \leteq (\var{slot},~\var{txIx},~\mathsf{len}~\Gamma) \\~\\
+      \mathit{c}\in\mathsf{DCertDeleg} \Rightarrow \mathsf{dpool}~{c} \in \dom \mathit{poolParams} \\
+      ptr \mathrel{\mathop:}= (\mathit{slot},~\mathit{txIx},~\mathsf{len}~\Gamma) \\~\\
     {
       \begin{array}{c}
-        \var{slot}\\
-        \var{ptr}\\
-        \var{pp}\\
-        \var{acnt}
+        \mathit{slot}\\
+        \mathit{ptr}\\
+        \mathit{pp}\\
+        \mathit{acnt}
       \end{array}
     }
     \vdash
-      \var{dpstate'}
-      \trans{\hyperref[fig:rules:delpl]{delpl}}{c}
-      \var{dpstate''}
+      \mathit{dpstate'}
+      \xrightarrow[\mathsf{\hyperref[fig:rules:delpl]{delpl}}]{}{c}
+      \mathit{dpstate''}
     }
     {
     {
       \begin{array}{c}
-        \var{slot}\\
-        \var{txIx}\\
-        \var{pp}\\
-        \var{tx}\\
-        \var{acnt}
+        \mathit{slot}\\
+        \mathit{txIx}\\
+        \mathit{pp}\\
+        \mathit{tx}\\
+        \mathit{acnt}
       \end{array}
     }
     \vdash
-      \var{dpstate}
-      \trans{delegs}{\Gamma; c}
-      \varUpdate{\var{dpstate''}}
+      \mathit{dpstate}
+      \xrightarrow[\mathsf{delegs}]{}{\Gamma; c}
+      \mathsf{varUpdate}~\mathit{dpstate''}
     }
 \end{equation}$$
 

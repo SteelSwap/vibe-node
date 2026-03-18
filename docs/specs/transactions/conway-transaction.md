@@ -1,6 +1,6 @@
 # Transactions
 sec:transactions
-\LedgerModule{Transaction}, where we define transactions.
+\mathsf{LedgerModule}{Transaction}, where we define transactions.
 
  A transaction consists of a transaction body, a collection of witnesses and some optional auxiliary
 data.

@@ -1,6 +1,6 @@
 # Addresses
 sec:addresses
-\LedgerModule{Address}, in which we define credentials and various types
+\mathsf{LedgerModule}{Address}, in which we define credentials and various types
 of addresses here. 
 
 A credential contains a hash, either of a verifying (public) key
@@ -24,7 +24,7 @@ AgdaMultiCode
 
 ```
 *Derived types*
-\AgdaTarget{Credential, BaseAddr, BootstrapAddr, RwdAddr, net, pay, stake, Addr,
+\mathsf{AgdaTarget}{Credential, BaseAddr, BootstrapAddr, RwdAddr, net, pay, stake, Addr,
 VKeyBaseAddr, VKeyBoostrapAddr, ScriptBaseAddr, ScriptBootstrapAddr, VKeyAddr, ScriptAddr}
 ```agda
 data Credential : Type where

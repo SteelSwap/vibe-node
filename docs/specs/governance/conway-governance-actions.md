@@ -1,6 +1,6 @@
 # Governance Actions
 sec:governance-actions
-\LedgerModule{GovernanceActions}.
+\mathsf{LedgerModule}{GovernanceActions}.
 
 We introduce the following distinct bodies with specific functions in the new governance framework:
 enumerate

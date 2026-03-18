@@ -5,78 +5,78 @@ The cryptographic concepts required for the formal definition of witnessing incl
 
 Abstract data types in this paper are essentially placeholders with names indicating the data types they are meant to represent in an implementation. Derived types are made up of data structures (i.e. products, lists, finite maps, etc.) built from abstract types. The underlying structure of a data type is implementation-dependent and furthermore, the way the data is stored on physical storage can vary as well.
 
-Serialization is a physical manifestation of data on a given storage device. In this document, the properties and rules we state involving serialization are assumed to hold true independently of the storage medium and style of data organization chosen for an implementation. The type $\Ser$ denotes the serialized representation of a term of any serializable type.
+Serialization is a physical manifestation of data on a given storage device. In this document, the properties and rules we state involving serialization are assumed to hold true independently of the storage medium and style of data organization chosen for an implementation. The type $\mathsf{Ser}$ denotes the serialized representation of a term of any serializable type.
 
 
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
-      \var{sk} & \SKey & \text{private signing key}\\
-      \var{vk} & \VKey & \text{public verifying key}\\
-      \var{hk} & \KeyHash & \text{hash of a key}\\
-      \sigma & \Sig  & \text{signature}\\
-      \var{d} & \Ser  & \text{data}\\
-      \var{script} & \Script & \text{multi-signature script} \\
-      \var{hs} & \HashScr & \text{hash of a script}
+      \mathit{sk} & \mathsf{SKey} & \text{private signing key}\\
+      \mathit{vk} & \mathsf{VKey} & \text{public verifying key}\\
+      \mathit{hk} & \mathsf{KeyHash} & \text{hash of a key}\\
+      \sigma & \mathsf{Sig}  & \text{signature}\\
+      \mathit{d} & \mathsf{Ser}  & \text{data}\\
+      \mathit{script} & \mathsf{Script} & \text{multi-signature script} \\
+      \mathit{hs} & \mathsf{HashScr} & \text{hash of a script}
     \end{array}
 \end{equation*}$$ *Derived types* $$\begin{equation*}
     \begin{array}{rlr}
-      (sk, vk) & \KeyPair & \text{signing-verifying key pairs}
+      (sk, vk) & \mathsf{KeyPair} & \text{signing-verifying key pairs}
     \end{array}
 \end{equation*}$$ *Abstract functions* $$\begin{equation*}
     \begin{array}{rlr}
-      \hashKey{} & \VKey \to \KeyHash
+      \mathsf{hashKey}~ & \mathsf{VKey} \to \mathsf{KeyHash}
                  & \text{hash a verification key} \\
                  %
-      \fun{verify} & \powerset{\left(\VKey \times \Ser \times \Sig\right)}
+      \mathsf{verify} & \mathbb{P}~\left(\mathsf{VKey} \times \mathsf{Ser} \times \mathsf{Sig}\right)
                    & \text{verification relation}\\
                    %
-      \fun{sign} & \SKey \to \Ser \to \Sig
+      \mathsf{sign} & \mathsf{SKey} \to \mathsf{Ser} \to \mathsf{Sig}
                  & \text{signing function}\\
-      \fun{hashScript} & \Script \to \HashScr & \text{hash a serialized script}
+      \mathsf{hashScript} & \mathsf{Script} \to \mathsf{HashScr} & \text{hash a serialized script}
     \end{array}
 \end{equation*}$$ *Constraints* $$\begin{align*}
-    & \forall (sk, vk) \in \KeyPair,~ d \in \Ser,~ \sigma \in \Sig \cdot
-    \sign{sk}{d} = \sigma \implies (vk, d, \sigma) \in \fun{verify}
+    & \forall (sk, vk) \in \mathsf{KeyPair},~ d \in \mathsf{Ser},~ \sigma \in \mathsf{Sig} \cdot
+    \mathsf{sign}~sk~d = \sigma \implies (vk, d, \sigma) \in \mathsf{verify}
 \end{align*}$$ *Notation for serialized and verified data* $$\begin{align*}
-    & \serialised{x} ~\in \Ser & \text{serialised representation of } x\\
-    & \mathcal{V}_{\var{vk}}{\serialised{d}}_{\sigma} = \verify{vk}{d}{\sigma}
-    & \text{shorthand notation for } \fun{verify}
+    & \lbrack\!\lbrack \mathit{x} \rbrack\!\rbrack ~\in \mathsf{Ser} & \text{serialised representation of } x\\
+    & \mathcal{V}_{\mathit{vk}}{\lbrack\!\lbrack \mathit{d} \rbrack\!\rbrack}_{\sigma} = \mathsf{verify}~vk~d~\sigma
+    & \text{shorthand notation for } \mathsf{verify}
 \end{align*}$$
 
 **Cryptographic definitions**
 When we get to the blockchain layer validation, we will use key evolving signatures (KES) according to the MMM scheme [@cryptoeprint:2001:034]. This is another asymmetric key cryptographic scheme, also relying on the use of public and private key pairs. These signature schemes provide forward cryptographic security, meaning that a compromised key does not make it easier for an adversary to forge a signature that allegedly had been signed in the past. Figure 2 introduces the additional cryptographic abstractions needed for KES.
 
-In KES, the public verification key stays constant, but the corresponding private key evolves incrementally. For this reason, KES signing keys are indexed by integers representing the step in the key's evolution. This evolution step parameter is also an additional parameter needed for the signing (denoted by $\fun{sign_{ev}}$) and verification (denoted by $\fun{verify_{ev}}$) functions.
+In KES, the public verification key stays constant, but the corresponding private key evolves incrementally. For this reason, KES signing keys are indexed by integers representing the step in the key's evolution. This evolution step parameter is also an additional parameter needed for the signing (denoted by $\mathsf{sign_{ev}}$) and verification (denoted by $\mathsf{verify_{ev}}$) functions.
 
-Since the private key evolves incrementally in a KES scheme, the ledger rules require the pool operators to evolve their keys every time a certain number of slots have passed, as determined by the global constant $\SlotsPerKESPeriod$.
+Since the private key evolves incrementally in a KES scheme, the ledger rules require the pool operators to evolve their keys every time a certain number of slots have passed, as determined by the global constant $\mathsf{SlotsPerKESPeriod}$.
 
 
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
-      \var{sk} & \N \to \SKeyEv & \text{private signing keys}\\
-      \var{vk} & \VKeyEv & \text{public verifying key}\\
+      \mathit{sk} & \N \to \mathsf{SKeyEv} & \text{private signing keys}\\
+      \mathit{vk} & \mathsf{VKeyEv} & \text{public verifying key}\\
     \end{array}
 \end{equation*}$$ *Notation for evolved signing key* $$\begin{align*}
-    & \var{sk_n} = \var{sk}~n & n\text{-th evolution of }sk
+    & \mathit{sk_n} = \mathit{sk}~n & n\text{-th evolution of }sk
 \end{align*}$$ *Derived types* $$\begin{equation*}
     \begin{array}{rlr}
-      (sk_n, vk) & \KeyPairEv & \text{signing-verifying key pairs}
+      (sk_n, vk) & \mathsf{KeyPairEv} & \text{signing-verifying key pairs}
     \end{array}
 \end{equation*}$$ *Abstract functions* $$\begin{equation*}
     \begin{array}{rlr}
-      \fun{verify_{ev}} & \powerset{\left(\VKey \times \N \times \Ser \times \Sig\right)}
+      \mathsf{verify_{ev}} & \mathbb{P}~\left(\mathsf{VKey} \times \N \times \mathsf{Ser} \times \mathsf{Sig}\right)
                         & \text{verification relation}\\
                         %
-      \fun{sign_{ev}} & (\N \to \SKeyEv) \to \N \to \Ser \to \Sig
+      \mathsf{sign_{ev}} & (\N \to \mathsf{SKeyEv}) \to \N \to \mathsf{Ser} \to \mathsf{Sig}
                       & \text{signing function}\\
     \end{array}
 \end{equation*}$$ *Constraints* $$\begin{align*}
-    & \forall n\in\N, (sk_n, vk) \in \KeyPairEv, ~ d \in \Ser,~ \sigma \in \Sig \cdot \\
-    & ~~~~~~~~\fun{sign_{ev}}~{sk}~{n}~{d} = \sigma \implies \verifyEv{vk}{n}{d}{\sigma}
+    & \forall n\in\N, (sk_n, vk) \in \mathsf{KeyPairEv}, ~ d \in \mathsf{Ser},~ \sigma \in \mathsf{Sig} \cdot \\
+    & ~~~~~~~~\mathsf{sign_{ev}}~{sk}~{n}~{d} = \sigma \implies \verifyEv{vk}{n}{d}{\sigma}
 \end{align*}$$ *Notation for verified KES data* $$\begin{align*}
-    & \mathcal{V}^{\mathsf{KES}}_{\var{vk}}{\serialised{d}}_{\sigma}^n
+    & \mathcal{V}^{\mathsf{KES}}_{\mathit{vk}}{\lbrack\!\lbrack \mathit{d} \rbrack\!\rbrack}_{\sigma}^n
         = \verifyEv{vk}{n}{d}{\sigma}
-    & \text{shorthand notation for } \fun{verify_{ev}}
+    & \text{shorthand notation for } \mathsf{verify_{ev}}
 \end{align*}$$
 
 **KES Cryptographic definitions**
@@ -88,7 +88,7 @@ The terms form a tree like structure and are evaluated via the function. The par
 
 -  : signatures of all of the keys that hash to the values specified in the given list are required;
 
--  : a single signature is required, by a key hashing to one of the given values in the list (this constructor is redundant and can be expressed using $\type{RequireMOf}$);
+-  : a single signature is required, by a key hashing to one of the given values in the list (this constructor is redundant and can be expressed using $\mathsf{RequireMOf}$);
 
 -  :  $m$ of the keys with the hashes specified in the list are required to sign
 
@@ -97,31 +97,31 @@ The terms form a tree like structure and are evaluated via the function. The par
 
 $$\begin{equation*}
     \begin{array}{rll}
-      \MSig & \subseteq & \Script \\
+      \mathsf{MSig} & \subseteq & \mathsf{Script} \\
       \\~\\
-      \var{msig}\in\MSig & = & \type{RequireSig}~\KeyHash\\
-      & \uniondistinct &
-         \type{RequireAllOf}~[\Script] \\
-      & \uniondistinct&
-         \type{RequireAnyOf}~[\Script] \\
-      & \uniondistinct&
-        \type{RequireMOf}~\N~[\Script]
+      \mathit{msig}\in\mathsf{MSig} & = & \mathsf{RequireSig}~\mathsf{KeyHash}\\
+      & \uplus &
+         \mathsf{RequireAllOf}~[\mathsf{Script}] \\
+      & \uplus&
+         \mathsf{RequireAnyOf}~[\mathsf{Script}] \\
+      & \uplus&
+        \mathsf{RequireMOf}~\N~[\mathsf{Script}]
     \end{array}
 \end{equation*}$$
 
 *Functions*
 
 $$\begin{align*}
-    \fun{evalMultiSigScript} & \in\MSig\to\powerset\KeyHash\to\Bool & \\
-    \fun{evalMultiSigScript} & ~(\type{RequireSig}~hk)~\var{vhks} =  hk \in vhks \\
-    \fun{evalMultiSigScript} & ~(\type{RequireAllOf}~ts)~\var{vhks} =
-                              \forall t \in ts: \fun{evalMultiSigScript}~t~vhks\\
-    \fun{evalMultiSigScript} & ~(\type{RequireAnyOf}~ts)~\var{vhks} =
-                              \exists t \in ts: \fun{evalMultiSigScript}~t~vhks\\
-    \fun{evalMultiSigScript} & ~(\type{RequireMOf}~m~ts)~\var{vhks} = \\
+    \mathsf{evalMultiSigScript} & \in\mathsf{MSig}\to\powerset\mathsf{KeyHash}\to\mathsf{Bool} & \\
+    \mathsf{evalMultiSigScript} & ~(\mathsf{RequireSig}~hk)~\mathit{vhks} =  hk \in vhks \\
+    \mathsf{evalMultiSigScript} & ~(\mathsf{RequireAllOf}~ts)~\mathit{vhks} =
+                              \forall t \in ts: \mathsf{evalMultiSigScript}~t~vhks\\
+    \mathsf{evalMultiSigScript} & ~(\mathsf{RequireAnyOf}~ts)~\mathit{vhks} =
+                              \exists t \in ts: \mathsf{evalMultiSigScript}~t~vhks\\
+    \mathsf{evalMultiSigScript} & ~(\mathsf{RequireMOf}~m~ts)~\mathit{vhks} = \\
                              & m \leq \Sigma
                                \left(
-                               [\textrm{if}~(\fun{evalMultiSigScript}~\var{t}~\var{vhks})~
+                               [\textrm{if}~(\mathsf{evalMultiSigScript}~\mathit{t}~\mathit{vhks})~
                                \textrm{then}~1~\textrm{else}~0\vert t \leftarrow ts]
                                \right)
 \end{align*}$$

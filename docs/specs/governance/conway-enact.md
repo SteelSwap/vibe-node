@@ -1,6 +1,6 @@
 # Enactment
 sec:enactment
-\LedgerModule{Enact}
+\mathsf{LedgerModule}{Enact}
 
 
 fig:enact-defs contains some definitions required to

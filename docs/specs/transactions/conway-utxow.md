@@ -1,6 +1,6 @@
 ## Witnessing
 sec:witnessing
-\LedgerModule{Utxow}, in which we define witnessing.
+\mathsf{LedgerModule}{Utxow}, in which we define witnessing.
 
 The purpose of witnessing is make sure the intended action is
 authorized by the holder of the signing key.  (For details

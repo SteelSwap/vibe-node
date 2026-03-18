@@ -1,8 +1,8 @@
 % If the module name changes, change the following macro to match!
-\LedgerPoV{Ledger/Properties/PoV}
+\mathsf{LedgerPoV}{Ledger/Properties/PoV}
 
 
-theorem[\LedgerPoV.lagda{\LedgerPoV{}}:  rule preserves value]
+theorem[\mathsf{LedgerPoV}.lagda{\mathsf{LedgerPoV}{}}:  rule preserves value]
   thm:LEDGER-PoV
   itemize
     \item Informally.
@@ -20,7 +20,7 @@ AgdaMultiCode
 ```
 AgdaMultiCode
     \item Proof. See the
-      \LedgerPoV.lagda{\LedgerPoV{}}
+      \mathsf{LedgerPoV}.lagda{\mathsf{LedgerPoV}{}}
       module in the \repourl{formal ledger repository}.
   itemize
 theorem

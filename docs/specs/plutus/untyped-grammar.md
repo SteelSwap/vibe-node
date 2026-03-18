@@ -48,7 +48,7 @@ For simplicity, **we assume throughout that the body of a Plutus Core program is
 
 #### Iterated applications.
 
-An application of a term $M$ to a term $N$ is represented by $\appU{M}{N}$. We may occasionally write $\appU{M}{N_1 \ldots N_k}$ or $\appU{M}{\repetition{N}}$ as an abbreviation for an iterated application $\mathtt{[}\ldots\mathtt{[[}M\;N_1\mathtt{]}\;N_2\mathtt{]}\ldots$ $N_k\mathtt{]}$, and tools may also use this as concrete syntax.
+An application of a term $M$ to a term $N$ is represented by $\appU{M}{N}$. We may occasionally write $\appU{M}{N_1 \ldots N_k}$ or $\appU{M}{\overline{N}}$ as an abbreviation for an iterated application $\mathtt{[}\ldots\mathtt{[[}M\;N_1\mathtt{]}\;N_2\mathtt{]}\ldots$ $N_k\mathtt{]}$, and tools may also use this as concrete syntax.
 
 #### Constructors and case analysis.
 
@@ -60,7 +60,7 @@ Constructor tags can in principle be any natural number. In practice, since they
 
 #### Built-in types and functions.
 
-The language is parameterised by a set $\Uni$ of *built-in types* (we sometimes refer to $\Uni$ as the *universe*) and a set $\Fun$ of *built-in functions* (*builtins* for short), both of which are sets of Names. Briefly, the built-in types represent sets of constants such as integers or strings; constant expressions $\con{\tn}{c}$ represent values of the built-in types (the integer 123 or the string `"string"`, for example), and built-in functions are functions operating on these values, and possibly also general Plutus Core terms. Precise details are given in Section sec:specify-builtins.
+The language is parameterised by a set $\mathsf{Uni}$ of *built-in types* (we sometimes refer to $\mathsf{Uni}$ as the *universe*) and a set $\mathsf{Fun}$ of *built-in functions* (*builtins* for short), both of which are sets of Names. Briefly, the built-in types represent sets of constants such as integers or strings; constant expressions $\con{\tn}{c}$ represent values of the built-in types (the integer 123 or the string `"string"`, for example), and built-in functions are functions operating on these values, and possibly also general Plutus Core terms. Precise details are given in Section sec:specify-builtins.
 
 See Section sec:cardano-builtins for a description of the types and functions which have already been deployed on the Cardano blockchain (or will be in the near future).
 

@@ -2,25 +2,25 @@
 ## UTxO Transitions
 We have added the following helper functions, which are used in defining the UTxO transition system, see Figure 1. These include:
 
-- the function $\fun{getOut}$ builds a UTxO-type output out of a transaction output
+- the function $\mathsf{getOut}$ builds a UTxO-type output out of a transaction output
 
-- the function $\fun{outs}$ builds the MA UTxO entries from the outputs of a transaction
+- the function $\mathsf{outs}$ builds the MA UTxO entries from the outputs of a transaction
 
-For calculating the minimum size of an output, we also need the function $\fun{valueSize}$ that computes the size of a $\Value$. It is defined as the size of the serialization of the $\Value$, in analogy to $\fun{txSize}$.
+For calculating the minimum size of an output, we also need the function $\mathsf{valueSize}$ that computes the size of a $\mathsf{Value}$. It is defined as the size of the serialization of the $\mathsf{Value}$, in analogy to $\mathsf{txSize}$.
 
 
 $$\begin{align*}
-    & \fun{getOut} \in \TxOut \to \UTxOOut \\
+    & \mathsf{getOut} \in \mathsf{TxOut} \to \mathsf{UTxOOut} \\
     & \text{tx outputs transformed to UTxO outputs} \\
-    & \fun{getOut} ~{txout}~= (\fun{getAddr}~\var{txout}, \fun{getValue}~\var{txout})
-    \nextdef
-    & \fun{outs} \in \TxBody \to \UTxO \\
+    & \mathsf{getOut} ~{txout}~= (\mathsf{getAddr}~\mathit{txout}, \mathsf{getValue}~\mathit{txout})
+    \\[0.5em]
+    & \mathsf{outs} \in \mathsf{TxBody} \to \mathsf{UTxO} \\
     & \text{tx outputs as UTxO} \\
-    & \fun{outs} ~\var{txb} =
+    & \mathsf{outs} ~\mathit{txb} =
         \left\{
-          (\fun{txid} ~ \var{txb}, \var{ix}) \mapsto \fun{getOut}~\var{txout} ~
+          (\mathsf{txid} ~ \mathit{txb}, \mathit{ix}) \mapsto \mathsf{getOut}~\mathit{txout} ~
           \middle|~
-          \var{ix} \mapsto \var{txout} \in \txouts{txb}
+          \mathit{ix} \mapsto \mathit{txout} \in \mathsf{txouts}~txb
         \right\} \\
 \end{align*}$$
 
@@ -29,27 +29,27 @@ $$\begin{align*}
 
 Figure 2 defines additional calculations that are needed for the UTxO transition system with MA:
 
-- $\fun{getCoin}$ sums all the Ada in a given output and returns it as a $\Coin$ value
+- $\mathsf{getCoin}$ sums all the Ada in a given output and returns it as a $\mathsf{Coin}$ value
 
-- The $\fun{ubalance}$ function calculates the (aggregated by $\PolicyID$ and $\AssetID$) sum total of all the value in a given UTxO.
+- The $\mathsf{ubalance}$ function calculates the (aggregated by $\mathsf{PolicyID}$ and $\mathsf{AssetID}$) sum total of all the value in a given UTxO.
 
-- The $\fun{valueSize}$ function estimates an upper bound on the size of a value as stored in the UTxO.
+- The $\mathsf{valueSize}$ function estimates an upper bound on the size of a value as stored in the UTxO.
 
-- As in Shelley, the $\fun{consumed}$ calculation is the sum of: i) the values of the UTxO entries consumed; ii) the reward address value consumed; and iii) the amount that is removed from the deposit pot as a result of the transaction collecting the deposit refunds that are due. There is an additional summand in this calculation, namely the value forged by a transaction. This calculation now returns a $\Value$.
+- As in Shelley, the $\mathsf{consumed}$ calculation is the sum of: i) the values of the UTxO entries consumed; ii) the reward address value consumed; and iii) the amount that is removed from the deposit pot as a result of the transaction collecting the deposit refunds that are due. There is an additional summand in this calculation, namely the value forged by a transaction. This calculation now returns a $\mathsf{Value}$.
 
-- The $\fun{produced}$ calculation sums the same values as its Shelley counterpart. This calculation also returns a $\Value$.
+- The $\mathsf{produced}$ calculation sums the same values as its Shelley counterpart. This calculation also returns a $\mathsf{Value}$.
 
-**Produced and Consumed Calculations and Preservation of Value.** Note that the $\fun{consumed}$ and $\fun{produced}$ calculations both produce a $\Value$. This is because the outputs of a transaction, as well as UTxO outputs, are of the $\Value$ type. The administrative amounts (of the $\Coin$ type) are converted into MA values for these summations.
+**Produced and Consumed Calculations and Preservation of Value.** Note that the $\mathsf{consumed}$ and $\mathsf{produced}$ calculations both produce a $\mathsf{Value}$. This is because the outputs of a transaction, as well as UTxO outputs, are of the $\mathsf{Value}$ type. The administrative amounts (of the $\mathsf{Coin}$ type) are converted into MA values for these summations.
 
-While the preservation of value is a single equality, it is really a comparison of token quantities aggregated by $\AssetID$ and by $\PolicyID$. In particular, ensuring that the produced amount equals the consumed amount also implies that the total quantity of Ada tokens is preserved.
+While the preservation of value is a single equality, it is really a comparison of token quantities aggregated by $\mathsf{AssetID}$ and by $\mathsf{PolicyID}$. In particular, ensuring that the produced amount equals the consumed amount also implies that the total quantity of Ada tokens is preserved.
 
-**Forging and the Preservation of Value.** What does it mean to preserve the value of non-Ada tokens, since they are put in and taken out of circulation by the users themselves? This is expressed by including the $\fun{forge}$ value of the transaction in the preservation of value equation.
+**Forging and the Preservation of Value.** What does it mean to preserve the value of non-Ada tokens, since they are put in and taken out of circulation by the users themselves? This is expressed by including the $\mathsf{forge}$ value of the transaction in the preservation of value equation.
 
 The *produced* side of the equation adds up, among other things, the values in the outputs that will be added to the ledger UTxO by the transaction. These outputs are where the forged value is \"put into of circulation\", i.e. how it ends up in the UTxO. Suppose a transaction $tx$ contains a single output $(a, pid \mapsto tkns)$. Suppose also that it does not have any inputs spending any UTxO outputs with policy ID $pid$.
 
-A valid transaction $tx$ satisfies the preservation of value condition by adding the value $pid \mapsto tkns$ to the *consumed* side as well. To do this, the $tx$ declares that it is forging the tokens $pid \mapsto tkns$ via the $\fun{forge}$ field, i.e. $tx$ must have
+A valid transaction $tx$ satisfies the preservation of value condition by adding the value $pid \mapsto tkns$ to the *consumed* side as well. To do this, the $tx$ declares that it is forging the tokens $pid \mapsto tkns$ via the $\mathsf{forge}$ field, i.e. $tx$ must have
 
-$$pid \mapsto tkns\in\fun{forge}~tx$$
+$$pid \mapsto tkns\in\mathsf{forge}~tx$$
 
 The forge field value is then added to the consumed side. This approach to balancing the *preservation of value* (POV) equation (Equation eqn:pov) extends to cases where the transaction might also be consuming some existing $pid$ tokens, or taking the out of circulation with negative quantities in the forge field.
 
@@ -59,29 +59,29 @@ Note also that the UTXO rule only checks that the transaction is forging the amo
 
 
 *Helper Functions* $$\begin{align*}
-    & \fun{getCoin} \in \UTxOOut \to \Coin \\
-    & \fun{getCoin}~{(\wcard,~\var{out})} ~=~\fun{co}~(\var{out}~\mathsf{adaID}~\mathsf{adaToken}) \\
-    \nextdef
-    & \fun{ubalance} \in \UTxO \to \Value \\
-    & \fun{ubalance} ~ utxo = \sum_{\wcard\mapsto\var{u}\in~\var{utxo}}
-    \fun{getValue}~\var{u} \\
+    & \mathsf{getCoin} \in \mathsf{UTxOOut} \to \mathsf{Coin} \\
+    & \mathsf{getCoin}~{(\underline{\phantom{a}},~\mathit{out})} ~=~\mathsf{co}~(\mathit{out}~\mathsf{adaID}~\mathsf{adaToken}) \\
+    \\[0.5em]
+    & \mathsf{ubalance} \in \mathsf{UTxO} \to \mathsf{Value} \\
+    & \mathsf{ubalance} ~ utxo = \sum_{\underline{\phantom{a}}\mapsto\mathit{u}\in~\mathit{utxo}}
+    \mathsf{getValue}~\mathit{u} \\
     & \text{UTxO balance} \\
-    \nextdef
-    & \fun{valueSize} \in \Value \to \N \\
-    & \fun{valueSize}~\var{v} = k + k' * |\{ (\var{pid}, \var{aid}) : \var{v}~\var{pid}~\var{aid} \neq 0
-      \land (\var{pid}, \var{aid}) \neq (\mathsf{adaID}, \mathsf{adaToken}) \}|
+    \\[0.5em]
+    & \mathsf{valueSize} \in \mathsf{Value} \to \N \\
+    & \mathsf{valueSize}~\mathit{v} = k + k' * |\{ (\mathit{pid}, \mathit{aid}) : \mathit{v}~\mathit{pid}~\mathit{aid} \neq 0
+      \land (\mathit{pid}, \mathit{aid}) \neq (\mathsf{adaID}, \mathsf{adaToken}) \}|
 \end{align*}$$ *Produced and Consumed Calculations* $$\begin{align*}
-    & \fun{consumed} \in \PParams \to \UTxO \to \StakeCreds \to \Wdrl \to \TxBody \to \Value \\
-    & \consumed{pp}{utxo}{stkCreds}{rewards}~{txb} = \\
-    & ~~\ubalance{(\txins{txb} \restrictdom \var{utxo})} + \\
-    &~~  \fun{coinToValue}(\fun{wbalance}~(\fun{txwdrls}~{txb})~+~ \keyRefunds{pp}{stkCreds}{txb}) \\
-    &~~+~\fun{forge}~\var{txb} \\
+    & \mathsf{consumed} \in \mathsf{PParams} \to \mathsf{UTxO} \to \mathsf{StakeCreds} \to \mathsf{Wdrl} \to \mathsf{TxBody} \to \mathsf{Value} \\
+    & \mathsf{consumed}~pp~utxo~stkCreds{rewards}~{txb} = \\
+    & ~~\mathsf{ubalance}~(\mathsf{txins}~txb \lhd \mathit{utxo}) + \\
+    &~~  \mathsf{coinToValue}(\mathsf{wbalance}~(\mathsf{txwdrls}~{txb})~+~ \mathsf{keyRefunds}~pp~stkCreds{txb}) \\
+    &~~+~\mathsf{forge}~\mathit{txb} \\
     & \text{\emph{-- value consumed}} \\
-    \nextdef
-    & \fun{produced} \to \PParams \to \StakePools \to \TxBody \to \Value \\
-    & \fun{produced}~\var{pp}~\var{stpools}~\var{txb} = \\
-    &~~\ubalance{(\fun{outs}~{txb})} \\
-    &~~+ \fun{coinToValue}(\txfee{txb} + \totalDeposits{pp}{stpools}{(\txcerts{txb})})\\
+    \\[0.5em]
+    & \mathsf{produced} \to \mathsf{PParams} \to \mathsf{StakePools} \to \mathsf{TxBody} \to \mathsf{Value} \\
+    & \mathsf{produced}~\mathit{pp}~\mathit{stpools}~\mathit{txb} = \\
+    &~~\mathsf{ubalance}~(\mathsf{outs}~{txb}) \\
+    &~~+ \mathsf{coinToValue}(\mathsf{txfee}~txb + \mathsf{totalDeposits}~pp~stpools{(\mathsf{txcerts}~txb)})\\
     & \text{\emph{-- value produced}} \\
 \end{align*}$$
 
@@ -90,75 +90,75 @@ Note also that the UTXO rule only checks that the transaction is forging the amo
 
 - The transaction is not forging any Ada
 
-- All outputs of the transaction contain only non-negative quantities (this is the $\Value$-type version to the corresponding rule about non-negative $\Coin$ amounts in the Shelley ledger rules)
+- All outputs of the transaction contain only non-negative quantities (this is the $\mathsf{Value}$-type version to the corresponding rule about non-negative $\mathsf{Coin}$ amounts in the Shelley ledger rules)
 
-- In the preservation of value calculation (which looks the same as in Shelley), the value in the $\fun{forge}$ field is taken into account
+- In the preservation of value calculation (which looks the same as in Shelley), the value in the $\mathsf{forge}$ field is taken into account
 
-Note that updating the $\UTxO$ with the inputs and the outputs of the transaction looks the same as in the Shelley rule, however, there is a type-level difference. Recall that the outputs of a transaction contain a $\Value$ term, rather than $\Coin$. Moreover, the $\fun{outs}$ map converts $\TxOut$ terms into $\UTxOOut$.
+Note that updating the $\mathsf{UTxO}$ with the inputs and the outputs of the transaction looks the same as in the Shelley rule, however, there is a type-level difference. Recall that the outputs of a transaction contain a $\mathsf{Value}$ term, rather than $\mathsf{Coin}$. Moreover, the $\mathsf{outs}$ map converts $\mathsf{TxOut}$ terms into $\mathsf{UTxOOut}$.
 
 
 $$\begin{equation}
 \label{eq:utxo-inductive-shelley}
     \inference[UTxO-inductive]
-    { \var{txb}\leteq\txbody{tx}
-      & \txttl txb \geq \var{slot}
-      \\ \txins{txb} \neq \emptyset
-      & \minfee{pp}{tx} \leq \txfee{txb}
-      & \txins{txb} \subseteq \dom \var{utxo}
+    { \mathit{txb}\mathrel{\mathop:}=\mathsf{txbody}~tx
+      & \txttl txb \geq \mathit{slot}
+      \\ \mathsf{txins}~txb \neq \emptyset
+      & \mathsf{minfee}~pp~tx \leq \mathsf{txfee}~txb
+      & \mathsf{txins}~txb \subseteq \dom \mathit{utxo}
       \\
-      \consumed{pp}{utxo}{stkCreds}{rewards}~{txb} = \produced{pp}{stpools}~{txb}
+      \mathsf{consumed}~pp~utxo~stkCreds{rewards}~{txb} = \mathsf{produced}~pp~stpools~{txb}
       \\
       ~
       \\
       {
         \begin{array}{r}
-          \var{slot} \\
-          \var{pp} \\
-          \var{genDelegs} \\
+          \mathit{slot} \\
+          \mathit{pp} \\
+          \mathit{genDelegs} \\
         \end{array}
       }
-      \vdash \var{ups} \trans{\hyperref[fig:rules:update]{up}}{\fun{txup}~\var{tx}} \var{ups'}
+      \vdash \mathit{ups} \xrightarrow[\mathsf{\hyperref[fig:rules:update]{up}}]{}{\mathsf{txup}~\mathit{tx}} \mathit{ups'}
       \\
       ~
       \\
-      \mathsf{adaID}~\notin \dom~{\fun{forge}~tx} \\
+      \mathsf{adaID}~\notin \dom~{\mathsf{forge}~tx} \\
       ~\\
-      \forall txout \in \txouts{txb}, ~ \fun{getValue}~txout  ~\geq ~ 0, \\~
-      \fun{getCoin}~txout ~\geq ~\fun{valueSize}~(\fun{getValue}~txout) * \fun{minUTxOValue}~pp \\~
+      \forall txout \in \mathsf{txouts}~txb, ~ \mathsf{getValue}~txout  ~\geq ~ 0, \\~
+      \mathsf{getCoin}~txout ~\geq ~\mathsf{valueSize}~(\mathsf{getValue}~txout) * \mathsf{minUTxOValue}~pp \\~
       \\
-      \fun{txsize}~{tx}\leq\fun{maxTxSize}~\var{pp}
+      \mathsf{txsize}~{tx}\leq\mathsf{maxTxSize}~\mathit{pp}
       \\
       ~
       \\
-      \var{refunded} \leteq \keyRefunds{pp}{stkCreds}{txb}
+      \mathit{refunded} \mathrel{\mathop:}= \mathsf{keyRefunds}~pp~stkCreds{txb}
       \\
-      \var{depositChange} \leteq
-        \totalDeposits{pp}{stpools}{(\txcerts{txb})} - \var{refunded}
+      \mathit{depositChange} \mathrel{\mathop:}=
+        \mathsf{totalDeposits}~pp~stpools{(\mathsf{txcerts}~txb)} - \mathit{refunded}
     }
     {
       \begin{array}{r}
-        \var{slot}\\
-        \var{pp}\\
-        \var{stkCreds}\\
-        \var{stpools}\\
-        \var{genDelegs}\\
+        \mathit{slot}\\
+        \mathit{pp}\\
+        \mathit{stkCreds}\\
+        \mathit{stpools}\\
+        \mathit{genDelegs}\\
       \end{array}
       \vdash
       \left(
       \begin{array}{r}
-        \var{utxo} \\
-        \var{deposits} \\
-        \var{fees} \\
-        \var{ups}\\
+        \mathit{utxo} \\
+        \mathit{deposits} \\
+        \mathit{fees} \\
+        \mathit{ups}\\
       \end{array}
       \right)
-      \trans{utxo}{tx}
+      \xrightarrow[\mathsf{utxo}]{}{tx}
       \left(
       \begin{array}{r}
-        \varUpdate{(\txins{txb} \subtractdom \var{utxo}) \cup \fun{outs}~{txb}}  \\
-        \varUpdate{\var{deposits} + \var{depositChange}} \\
-        \varUpdate{\var{fees} + \txfee{txb}} \\
-        \varUpdate{ups'}\\
+        \varUpdate{(\mathsf{txins}~txb \mathbin{\rlap{\lhd}/} \mathit{utxo}) \cup \mathsf{outs}~{txb}}  \\
+        \mathsf{varUpdate}~\mathit{deposits} + \mathit{depositChange} \\
+        \mathsf{varUpdate}~\mathit{fees} + \mathsf{txfee}~txb \\
+        \mathsf{varUpdate}~ups'\\
       \end{array}
       \right)
     }
@@ -167,7 +167,7 @@ $$\begin{equation}
 **UTxO inference rules**
 **Witnessing.**
 
-We have changed the definition of the function $\fun{scriptsNeeded}$, see Figure 4. There is now an additional category of scripts that are needed for transaction validation, the forging scripts.
+We have changed the definition of the function $\mathsf{scriptsNeeded}$, see Figure 4. There is now an additional category of scripts that are needed for transaction validation, the forging scripts.
 
 Note that there are no restrictions on the use of forging scripts. Their hashes may be used as credentials in UTxO entries, certificates, and withdrawals. Non-MPS type scripts can also be used for forging, e.g. MSig scripts.
 
@@ -175,18 +175,18 @@ Note also that UTxO entries containing MA tokens, just like Shelley UTxO entries
 
 
 $$\begin{align*}
-    & \hspace{-1cm}\fun{scriptsNeeded} \in \UTxO \to \Tx \to
-      \powerset{\ScriptHash}
+    & \hspace{-1cm}\mathsf{scriptsNeeded} \in \mathsf{UTxO} \to \mathsf{Tx} \to
+      \mathbb{P}~\mathsf{ScriptHash}
     & \text{required script hashes} \\
-    &  \hspace{-1cm}\fun{scriptsNeeded}~\var{utxo}~\var{tx} = \\
-    & ~~\{ \fun{validatorHash}~a \mid i \mapsto (a, \wcard) \in \var{utxo},\\
-    & ~~~~~i\in\fun{txinsScript}~{(\fun{txins~\var{txb}})}~{utxo}\} \\
-    \cup & ~~\{ \fun{stakeCred_{r}}~\var{a} \mid a \in \dom (\AddrRWDScr
-           \restrictdom \fun{txwdrls}~\var{txb}) \} \\
-      \cup & ~~(\AddrScr \cap \fun{certWitsNeeded}~{txb}) \\
-      \cup & ~~\dom~(\fun{forge}~{txb}) \\
+    &  \hspace{-1cm}\mathsf{scriptsNeeded}~\mathit{utxo}~\mathit{tx} = \\
+    & ~~\{ \mathsf{validatorHash}~a \mid i \mapsto (a, \underline{\phantom{a}}) \in \mathit{utxo},\\
+    & ~~~~~i\in\mathsf{txinsScript}~{(\mathsf{txins~\mathit{txb}})}~{utxo}\} \\
+    \cup & ~~\{ \mathsf{stakeCred_{r}}~\mathit{a} \mid a \in \dom (\mathsf{AddrRWDScr}
+           \lhd \mathsf{txwdrls}~\mathit{txb}) \} \\
+      \cup & ~~(\mathsf{AddrScr} \cap \mathsf{certWitsNeeded}~{txb}) \\
+      \cup & ~~\dom~(\mathsf{forge}~{txb}) \\
       & \where \\
-      & ~~~~~~~ \var{txb}~=~\txbody{tx} \\
+      & ~~~~~~~ \mathit{txb}~=~\mathsf{txbody}~tx \\
 \end{align*}$$
 
 **Scripts Needed**

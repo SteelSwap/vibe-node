@@ -32,7 +32,7 @@ Filtering on sequences
 
 Option type
 
-:   An option type in type $A$ is denoted as $A^? = A + \Diamond$. The $A$ case corresponds to a case when there is a value of type $A$ and the $\Diamond$ case corresponds to a case when there is no value.
+:   An option type in type $A$ is denoted as $A^? = A + \mathsf{Diamond}$. The $A$ case corresponds to a case when there is a value of type $A$ and the $\mathsf{Diamond}$ case corresponds to a case when there is no value.
 
 Union override
 
@@ -142,7 +142,7 @@ $$\begin{equation*}
       \xlongrightarrow[\textsc{bupi}]{
         \left(
           \begin{array}{l}
-            \Diamond\\
+            \mathsf{Diamond}\\
             \mathit{votes} \\
             \mathit{end}
           \end{array}
