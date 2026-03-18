@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" font-family="Inter, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="stGrad" gradientTransform="rotate(110)">
+      <stop offset="0%" style="stop-color:#ED458E"/>
+      <stop offset="100%" style="stop-color:#F48020"/>
+    </linearGradient>
+    <linearGradient id="stStore">
+      <stop offset="0%" style="stop-color:#E86040"/>
+      <stop offset="100%" style="stop-color:#F48020"/>
+    </linearGradient>
+    <filter id="stShadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="720" height="360" rx="16" fill="#1a1b1e"/>
+  <rect width="720" height="4" fill="url(#stGrad)"/>
+
+  <text x="360" y="34" text-anchor="middle" fill="url(#stGrad)" font-size="18" font-weight="800">Storage</text>
+  <text x="360" y="52" text-anchor="middle" fill="#909296" font-size="10">How the node remembers the entire blockchain</text>
+
+  <!-- Three stores -->
+  <rect x="35" y="80" width="200" height="130" rx="10" fill="url(#stStore)" filter="url(#stShadow)"/>
+  <text x="135" y="108" text-anchor="middle" fill="white" font-size="14" font-weight="700">Immutable Store</text>
+  <text x="135" y="130" text-anchor="middle" fill="#ffe0c0" font-size="10">Blocks that are final.</text>
+  <text x="135" y="148" text-anchor="middle" fill="#ffe0c0" font-size="10">The permanent history</text>
+  <text x="135" y="166" text-anchor="middle" fill="#ffe0c0" font-size="10">that will never change.</text>
+  <text x="135" y="196" text-anchor="middle" fill="#ffd0b0" font-size="9">Append-only on disk</text>
+
+  <rect x="260" y="80" width="200" height="130" rx="10" fill="url(#stStore)" filter="url(#stShadow)"/>
+  <text x="360" y="108" text-anchor="middle" fill="white" font-size="14" font-weight="700">Volatile Store</text>
+  <text x="360" y="130" text-anchor="middle" fill="#ffe0c0" font-size="10">Recent blocks near the</text>
+  <text x="360" y="148" text-anchor="middle" fill="#ffe0c0" font-size="10">chain tip. May include</text>
+  <text x="360" y="166" text-anchor="middle" fill="#ffe0c0" font-size="10">short-lived forks.</text>
+  <text x="360" y="196" text-anchor="middle" fill="#ffd0b0" font-size="9">In memory + write-ahead log</text>
+
+  <rect x="485" y="80" width="200" height="130" rx="10" fill="url(#stStore)" filter="url(#stShadow)"/>
+  <text x="585" y="108" text-anchor="middle" fill="white" font-size="14" font-weight="700">Ledger Snapshots</text>
+  <text x="585" y="130" text-anchor="middle" fill="#ffe0c0" font-size="10">Periodic snapshots of</text>
+  <text x="585" y="148" text-anchor="middle" fill="#ffe0c0" font-size="10">the UTxO set and stake</text>
+  <text x="585" y="166" text-anchor="middle" fill="#ffe0c0" font-size="10">distribution.</text>
+  <text x="585" y="196" text-anchor="middle" fill="#ffd0b0" font-size="9">Fast restart after shutdown</text>
+
+  <!-- Flow arrows -->
+  <line x1="235" y1="145" x2="258" y2="145" stroke="white" stroke-width="2" stroke-dasharray="4,3"/>
+  <polygon points="256,141 264,145 256,149" fill="white"/>
+  <line x1="460" y1="145" x2="483" y2="145" stroke="white" stroke-width="2" stroke-dasharray="4,3"/>
+  <polygon points="481,141 489,145 481,149" fill="white"/>
+
+  <!-- Labels under arrows -->
+  <text x="247" y="135" text-anchor="middle" fill="#909296" font-size="8">k blocks</text>
+  <text x="247" y="160" text-anchor="middle" fill="#909296" font-size="8">old</text>
+  <text x="472" y="135" text-anchor="middle" fill="#909296" font-size="8">every</text>
+  <text x="472" y="160" text-anchor="middle" fill="#909296" font-size="8">epoch</text>
+
+  <!-- Recovery note -->
+  <rect x="100" y="240" width="520" height="80" rx="10" fill="#25262b" stroke="#373a40" stroke-width="1"/>
+  <text x="360" y="266" text-anchor="middle" fill="url(#stGrad)" font-size="13" font-weight="700">Crash Recovery</text>
+  <text x="360" y="288" text-anchor="middle" fill="#909296" font-size="10">If the node crashes or loses power, it restarts from the latest ledger snapshot</text>
+  <text x="360" y="306" text-anchor="middle" fill="#909296" font-size="10">and replays only the recent volatile blocks. No full resync needed.</text>
+
+  <rect y="356" width="720" height="4" fill="url(#stGrad)" rx="2"/>
+</svg>

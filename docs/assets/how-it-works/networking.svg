@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" font-family="Inter, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="nssGrad" gradientTransform="rotate(110)">
+      <stop offset="0%" style="stop-color:#ED458E"/>
+      <stop offset="100%" style="stop-color:#F48020"/>
+    </linearGradient>
+    <linearGradient id="nNodeGrad">
+      <stop offset="0%" style="stop-color:#ED458E"/>
+      <stop offset="100%" style="stop-color:#d03878"/>
+    </linearGradient>
+    <filter id="nShadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="720" height="360" rx="16" fill="#1a1b1e"/>
+  <rect width="720" height="4" fill="url(#nssGrad)"/>
+
+  <text x="360" y="34" text-anchor="middle" fill="url(#nssGrad)" font-size="18" font-weight="800">Networking</text>
+  <text x="360" y="52" text-anchor="middle" fill="#909296" font-size="10">How your node finds and talks to other nodes</text>
+
+  <!-- Our node in center -->
+  <rect x="270" y="120" width="180" height="100" rx="14" fill="url(#nNodeGrad)" filter="url(#nShadow)"/>
+  <text x="360" y="155" text-anchor="middle" fill="white" font-size="16" font-weight="800">Your Node</text>
+  <text x="360" y="175" text-anchor="middle" fill="#ffcce0" font-size="10">Maintains connections</text>
+  <text x="360" y="190" text-anchor="middle" fill="#ffcce0" font-size="10">to 20+ peers</text>
+  <text x="360" y="207" text-anchor="middle" fill="#ffb0d0" font-size="9">TCP + multiplexing</text>
+
+  <!-- Peer nodes around -->
+  <rect x="30" y="70" width="110" height="46" rx="8" fill="#25262b" stroke="#ED458E" stroke-width="1.5"/>
+  <text x="85" y="92" text-anchor="middle" fill="#ED458E" font-size="11" font-weight="600">Relay Node</text>
+  <text x="85" y="106" text-anchor="middle" fill="#909296" font-size="9">Americas</text>
+
+  <rect x="30" y="180" width="110" height="46" rx="8" fill="#25262b" stroke="#ED458E" stroke-width="1.5"/>
+  <text x="85" y="202" text-anchor="middle" fill="#ED458E" font-size="11" font-weight="600">Relay Node</text>
+  <text x="85" y="216" text-anchor="middle" fill="#909296" font-size="9">Europe</text>
+
+  <rect x="580" y="70" width="110" height="46" rx="8" fill="#25262b" stroke="#F48020" stroke-width="1.5"/>
+  <text x="635" y="92" text-anchor="middle" fill="#F48020" font-size="11" font-weight="600">Stake Pool</text>
+  <text x="635" y="106" text-anchor="middle" fill="#909296" font-size="9">Block Producer</text>
+
+  <rect x="580" y="180" width="110" height="46" rx="8" fill="#25262b" stroke="#F48020" stroke-width="1.5"/>
+  <text x="635" y="202" text-anchor="middle" fill="#F48020" font-size="11" font-weight="600">Relay Node</text>
+  <text x="635" y="216" text-anchor="middle" fill="#909296" font-size="9">Asia-Pacific</text>
+
+  <!-- Connection lines -->
+  <line x1="140" y1="93" x2="268" y2="145" stroke="#ED458E" stroke-width="2"/>
+  <line x1="140" y1="203" x2="268" y2="185" stroke="#ED458E" stroke-width="2"/>
+  <line x1="580" y1="93" x2="452" y2="145" stroke="#F48020" stroke-width="2"/>
+  <line x1="580" y1="203" x2="452" y2="185" stroke="#F48020" stroke-width="2"/>
+
+  <!-- Multiplexing explanation -->
+  <rect x="130" y="268" width="460" height="52" rx="10" fill="#25262b" stroke="#373a40" stroke-width="1"/>
+  <text x="360" y="290" text-anchor="middle" fill="#ED458E" font-size="12" font-weight="600">One connection, many conversations</text>
+  <text x="360" y="308" text-anchor="middle" fill="#909296" font-size="10">Each TCP connection carries multiple miniprotocols simultaneously</text>
+
+  <rect y="356" width="720" height="4" fill="url(#nssGrad)" rx="2"/>
+</svg>

@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 340" font-family="Inter, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="mmpGrad" gradientTransform="rotate(110)">
+      <stop offset="0%" style="stop-color:#ED458E"/>
+      <stop offset="100%" style="stop-color:#F48020"/>
+    </linearGradient>
+    <linearGradient id="mmpPool">
+      <stop offset="0%" style="stop-color:#d94080"/>
+      <stop offset="100%" style="stop-color:#E86040"/>
+    </linearGradient>
+    <filter id="mmpShadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="720" height="340" rx="16" fill="#1a1b1e"/>
+  <rect width="720" height="4" fill="url(#mmpGrad)"/>
+
+  <text x="360" y="34" text-anchor="middle" fill="url(#mmpGrad)" font-size="18" font-weight="800">Mempool</text>
+  <text x="360" y="52" text-anchor="middle" fill="#909296" font-size="10">The waiting room for transactions that haven't been included in a block yet</text>
+
+  <!-- Incoming transactions -->
+  <rect x="30" y="90" width="120" height="44" rx="8" fill="#25262b" stroke="#ED458E" stroke-width="1.5"/>
+  <text x="90" y="110" text-anchor="middle" fill="#ED458E" font-size="11" font-weight="600">From Peers</text>
+  <text x="90" y="126" text-anchor="middle" fill="#909296" font-size="9">tx-submission</text>
+
+  <rect x="30" y="148" width="120" height="44" rx="8" fill="#25262b" stroke="#F48020" stroke-width="1.5"/>
+  <text x="90" y="168" text-anchor="middle" fill="#F48020" font-size="11" font-weight="600">From Wallets</text>
+  <text x="90" y="184" text-anchor="middle" fill="#909296" font-size="9">local tx-submit</text>
+
+  <!-- Validation gate -->
+  <rect x="195" y="100" width="90" height="82" rx="8" fill="#25262b" stroke="#d94080" stroke-width="1.5"/>
+  <text x="240" y="130" text-anchor="middle" fill="#d94080" font-size="11" font-weight="700">Validate</text>
+  <text x="240" y="148" text-anchor="middle" fill="#909296" font-size="9">Ledger rules</text>
+  <text x="240" y="163" text-anchor="middle" fill="#909296" font-size="9">check each tx</text>
+
+  <!-- Mempool -->
+  <rect x="340" y="80" width="220" height="130" rx="14" fill="url(#mmpPool)" filter="url(#mmpShadow)"/>
+  <text x="450" y="112" text-anchor="middle" fill="white" font-size="16" font-weight="800">Mempool</text>
+  <text x="450" y="134" text-anchor="middle" fill="#ffd0b0" font-size="10">Valid transactions waiting</text>
+  <text x="450" y="152" text-anchor="middle" fill="#ffd0b0" font-size="10">for a block producer to</text>
+  <text x="450" y="170" text-anchor="middle" fill="#ffd0b0" font-size="10">include them</text>
+  <text x="450" y="196" text-anchor="middle" fill="#ffe0c0" font-size="9">Size-limited &mdash; oldest out first</text>
+
+  <!-- Block production -->
+  <rect x="610" y="105" width="85" height="80" rx="8" fill="#25262b" stroke="#F48020" stroke-width="1.5"/>
+  <text x="652" y="136" text-anchor="middle" fill="#F48020" font-size="11" font-weight="600">Block</text>
+  <text x="652" y="152" text-anchor="middle" fill="#F48020" font-size="11" font-weight="600">Forging</text>
+  <text x="652" y="172" text-anchor="middle" fill="#909296" font-size="9">Picks txs</text>
+
+  <!-- Arrows -->
+  <line x1="150" y1="112" x2="193" y2="126" stroke="#ED458E" stroke-width="2"/>
+  <polygon points="191,122 199,126 191,130" fill="#ED458E"/>
+  <line x1="150" y1="170" x2="193" y2="156" stroke="#F48020" stroke-width="2"/>
+  <polygon points="191,152 199,156 191,160" fill="#F48020"/>
+  <line x1="285" y1="141" x2="338" y2="141" stroke="#d94080" stroke-width="2"/>
+  <polygon points="336,137 344,141 336,145" fill="#d94080"/>
+  <line x1="560" y1="145" x2="608" y2="145" stroke="#F48020" stroke-width="2"/>
+  <polygon points="606,141 614,145 606,149" fill="#F48020"/>
+
+  <!-- Removal explanation -->
+  <rect x="120" y="248" width="480" height="56" rx="10" fill="#25262b" stroke="#373a40" stroke-width="1"/>
+  <text x="360" y="272" text-anchor="middle" fill="url(#mmpGrad)" font-size="12" font-weight="700">When a new block arrives, included transactions are removed</text>
+  <text x="360" y="292" text-anchor="middle" fill="#909296" font-size="10">Conflicting transactions are also evicted. The mempool stays fresh.</text>
+
+  <rect y="336" width="720" height="4" fill="url(#mmpGrad)" rx="2"/>
+</svg>
