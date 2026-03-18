@@ -139,3 +139,93 @@ General comments, review summaries, and line-level review comments.
 | file_path | varchar(1024) | For line-level reviews |
 | diff_hunk | text | Code context for reviews |
 | embedding | vector(1536) | |
+
+## Phase 1: Cross-Referencing Tables
+
+### spec_sections
+
+Atomic unit of spec traceability — one rule, definition, or equation. Produced by the PydanticAI extraction pipeline. More granular than `spec_documents` (which are optimized for search).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid PK | |
+| spec_chunk_id | uuid FK | → spec_documents (parent chunk) |
+| section_id | text | Stable ID like `shelley-ledger:rule-utxo-transition` |
+| title | text | Human-readable title |
+| section_type | text | rule, definition, equation, type, figure, algorithm |
+| era | text | byron, shelley, ..., conway |
+| subsystem | text | networking, ledger, consensus, etc. |
+| verbatim | text | Exact spec text |
+| extracted_rule | text | Context-enriched, self-contained description |
+| embedding | vector(1536) | Generated from extracted_rule |
+
+Unique constraint: `(spec_chunk_id, title)`
+
+### cross_references
+
+Links any two entities in the knowledge base. 10 relationship types borrowed from W3C PROV-O, Dublin Core, SPDX, OSLC RM. Inverses computed at query time, not stored.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid PK | |
+| source_type | text | spec_section, code_chunk, github_issue, github_pr, gap_analysis |
+| source_id | uuid | |
+| target_type | text | Same enum as source_type |
+| target_id | uuid | |
+| relationship | text | See vocabulary below |
+| confidence | float | 1.0 = manual, 0.5-0.7 = pipeline |
+| notes | text | Optional context |
+| created_by | text | manual, agent, pipeline |
+
+**Relationship vocabulary:**
+
+| Relationship | Inverse (query-time) | Semantics |
+|---|---|---|
+| `implements` | `implementedBy` | Code fulfills a spec rule |
+| `tests` | `testedBy` | Test verifies an artifact |
+| `discusses` | `discussedIn` | Issue/PR discusses an artifact |
+| `references` | `referencedBy` | A cites or points to B |
+| `contradicts` | `contradictedBy` | A conflicts with B |
+| `extends` | `extendedBy` | A adds capability on top of B |
+| `derivedFrom` | `derivationOf` | B was produced by transforming A |
+| `supersedes` | `supersededBy` | A replaces B |
+| `requires` | `requiredBy` | A needs B to function |
+| `trackedBy` | `tracks` | B governs resolution of A |
+
+### test_specifications
+
+Test knowledge base — describes what should be tested and how. Not a state tracker.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid PK | |
+| spec_section_id | uuid FK | → spec_sections |
+| subsystem | text | |
+| test_type | text | unit, property, replay, conformance, integration |
+| test_name | text | Descriptive name |
+| description | text | What the test verifies |
+| hypothesis_strategy | text | For property tests: generators, value ranges |
+| priority | text | critical, high, medium, low |
+| phase | text | phase-2, phase-3, etc. |
+
+Unique constraint: `(spec_section_id, test_name)`
+
+### gap_analysis
+
+Structured spec-vs-implementation divergences. Queryable version of gap analysis entries.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid PK | |
+| spec_section_id | uuid FK | → spec_sections |
+| subsystem | text | |
+| era | text | |
+| spec_says | text | What the spec defines |
+| haskell_does | text | What the Haskell node does |
+| delta | text | The specific difference |
+| implications | text | How this affects our implementation |
+| discovered_during | text | Which phase/task |
+| code_chunk_id | uuid FK | → code_chunks (optional) |
+| embedding | vector(1536) | |
+
+Unique constraint: `(spec_section_id, delta)`
