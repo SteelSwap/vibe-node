@@ -1,6 +1,6 @@
 # UTxO
 ## UTxO Transitions
-We have added the following helper functions, which are used in defining the UTxO transition system, see Figure [1](#fig:functions:insouts). These include:
+We have added the following helper functions, which are used in defining the UTxO transition system, see Figure 1. These include:
 
 - the function $\fun{getOut}$ builds a UTxO-type output out of a transaction output
 
@@ -27,7 +27,7 @@ $$\begin{align*}
 **Functions on Tx Outputs**
 **UTxO Helper Functions.**
 
-Figure [2](#fig:functions:utxo) defines additional calculations that are needed for the UTxO transition system with MA:
+Figure 2 defines additional calculations that are needed for the UTxO transition system with MA:
 
 - $\fun{getCoin}$ sums all the Ada in a given output and returns it as a $\Coin$ value
 
@@ -51,7 +51,7 @@ A valid transaction $tx$ satisfies the preservation of value condition by adding
 
 $$pid \mapsto tkns\in\fun{forge}~tx$$
 
-The forge field value is then added to the consumed side. This approach to balancing the *preservation of value* (POV) equation (Equation [\[eqn:pov\]](#eqn:pov)) extends to cases where the transaction might also be consuming some existing $pid$ tokens, or taking the out of circulation with negative quantities in the forge field.
+The forge field value is then added to the consumed side. This approach to balancing the *preservation of value* (POV) equation (Equation eqn:pov) extends to cases where the transaction might also be consuming some existing $pid$ tokens, or taking the out of circulation with negative quantities in the forge field.
 
 The forge field value represents the change in total existing tokens of each given asset as a result of processing the transaction. It is always added to the *consumed* side of the POV equation because of this side, the signs of the quantities in the forge field match the signs of the change. That is, when tokens are added into the UTxO, their quantities are positive, and when they are taken out of circulation via the forge field, the signs are negative.
 
@@ -86,7 +86,7 @@ Note also that the UTXO rule only checks that the transaction is forging the amo
 \end{align*}$$
 
 **UTxO Calculations**
-**The UTXO Transition Rule.** In Figure [3](#fig:rules:utxo-shelley), we give the UTXO transition rule, updated for MA support. There are the following changes to the preconditions of this rule as compared to the original Shelley UTXO rule:
+**The UTXO Transition Rule.** In Figure 3, we give the UTXO transition rule, updated for MA support. There are the following changes to the preconditions of this rule as compared to the original Shelley UTXO rule:
 
 - The transaction is not forging any Ada
 
@@ -167,7 +167,7 @@ $$\begin{equation}
 **UTxO inference rules**
 **Witnessing.**
 
-We have changed the definition of the function $\fun{scriptsNeeded}$, see Figure [4](#fig:functions-witnesses). There is now an additional category of scripts that are needed for transaction validation, the forging scripts.
+We have changed the definition of the function $\fun{scriptsNeeded}$, see Figure 4. There is now an additional category of scripts that are needed for transaction validation, the forging scripts.
 
 Note that there are no restrictions on the use of forging scripts. Their hashes may be used as credentials in UTxO entries, certificates, and withdrawals. Non-MPS type scripts can also be used for forging, e.g. MSig scripts.
 

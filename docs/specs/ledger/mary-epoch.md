@@ -1,5 +1,5 @@
 # Rewards and the Epoch Boundary
-In order to handle rewards and staking, we must change the stake distribution calculation function to add up only the Ada in the UTxO before performing any calculations. In Figure [1](#fig:functions:stake-distribution) below, we do so using the function $\fun{utxoAda}$, which returns the amount of Ada tokens in an address.
+In order to handle rewards and staking, we must change the stake distribution calculation function to add up only the Ada in the UTxO before performing any calculations. In Figure 1 below, we do so using the function $\fun{utxoAda}$, which returns the amount of Ada tokens in an address.
 
 
 *Helper function* $$\begin{align*}

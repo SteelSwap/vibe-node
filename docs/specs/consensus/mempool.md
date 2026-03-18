@@ -1,8 +1,8 @@
 # Mempool
 
-Whenever a block producing node is the leader of a slot ([\[consensus:class:leaderselection\]](#consensus:class:leaderselection)), it gets the chance to mint a block. For the Cardano blockchain to be useful, the minted block in the blockchain needs to contain *transactions*. The *mempool* is where we buffer transactions until we are able to mint a block containing those transactions.
+Whenever a block producing node is the leader of a slot (consensus:class:leaderselection), it gets the chance to mint a block. For the Cardano blockchain to be useful, the minted block in the blockchain needs to contain *transactions*. The *mempool* is where we buffer transactions until we are able to mint a block containing those transactions.
 
-Transactions created by the user using the wallet enter the Mempool via the local transaction submission protocol (see [\[servers:txsubmission\]](#servers:txsubmission)). As not every user will be running a block producing node or stakepool, these transactions should be broadcast over the network so that other, block producing, nodes can include these transactions in their next block, in order for the transactions to ends up in the blockchain as soon as possible. This is accomplished by the node-to-node transaction submission protocol, which exchanges the transactions between the mempool of the nodes in the network.
+Transactions created by the user using the wallet enter the Mempool via the local transaction submission protocol (see servers:txsubmission). As not every user will be running a block producing node or stakepool, these transactions should be broadcast over the network so that other, block producing, nodes can include these transactions in their next block, in order for the transactions to ends up in the blockchain as soon as possible. This is accomplished by the node-to-node transaction submission protocol, which exchanges the transactions between the mempool of the nodes in the network.
 
 Naturally, we only want to put transactions in a block that are valid w.r.t. the ledger state against which the block will be applied. Putting invalid transactions in a block will result in an invalid block, which will be rejected by other nodes. Consequently, the block along with its rewards is lost. Even for a node that is not a block producer, there is no point in flooding the network with invalid transactions. For these reasons, we validate the transactions in the mempool w.r.t. the current ledger state and remove transactions that are no longer valid.
 
@@ -19,11 +19,11 @@ We chose a simple approach: we maintain a list of transactions, ordered by the t
 
 We call this *linear consistency*: transactions are ordered linearly and each transaction is valid w.r.t. the transactions before it and the ledger state against which the mempool was validated.
 
-The mempool has a background thread that watches the current ledger state exposed by the Chain DB ([\[chaindb\]](#chaindb)). Whenever it changes, the mempool will revalidate its contents w.r.t. that ledger state. This ensures that we no longer keep broadcasting invalid transactions and that the next time we get to mint a block, we do not have to validate a bunch of invalid transactions, costing us more crucial time.
+The mempool has a background thread that watches the current ledger state exposed by the Chain DB (chaindb). Whenever it changes, the mempool will revalidate its contents w.r.t. that ledger state. This ensures that we no longer keep broadcasting invalid transactions and that the next time we get to mint a block, we do not have to validate a bunch of invalid transactions, costing us more crucial time.
 
 ## Caching
 
-The mempool caches the ledger state resulting from applying all the transactions in the mempool to the current ledger state. This makes it quick and easy to validate incoming transactions, they can simply be validated against the cached ledger state without having to recompute it for each transaction. As discussed in [\[ledgerdb:in-memory\]](#ledgerdb:in-memory), the memory cost of this is minimal. When the incoming transaction is valid w.r.t. the cached ledger state, we append the transaction to the mempool and we cache the resulting ledger state.
+The mempool caches the ledger state resulting from applying all the transactions in the mempool to the current ledger state. This makes it quick and easy to validate incoming transactions, they can simply be validated against the cached ledger state without having to recompute it for each transaction. As discussed in ledgerdb:in-memory, the memory cost of this is minimal. When the incoming transaction is valid w.r.t. the cached ledger state, we append the transaction to the mempool and we cache the resulting ledger state.
 
 talk about the slot for which we produce
 

@@ -1,7 +1,7 @@
 # Transactions
 In this chapter, we outline the changes necessary to transaction and UTxO structure to make it possible to use Plutus scripts to validate certain actions. Note that we use EUTxO and UTxO interchangably here, implicitly referring to the extended version.
 
-In Figure [1](#fig:defs:utxo-shelley-1), we give the transaction types modified to support Plutus.
+In Figure 1, we give the transaction types modified to support Plutus.
 
 These types are consistent with the Shelley ledger as much as possible, except for the following changes and additions:
 
@@ -33,7 +33,7 @@ These types are consistent with the Shelley ledger as much as possible, except f
 
 - $\IsFee$ is a tag that indicates when an input has been marked to be used for paying transaction fees ($\Yes$ for when it is for fees, $\Nope$ when it is not). The purpose of this tag is to give users a way to prevent the entire value of the UTxO entries spent by the transaction from going into the fee pot in case of script validation failure. Instead, only the total amount referenced by for-fees inputs goes to the fee pot.
 
-  Note that in the extended UTxO model, it is possible for a transaction to either be processed in full, or do nothing but pay fees for script validation (in the case of script validation failure, see Section [\[sec:utxo\]](#sec:utxo) for details). In designing a way to prevent all Ada in the transaction outputs from going into the fee pot (in case of script validation failure), we have considered two possibilities:
+  Note that in the extended UTxO model, it is possible for a transaction to either be processed in full, or do nothing but pay fees for script validation (in the case of script validation failure, see Section sec:utxo for details). In designing a way to prevent all Ada in the transaction outputs from going into the fee pot (in case of script validation failure), we have considered two possibilities:
 
   - programmatically select the inputs which will be used to pay fees
 
@@ -45,7 +45,7 @@ These types are consistent with the Shelley ledger as much as possible, except f
 
 - $\TxIn$ is a transaction input. It includes the reference to the UTxO entry it is spending (the UTxO output reference part) and the $\IsFee$ tag, which indicates if this input should be used to pay script execution fees.
 
-  Only VK-spending inputs and native-script (MSig) spending inputs can be used to pay fees. In Shelley, spending VK or MSig outputs is validated in a single witnessing rule application, so either all required signatures are valid, or a transaction is completely invalid. We kept this model, but chose a different approach to charging users for running Plutus scripts, see Section [\[sec:two-phase\]](#sec:two-phase).
+  Only VK-spending inputs and native-script (MSig) spending inputs can be used to pay fees. In Shelley, spending VK or MSig outputs is validated in a single witnessing rule application, so either all required signatures are valid, or a transaction is completely invalid. We kept this model, but chose a different approach to charging users for running Plutus scripts, see Section sec:two-phase.
 
   It is expected that Plutus scripts will be more expensive to run, on average, than only checking signatures. We want to charge users for running Plutus scripts, even if they do not validate. The outputs spent to pay for running them (the ones marked as for-fees) must be validated fully before validating Plutus scripts.
 
@@ -161,7 +161,7 @@ $\mathsf{inputTag},~\mathsf{forgeTag},~\mathsf{certTag},~\mathsf{wdrlTag}$
 
 **Data Representation.** The type $\Data$ is a Plutus type, however, there is a similar type in the ledger. We do not assume these are the same $\Data$, but we do assume there is structural equality between them.
 
-**Witnessing.** In Figure [2](#fig:defs:utxo-shelley-2), the type $\TxWitness$ contains everything in a transaction that is needed for witnessing (script and VK), including
+**Witnessing.** In Figure 2, the type $\TxWitness$ contains everything in a transaction that is needed for witnessing (script and VK), including
 
 - VK signatures, as before
 
@@ -197,11 +197,11 @@ There is a difference between the way scripts and datum objects are included in 
 
 - the body has a hash of a subset of the current protocol parameters (only the ones relevant to Plutus script validation of each Plutus version of the transaction's validators), $\PPHash$, with accessor $\fun{ppHash}$
 
-**Additional Role of Signatures on TxBody.** Note that the transaction body must contain every bit of data (or at least the hash of the data) that can influence the on-chain transfer of value resulting from this transaction being processed (see Figure [2](#fig:defs:utxo-shelley-2)). In the classic UTxO case, this means that, for example, every input being spent and every output being created are in the body.
+**Additional Role of Signatures on TxBody.** Note that the transaction body must contain every bit of data (or at least the hash of the data) that can influence the on-chain transfer of value resulting from this transaction being processed (see Figure 2). In the classic UTxO case, this means that, for example, every input being spent and every output being created are in the body.
 
 There is no need to ever sign anything related to validator scripts or datum objects, because a hash of every validator script that will be run during the validation of the transaction is always part of the body, and the hash of every datum is recorded in the UTxO.
 
-In the EUTxO case, this means additionally including everything in the body that can change the validation outcome of a transaction between \"fully validated\", and \"only paying fees\" (two distinct cases of value transfer, which we will explain in Section [\[sec:utxo\]](#sec:utxo)).
+In the EUTxO case, this means additionally including everything in the body that can change the validation outcome of a transaction between \"fully validated\", and \"only paying fees\" (two distinct cases of value transfer, which we will explain in Section sec:utxo).
 
 The signatures on transactions in both the extended and basic UTxO models are outside the body of the transaction. In both the basic and extended UTxO model, the body is signed by every key whose outputs are being spent. In the extended case, this additionally offers protection from tampering with Plutus interpreter arguments, which may cause script validation failure (thus putting the transaction in the \"only paying fees\" case). In particular, the hash of the indexed redeemer structure, which has type $\RdmrPtr \mapsto \Data$, is part of the body.
 
@@ -274,7 +274,7 @@ Shelley transactions have less data than the Goguen ones, so we can interpret a 
 **Definitions used in the UTxO transition system, cont.**
 **Protocol Parameter Hash Comparison Considerations.** Recall that to ensure deterministic script validation outcome, we must include a hash of certain on-chain data (currently, only some protocol parameters) inside the body of the transaction. This hash is accessed by $\fun{ppHash}$. We must also compute the hash of a subset of the actual current protocol parameter values, and compare it to the hash inside the transaction.
 
-To select the relevant protocol parameters to hash, we have defined two helper functions (see Figure [3](#fig:defs:functions-chain-helper)). The first is an accessor function that returns the language tag of a given script, $\fun{language}$. The second is $\fun{cmlangs}$, which, given a set of scripts, returns the set of language tags of scripts whose languages have a corresponding cost model, e.g. MSig (recall the discussion in [\[sec:plutus-native\]](#sec:plutus-native)). We will use these in the rules we present later to compare the hashes.
+To select the relevant protocol parameters to hash, we have defined two helper functions (see Figure 3). The first is an accessor function that returns the language tag of a given script, $\fun{language}$. The second is $\fun{cmlangs}$, which, given a set of scripts, returns the set of language tags of scripts whose languages have a corresponding cost model, e.g. MSig (recall the discussion in sec:plutus-native). We will use these in the rules we present later to compare the hashes.
 
 Note that at this time, only data from the protocol parameters must be hashed for the comparison we defined. For future Plutus versions, parts of the ledger state may need to be included in this hash as well, if they are passed as arguments to the new interpreter versions. Note also that data from the UTxO is passed to the interpreter, but does not require this type of hash comparison. This is because if the entries the transaction being processed is trying to spend have already been spent, there is a phase 1 validation check that will fail.
 
@@ -296,7 +296,7 @@ Additional fees may be required because of the changes in prices or the cost mod
 **Languages and Plutus Versions**
 **Coin and Multicurrency Tokens** In the Goguen era, multicurrency is intorduced, but Ada is still expected to be the most common type of token on the ledger. The $\Coin$ type is used to represent an amount of Ada. It is the only type of token which can be used for all non-UTxO ledger accounting, including deposits, fees, rewards, treasury, and the proof of stake protocol. Under no circumstances are these administrative fields and calculations ever expected to operate on any types of tokens besides Ada. These fiels will continue to have the type $\Coin$.
 
-The exact representation of tokens in the UTxO and inside transactions is an implementation detail, which we omit here. Note that it necessarily is equivalent to $\Value$, optimized for Ada-only cases, has a unique representation for the Ada token class, and does not allow tokens of the Ada currency to have a $\AssetID$ value of anything other than $\mathsf{adaToken}$. In Figure [4](#fig:defs:functions-helper) are the following helper functions,
+The exact representation of tokens in the UTxO and inside transactions is an implementation detail, which we omit here. Note that it necessarily is equivalent to $\Value$, optimized for Ada-only cases, has a unique representation for the Ada token class, and does not allow tokens of the Ada currency to have a $\AssetID$ value of anything other than $\mathsf{adaToken}$. In Figure 4 are the following helper functions,
 
 - $\mathsf{adaID}$ is a fixed bytestring value with no known associated script (i.e. no known script hashes to this bytestring). It is the currency ID of Ada. Note that as part of transaction validation, we explicitly check that there is no value with currency ID $\mathsf{adaID}$ in its forge field.
 
@@ -312,7 +312,7 @@ The exact representation of tokens in the UTxO and inside transactions is an imp
 
 - $\fun{coinToValue}$ takes a coin value and generates a $\Value$ type representation of it
 
-An amount of Ada can also be represented as a multicurrency value using the notation in Figure [4](#fig:defs:functions-helper), as $\fun{coinToValue}~c$ where $c \in \Coin$. We must use this representation when adding or subtracting Ada and other tokens as $\Value$, e.g. in the preservation of value calculations. However, we will abuse notation and write shorthand that $v ~\in~ \Coin$ is $\type{True}$ when $v~ =~ \fun{coinToValue}~ c$ for some $c~\in~\Coin$.
+An amount of Ada can also be represented as a multicurrency value using the notation in Figure 4, as $\fun{coinToValue}~c$ where $c \in \Coin$. We must use this representation when adding or subtracting Ada and other tokens as $\Value$, e.g. in the preservation of value calculations. However, we will abuse notation and write shorthand that $v ~\in~ \Coin$ is $\type{True}$ when $v~ =~ \fun{coinToValue}~ c$ for some $c~\in~\Coin$.
 
 
 *Abstract Functions and Values* $$\begin{align*}
@@ -331,7 +331,7 @@ An amount of Ada can also be represented as a multicurrency value using the nota
 \end{align*}$$
 
 **Multicurrency**
-**Plutus Script Validation** In Figure [5](#fig:defs:functions-valid), abstract functions for script validation are presented.
+**Plutus Script Validation** In Figure 5, abstract functions for script validation are presented.
 
 - $\fun{valContext}$ constructs the validation context value passed to the script interpreter (all the necessary transaction and chain state data)
 

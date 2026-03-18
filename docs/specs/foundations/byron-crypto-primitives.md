@@ -1,5 +1,5 @@
 # Cryptographic primitives
-Figure [1](#fig:crypto-defs) introduces the cryptographic abstractions used in this document. Note that we define a family of serialization functions $\serialised{\wcard}_\type{A}$, for all types $\type{A}$ for which such serialization function can be defined. When the context is clear, we omit the type suffix, and use simply $\serialised{\wcard}$.
+Figure 1 introduces the cryptographic abstractions used in this document. Note that we define a family of serialization functions $\serialised{\wcard}_\type{A}$, for all types $\type{A}$ for which such serialization function can be defined. When the context is clear, we omit the type suffix, and use simply $\serialised{\wcard}$.
 
 
 *Abstract types* $$\begin{equation*}
@@ -42,7 +42,7 @@ For all types $\type{A}$ and $\type{B}$, given a function $\fun{f} \in \type{A} 
     \serialised{\fun{f}~a}_\type{B} = \fun{f}_{\serialised{ }}~\serialised{a}_\type{A}
 \end{equation}$$
 
-The equality defined in [\[eq:distributivity-serialization\]](#eq:distributivity-serialization) means that the following diagram commutes:
+The equality defined in eq:distributivity-serialization means that the following diagram commutes:
 
 ```mermaid
 graph LR
@@ -52,7 +52,7 @@ graph LR
     Data1 -->|"f_serialize"| Data2
 ```
 
-Throughout this specification, whenever we use $\serialised{\fun{f}~a}_\type{B}$, for some type $\type{B}$ and function $\fun{f} \in \type{A} \to \type{B}$, we assume that $\serialised{ }_\type{A}$ distributes over $\fun{f}$ (see for example Rule [\[eq:utxo-witness-inductive\]](#eq:utxo-witness-inductive)). This property is what allow us to extract a component of the serialized data (if it is available) without deserializing it in the cases in which the deserialization function ($\serialised{\wcard}^{-1}_\type{A}$) doesn't behave as an inverse of serialization:
+Throughout this specification, whenever we use $\serialised{\fun{f}~a}_\type{B}$, for some type $\type{B}$ and function $\fun{f} \in \type{A} \to \type{B}$, we assume that $\serialised{ }_\type{A}$ distributes over $\fun{f}$ (see for example Rule eq:utxo-witness-inductive). This property is what allow us to extract a component of the serialized data (if it is available) without deserializing it in the cases in which the deserialization function ($\serialised{\wcard}^{-1}_\type{A}$) doesn't behave as an inverse of serialization:
 
 $$\begin{equation*}
   \serialised{\wcard}^{-1}_\type{A} \cdot \serialised{\wcard}_\type{A} \neq \fun{id}_\type{A}

@@ -4,9 +4,9 @@
 
 There are two protocols which support different sets of mini-protocols:
 
-- [node-to-node protocol](#section:node-to-node-protocol) for communication between different nodes usually run by different entities across the globe. It consists of [chain-sync](#chain-sync-protocol), [block-fetch](#block-fetch-protocol), [tx-submission](#tx-submission-protocol) and [keep-alive](#keep-alive-protocol) mini-protocols.
+- node-to-node protocol for communication between different nodes usually run by different entities across the globe. It consists of chain-sync, block-fetch, tx-submission and keep-alive mini-protocols.
 
-- [node-to-client protocol](#section:node-to-client-protocol) for intra-process communication, which allows to build applications that need access to the blockchain, ledger, e.g. a wallet, an explorer, etc. It consists of [chain-sync](#chain-sync-protocol), [local-tx-submission](#local-tx-submission-protocol) and [local-state-query](#local-state-query-protocol) mini-protocols.
+- node-to-client protocol for intra-process communication, which allows to build applications that need access to the blockchain, ledger, e.g. a wallet, an explorer, etc. It consists of chain-sync, local-tx-submission and local-state-query mini-protocols.
 
 Chain-sync mini-protocol (the node-to-node version) is used to replicate a remote chain of headers; block-fetch mini-protocol to download blocks and tx-submission to disseminate transactions across the network.
 
@@ -16,9 +16,9 @@ Chain-sync mini-protocol (the node-to-node version) is used to replicate a remot
 **Cardano Node**
 :::::
 
-Figure [1.1](#node-diagram-concurrency) illustrates the design of a node. Circles represents threads that run one of the mini-protocols. Each mini-protocols communicate with a remote node over the network. Threads communicate by means of shared mutable variables, which are represented by boxes in Figure [1.1](#node-diagram-concurrency). We heavily use [Software transactional memory](https://en.wikipedia.org/wiki/Software_transactional_memory) (STM), which is a mechanism for safe and lock-free concurrent access to mutable state (see [@stm:harris2006]).
+Figure 1.1 illustrates the design of a node. Circles represents threads that run one of the mini-protocols. Each mini-protocols communicate with a remote node over the network. Threads communicate by means of shared mutable variables, which are represented by boxes in Figure 1.1. We heavily use [Software transactional memory](https://en.wikipedia.org/wiki/Software_transactional_memory) (STM), which is a mechanism for safe and lock-free concurrent access to mutable state (see [@stm:harris2006]).
 
-The ouroboros-network supports multiplexing mini-protocols, which allows us to run the node-to-node or the node-to-client protocol on a single bearer, e.g. a TCP connection; other bearers are also supported. This means that chain-sync, block-fetch and tx-submission mini-protocols will share a single TCP connection. The multiplexer and its framing are described in Chapter [\[chapter:multiplexer\]](#chapter:multiplexer).
+The ouroboros-network supports multiplexing mini-protocols, which allows us to run the node-to-node or the node-to-client protocol on a single bearer, e.g. a TCP connection; other bearers are also supported. This means that chain-sync, block-fetch and tx-submission mini-protocols will share a single TCP connection. The multiplexer and its framing are described in Chapter chapter:multiplexer.
 
 ## Congestion Control
 

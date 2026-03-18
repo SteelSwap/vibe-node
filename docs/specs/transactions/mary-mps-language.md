@@ -8,7 +8,7 @@ The language for MP scripts given here is only a suggestion and its implementati
 
 - Others will be here once decided on
 
-The Figures [1](#fig:defs:tx-mc-eval), [3](#fig:whitelist-example),  [\[fig:defs:tx-mc-eval-2\]](#fig:defs:tx-mc-eval-2), and [2](#fig:defs:tx-mc-eval-3) give possible constructors of the MPS language.
+The Figures 1, 3,  fig:defs:tx-mc-eval-2, and 2 give possible constructors of the MPS language.
 
 
 $$\begin{align*}

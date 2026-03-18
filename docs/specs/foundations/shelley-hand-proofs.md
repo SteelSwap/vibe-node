@@ -1,7 +1,7 @@
 ## Preservation of Value
-As visualized in Figure [\[fig:fund-preservation\]](#fig:fund-preservation), the total amount of lovelace in any given chain state $\var{s}\in\ChainState$ is completely contained within the values of the six variables:
+As visualized in Figure fig:fund-preservation, the total amount of lovelace in any given chain state $\var{s}\in\ChainState$ is completely contained within the values of the six variables:
 
-  **Variable**   **Name in Figure [\[fig:fund-preservation\]](#fig:fund-preservation)**   **Nesting Inside Chain State**   **Kind**
+  **Variable**   **Name in Figure fig:fund-preservation**   **Nesting Inside Chain State**   **Kind**
   -------------- -------------------------------------------------------------------------------------------------------------------------------- -------------------------------- --------------------------
   utxo           circulation                                                                                                                      s.nes.es.ls.utxoSt               Map over Lovelace Values
   deposits       deposits                                                                                                                         s.nes.es.ls.utxoSt               Lovelace Value ($\Coin$)
@@ -43,7 +43,7 @@ The key property that we want to prove is that no semantic transition changes th
     \Val(s) = \Val(s')
 \end{equation*}$$
 
-We will prove the soundness of Theorem [\[thm:chain-pres-of-value\]](#thm:chain-pres-of-value) via a few lemmas.
+We will prove the soundness of Theorem thm:chain-pres-of-value via a few lemmas.
 
 ::: lemma
 []{#lemma:value-sum-pres-1 label="lemma:value-sum-pres-1"} For any mapping $m:A\mapsto\Coin$ and set $s\in\powerset{A}$, $$\begin{equation*}
@@ -78,12 +78,12 @@ We will prove the soundness of Theorem [\[thm:chain-pres-of-value\]](#thm:chain
       f & \txfee{t} \\
       d & \totalDeposits{pp}{stpools}{(\txcerts{t})} \\
     \end{array}
-\end{equation*}$$ then equation [\[cons-is-prod\]](#cons-is-prod) can be rewritten as: $$\begin{equation*}
+\end{equation*}$$ then equation cons-is-prod can be rewritten as: $$\begin{equation*}
     \Val(\txins{t} \restrictdom{\var{utxo}}) + w + k = \Val(\outs{t}) + f + d
-\end{equation*}$$ where $\outs{}$ is defined in Figure [\[fig:functions:utxo\]](#fig:functions:utxo) and returns a value of type $\UTxO$. Therefore, moving $k$ to the right and adding $\txins{t} \subtractdom{\var{utxo}}$ to each side, $$\begin{equation*}
+\end{equation*}$$ where $\outs{}$ is defined in Figure fig:functions:utxo and returns a value of type $\UTxO$. Therefore, moving $k$ to the right and adding $\txins{t} \subtractdom{\var{utxo}}$ to each side, $$\begin{equation*}
     \Val(\txins{t} \restrictdom{\var{utxo}}) + \Val(\txins{t} \subtractdom{\var{utxo}}) + w
     = \Val(\outs{t}) + f + d - k + \Val(\txins{t} \subtractdom{\var{utxo}})
-\end{equation*}$$ (Though not needed for the proof at hand, note that $d-k$ is non-negative since the deposits will always be large enough to cover the current obligation. See Theorem [\[thm:non-neg-deposits\]](#thm:non-neg-deposits).) It then follows that: $$\begin{equation*}
+\end{equation*}$$ (Though not needed for the proof at hand, note that $d-k$ is non-negative since the deposits will always be large enough to cover the current obligation. See Theorem thm:non-neg-deposits.) It then follows that: $$\begin{equation*}
     \begin{array}{rlr}
       \Val(\var{utxo}) + w
     & \Val(\outs{t}) + f + d - k + \Val(\txins{t} \subtractdom{\var{utxo}})
@@ -92,7 +92,7 @@ We will prove the soundness of Theorem [\[thm:chain-pres-of-value\]](#thm:chain
     & \Val((\txins{t} \subtractdom{\var{utxo}})\cup\outs{t}) + (d - k) + f
     & \text{(by Lemma~\ref{lemma:value-sum-pres-2})}
     \end{array}
-\end{equation*}$$ Note that in order to apply Lemma [\[lemma:value-sum-pres-2\]](#lemma:value-sum-pres-2) above, it must be true that $(\txins{t} \subtractdom{\var{utxo}})$ and $(\outs{t})$ have disjoint domains, which follows from the uniqueness of the transaction IDs.
+\end{equation*}$$ Note that in order to apply Lemma lemma:value-sum-pres-2 above, it must be true that $(\txins{t} \subtractdom{\var{utxo}})$ and $(\outs{t})$ have disjoint domains, which follows from the uniqueness of the transaction IDs.
 
 Therefore, by adding the deposits and fees from $s$ to the equality above, it follows that $\Val(s) + w = \Val(s')$. ◻
 
@@ -129,7 +129,7 @@ Therefore, by adding the deposits and fees from $s$ to the equality above, it fo
     \end{array}
 \end{equation*}$$ Therefore $\Val(s) = \Val(s')$.
 
-*In the inductive case*, we look at the rule $\mathsf{Seq{-}delg{-}ind}$. In this case, the lemma then follows directly from Lemma [\[lemma:deleg-pres-of-value\]](#lemma:deleg-pres-of-value). ◻
+*In the inductive case*, we look at the rule $\mathsf{Seq{-}delg{-}ind}$. In this case, the lemma then follows directly from Lemma lemma:deleg-pres-of-value. ◻
 
 ::: lemma
 []{#lemma:poolreap-pres-of-value label="lemma:poolreap-pres-of-value"} For all environments $e$, epoch $\epsilon$, and states $s$, $s'$, if $$\begin{equation*}
@@ -139,7 +139,7 @@ Therefore, by adding the deposits and fees from $s$ to the equality above, it fo
 \end{equation*}$$
 
 ::: proof
-*Proof.* The $\mathsf{POOLREAP}$ value is contained in $\var{deposits}$, $\var{treasury}$, and $\var{rewards}$. Notice that $\var{unclaimed}$ is added to $\var{treasury}$ and subtracted from the $\var{deposits}$. Moreover, $\var{refunded}$ is subtracted from $\var{deposits}$. (Note that $\var{deposits}-(\var{unclaimed}+\var{refunded})$ is non-negative by Theorem [\[thm:non-neg-deposits\]](#thm:non-neg-deposits).) It therefore suffices to show that $$\begin{equation*}
+*Proof.* The $\mathsf{POOLREAP}$ value is contained in $\var{deposits}$, $\var{treasury}$, and $\var{rewards}$. Notice that $\var{unclaimed}$ is added to $\var{treasury}$ and subtracted from the $\var{deposits}$. Moreover, $\var{refunded}$ is subtracted from $\var{deposits}$. (Note that $\var{deposits}-(\var{unclaimed}+\var{refunded})$ is non-negative by Theorem thm:non-neg-deposits.) It therefore suffices to show that $$\begin{equation*}
     \begin{array}{rl}
     \Val(\var{rewards}\unionoverridePlus\var{refunds})
     & \Val(\var{rewards}) + \Val(\var{refunds})
@@ -154,7 +154,7 @@ Therefore, by adding the deposits and fees from $s$ to the equality above, it fo
 \end{equation*}$$
 
 ::: proof
-*Proof.* In the definition of $\fun{createRUpd}$ in Figure [\[fig:functions:reward-update-creation\]](#fig:functions:reward-update-creation), We see that: $$\begin{equation*}
+*Proof.* In the definition of $\fun{createRUpd}$ in Figure fig:functions:reward-update-creation, We see that: $$\begin{equation*}
     \begin{array}{rl}
       \var{rewardPot} & \var{feeSS} + \Delta r \\
       \var{R} & \var{rewardPot} - \Delta t_1 \\
@@ -169,14 +169,14 @@ Therefore, by adding the deposits and fees from $s$ to the equality above, it fo
     \end{array}
 \end{equation*}$$ It then suffices to notice that $\fun{createRUpd}$ returns $(\Delta t,-~\Delta r,~\var{rs},~-\var{feeSS})$. ◻
 
-Note that Lemma [\[lemma:ru-pres-of-value\]](#lemma:ru-pres-of-value) is not strictly need for the proof of Theorem [\[thm:chain-pres-of-value\]](#thm:chain-pres-of-value), since the $\mathsf{NEWEPOCH}$ transition requires that $\Delta t + \Delta r + \Val(rs) + \Delta f = 0$ holds. It does, however, give us confidence that the $\mathsf{CHAIN}$ transition can proceed.
+Note that Lemma lemma:ru-pres-of-value is not strictly need for the proof of Theorem thm:chain-pres-of-value, since the $\mathsf{NEWEPOCH}$ transition requires that $\Delta t + \Delta r + \Val(rs) + \Delta f = 0$ holds. It does, however, give us confidence that the $\mathsf{CHAIN}$ transition can proceed.
 
-We are now ready to prove Theorem [\[thm:chain-pres-of-value\]](#thm:chain-pres-of-value).
+We are now ready to prove Theorem thm:chain-pres-of-value.
 
 ::: proof
 *Proof.* For a given transition $\mathsf{TR}$, let be the statement:
 
-Our goal is to prove . Lemmas [\[lemma:utxo-pres-of-value\]](#lemma:utxo-pres-of-value) and [\[lemma:delegs-pres-of-value\]](#lemma:delegs-pres-of-value) imply , since $\mathsf{UTXOW}$ transforms state exactly as $\mathsf{UTXO}$ does. then follows by straightforward induction on the length of $\Gamma$: the base case is trivial; and the inductive case follows directly from . holds trivially, since it contains no value. Similarly, holds since $\var{diff}$ is added to $\var{reserves}$ and subtracted from $\var{deposits}$. Therefore holds by Lemma [\[lemma:poolreap-pres-of-value\]](#lemma:poolreap-pres-of-value). holds since $\Val{i_{rwd}'}=\var{tot}$ in Figure [\[fig:rules:mir\]](#fig:rules:mir). Morover, holds in the presence of $\fun{applyRUpd}$ since the transition requires $\Delta t + \Delta r + \Val(rs) + \Delta f = 0$. easily follows from this. ◻
+Our goal is to prove . Lemmas lemma:utxo-pres-of-value and lemma:delegs-pres-of-value imply , since $\mathsf{UTXOW}$ transforms state exactly as $\mathsf{UTXO}$ does. then follows by straightforward induction on the length of $\Gamma$: the base case is trivial; and the inductive case follows directly from . holds trivially, since it contains no value. Similarly, holds since $\var{diff}$ is added to $\var{reserves}$ and subtracted from $\var{deposits}$. Therefore holds by Lemma lemma:poolreap-pres-of-value. holds since $\Val{i_{rwd}'}=\var{tot}$ in Figure fig:rules:mir. Morover, holds in the presence of $\fun{applyRUpd}$ since the transition requires $\Delta t + \Delta r + \Val(rs) + \Delta f = 0$. easily follows from this. ◻
 
 ## Non-negative Deposit Pot
 The *deposit pot* (the variable $\var{deposits}$ in the UTxO State) represents the amount of *lovelace* that is set aside by the system as a whole for refunding deposits. Deposits are added to this pot, which then decays exponentially over time, and is also depleted by any refunded deposits. At an epoch boundary, the decayed parts of any deposits (including, possibly, deposits for any transactions that will complete in future epochs) will be distributed as additional *rewards*, as described in [@delegation_design]. Since $\var{deposits}$ is only used to record the value of future refunds or rewards whose costs have already been incurred, both it and any reward value will always be non-negative. Note that there are two types of deposits which are recorded in the same pot: those for stake keys; and those for stake pools. Stake keys are deregistered in the slot in which the deregistration certificates is processed. Stake pools, however, are staged for retirement on epoch boundaries. The following theorem ensures that the deposit pot is properly maintained and will always be large enough to meet all of its obligations.
@@ -208,7 +208,7 @@ If we assume that the *protocol parameters*, $pp$, are fixed[^1], then we can pr
       R_c~s_0~s_1 & \refund{d_{val}}{d_{min}}{\lambda_d}{s_1-s_0} \\
       R_p~s_0~s_1 & \refund{p_{val}}{p_{min}}{\lambda_p}{s_1-s_0} \\
     \end{array}
-\end{equation*}$$ where $d_{val}$, $d_{min}$, $\lambda_d$, $p_{val}$, $p_{min}$, $\lambda_p$ are the protocol parameter values from $pp$, and $\fun{refund}$ is defined in Figure [\[fig:functions:deposits-refunds\]](#fig:functions:deposits-refunds). We let ("Deposits (precisely) Big Enough\"), be the following property: $$\begin{equation}
+\end{equation*}$$ where $d_{val}$, $d_{min}$, $\lambda_d$, $p_{val}$, $p_{min}$, $\lambda_p$ are the protocol parameter values from $pp$, and $\fun{refund}$ is defined in Figure fig:functions:deposits-refunds. We let ("Deposits (precisely) Big Enough\"), be the following property: $$\begin{equation}
 \tag{DBE}\label{DBE}
     \var{deposits}
     = \left(\sum_{\wcard\mapsto t\in C_{old}}R_c~t~\ell(s)\right)
@@ -225,27 +225,27 @@ If we assume that the *protocol parameters*, $pp$, are fixed[^1], then we can pr
 Notice that for a chain state $c$ and slot $s$, if the range of $\var{stkCreds}$ and $\var{stpools}$ contains only slots from the previous epoch, then is equivalent to $$\begin{equation}
 \tag{DEO}\label{DEO}
     \var{deposits} = \obligation{pp}{stkCreds}{stpools}{\ell(s)}
-\end{equation}$$ where $\fun{obligation}$ is defined in Figure [\[fig:funcs:epoch-helper-rewards\]](#fig:funcs:epoch-helper-rewards). It is generally true that holds after each subtransition of $s_i\vdash c_i\trans{\hyperref[fig:rules:chain]{chain}}{b_i}c_{i+1}$. However, this invariant can fail to hold after the $\hyperref[fig:delegation-transitions]{\mathsf{DELEG}}$ transition, since this transition can add and remove stake credentials, and can also add stake pools, but the deposit pot is not adjusted accordingly until the next subtransiton of $\hyperref[fig:rules:ledger]{\mathsf{LEDGER}}$, namely $\hyperref[fig:rules:utxo-shelley]{\mathsf{UTXO}}$. The invariant can also fail to hold if the slot increases while the chain state remains the same. That is, if holds, then can fail to hold if $\epoch{s_i} < \epoch{s_{i+1}}$, since the value of the deposit in the left hand side of equation [\[DBE\]](#DBE) remains the same, but the refunded values become smaller[^2]. Therefore, in this situation we can consider the slightly weaker constraint: $$\begin{equation}
+\end{equation}$$ where $\fun{obligation}$ is defined in Figure fig:funcs:epoch-helper-rewards. It is generally true that holds after each subtransition of $s_i\vdash c_i\trans{\hyperref[fig:rules:chain]{chain}}{b_i}c_{i+1}$. However, this invariant can fail to hold after the $\hyperref[fig:delegation-transitions]{\mathsf{DELEG}}$ transition, since this transition can add and remove stake credentials, and can also add stake pools, but the deposit pot is not adjusted accordingly until the next subtransiton of $\hyperref[fig:rules:ledger]{\mathsf{LEDGER}}$, namely $\hyperref[fig:rules:utxo-shelley]{\mathsf{UTXO}}$. The invariant can also fail to hold if the slot increases while the chain state remains the same. That is, if holds, then can fail to hold if $\epoch{s_i} < \epoch{s_{i+1}}$, since the value of the deposit in the left hand side of equation DBE remains the same, but the refunded values become smaller[^2]. Therefore, in this situation we can consider the slightly weaker constraint: $$\begin{equation}
 \tag{DGO}\label{DGTO}
     \var{deposits} \geq \obligation{pp}{stkCreds}{stpools}{\ell(s)}
 \end{equation}$$ The difference between the left and right hand sides of the inequality corresponds to the lovelace value in $c_{i+1}$ that decays between $s_i$ and $s_{i+1}$.
 
-There are four sub-transitions where $\var{deposits}$ is changed: $\mathsf{SNAP}$ (Figure [\[fig:rules:snapshot\]](#fig:rules:snapshot)), $\mathsf{POOLREAP}$ (Figure [\[fig:rules:pool-reap\]](#fig:rules:pool-reap)), $\mathsf{NEWPP}$ (Figure [\[fig:rules:new-proto-param\]](#fig:rules:new-proto-param)), $\mathsf{UTXO}$ (Figure [\[fig:rules:utxo-shelley\]](#fig:rules:utxo-shelley)). This ordering is also the order in which $\var{deposits}$ is changed. Of these sub-transitions, only $\mathsf{UTXO}$ actually changes the value of $\var{deposits}$ when $s_i$ is in the same epoch as $s_i$. (We say that $s_i$ *crosses the epoch boundary* if the precondition of Rule [\[eq:new-epoch\]](#eq:new-epoch) in Figure [\[fig:rules:new-epoch\]](#fig:rules:new-epoch) is met, namely if $\epoch{s_i} \ge e_\ell+1$.) The proof then proceeds by induction on $n$, showing the following:
+There are four sub-transitions where $\var{deposits}$ is changed: $\mathsf{SNAP}$ (Figure fig:rules:snapshot), $\mathsf{POOLREAP}$ (Figure fig:rules:pool-reap), $\mathsf{NEWPP}$ (Figure fig:rules:new-proto-param), $\mathsf{UTXO}$ (Figure fig:rules:utxo-shelley). This ordering is also the order in which $\var{deposits}$ is changed. Of these sub-transitions, only $\mathsf{UTXO}$ actually changes the value of $\var{deposits}$ when $s_i$ is in the same epoch as $s_i$. (We say that $s_i$ *crosses the epoch boundary* if the precondition of Rule eq:new-epoch in Figure fig:rules:new-epoch is met, namely if $\epoch{s_i} \ge e_\ell+1$.) The proof then proceeds by induction on $n$, showing the following:
 
 - Let $c$ be the chain state after the $\mathsf{SNAP}$ transition in $s_i\vdash c_i\trans{\hyperref[fig:rules:chain]{chain}}{b_i}c_{i+1}$. If , then holds.
 
-- $\mathsf{POOLREAP}$ preserves [\[DBE\]](#DBE).
+- $\mathsf{POOLREAP}$ preserves DBE.
 
-- $\mathsf{NEWPP}$ preserves [\[DBE\]](#DBE).
+- $\mathsf{NEWPP}$ preserves DBE.
 
-- The property for $\mathsf{UTXO}$ requires a bit of explanation. Let $\var{nes}\in\NewEpochState$ be the new epoch state in $c_i$. Note that the property [\[DBE\]](#DBE) makes sense for values of $\NewEpochState$ since it contains all the relevant variables. Similarly, [\[DBE\]](#DBE) also makes sense for values of $\UTxOState\times\PParams$. Let $${\begin{array}{c}
+- The property for $\mathsf{UTXO}$ requires a bit of explanation. Let $\var{nes}\in\NewEpochState$ be the new epoch state in $c_i$. Note that the property DBE makes sense for values of $\NewEpochState$ since it contains all the relevant variables. Similarly, DBE also makes sense for values of $\UTxOState\times\PParams$. Let $${\begin{array}{c}
              \var{gkeys} \\
            \end{array}}
           \vdash\var{nes}\trans{\hyperref[fig:rules:tick]{tick}}{\var{bh}}\var{nes'}$$ be the first sub-transition of $s_i\vdash c_i\trans{\hyperref[fig:rules:chain]{chain}}{b_i}c_{i+1}$. If holds, then holds for every transaction $tx$ in $b_i$, where: $$\var{env}\vdash \var{us} \trans{\hyperref[fig:rules:utxow-shelley]{utxo}}{tx} \var{us'},$$ is a sub-transition of $s_i\vdash c_i\trans{\hyperref[fig:rules:chain]{chain}}{b_i}c_{i+1}$, and $\var{pp}$ is the protocol parameters in $\var{nes'}$.
 
-Case $\hyperref[fig:rules:snapshot]{\mathsf{SNAP}}$. We must show that if $c$ is the chain state after the $\mathsf{SNAP}$ transition in $s_i\vdash c_i\trans{\hyperref[fig:rules:chain]{chain}}{b_i}c_{i+1}$, and holds, then so does . We can assume that $s_i$ crosses the epoch boundary, since otherwise the $\mathsf{SNAP}$ transition will not occur. Since the $\mathsf{SNAP}$ transition only happens within the $\mathsf{TICK}$ transition on the epoch boundary, it follows that $c_i$ does not contain any stake credentials or pools from the current epoch, and so [\[DBE\]](#DBE) will be equivalent to [\[DEO\]](#DEO) (the current epoch is $\epoch{s_i}$). However, holds trivially, since it is determined from the $\fun{obligation}$ value.\
+Case $\hyperref[fig:rules:snapshot]{\mathsf{SNAP}}$. We must show that if $c$ is the chain state after the $\mathsf{SNAP}$ transition in $s_i\vdash c_i\trans{\hyperref[fig:rules:chain]{chain}}{b_i}c_{i+1}$, and holds, then so does . We can assume that $s_i$ crosses the epoch boundary, since otherwise the $\mathsf{SNAP}$ transition will not occur. Since the $\mathsf{SNAP}$ transition only happens within the $\mathsf{TICK}$ transition on the epoch boundary, it follows that $c_i$ does not contain any stake credentials or pools from the current epoch, and so DBE will be equivalent to DEO (the current epoch is $\epoch{s_i}$). However, holds trivially, since it is determined from the $\fun{obligation}$ value.\
  \
-Case $\hyperref[fig:rules:pool-reap]{\mathsf{POOLREAP}}$. We must show that [\[DBE\]](#DBE) is preserved. We again assume that $s_i$ crosses the epoch boundary. The $\mathsf{POOLREAP}$ transition does the following:
+Case $\hyperref[fig:rules:pool-reap]{\mathsf{POOLREAP}}$. We must show that DBE is preserved. We again assume that $s_i$ crosses the epoch boundary. The $\mathsf{POOLREAP}$ transition does the following:
 
 1.  leaves $\var{stkCreds}$ unchanged,
 
@@ -275,11 +275,11 @@ Notice that the domain of the $\var{pr}$ is $\var{retired}$, and similarly the d
         \sum\limits_{\wcard\mapsto t\in\var{retired}\subtractdom\var{stpools}}R_p~t~\ell(s)
       \right)
     \end{array}
-\end{equation*}$$ Therefore, it follows that if [\[DEO\]](#DEO) holds before $\mathsf{POOLREAP}$, then it also holds afterwards.\
+\end{equation*}$$ Therefore, it follows that if DEO holds before $\mathsf{POOLREAP}$, then it also holds afterwards.\
  \
-Case $\hyperref[fig:rules:new-proto-param]{\mathsf{NEWPP}}$. We must show that [\[DBE\]](#DBE) is preserved. We again assume that $s_i$ crosses the epoch boundary. In this transition $\var{pp}$ can change, but $\var{stkCreds}$, $\var{stpools}$, and $\var{deposits}$ do not change. As in the $\mathsf{SNAP}$ case, holds trivially, since it is set to the value that is determined by $\fun{obligation}$.\
+Case $\hyperref[fig:rules:new-proto-param]{\mathsf{NEWPP}}$. We must show that DBE is preserved. We again assume that $s_i$ crosses the epoch boundary. In this transition $\var{pp}$ can change, but $\var{stkCreds}$, $\var{stpools}$, and $\var{deposits}$ do not change. As in the $\mathsf{SNAP}$ case, holds trivially, since it is set to the value that is determined by $\fun{obligation}$.\
  \
-Case $\hyperref[fig:rules:utxo-shelley]{\mathsf{UTXO}}$. We assume that holds, where $\var{nes'}$ is the new epoch state after the $\mathsf{TICK}$ transition. We must show that [\[DBE\]](#DBE) is preserved after each $\mathsf{UTXO}$ transition. The $\mathsf{DELEGS}$ transition can result in values being added to or deleted from $\var{stkCreds}$, and added to $\var{stpools}$. Let $A_s$ be the added stake credentials, $D_s$ be the deleted credentials, and $A_p$ be the added stake pools, where $\var{stkCreds}'$ is the stake credential mapping $\var{stpools}'$ is the stake pools, and $\var{deposits}'$ is the deposit pot after $\mathsf{DELEGS}$. We have that $$\begin{equation*}
+Case $\hyperref[fig:rules:utxo-shelley]{\mathsf{UTXO}}$. We assume that holds, where $\var{nes'}$ is the new epoch state after the $\mathsf{TICK}$ transition. We must show that DBE is preserved after each $\mathsf{UTXO}$ transition. The $\mathsf{DELEGS}$ transition can result in values being added to or deleted from $\var{stkCreds}$, and added to $\var{stpools}$. Let $A_s$ be the added stake credentials, $D_s$ be the deleted credentials, and $A_p$ be the added stake pools, where $\var{stkCreds}'$ is the stake credential mapping $\var{stpools}'$ is the stake pools, and $\var{deposits}'$ is the deposit pot after $\mathsf{DELEGS}$. We have that $$\begin{equation*}
     \begin{array}{rcl}
       \var{D_s} & \subseteq & \var{\var{stkCreds}\cup\var{A_s}} \\
       \var{stkCreds}' & = & (\var{stkCreds}\cup\var{A_s})\setminus\var{D_s} \\
@@ -293,19 +293,19 @@ Case $\hyperref[fig:rules:utxo-shelley]{\mathsf{UTXO}}$. We assume that holds, w
     + |P_c|\cdot p_{val}
     - |D_{s\_new}|\cdot d_{val}
     - \left(\sum_{\wcard\mapsto t\in D_{s\_old}}R_c~t~\ell(s_i)\right)
-\end{equation*}$$ Looking at the $\mathsf{UTXO}$ transition in Figure [\[fig:rules:utxo-shelley\]](#fig:rules:utxo-shelley), $$\begin{equation*}
+\end{equation*}$$ Looking at the $\mathsf{UTXO}$ transition in Figure fig:rules:utxo-shelley, $$\begin{equation*}
     \var{deposits}' = \var{deposits} + \totalDeposits{pp}{stpools}{(\txcerts{tx})}
     - (\var{refunded} + \var{decayed})
-\end{equation*}$$ The function $\fun{totalDeposits}$ is defined in Figure [\[fig:functions:deposits-refunds\]](#fig:functions:deposits-refunds) and it is clear that here it is equal to $$|A_s|\cdot d_{val} + |P_c|\cdot p_{val.}$$ Recall that $$\begin{equation*}
+\end{equation*}$$ The function $\fun{totalDeposits}$ is defined in Figure fig:functions:deposits-refunds and it is clear that here it is equal to $$|A_s|\cdot d_{val} + |P_c|\cdot p_{val.}$$ Recall that $$\begin{equation*}
     \begin{array}{rl}
       \var{refunded} & \keyRefunds{pp}{stkCreds}~{tx} \\
       \var{decayed} & \decayedTx{pp}{stkCreds}~{tx}
     \end{array}
-\end{equation*}$$ where $\fun{keyRefunds}$ is defined in Figure [\[fig:functions:deposits-refunds\]](#fig:functions:deposits-refunds). This iterates $\fun{keyRefund}$ from the same figure, which in turn just looks up the creation slot for a transaction and returns $R_c$. The function to calculate the value of decayed deposits, $\fun{decayedTx}$, is defined in Figure [\[fig:functions:deposits-decay\]](#fig:functions:deposits-decay). This iterates $\fun{decayedKey}$ from the same figure. Therefore, to show that $$\begin{equation}
+\end{equation*}$$ where $\fun{keyRefunds}$ is defined in Figure fig:functions:deposits-refunds. This iterates $\fun{keyRefund}$ from the same figure, which in turn just looks up the creation slot for a transaction and returns $R_c$. The function to calculate the value of decayed deposits, $\fun{decayedTx}$, is defined in Figure fig:functions:deposits-decay. This iterates $\fun{decayedKey}$ from the same figure. Therefore, to show that $$\begin{equation}
 \label{deleted-is-refunds-plus-decayed}
     |D_{s\_new}|\cdot d_{val} + \sum_{\wcard\mapsto t\in D_{s\_old}}R_c~t~\ell(s_i)
     = \var{refunded} + \var{decayed},
-\end{equation}$$ and thus complete the proof for the $\mathsf{UTXO}$ case, it suffices to show that for a given $\var{c}\mapsto s\in D_s$, the $R_c$ value plus the $\fun{decayedKey}$ value that is associated with the stake credential $c$ is equal to $d_{val}$ if $\epoch(s)=\epoch(s_i)$, and is otherwise equal to $R_c~s~\ell(s_i)$. Looking at the definition of $\fun{decayedKey}$, observe that if $\epoch(s)=\epoch(s_i)$ then $\var{start}=\var{created}$ and so the decayed value is $(R_c~s~s)-(R_c~s~s_i)$. However, $R_c~s~s = d_{val}$, so the refund plus the decayed value is $d_{val}-(R_c~s~s_i)+(R_c~s~s_i)=d_{val}$. Otherwise, if $s$ is from a previous epoch, then $\var{start}=\ell(s_i)$, and so the decayed value is $(R_c~s~\ell(s_i))-(R_c~s~s_i)$. The refund plus the decayed value is thus $(R_c~s~\ell(s_i))-(R_c~s~s_i)+(R_c~s~s_i)=(R_c~s~\ell(s_i))$. Therefore, equation [\[deleted-is-refunds-plus-decayed\]](#deleted-is-refunds-plus-decayed) holds, and consequently so also does . ◻
+\end{equation}$$ and thus complete the proof for the $\mathsf{UTXO}$ case, it suffices to show that for a given $\var{c}\mapsto s\in D_s$, the $R_c$ value plus the $\fun{decayedKey}$ value that is associated with the stake credential $c$ is equal to $d_{val}$ if $\epoch(s)=\epoch(s_i)$, and is otherwise equal to $R_c~s~\ell(s_i)$. Looking at the definition of $\fun{decayedKey}$, observe that if $\epoch(s)=\epoch(s_i)$ then $\var{start}=\var{created}$ and so the decayed value is $(R_c~s~s)-(R_c~s~s_i)$. However, $R_c~s~s = d_{val}$, so the refund plus the decayed value is $d_{val}-(R_c~s~s_i)+(R_c~s~s_i)=d_{val}$. Otherwise, if $s$ is from a previous epoch, then $\var{start}=\ell(s_i)$, and so the decayed value is $(R_c~s~\ell(s_i))-(R_c~s~s_i)$. The refund plus the decayed value is thus $(R_c~s~\ell(s_i))-(R_c~s~s_i)+(R_c~s~s_i)=(R_c~s~\ell(s_i))$. Therefore, equation deleted-is-refunds-plus-decayed holds, and consequently so also does . ◻
 
 [^1]: Note that the protocol parameters can only change in the $\mathsf{NEWPP}$ transition.
 

@@ -1,19 +1,19 @@
 # Transactions
-Transactions are defined in Figure [1](#fig:defs:utxo-shelley). A transaction body, $\TxBody$, is made up of eight pieces:
+Transactions are defined in Figure 1. A transaction body, $\TxBody$, is made up of eight pieces:
 
 - A set of transaction inputs. This derived type identifies an output from a previous transaction. It consists of a transaction id and an index to uniquely identify the output.
 
 - An indexed collection of transaction outputs. The $\TxOut$ type is an address paired with a coin value.
 
-- A list of certificates, which will be explained in detail in Section [\[sec:delegation-shelley\]](#sec:delegation-shelley).
+- A list of certificates, which will be explained in detail in Section sec:delegation-shelley.
 
 - A transaction fee. This value will be added to the fee pot and eventually handed out as stake rewards.
 
 - A time to live. A transaction will be deemed invalid if processed after this slot.
 
-- A mapping of reward account withdrawals. The type $\Wdrl$ is a finite map that maps a reward address to the coin value to be withdrawn. The coin value must be equal to the full value contained in the account. Explicitly stating these values ensures that error messages can be precise about why a transaction is invalid. For reward calculation rules, see Section [\[sec:reward-overview\]](#sec:reward-overview), and for the rule for collecting rewards, see Section [\[sec:utxo-trans\]](#sec:utxo-trans).
+- A mapping of reward account withdrawals. The type $\Wdrl$ is a finite map that maps a reward address to the coin value to be withdrawn. The coin value must be equal to the full value contained in the account. Explicitly stating these values ensures that error messages can be precise about why a transaction is invalid. For reward calculation rules, see Section sec:reward-overview, and for the rule for collecting rewards, see Section sec:utxo-trans.
 
-- An optional update proposals for the protocol parameters. The update system will be explained in Section [\[sec:update\]](#sec:update).
+- An optional update proposals for the protocol parameters. The update system will be explained in Section sec:update.
 
 - An optional metadata hash.
 
@@ -144,4 +144,4 @@ Finally, $\fun{txid}$ computes the transaction id of a given transaction. This f
 \end{align*}$$
 
 **Helper Functions for Transaction Inputs**
-Figure [2](#fig:defs:functions-txins) shows the helper functions $\fun{txinsVKey}$ and $\fun{txinsScript}$ which partition the set of transaction inputs of the transaction into those that are locked with a private key and those that are locked via a script. It also defines $\fun{validateScript}$, which validates the multisignature scripts.
+Figure 2 shows the helper functions $\fun{txinsVKey}$ and $\fun{txinsScript}$ which partition the set of transaction inputs of the transaction into those that are locked with a private key and those that are locked via a script. It also defines $\fun{validateScript}$, which validates the multisignature scripts.

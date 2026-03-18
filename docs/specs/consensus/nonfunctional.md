@@ -15,12 +15,12 @@ TODOs:
 - Why do we even want to validate headers ahead of time? (Thread model etc.) (Section for Duncan?). Section with a sketch on an analysis of the amortised cost for attackers versus our own costs to defend against it (\"budget for work\" that grows and shrinks as you interact with a node).
 
 ### Header/Body Split (aka: Header submission)
-Discuss the chain fragments that we store per upstream node. Discuss why we want to validate headers here -- without a full ledger state (necessarily so, since no block bodies -- can't update ledger state): to prevent DoS attacks. ([\[ledger:forecasting\]](#ledger:forecasting) contains a discussion of this from the point of view of the ledger). Forward reference to the chain sync client ([\[chainsyncclient\]](#chainsyncclient)). Discuss why it's useful if the chain sync client can race ahead for *performance* (why it's required for chain selection is the discussed in [\[forecast:ledgerview\]](#forecast:ledgerview)).
+Discuss the chain fragments that we store per upstream node. Discuss why we want to validate headers here -- without a full ledger state (necessarily so, since no block bodies -- can't update ledger state): to prevent DoS attacks. (ledger:forecasting contains a discussion of this from the point of view of the ledger). Forward reference to the chain sync client (chainsyncclient). Discuss why it's useful if the chain sync client can race ahead for *performance* (why it's required for chain selection is the discussed in forecast:ledgerview).
 
-See also section on avoiding the stability window ([\[low-density:pre-genesis\]](#low-density:pre-genesis)).
+See also section on avoiding the stability window (low-density:pre-genesis).
 
 ### Block submission
-Forward reference to [\[servers:blockfetch\]](#servers:blockfetch).
+Forward reference to servers:blockfetch.
 
 ### Transaction submission
 Mention that these are defined entirely network side, no consensus involvement (just an abstraction over the mempool).

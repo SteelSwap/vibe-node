@@ -12,7 +12,7 @@ Delegation requires the following to be tracked by the ledger state: the registe
 Finally, there are two types of delegation certificates available only to the genesis keys. The genesis keys will still be used for update proposals at the beginning of the Shelley era, and so there must be a way to maintain the delegation of these keys to their cold keys. This mapping is also maintained by the delegation state. There is also a mechanism to transfer rewards directly from either the reserves pot or the treasury pot to a reward address. While technically everybody can post such a certificate, the transaction that contains it must be signed by $\Quorum$-many genesis key delegates.
 
 ## Delegation Definitions
-In [1](#fig:delegation-defs) we give the delegation primitives. Here we introduce the following primitive datatypes used in delegation:
+In 1 we give the delegation primitives. Here we introduce the following primitive datatypes used in delegation:
 
 - $\DCertRegKey$: a stake credential registration certificate.
 
@@ -142,7 +142,7 @@ Accessor functions for certificates and pool parameters are also defined, but on
 
 **Delegation Definitions**
 ## Delegation Transitions
-In [2](#fig:delegation-transitions) we give the delegation and stake pool state transition types. We define two separate parts of the ledger state.
+In 2 we give the delegation and stake pool state transition types. We define two separate parts of the ledger state.
 
 - $\DState$ keeps track of the delegation state, consisting of:
 
@@ -152,7 +152,7 @@ In [2](#fig:delegation-transitions) we give the delegation and stake pool state 
 
   - $\var{ptrs}$ maps stake credentials to the position of the registration certificate in the blockchain. This is needed to lookup the stake hashkey of a pointer address.
 
-  - $\var{fGenDelegs}$ are the future genesis keys delegations. This variable is needed because genesis keys can only update their delegation with a delay of $\StabilityWindow$ slots after submitting the certificate (this is necessary for header validation, see Section [\[sec:chain\]](#sec:chain))
+  - $\var{fGenDelegs}$ are the future genesis keys delegations. This variable is needed because genesis keys can only update their delegation with a delay of $\StabilityWindow$ slots after submitting the certificate (this is necessary for header validation, see Section sec:chain)
 
   - $\var{genDelegs}$ maps genesis key hashes to hashes of the cold key delegates.
 
@@ -166,7 +166,7 @@ In [2](#fig:delegation-transitions) we give the delegation and stake pool state 
 
   - $\var{retiring}$ tracks stake pool retirements, using a map from hashkeys to the epoch in which it will retire.
 
-The operational certificates counters $\var{cs}$ in the stake pool state are a tool to ensure that blocks containing outdated certificates are rejected. These certificates are part of the block header. For a discussion of why this additional mechanism is needed, see the document [@delegation_design], and for the relevant rules, see Section [\[sec:oper-cert-trans\]](#sec:oper-cert-trans).
+The operational certificates counters $\var{cs}$ in the stake pool state are a tool to ensure that blocks containing outdated certificates are rejected. These certificates are part of the block header. For a discussion of why this additional mechanism is needed, see the document [@delegation_design], and for the relevant rules, see Section sec:oper-cert-trans.
 
 The environment for the state transition for $\DState$ contains the current slot number, the index for the current certificate pointer, and the account state. The environment for the state transition for $\PState$ contains the current slot number and the protocol parameters.
 
@@ -231,9 +231,9 @@ The environment for the state transition for $\DState$ contains the current slot
 
 **Delegation Transitions**
 ## Delegation Rules
-The rules for registering and delegating stake credentials are given in [3](#fig:delegation-rules). Note that section 5.2 of [@delegation_design] describes how a wallet would help a user choose a stake pool, though these concerns are independent of the ledger rules.
+The rules for registering and delegating stake credentials are given in 3. Note that section 5.2 of [@delegation_design] describes how a wallet would help a user choose a stake pool, though these concerns are independent of the ledger rules.
 
-- Stake credential registration is handled by [\[eq:deleg-reg\]](#eq:deleg-reg), since it contains the precondition that the certificate has type $\DCertRegKey$. All the equations in $\mathsf{DELEG}$ and $\mathsf{POOL}$ follow this same pattern of matching on certificate type.
+- Stake credential registration is handled by eq:deleg-reg, since it contains the precondition that the certificate has type $\DCertRegKey$. All the equations in $\mathsf{DELEG}$ and $\mathsf{POOL}$ follow this same pattern of matching on certificate type.
 
   There are also preconditions on registration that the hashkey associated with the certificate witness of the certificate is not already found in the current list of stake credentials or the current reward accounts. We expect that the stake credentials and the reward accounts contain the same key hashes, making one of the checks redundant.
 
@@ -241,11 +241,11 @@ The rules for registering and delegating stake credentials are given in [3](#fig
 
   - The key is added to the set of registered stake credentials.
 
-  - A reward account is created for this key, with a starting balance of zero. Note that [\[eq:deleg-reg\]](#eq:deleg-reg) uses a union override left to add a zero balance reward account.
+  - A reward account is created for this key, with a starting balance of zero. Note that eq:deleg-reg uses a union override left to add a zero balance reward account.
 
   - The certificate pointer is mapped to the new stake credential.
 
-- Stake credential deregistration is handled by [\[eq:deleg-dereg\]](#eq:deleg-dereg). There is a precondition that the credential has been registered and that the reward balance is zero. Deregistration causes the following state transformation:
+- Stake credential deregistration is handled by eq:deleg-dereg. There is a precondition that the credential has been registered and that the reward balance is zero. Deregistration causes the following state transformation:
 
   - The key is removed from the collection of registered keys.
 
@@ -255,15 +255,15 @@ The rules for registering and delegating stake credentials are given in [3](#fig
 
   - The certificate pointer is removed.
 
-- Stake credential delegation is handled by [\[eq:deleg-deleg\]](#eq:deleg-deleg). There is a precondition that the key has been registered. Delegation causes the following state transformation:
+- Stake credential delegation is handled by eq:deleg-deleg. There is a precondition that the key has been registered. Delegation causes the following state transformation:
 
   - The delegation relation is updated so that the stake credential is delegated to the given stake pool. The use of union override here allows us to use the same rule to perform both an initial delegation and an update to an existing delegation.
 
-- Genesis key delegation is handled by [\[eq:deleg-gen\]](#eq:deleg-gen). There is a precondition that the genesis key is already in the mapping $\var{genDelegs}$. Genesis delegation causes the following state transformation:
+- Genesis key delegation is handled by eq:deleg-gen. There is a precondition that the genesis key is already in the mapping $\var{genDelegs}$. Genesis delegation causes the following state transformation:
 
   - The future genesis delegation relation is updated with the new delegate to be adopted in $\StabilityWindow$-many slots.
 
-- Moving instantaneous rewards is handled by [\[eq:deleg-mir-reserves\]](#eq:deleg-mir-reserves) and [\[eq:deleg-mir-treasury\]](#eq:deleg-mir-treasury). There is a precondition that the current slot is early enough in the current epoch and that the available reserves or treasury are sufficient to pay for the instantaneous rewards.
+- Moving instantaneous rewards is handled by eq:deleg-mir-reserves and eq:deleg-mir-treasury. There is a precondition that the current slot is early enough in the current epoch and that the available reserves or treasury are sufficient to pay for the instantaneous rewards.
 
 
 $$\begin{equation}
@@ -560,25 +560,25 @@ The DELEG rule has ten possible predicate failures:
 - In the case of a genesis key delegation certificate, if the VRF key is in the range of the genesis delegation mapping, there is a *DuplicateGenesisVRF* failure.
 
 ## Stake Pool Rules
-The rules for updating the part of the ledger state defining the current stake pools are given in [5](#fig:pool-rules). The calculation of stake distribution is described in Section [\[sec:stake-dist-calc\]](#sec:stake-dist-calc).
+The rules for updating the part of the ledger state defining the current stake pools are given in 5. The calculation of stake distribution is described in Section sec:stake-dist-calc.
 
 In the pool rules, the stake pool is identified with the hashkey of the pool operator. For each rule, again, we first check that a given certificate $c$ is of the correct type.
 
-- Stake pool registration is handled by [\[eq:pool-reg\]](#eq:pool-reg). It is required that the pool not be currently registered. Registration causes the following state transformation:
+- Stake pool registration is handled by eq:pool-reg. It is required that the pool not be currently registered. Registration causes the following state transformation:
 
   - The key is added to the set of registered stake pools.
 
   - The pool's parameters are stored.
 
-- Stake pool parameter updates are handled by [\[eq:pool-rereg\]](#eq:pool-rereg). This rule, which also matches on the certificate type $\type{DCertRegPool}$, is distinguished from [\[eq:pool-reg\]](#eq:pool-reg) by the requirement that the pool be registered.
+- Stake pool parameter updates are handled by eq:pool-rereg. This rule, which also matches on the certificate type $\type{DCertRegPool}$, is distinguished from eq:pool-reg by the requirement that the pool be registered.
 
-  Unlike the initial stake pool registrations, the pool parameters will not change until the next epoch, after stake distribution snapshots are taken. This gives delegators an entire epoch to respond to changes in stake pool parameters. The staging is achieved by adding updates to the mapping $\var{fPoolParams}$, which will override $\var{poolParam}$ with new values in the $\mathsf{EPOCH}$ transition (see Figure [\[fig:rules:epoch\]](#fig:rules:epoch)).
+  Unlike the initial stake pool registrations, the pool parameters will not change until the next epoch, after stake distribution snapshots are taken. This gives delegators an entire epoch to respond to changes in stake pool parameters. The staging is achieved by adding updates to the mapping $\var{fPoolParams}$, which will override $\var{poolParam}$ with new values in the $\mathsf{EPOCH}$ transition (see Figure fig:rules:epoch).
 
   This rule also ends stake pool retirements. Note that $\var{poolParams}$ is **not** updated. The registration creation slot does does not change.
 
-- Stake pool retirements are handled by [\[eq:pool-ret\]](#eq:pool-ret). Given a slot number $\var{slot}$, the application of this rule requires that the planned retirement epoch $\var{e}$ stated in the certificate is in the future, i.e. after $\var{cepoch}$ (the epoch of the current slot number in this context) and that it is no more than than $\emax$ epochs after the current one. It is also required that the pool be registered. Note that imposing the $\emax$ constraint on the system is not strictly necessary. However, forcing stake pools to announce their retirement a shorter time in advance will curb the growth of the $\var{retiring}$ list in the ledger state.
+- Stake pool retirements are handled by eq:pool-ret. Given a slot number $\var{slot}$, the application of this rule requires that the planned retirement epoch $\var{e}$ stated in the certificate is in the future, i.e. after $\var{cepoch}$ (the epoch of the current slot number in this context) and that it is no more than than $\emax$ epochs after the current one. It is also required that the pool be registered. Note that imposing the $\emax$ constraint on the system is not strictly necessary. However, forcing stake pools to announce their retirement a shorter time in advance will curb the growth of the $\var{retiring}$ list in the ledger state.
 
-  The pools scheduled for retirement must be removed from the $\var{retiring}$ state variable at the end of the epoch they are scheduled to retire in. This non-signaled transition (triggered, instead, directly by a change of current slot number in the environment), along with all other transitions that take place at the epoch boundary, are described in Section [\[sec:epoch\]](#sec:epoch).
+  The pools scheduled for retirement must be removed from the $\var{retiring}$ state variable at the end of the epoch they are scheduled to retire in. This non-signaled transition (triggered, instead, directly by a change of current slot number in the environment), along with all other transitions that take place at the epoch boundary, are described in Section sec:epoch.
 
   Reregistration causes the following state transformation:
 
@@ -705,7 +705,7 @@ The POOL rule has four predicate failures:
 - If the delegation certificate is not of one of the pool types, there is a *WrongCertificateType* failure.
 
 ## Delegation and Pool Combined Rules
-We now combine the delegation and pool transition systems. Figure [6](#fig:defs:delpl) gives the state, environment and transition type for the combined transition.
+We now combine the delegation and pool transition systems. Figure 6 gives the state, environment and transition type for the combined transition.
 
 
 *Delegation and Pool Combined Environment* $$\begin{equation*}
@@ -733,7 +733,7 @@ We now combine the delegation and pool transition systems. Figure [6](#fig:defs
 \end{equation*}$$
 
 **Delegation and Pool Combined Transition Type**
-Figure [7](#fig:rules:delpl), gives the rules for the combined transition. Note that for any given certificate, at most one of the two rules ([\[eq:delpl-d\]](#eq:delpl-d) and [\[eq:delpl-p\]](#eq:delpl-p)) will be successful, since the pool certificates are disjoint from the delegation certificates.
+Figure 7, gives the rules for the combined transition. Note that for any given certificate, at most one of the two rules (eq:delpl-d and eq:delpl-p) will be successful, since the pool certificates are disjoint from the delegation certificates.
 
 
 *Delegation and Pool Combined Rules* $$\begin{equation}
@@ -810,9 +810,9 @@ Figure [7](#fig:rules:delpl), gives the rules for the combined transition. Note
 \end{equation}$$
 
 **Delegation and Pool Combined Transition Rules**
-We now describe a transition system that processes the list of certificates inside a transaction. It is defined recursively from the transition system in Figure [7](#fig:rules:delpl) above.
+We now describe a transition system that processes the list of certificates inside a transaction. It is defined recursively from the transition system in Figure 7 above.
 
-Figure [8](#fig:type:delegations) defines the types for the delegation certificate sequence transition.
+Figure 8 defines the types for the delegation certificate sequence transition.
 
 
 *Certificate Sequence Environment* $$\begin{equation*}
@@ -833,13 +833,13 @@ Figure [8](#fig:type:delegations) defines the types for the delegation certific
 \end{equation*}$$
 
 **Delegation sequence transition type**
-Figure [9](#fig:rules:delegation-sequence) defines the transition system recursively. This definition guarantees that a certificate list (and therefore, the transaction carrying it) cannot be processed unless every certificate in it is valid. For example, if a transaction is carrying a certificate that schedules a pool retirement in a past epoch, the whole transaction will be invalid.
+Figure 9 defines the transition system recursively. This definition guarantees that a certificate list (and therefore, the transaction carrying it) cannot be processed unless every certificate in it is valid. For example, if a transaction is carrying a certificate that schedules a pool retirement in a past epoch, the whole transaction will be invalid.
 
-- The base case, when the list is empty, is captured by [\[eq:delegs-base\]](#eq:delegs-base). In the base case we address one final accounting detail not yet covered by the UTxO transition, namely setting the reward account balance to zero for any account that made a withdrawal. There is therefore a precondition that all withdrawals are correct, where correct means that there is a reward account for each stake credential and that the balance matches that of the reward being withdrawn. The base case triggers the following state transformation:
+- The base case, when the list is empty, is captured by eq:delegs-base. In the base case we address one final accounting detail not yet covered by the UTxO transition, namely setting the reward account balance to zero for any account that made a withdrawal. There is therefore a precondition that all withdrawals are correct, where correct means that there is a reward account for each stake credential and that the balance matches that of the reward being withdrawn. The base case triggers the following state transformation:
 
   - Reward accounts are set to zero for each corresponding withdrawal.
 
-- The inductive case, when the list is non-empty, is captured by [\[eq:delegs-induct\]](#eq:delegs-induct). It constructs a certificate pointer given the current slot and transaction index, calls $\mathsf{DELPL}$ on the next certificate in the list and inductively calls $\mathsf{DELEGS}$ on the rest of the list. The inductive case triggers the following state transformation:
+- The inductive case, when the list is non-empty, is captured by eq:delegs-induct. It constructs a certificate pointer given the current slot and transaction index, calls $\mathsf{DELPL}$ on the next certificate in the list and inductively calls $\mathsf{DELEGS}$ on the rest of the list. The inductive case triggers the following state transformation:
 
   - The delegation and pool states are (inductively) updated by the results of $\mathsf{DELEGS}$, which is then updated according to $\mathsf{DELPL}$.
 

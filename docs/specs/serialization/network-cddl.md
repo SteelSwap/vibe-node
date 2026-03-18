@@ -6,7 +6,7 @@
 
 ## Node-to-node protocol
 
-Previously supported versions of the *node-to-node protocol* are listed in table [2.1](#table:historical-node-to-node-protocol-versions).
+Previously supported versions of the *node-to-node protocol* are listed in table 2.1.
 
 ::::: {#table:historical-node-to-node-protocol-versions .figure latex-placement="h"}
 ::: center
@@ -31,7 +31,7 @@ Previously supported versions of the *node-to-node protocol* are listed in table
 
 ## Node-to-client protocol
 
-Previously supported versions of the *node-to-client protocol* are listed in table [2.2](#table:historical-node-to-client-protocol-versions).
+Previously supported versions of the *node-to-client protocol* are listed in table 2.2.
 
 ::::: {#table:historical-node-to-client-protocol-versions .figure latex-placement="h"}
 ::: center

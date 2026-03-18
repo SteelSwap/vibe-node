@@ -9,7 +9,7 @@ Knowing this, it would be good to make the most of each connection and, in order
 
 ## Components
 
-Figure [1.1](#tik:components) illustrates the three main components of the decentralisation process from the perspective of a local node. In the `Outbound` side, the *p2p governor*, as said previously, takes care of all connection initiation (outbound connections) and decides which mini-protocols to run (*established*, *warm* or *hot*). In the `Inbound` side, the `Server` is just a simple loop, responsible for accepting incoming connections; and the `Inbound Protocol Governor` role is starting/restarting the required mini-protocols, to detect if its local peer was added as a *warm*/*hot* peer in some other remote node and to set timers in some cases, e.g. if the remote end opened a connection and did not send any message; the `Inbound Protocol Governor` will timeout after some time and close the connection. The arrows in Figure [1.1](#tik:components) represent dependencies between components: The server accepts a connection, which is then given to *Connection manager*. *Connection manager* exposes methods to update its state whenever the `Inbound Protocol Governor` notices that the connection was used (could be used due to *warm*\
+Figure 1.1 illustrates the three main components of the decentralisation process from the perspective of a local node. In the `Outbound` side, the *p2p governor*, as said previously, takes care of all connection initiation (outbound connections) and decides which mini-protocols to run (*established*, *warm* or *hot*). In the `Inbound` side, the `Server` is just a simple loop, responsible for accepting incoming connections; and the `Inbound Protocol Governor` role is starting/restarting the required mini-protocols, to detect if its local peer was added as a *warm*/*hot* peer in some other remote node and to set timers in some cases, e.g. if the remote end opened a connection and did not send any message; the `Inbound Protocol Governor` will timeout after some time and close the connection. The arrows in Figure 1.1 represent dependencies between components: The server accepts a connection, which is then given to *Connection manager*. *Connection manager* exposes methods to update its state whenever the `Inbound Protocol Governor` notices that the connection was used (could be used due to *warm*\
 hot transitions). If peer sharing is enabled, the incoming address will eventually be added to the known set of the outbound governor.
 
 
@@ -38,9 +38,9 @@ A consequence of all this is that we cannot use a classic client/server design. 
 
 Although actual TCP connections must be a shared resource, we do not wish to Intermingle the code to handle the inbound and outbound directions. As noted above, the selection of upstream (outbound) peers is quite complicated, and we would not want to add to that complexity by mixing it with a lot of other concerns, and vice versa. To minimise complexity, it would be preferable if the code that manages the outbound side would be completely unaware of the inbound side and vice versa. Yet, we still want the inbound and outbound sides to opportunistically share TCP connections where possible. This appears to be eminently achievable given that we are using multiplexing to run mini-protocols in either direction and concurrency for mini-protocol handlers to achieve a degree of modularity.
 
-The use of a single TCP connection helps simplify exception processing and mitigate poor peer performance in a timely manner (whether connection-related or otherwise). This is covered in more detail in [1.3](#sec:exceptions).
+The use of a single TCP connection helps simplify exception processing and mitigate poor peer performance in a timely manner (whether connection-related or otherwise). This is covered in more detail in 1.3.
 
-These ideas lead to the design illustrated in [1.1](#tik:components). In this design, there is an outbound and inbound side -- which are completely unaware of each other -- mediated by a shared *connection manager* component.
+These ideas lead to the design illustrated in 1.1. In this design, there is an outbound and inbound side -- which are completely unaware of each other -- mediated by a shared *connection manager* component.
 
 The connection manager is there to manage the underlying TCP connection resources. It has to provide an interface to the outbound side to enable the use of connections in an outbound direction. Correspondingly, it must provide an interface to the inbound side to enable the use of connections in an inbound direction. Internally, it must deal with connections being used in a unidirectional or duplex way, as well as the transitions between them. Of course, it can be the case that connections are no longer required in either direction, and such connections should be closed in an orderly manner. This must be the responsibility of the connection manager since it is the only component that can see both inbound and outbound sides to be able to see that a connection is no longer needed in either direction and, hence, not needed at all.
 
@@ -112,7 +112,7 @@ All the mini-protocols have the property that agency starts with the client/init
 
 The inbound governor gets informed of new connections that should be monitored either via the server or by the connection manager. The server informs the governor about fresh inbound connections. The connection manager informs the governor about connections that started due to a request for an outbound connection -- at least for those connections that are to be available to use in duplex mode.
 
-As illustrated in [1.1](#tik:components), both the connection manager and server components communicate with the inbound governor directly. They do this to inform the inbound governor about new connections so that it can start to run and monitor the server-side protocols. The server notifies about new connections established inbound, while the connection manager acquires new connections established outbound (at least the duplex ones) through the connection manager API. A slight simplification would be to have only one of these routes of notification.
+As illustrated in 1.1, both the connection manager and server components communicate with the inbound governor directly. They do this to inform the inbound governor about new connections so that it can start to run and monitor the server-side protocols. The server notifies about new connections established inbound, while the connection manager acquires new connections established outbound (at least the duplex ones) through the connection manager API. A slight simplification would be to have only one of these routes of notification.
 
 The inbound governor
 
@@ -130,7 +130,7 @@ One simple illustration of how these three components interact together:
 
 - *Connection manager* is asked for an outbound connection to that peer (by the *p2p governor*), it notices that it already has a connection with that peer in `InboundState Duplex`, so it gives that connection to *p2p governor* and updates its state to `DuplexState`.
 
-You can find more information about the possible different connection states in the section [1.8.3](#sec:connection-state).
+You can find more information about the possible different connection states in the section 1.8.3.
 
 ## Connection Manager
 
@@ -161,7 +161,7 @@ The *Connection Handler* drives through handshake negotiation and starts the mul
 
 <!-- [Image from original LaTeX source: figure/node-to-node-ipc.png] Duplex connection running several mini-protocols -->
 
-The *Connection Handler* notifies the *Connection manager* about the result of a negotiation, which triggers a state transition. If we can run the connection in full-duplex mode, then it is possible to run the bundles of mini-protocols in both directions and otherwise only in one direction. So, Figure [1.2](#fig:protocol-diagram) shows $6$ mini protocols running, $3$ in each direction. If we negotiated only a unidirectional connection, then we'd only be running $3$ (The direction is based on which peer established the connection).
+The *Connection Handler* notifies the *Connection manager* about the result of a negotiation, which triggers a state transition. If we can run the connection in full-duplex mode, then it is possible to run the bundles of mini-protocols in both directions and otherwise only in one direction. So, Figure 1.2 shows $6$ mini protocols running, $3$ in each direction. If we negotiated only a unidirectional connection, then we'd only be running $3$ (The direction is based on which peer established the connection).
 
 From the point of view of the *connection manager*, it only matters whether an *unidirectional* or *duplex* connection was negotiated. Unidirectional connections are the ones that run exclusively on either the initiator or responder side of mini-protocols, while duplex connections can run either or both initiator and responder protocols. Note that in the outbound direction (initiator side), it is the *p2p governor* responsibility to decide which set of mini-protocols: *established*, *warm* or *hot*, are running. On the inbound side (responder mini-protocols), we have no choice but to run all of them.
 
@@ -332,9 +332,9 @@ In this specification, we represent `OutboundState`^$\tau$^` Unidirectional`, wh
 
 
 ***Outbound* (blue & violet) and *inbound* (green & violet) connection states and allowed transitions.**
-Figure [1.3](#fig:statediagram) shows all the transitions between `ConnectionState`s. Blue and Violet states represent states of an *Outbound* connection, and Green and Violet states represent states of an *Inbound* connection. Dashed arrows indicate asynchronous transitions that are triggered, either by a remote node or by the connection manager itself.
+Figure 1.3 shows all the transitions between `ConnectionState`s. Blue and Violet states represent states of an *Outbound* connection, and Green and Violet states represent states of an *Inbound* connection. Dashed arrows indicate asynchronous transitions that are triggered, either by a remote node or by the connection manager itself.
 
-Note that the vertical symmetry in the graph corresponds to the local vs remote state of the connection, see table [1.1](#table:symmetry). The symmetry is only broken by `InboundIdleState`^$\tau$^` dataFlow`, which does not have a corresponding local equivalent. This is simply because, locally, we immediately know when we will start initiator protocols, and the implementation is supposed to do that promptly. This, however, cannot be assumed to be the case on the inbound side.
+Note that the vertical symmetry in the graph corresponds to the local vs remote state of the connection, see table 1.1. The symmetry is only broken by `InboundIdleState`^$\tau$^` dataFlow`, which does not have a corresponding local equivalent. This is simply because, locally, we immediately know when we will start initiator protocols, and the implementation is supposed to do that promptly. This, however, cannot be assumed to be the case on the inbound side.
 
 
   *local connection state*                 *remote connection state*
@@ -349,7 +349,7 @@ Note that the vertical symmetry in the graph corresponds to the local vs remote 
 
   : Symmetry between local and remote states
 
-Another symmetry that we tried to preserve is between `Unidirectional` and `Duplex` connections. The `Duplex` side is considerably more complex as it includes interaction between `Inbound` and `Outbound` connections (in the sense that inbound connections can migrate to outbound only and vice versa). However, the state machine for an inbound-only connection is the same whether it is `Duplex` or `Unidirectional`, see Figure [1.4](#fig:statediagram-inbound-only). A *connection manager* running in `ResponderMode` will use this state machine.
+Another symmetry that we tried to preserve is between `Unidirectional` and `Duplex` connections. The `Duplex` side is considerably more complex as it includes interaction between `Inbound` and `Outbound` connections (in the sense that inbound connections can migrate to outbound only and vice versa). However, the state machine for an inbound-only connection is the same whether it is `Duplex` or `Unidirectional`, see Figure 1.4. A *connection manager* running in `ResponderMode` will use this state machine.
 
 For *node-to-client* server, it will be even simpler, as there we only allow for unidirectional connections. Nevertheless, this symmetry simplifies the implementation.
 
@@ -437,7 +437,7 @@ This transition is done by `unregisterOutboundConnection`.
 
 #### [DemotedToCold]{.sans-serif}^[Unidirectional]{.sans-serif}^~[Remote]{.sans-serif}~, [DemotedToCold]{.sans-serif}^[Duplex]{.sans-serif}^~[Remote]{.sans-serif}~
 
-Both transitions are edge-triggered, the connection manager is notified by the *inbound protocol governor* once it notices that all responders became idle. Detection of idleness during *protocol idle timeout* is done in a separate step which is triggered immediately, see section [1.8.4.14](#sec:tr_commit_rem) for details.
+Both transitions are edge-triggered, the connection manager is notified by the *inbound protocol governor* once it notices that all responders became idle. Detection of idleness during *protocol idle timeout* is done in a separate step which is triggered immediately, see section 1.8.4.14 for details.
 
 ::: detail
 Both transitions are done by `demotedToColdRemote`.
@@ -531,7 +531,7 @@ Whenever an outbound connection is requested, we notify the server about a new c
 - *inbound protocol governor* does not start mini-protocols, as they are already running (we restart responders as soon as they stop, using the on-demand strategy).
 
 #### [Commit]{.sans-serif}^[Unidirectional]{.sans-serif}^~[Local]{.sans-serif}~, [Commit]{.sans-serif}^[Duplex]{.sans-serif}^~[Local]{.sans-serif}~
-As previous two transitions, these also are triggered after *protocol idle timeout*, but this time, they are triggered on the outbound side. This transition will reset the connection, and the timeout ensures that the remote end can clear its ingress queue before the [TCP]{.sans-serif} reset arrives. For a more detailed analysis, see [1.8.6](#sec:connection-close) section.
+As previous two transitions, these also are triggered after *protocol idle timeout*, but this time, they are triggered on the outbound side. This transition will reset the connection, and the timeout ensures that the remote end can clear its ingress queue before the [TCP]{.sans-serif} reset arrives. For a more detailed analysis, see 1.8.6 section.
 
 #### [Terminate]{.sans-serif}
 
@@ -553,7 +553,7 @@ In some of these cases, the external IP address would need to agree with the int
 
 Let us note that these connections effectively only add delay, and thus they will be replaced by the outbound governor (by its churn mechanism).
 
-These transitions are not indicated in the figure [1.3](#fig:statediagram), instead they are shown bellow in figure [1.5](#fig:statediagram-selfconn).
+These transitions are not indicated in the figure 1.3, instead they are shown bellow in figure 1.5.
 
 ##### [SelfConn]{.sans-serif} and [SelfConn$^{-1}$]{.sans-serif}
 
@@ -626,9 +626,9 @@ block until `TerminatedState` and start from the initial state.
 
 ##### [Otherwise]{.nodecor}:
 
-if *connection manager* is asked to connect to peer, and there exists a connection in any other state, e.g. `UnnegotiatedState Outbound`, `OutboundState dataFlow`, `DuplexState`, *connection manager* signals the caller with an error, see section [1.2](#table:requestOutboundConnection).
+if *connection manager* is asked to connect to peer, and there exists a connection in any other state, e.g. `UnnegotiatedState Outbound`, `OutboundState dataFlow`, `DuplexState`, *connection manager* signals the caller with an error, see section 1.2.
 
-Figure [1.6](#fig:outbound_flow) shows outbound connection state evolution, e.g. the flow graph of `requestOutboundConnection`.
+Figure 1.6 shows outbound connection state evolution, e.g. the flow graph of `requestOutboundConnection`.
 
 
 ***Outbound* connection flow graph**
@@ -656,7 +656,7 @@ This method performs [DemotedToCold]{.sans-serif}^[Unidirectional]{.sans-serif}^
 
 #### Connection manager methods
 
-The tables [1.2](#table:requestOutboundConnection) and [1.3](#table:unregisterOutboundConnection) show transitions performed by
+The tables 1.2 and 1.3 show transitions performed by
 
 - `requestOutboundConnection` and
 
@@ -749,13 +749,13 @@ Initial states for inbound connection are either:
 
 The following tables show transitions of the following connection manager methods:
 
-- `includeInboundConnection`: table [1.4](#table:includeInboundConnection)
+- `includeInboundConnection`: table 1.4
 
-- `promotedToWarmRemote`: table [1.5](#table:promotedToWarmRemote)
+- `promotedToWarmRemote`: table 1.5
 
-- `demotedToColdRemote`: table [1.6](#table:demotedToColdRemote)
+- `demotedToColdRemote`: table 1.6
 
-- `unregisterInboundConnection`: table [1.7](#table:unregisterInboundConnection)
+- `unregisterInboundConnection`: table 1.7
 
 States indicated by '-' are preserved, though unexpected; `promotedToWarmRemote` will use `UnsupportedState :: OperationResult a` to indicate that to the caller.
 
@@ -917,7 +917,7 @@ Both [Commit]{.sans-serif}^[Unidirectional]{.sans-serif}^~[Remote]{.sans-serif}~
 
 ## Inbound Protocol Governor
 
-*Inbound protocol governor* keeps track of the responder side of the protocol for both inbound and outbound duplex connections. Unidirectional outbound connections are not tracked by *inbound protocol governor*. The server and connection manager are responsible for notifying it about new connections once negotiated. Figure [1.8](#fig:inbgov-state-machine) presents the state machine that drives changes to connection states tracked by *inbound protocol governor*. As in the connection manager case, there is an implicit transition from every state to the terminating state, representing mux or mini-protocol failures.
+*Inbound protocol governor* keeps track of the responder side of the protocol for both inbound and outbound duplex connections. Unidirectional outbound connections are not tracked by *inbound protocol governor*. The server and connection manager are responsible for notifying it about new connections once negotiated. Figure 1.8 presents the state machine that drives changes to connection states tracked by *inbound protocol governor*. As in the connection manager case, there is an implicit transition from every state to the terminating state, representing mux or mini-protocol failures.
 
 ::::: {#fig:inbgov-state-machine .figure latex-placement="h!"}
 ::: center

@@ -2,9 +2,9 @@
 ## Overview
 
 ### Chain selection
-Chain selection is the process of choosing between multiple competing chains, and is one of the most important responsibilities of a consensus protocol. When choosing between two chains, in theory any part of those chains could be relevant; indeed, the research literature typically describes chain selection as a comparison of two entire chains ([\[bft-paper,praos-paper\]](#bft-paper,praos-paper)). In practice that is not realistic: the node has to do chain selection frequently, and scanning millions of blocks each time to make the comparison is of course out of the question.
+Chain selection is the process of choosing between multiple competing chains, and is one of the most important responsibilities of a consensus protocol. When choosing between two chains, in theory any part of those chains could be relevant; indeed, the research literature typically describes chain selection as a comparison of two entire chains (bft-paper,praos-paper). In practice that is not realistic: the node has to do chain selection frequently, and scanning millions of blocks each time to make the comparison is of course out of the question.
 
-The consensus layer keeps the most recent headers as a *chain fragment* in memory ([\[storage:inmemory\]](#storage:inmemory)); the rest of the chain is stored on disk. Similarly, we keep a chain fragment of headers in memory for every (upstream) node whose chain we are following and whose blocks we may wish to adopt ([\[chainsyncclient\]](#chainsyncclient)). Before the introduction of the hard fork combinator chain selection used to be given these fragments to compare; as we will discuss in [\[hfc:intro\]](#hfc:intro), however, this does not scale so well to hybrid chains.
+The consensus layer keeps the most recent headers as a *chain fragment* in memory (storage:inmemory); the rest of the chain is stored on disk. Similarly, we keep a chain fragment of headers in memory for every (upstream) node whose chain we are following and whose blocks we may wish to adopt (chainsyncclient). Before the introduction of the hard fork combinator chain selection used to be given these fragments to compare; as we will discuss in hfc:intro, however, this does not scale so well to hybrid chains.
 
 It turns out, however, that it suffices to look only at the headers at the very tip of the chain, at least for the class of consensus algorithms we need to support. The exact information we need about that tip varies from one protocol to the other, but at least for the Ouroboros family of consensus protocols the essence is always the same: we prefer longer chains over shorter ones (justifying *why* this is the right choice is the domain of cryptographic research and well outside the scope of this report). In the simplest case, the length of the chain is *all* that matters, and hence the only thing we need to know about the blocks at the tips of the chains is their block numbers.[^1]
 
@@ -13,17 +13,17 @@ This does beg the question of how to compare two chains when one (or both) of th
 ::: assumption
 []{#prefer-extension label="prefer-extension"} The extension of a chain is always preferred over that chain.
 
-A direct consequence of [\[prefer-extension\]](#prefer-extension) is that a non-empty chain is always preferred over an empty one,[^2] but we will actually need something stronger than that: we insist that shorter chains can never be preferred over longer ones:
+A direct consequence of prefer-extension is that a non-empty chain is always preferred over an empty one,[^2] but we will actually need something stronger than that: we insist that shorter chains can never be preferred over longer ones:
 
 ::: assumption
 []{#never-shrink label="never-shrink"} A shorter chain is never preferred over a longer chain.
 
-[\[never-shrink\]](#never-shrink) does not say anything about chains of equal length; this will be important for Praos ([1.6](#praos)). An important side-note here is that the Ouroboros Genesis consensus protocol includes a chain selection rule (the genesis rule) that violates [\[never-shrink\]](#never-shrink) (though not [\[prefer-extension\]](#prefer-extension)); it also cannot be defined by only looking at the tips of chains. It will therefore require special treatment; we will come back to this in [\[genesis\]](#genesis).
+never-shrink does not say anything about chains of equal length; this will be important for Praos ([1.6](#praos)). An important side-note here is that the Ouroboros Genesis consensus protocol includes a chain selection rule (the genesis rule) that violates never-shrink (though not prefer-extension); it also cannot be defined by only looking at the tips of chains. It will therefore require special treatment; we will come back to this in genesis.
 
 ### The security parameter $k$
-When the Cardano blockchain was first launched, it was using a consensus protocol that we now refer to as Ouroboros Classic [@cryptoeprint:2016:889]. The re-implementation of the consensus layer never had support for Ouroboros Classic, instead using Ouroboros BFT [@cryptoeprint:2018:1049] as a transitional protocol towards Ouroboros Praos [@cryptoeprint:2017:573], which is the consensus protocol in use at the time of writing, with plans to switch to Ouroboros Genesis [@cryptoeprint:2018:378] relatively soon ([\[genesis\]](#genesis)).
+When the Cardano blockchain was first launched, it was using a consensus protocol that we now refer to as Ouroboros Classic [@cryptoeprint:2016:889]. The re-implementation of the consensus layer never had support for Ouroboros Classic, instead using Ouroboros BFT [@cryptoeprint:2018:1049] as a transitional protocol towards Ouroboros Praos [@cryptoeprint:2017:573], which is the consensus protocol in use at the time of writing, with plans to switch to Ouroboros Genesis [@cryptoeprint:2018:378] relatively soon (genesis).
 
-Both Ouroboros Classic and Ouroboros Praos are based on a chain selection rule that imposes a maximum rollback condition: alternative chains to a node's current chain that fork off more than a certain number of blocks ago are never considered for adoption. This limit is known as the *security parameter*, and is usually denoted by $k$; at present $k = 2160$ blocks. The Ouroboros analysis shows that consensus will be reached despite this maximum rollback limitation; indeed, this maximum rollback is *required* in order to reach consensus (we discuss this in some detail in [\[genesis:background:longest-chain\]](#genesis:background:longest-chain)).
+Both Ouroboros Classic and Ouroboros Praos are based on a chain selection rule that imposes a maximum rollback condition: alternative chains to a node's current chain that fork off more than a certain number of blocks ago are never considered for adoption. This limit is known as the *security parameter*, and is usually denoted by $k$; at present $k = 2160$ blocks. The Ouroboros analysis shows that consensus will be reached despite this maximum rollback limitation; indeed, this maximum rollback is *required* in order to reach consensus (we discuss this in some detail in genesis:background:longest-chain).
 
 For Ouroboros BFT and Ouroboros Genesis the situation is slightly different:
 
@@ -31,15 +31,15 @@ For Ouroboros BFT and Ouroboros Genesis the situation is slightly different:
 
 - The analysis that shows that nodes will not diverge by more than $k$ blocks does of course not apply to new nodes joining the system. Indeed, when using Ouroboros Praos, such nodes are vulnerable to an attack where an adversary with some stake (does not have to be much) presents the newly joining node with a chain that diverges by more than $k$ blocks from the honest chain, at which point point the node would become unable to switch to the real chain. Solving this is the purview of Ouroboros Genesis.
 
-  Like Ouroboros BFT, Ouroboros Genesis likewise does not impose a maximum rollback, *but* the analysis [@cryptoeprint:2018:378] shows that when nodes are up to date, they can employ the Ouroboros Praos rule (i.e., the rule *with* the maximum rollback requirement). This is not true when the node is behind and is catching up, but the main goal of [\[genesis\]](#genesis) is to show how we can nonetheless avoid rollbacks exceeding $k$ blocks even when a node is catching up.
+  Like Ouroboros BFT, Ouroboros Genesis likewise does not impose a maximum rollback, *but* the analysis [@cryptoeprint:2018:378] shows that when nodes are up to date, they can employ the Ouroboros Praos rule (i.e., the rule *with* the maximum rollback requirement). This is not true when the node is behind and is catching up, but the main goal of genesis is to show how we can nonetheless avoid rollbacks exceeding $k$ blocks even when a node is catching up.
 
 Within the consensus layer we therefore assume that we *always* have a limit $k$ on the number of blocks we might have to rollback. We take advantage of this in many ways; here we just mention a few:
 
-- We use it as an organising principle in the storage layer ([\[storage\]](#storage)), dividing the chain into a part that we know is stable (the \"immutable chain\"), and a part near the tip that is still subject to rollback (the \"volatile chain\"). Block lookup into the immutable chain is very efficient, and since the vast majority of the chain is immutable, this helps improve overall efficiency of the system.
+- We use it as an organising principle in the storage layer (storage), dividing the chain into a part that we know is stable (the \"immutable chain\"), and a part near the tip that is still subject to rollback (the \"volatile chain\"). Block lookup into the immutable chain is very efficient, and since the vast majority of the chain is immutable, this helps improve overall efficiency of the system.
 
-- When we switch to a new fork by rolling back and then adopting some new blocks, those new blocks must be verified against the ledger state as it was at the point we rolled back to. This means we must be able to construct historical ledger states. In principle this is always possible, as we can always replay the entire chain, but doing so would be expensive. However, since we have a limit on the maximum rollback, we also have a limit on how old the oldest ledger state is we might have to reconstruct; we take advantage of this in the Ledger Database ([\[ledgerdb\]](#ledgerdb)) which can efficiently reconstruct any of those $k$ historical ledger states.
+- When we switch to a new fork by rolling back and then adopting some new blocks, those new blocks must be verified against the ledger state as it was at the point we rolled back to. This means we must be able to construct historical ledger states. In principle this is always possible, as we can always replay the entire chain, but doing so would be expensive. However, since we have a limit on the maximum rollback, we also have a limit on how old the oldest ledger state is we might have to reconstruct; we take advantage of this in the Ledger Database (ledgerdb) which can efficiently reconstruct any of those $k$ historical ledger states.
 
-- We need to keep track of the chains of our peer nodes in order to be able to decide whether or not we might wish to switch to those chains ([\[chainsyncclient\]](#chainsyncclient)). For consensus protocols based on a longest chain rule (such as Ouroboros Praos), this means that we would need to download and verify enough blocks from those alternative chains that the alternative chain becomes longer than our own. Without a maximum rollback, this would be an unbounded amount of work as well as an unbounded amount of data we would have to store. A maximum rollback of $k$, however, means that validating (and storing) $k+1$ blocks should be sufficient.[^3]
+- We need to keep track of the chains of our peer nodes in order to be able to decide whether or not we might wish to switch to those chains (chainsyncclient). For consensus protocols based on a longest chain rule (such as Ouroboros Praos), this means that we would need to download and verify enough blocks from those alternative chains that the alternative chain becomes longer than our own. Without a maximum rollback, this would be an unbounded amount of work as well as an unbounded amount of data we would have to store. A maximum rollback of $k$, however, means that validating (and storing) $k+1$ blocks should be sufficient.[^3]
 
 Of course, a maximum rollback may be problematic in the case of severe network outages that partition the nodes for extended periods of time (in the order of days). When this happens, the chains will diverge and recovering converge will need manual intervention; this is true for any of the consensus protocols mentioned above. This manual intervention is outside the scope of this report.
 
@@ -56,27 +56,27 @@ This allows the protocol to depend on some static configuration data; what confi
 
     protocolSecurityParam :: ConsensusConfig p -> SecurityParam
 
-For example, this is used by the chain database to determine when blocks can be moved from the volatile DB to the immutable DB ([\[storage:components\]](#storage:components)). In the rest of this section we will consider the various parts of the `ConsensusProtocol` class one by one.
+For example, this is used by the chain database to determine when blocks can be moved from the volatile DB to the immutable DB (storage:components). In the rest of this section we will consider the various parts of the `ConsensusProtocol` class one by one.
 
 ### Chain selection
-As mentioned in [1.1.1](#consensus:overview:chainsel), chain selection will only look at the headers at the tip of the ledger. Since we are defining consensus protocols independent from a concrete choice of ledger, however ([\[decouple-consensus-ledger\]](#decouple-consensus-ledger)), we cannot use a concrete block or header type. Instead, we merely say that the chain selection requires *some* view on headers that it needs to make its decisions:
+As mentioned in 1.1.1, chain selection will only look at the headers at the tip of the ledger. Since we are defining consensus protocols independent from a concrete choice of ledger, however (decouple-consensus-ledger), we cannot use a concrete block or header type. Instead, we merely say that the chain selection requires *some* view on headers that it needs to make its decisions:
 
     type family SelectView p :: Type
     type SelectView p = BlockNo
 
-The default is `BlockNo` because as we have seen this is all that is required for the most important chain selection rule, simply preferring longer chains over shorter ones. It is the responsibility of the glue code that connects a specific choice of ledger to a consensus protocol to define the projection from a concrete block type to this `SelectView` ([1.3](#BlockSupportsProtocol)). We then require that these views must be comparable
+The default is `BlockNo` because as we have seen this is all that is required for the most important chain selection rule, simply preferring longer chains over shorter ones. It is the responsibility of the glue code that connects a specific choice of ledger to a consensus protocol to define the projection from a concrete block type to this `SelectView` (1.3). We then require that these views must be comparable
 
     class (Ord (SelectView p), ..) => ConsensusProtocol p where
 
 and say that one chain is (strictly) preferred over another if its `SelectView` is greater. If two chains terminate in headers with the *same* view, neither chain is preferred over the other, and we could pick either one (we say they are equally preferable).
 
-Later in this chapter we will discuss in detail how our treatment of consensus algorithms differs from the research literature ([\[bft,praos\]](#bft,praos)), and in [\[chainsel\]](#chainsel) we will see how the details of how chain selection is implemented in the chain database; it is worth pointing out here, however, that the comparison based on `SelectView` is not intended to capture
+Later in this chapter we will discuss in detail how our treatment of consensus algorithms differs from the research literature (bft,praos), and in chainsel we will see how the details of how chain selection is implemented in the chain database; it is worth pointing out here, however, that the comparison based on `SelectView` is not intended to capture
 
 - chain validity
 
-- the intersection point (checking that the intersection point is not too far back, preserving the invariant that we never roll back more than $k$ blocks, see [1.1.2](#consensus:overview:k))
+- the intersection point (checking that the intersection point is not too far back, preserving the invariant that we never roll back more than $k$ blocks, see 1.1.2)
 
-Both of these responsibilities would require more than seeing just the tip of the chains. They are handled independent of the choice of consensus protocol by the chain database, as discussed in [\[chainsel\]](#chainsel).
+Both of these responsibilities would require more than seeing just the tip of the chains. They are handled independent of the choice of consensus protocol by the chain database, as discussed in chainsel.
 
 When two *candidate* chains (that is, two chains that aren't our current) are equally preferable, we are free to choose either one. However, when a candidate chain is equally preferable to our current, we *must* stick with our current chain. This is true for all Ouroboros consensus protocols, and we define it once and for all:
 
@@ -89,7 +89,7 @@ When two *candidate* chains (that is, two chains that aren't our current) are eq
     preferCandidate _ ours cand = cand > ours
 
 ### Ledger view
-We mentioned in [\[overview:ledger\]](#overview:ledger) that some consensus protocols may require limited information from the ledger; for instance, the Praos consensus protocol needs access to the stake distribution for the leadership check. In the `ConsensusProtocol` abstraction, this is modelled as a *view* on the ledger state
+We mentioned in overview:ledger that some consensus protocols may require limited information from the ledger; for instance, the Praos consensus protocol needs access to the stake distribution for the leadership check. In the `ConsensusProtocol` abstraction, this is modelled as a *view* on the ledger state
 
     type family LedgerView p :: Type
 
@@ -108,7 +108,7 @@ We're referring to this as the `ValidateView` because updating the consensus sta
 
     type family ValidationErr p :: Type
 
-Updating the chain dependent state now comes as a pair of functions. As for the ledger ([\[overview:ledger\]](#overview:ledger)), we first *tick* the protocol state to the appropriate slot, passing the already ticked ledger view as an argument:[^7]
+Updating the chain dependent state now comes as a pair of functions. As for the ledger (overview:ledger), we first *tick* the protocol state to the appropriate slot, passing the already ticked ledger view as an argument:[^7]
 
     tickChainDepState ::
          ConsensusConfig p
@@ -137,7 +137,7 @@ Finally, there is a variant of this function that can we used to *reapply* a kno
       -> Ticked (ChainDepState p)
       -> ChainDepState         p
 
-Re-applying previously-validated blocks happens when we are replaying blocks from the immutable database when initialising the in-memory ledger state ([\[ledgerdb:on-disk:initialisation\]](#ledgerdb:on-disk:initialisation)). It is also useful during chain selection ([\[chainsel\]](#chainsel)): depending on the consensus protocol, we may end up switching relatively frequently between short-lived forks; when this happens, skipping expensive checks can improve the performance of the node.
+Re-applying previously-validated blocks happens when we are replaying blocks from the immutable database when initialising the in-memory ledger state (ledgerdb:on-disk:initialisation). It is also useful during chain selection (chainsel): depending on the consensus protocol, we may end up switching relatively frequently between short-lived forks; when this happens, skipping expensive checks can improve the performance of the node.
 
 ### Leader selection
 The final responsibility of the consensus protocol is leader selection. First, it is entirely possible for nodes to track the blockchain without ever producing any blocks themselves; indeed, this will be the case for the majority of nodes[^8] In order for a node to be able to lead at all, it may need access to keys and other configuration data; the exact nature of what is required is different from protocol to protocol, and so we model this as a type family
@@ -162,7 +162,7 @@ Although a single consensus protocol might be used with many blocks, any given b
 
     type family BlockProtocol blk :: Type
 
-Of course, for the block to be usable with that consensus protocol, we need functions that construct the `SelectView` ([1.2.1](#consensus:class:chainsel)) and `ValidateView` ([1.2.3](#consensus:class:state)) projections from that block:
+Of course, for the block to be usable with that consensus protocol, we need functions that construct the `SelectView` (1.2.1) and `ValidateView` (1.2.3) projections from that block:
 
     class (..) => BlockSupportsProtocol blk where
       validateView ::
@@ -205,17 +205,17 @@ Discuss *why* we started with Permissive BFT (backwards compatible with Ouroboro
 ### Implementation
 
 ### Relation to the paper
-Permissive BFT is a variation on Ouroboros BFT, defined in [@cryptoeprint:2018:1049]. We have included the main protocol description from that paper as [1.1](#figure:bft) in this document; the only difference is that we've added a few additional labels so we can refer to specific parts of the protocol description below.
+Permissive BFT is a variation on Ouroboros BFT, defined in [@cryptoeprint:2018:1049]. We have included the main protocol description from that paper as 1.1 in this document; the only difference is that we've added a few additional labels so we can refer to specific parts of the protocol description below.
 
-It will be immediately obvious from [1.1](#figure:bft) that this description covers significantly more than what we consider to be part of the consensus protocol proper here. We will discuss the various parts of the BFT protocol description below.
+It will be immediately obvious from 1.1 that this description covers significantly more than what we consider to be part of the consensus protocol proper here. We will discuss the various parts of the BFT protocol description below.
 
 Clock update and network delivery
 
-:   The BFT specification requires that "with each advance of the clock (..) a collection of transactions and blockchains are pushed to the server". We consider neither block submission nor transaction submission to be within the scope of the consensus algorithm; see [\[nonfunctional:network:blocksubmission,servers:blockfetch\]](#nonfunctional:network:blocksubmission,servers:blockfetch) and [\[nonfunctional:network:blocksubmission,servers:txsubmission\]](#nonfunctional:network:blocksubmission,servers:txsubmission) instead, respectively.
+:   The BFT specification requires that "with each advance of the clock (..) a collection of transactions and blockchains are pushed to the server". We consider neither block submission nor transaction submission to be within the scope of the consensus algorithm; see nonfunctional:network:blocksubmission,servers:blockfetch and nonfunctional:network:blocksubmission,servers:txsubmission instead, respectively.
 
 Mempool update
 
-:   ([\[bft:mempool\]](#bft:mempool)). The design of the mempool is the subject of [\[mempool\]](#mempool). Here we only briefly comment on how it relates to what the BFT specification assumes:
+:   (bft:mempool). The design of the mempool is the subject of mempool. Here we only briefly comment on how it relates to what the BFT specification assumes:
 
     - *Consistency* ([\[bft:mempool:consistency\]](#bft:mempool:consistency)). Our mempool does indeed ensure consistency. In fact, we require something strictly stronger; see [\[mempool:consistency\]](#mempool:consistency) for details.
 
@@ -225,7 +225,7 @@ Mempool update
 
 Blockchain update
 
-:   ([\[bft:update\]](#bft:update)). The BFT specification requires that the node prefers any valid chain over its own, as long as its strictly longer. *We do not satisfy this requirement.* The chain selection rule for Permissive BFT is indeed the longest chain rule, *but* consensus imposes a global maximum rollback (the security parameter $k$; [1.1.2](#consensus:overview:k)). In other words, nodes *will* prefer longer chains over its own, *provided* that the intersection between that chain and the nodes own chain is no more than $k$ blocks away from the node's tip.
+:   (bft:update). The BFT specification requires that the node prefers any valid chain over its own, as long as its strictly longer. *We do not satisfy this requirement.* The chain selection rule for Permissive BFT is indeed the longest chain rule, *but* consensus imposes a global maximum rollback (the security parameter $k$; 1.1.2). In other words, nodes *will* prefer longer chains over its own, *provided* that the intersection between that chain and the nodes own chain is no more than $k$ blocks away from the node's tip.
 
     Moreover, our definition of validity is also different. We do require that hashes line up ([\[bft:update:hash\]](#bft:update:hash)), although we do not consider this part of the responsibility of the consensus protocol, but instead require this independent of the choice of consensus protocol when updating the header state ([\[storage:headerstate\]](#storage:headerstate)). We do of course also require that the transactions in the block are valid ([\[bft:update:body\]](#bft:update:body)), but this is the responsibility of the ledger layer instead ([\[ledger\]](#ledger)); the consensus protocol should be independent from what's stored in the block body.
 
@@ -235,7 +235,7 @@ Blockchain update
 
 Blockchain extension
 
-:   ([\[bft:extension\]](#bft:extension)). The leadership check implemented as part of PBFT is conform specification ([\[bft:leadershipcheck\]](#bft:leadershipcheck)). The rest of this section matches the implementation, modulo some details some of which we already alluded to above:
+:   (bft:extension). The leadership check implemented as part of PBFT is conform specification (bft:leadershipcheck). The rest of this section matches the implementation, modulo some details some of which we already alluded to above:
 
     - The block format is slightly different; for instance, we only have a single signature ([10](#footnote:singlesignature)).
 
@@ -247,7 +247,7 @@ Blockchain extension
 
 Ledger reporting
 
-:   . Although we do offer a way to query the state of the ledger ([\[ledger:queries\]](#ledger:queries)), we do not offer a query to distinguish between finalised/pending blocks. TODO: It's also not clear to me why the BFT specification would consider a block to be finalised as soon as it's $3t + 1$ blocks deep (where $t$ is the maximum number of core nodes). The paper claims that BFT can always recover from a network partition, and the chain selection rule in the paper requires supporting infinite rollback.
+:   . Although we do offer a way to query the state of the ledger (ledger:queries), we do not offer a query to distinguish between finalised/pending blocks. TODO: It's also not clear to me why the BFT specification would consider a block to be finalised as soon as it's $3t + 1$ blocks deep (where $t$ is the maximum number of core nodes). The paper claims that BFT can always recover from a network partition, and the chain selection rule in the paper requires supporting infinite rollback.
 
 
 ------------------------------------------------------------------------
@@ -358,11 +358,11 @@ The ledger layer is entirely stateless: it is a pure function that accepts a led
 
 - The consensus layer must maintain the current ledger state, and pass that to the ledger layer when validating blocks that fit neatly onto the node's current tip. In addition, the consensus must provide efficient access to *historical* ledger states, so that it can validate (and possibly adopt) alternative forks of the chain.
 
-- Although the consensus layer does not need to be aware of the exact nature of the block contents, it *does* have to collect these "transactions" and consider them when producing a block (the mempool, [\[mempool\]](#mempool)). If it chooses to do eager transaction validation (that is, before it actually produces a block), it will need support from the ledger layer to do; when producing a block, it will need assistance from the ledger layer to produce the block body.
+- Although the consensus layer does not need to be aware of the exact nature of the block contents, it *does* have to collect these "transactions" and consider them when producing a block (the mempool, mempool). If it chooses to do eager transaction validation (that is, before it actually produces a block), it will need support from the ledger layer to do; when producing a block, it will need assistance from the ledger layer to produce the block body.
 
   In both cases (transaction validation and block body construction), the consensus layer is responsible for passing an appropriate ledger state to the ledger layer. In the case of block production, the choice of ledger state is clear: the current ledger state. For the mempool, it is slightly less clear-cut; the mempool is effectively constructing a "virtual" block with a predecessor chosen from the node's current chain, near its tip.[^11]
 
-Ideally, the implementation of a particular consensus protocol (say, Praos) should be usable with any choice of ledger (cryptocurrency or otherwise), and conversely, a particular ledger (say, Shelley) should be usable with any choice of consensus protocol (Praos, Genesis, or indeed a different consensus protocol entirely). The consensus protocol *does* need some limited information from the ledger, but we can provide this separately ([\[ledger:api:LedgerSupportsProtocol\]](#ledger:api:LedgerSupportsProtocol)), and abstract over what a particular consensus algorithm needs from the ledger layer it is used with (specifically, the `SelectView` and the `LedgerView`, discussed in [\[consensus:class:chainsel,consensus:class:ledgerview\]](#consensus:class:chainsel,consensus:class:ledgerview)).
+Ideally, the implementation of a particular consensus protocol (say, Praos) should be usable with any choice of ledger (cryptocurrency or otherwise), and conversely, a particular ledger (say, Shelley) should be usable with any choice of consensus protocol (Praos, Genesis, or indeed a different consensus protocol entirely). The consensus protocol *does* need some limited information from the ledger, but we can provide this separately (ledger:api:LedgerSupportsProtocol), and abstract over what a particular consensus algorithm needs from the ledger layer it is used with (specifically, the `SelectView` and the `LedgerView`, discussed in consensus:class:chainsel,consensus:class:ledgerview).
 
 ### Practice
 
@@ -376,13 +376,13 @@ Unfortunately, disentangling the two isn't *quite* that easy. In particular, the
 
 [^1]: It doesn't actually matter if the actual block headers contain a block number or not; if they don't, we can add a "virtual field" to the in-memory representation of the block header. For block headers that *do* include a block number (which is the case for the Cardano chain), header validation verifies that the block number is increasing. Note that EBBs complicate this particular somewhat; see page .
 
-[^2]: Comparing empty chain *fragments*, introduced in [\[storage:fragments\]](#storage:fragments), is significantly more subtle, and will be discussed in [\[chainsel:fragments\]](#chainsel:fragments).
+[^2]: Comparing empty chain *fragments*, introduced in storage:fragments, is significantly more subtle, and will be discussed in chainsel:fragments.
 
 [^3]: For chain selection algorithms such as Ouroboros Genesis which are based on properties of the chains near their *intersection point* rather than near their tips this is less relevant.
 
-[^4]: We will come back to this in [\[future:openkinds\]](#future:openkinds).
+[^4]: We will come back to this in future:openkinds.
 
-[^5]: Explicitly modelling such a required context could be avoided if we used explicit records instead of type classes; we will discuss this point in more detail in [\[technical:classes-vs-records\]](#technical:classes-vs-records).
+[^5]: Explicitly modelling such a required context could be avoided if we used explicit records instead of type classes; we will discuss this point in more detail in technical:classes-vs-records.
 
 [^6]: We are referring to this as the "chain dependent state" to emphasise that this is state that evolves with the chain, and indeed is subject to rollback when we switch to alternatives forks. This distinguishes it from chain *independent* state such as evolving private keys, which are updated independently from blocks and are not subject to rollback.
 
@@ -390,7 +390,7 @@ Unfortunately, disentangling the two isn't *quite* that easy. In particular, the
 
 [^8]: Most "normal" users will not produce blocks themselves, but instead delegate their stake to stakepools who produce blocks on their behalf.
 
-[^9]: For a discussion about why we choose to make some type families top-level definitions rather than associate them with a type class, see [\[technical:toplevel-vs-associated\]](#technical:toplevel-vs-associated).
+[^9]: For a discussion about why we choose to make some type families top-level definitions rather than associate them with a type class, see technical:toplevel-vs-associated.
 
 [^10]: []{#footnote:singlesignature label="footnote:singlesignature"}There is another minor deviation from the specification: we don't require an explicit signature on the block body. Instead, we have a single signature over the header, and the header includes a *hash* of the body.
 

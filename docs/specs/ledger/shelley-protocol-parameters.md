@@ -1,12 +1,12 @@
 # Protocol Parameters
 ## Updatble Protocol Parameters
-The Shelley protocol parameters are listed in Figure [1](#fig:defs:protocol-parameters). Some of the Shelley protocol parameters are common to the Byron era, specifically, the common ones are $\var{a}$, $\var{b}$, $\var{maxTxSize}$, and $\var{maxHeaderSize}$ (see the document [@byron_ledger_spec]).
+The Shelley protocol parameters are listed in Figure 1. Some of the Shelley protocol parameters are common to the Byron era, specifically, the common ones are $\var{a}$, $\var{b}$, $\var{maxTxSize}$, and $\var{maxHeaderSize}$ (see the document [@byron_ledger_spec]).
 
-The type $\Ppm$ represents the names of the protocol parameters, and $\mathsf{T_{ppm}}$ is the type of the protocol parameter $\var{ppm}$. The type $\PParams$ is a finite map containing all the Shelley parameters, indexed by their names. We will explain the significance of each parameter as it comes up in the calculations used in transition rules. The type $\PParamsUpdate$ is similar to $\PParams$, but is a partial mapping of the protocol parameters. It is used in the update system explained in Section [\[sec:update\]](#sec:update).
+The type $\Ppm$ represents the names of the protocol parameters, and $\mathsf{T_{ppm}}$ is the type of the protocol parameter $\var{ppm}$. The type $\PParams$ is a finite map containing all the Shelley parameters, indexed by their names. We will explain the significance of each parameter as it comes up in the calculations used in transition rules. The type $\PParamsUpdate$ is similar to $\PParams$, but is a partial mapping of the protocol parameters. It is used in the update system explained in Section sec:update.
 
 The type $\Coin$ is defined as an alias for the integers. Negative values will not be allowed in UTxO outputs or reward accounts, and $\Z$ is only chosen over $\N$ for its additive inverses.
 
-Some helper functions are defined in Figure [3](#fig:defs:protocol-parameters-helpers). The $\fun{minfee}$ function calculates the minimum fee that must be paid by a transaction. This value depends on the protocol parameters and the size of the transaction.
+Some helper functions are defined in Figure 3. The $\fun{minfee}$ function calculates the minimum fee that must be paid by a transaction. This value depends on the protocol parameters and the size of the transaction.
 
 Two time related types are introduced, $\Epoch$ and $\type{Duration}$. A $\type{Duration}$ is the difference between two slots, as given by $\slotminus{}{}$.
 
@@ -78,13 +78,13 @@ Lastly, there are two functions, $\fun{epoch}$ and $\fun{firstSlot}$ for convert
 :::::
 
 ## Global Constants
-In additon to the updatable protocol parameters defined in Section [1.1](#sec:updatable-protocol-parameters), there are ten parameters which cannot be changed by the update system in Section [\[sec:update\]](#sec:update). We call these the global constants, as changing these values can only be done by updating the software, i.e. a soft or a hard fork. For the software update mechanism, see Section [\[sec:software-updates\]](#sec:software-updates).
+In additon to the updatable protocol parameters defined in Section 1.1, there are ten parameters which cannot be changed by the update system in Section sec:update. We call these the global constants, as changing these values can only be done by updating the software, i.e. a soft or a hard fork. For the software update mechanism, see Section sec:software-updates.
 
-The constants $\SlotsPerEpoch$ and $\SlotsPerKESPeriod$ represent the number of slots in an epoch/KES period (for a brief explanation of a KES period, see Section [\[sec:crypto-primitives-shelley\]](#sec:crypto-primitives-shelley)). The constants $\StabilityWindow$ and $\RandomnessStabilisationWindow$ concern the chain stability. The maximum number of time a KES key can be evolved before a pool operator must create a new operational certificate is given by $\MaxKESEvo$. **Note that if** $\MaxKESEvo$ **is changed, the KES signature format may have to change as well.**
+The constants $\SlotsPerEpoch$ and $\SlotsPerKESPeriod$ represent the number of slots in an epoch/KES period (for a brief explanation of a KES period, see Section sec:crypto-primitives-shelley). The constants $\StabilityWindow$ and $\RandomnessStabilisationWindow$ concern the chain stability. The maximum number of time a KES key can be evolved before a pool operator must create a new operational certificate is given by $\MaxKESEvo$. **Note that if** $\MaxKESEvo$ **is changed, the KES signature format may have to change as well.**
 
 The constant $\Quorum$ determines the quorum amount needed for votes on the protocol parameter updates and the application version updates.
 
-The constant $\MaxMajorPV$ provides a mechanism for halting outdated nodes. Once the major component of the protocol version in the protocol parameters exceeds this value, every subsequent block is invalid. See Figures [\[fig:funcs:chain-helper\]](#fig:funcs:chain-helper) and [\[fig:rules:chain\]](#fig:rules:chain).
+The constant $\MaxMajorPV$ provides a mechanism for halting outdated nodes. Once the major component of the protocol version in the protocol parameters exceeds this value, every subsequent block is invalid. See Figures fig:funcs:chain-helper and fig:rules:chain.
 
 The constant $\MaxLovelaceSupply$ gives the total number of lovelace in the system, which is used in the reward calculation. It is always equal to the sum of the values in the UTxO, plus the sum of the values in the reward accounts, plus the deposit pot, plus the fee pot, plus the treasury and the reserves.
 

@@ -23,7 +23,7 @@ Maps and partial functions
 
 Map Operations
 
-:   Figure [1](#fig:notation:nonstandard) describes some non-standard map operations.
+:   Figure 1 describes some non-standard map operations.
 
 Relations
 
@@ -41,7 +41,7 @@ Option type
 
     Then, in subsequent expressions, it is more convenient to write simply $s$. It is not meant to shadow variables, and if it does, there is likely a problem with the rules that must be addressed.
 
-In Figure [1](#fig:notation:nonstandard), we specify the notation that we use in the rest of the document.
+In Figure 1, we specify the notation that we use in the rest of the document.
 
 
 $$\begin{align*}

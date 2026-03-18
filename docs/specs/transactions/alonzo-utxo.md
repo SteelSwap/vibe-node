@@ -1,6 +1,6 @@
 # UTxO
 ## UTxO Transitions
-We have added several functions having to to with transaction and UTxO inputs and outputs, which are used in defining the UTxO transition system. These are given in Figure [1](#fig:functions:insouts). These include
+We have added several functions having to to with transaction and UTxO inputs and outputs, which are used in defining the UTxO transition system. These are given in Figure 1. These include
 
 - the function $\fun{txinputs_{vf}}$ returns only those transaction inputs that were selected to pay transaction fees (we call these \"fee-marked\" inputs)
 
@@ -66,7 +66,7 @@ $$\begin{align*}
 \end{align*}$$
 
 **Functions on Tx Inputs and Outputs**
-Figure [2](#fig:functions:utxo) defines functions needed for the UTxO transition system. The changes due to Plutus integration are as follows:
+Figure 2 defines functions needed for the UTxO transition system. The changes due to Plutus integration are as follows:
 
 - $\fun{getCoin}$ adds up all the Ada in a given output and returns it as a $\Coin$ value
 
@@ -145,7 +145,7 @@ $$m_1 \leq m_2 \Leftrightarrow \forall~\var{pid}~\var{aid}, m_1~\var{pid}~\var{a
 
 **Functions used in UTxO rules**
 ## Putting Together Plutus Scripts and Their Inputs
-In Figure [3](#fig:functions:script1) we give the helper functions needed to retrieve all the data relevant to validation of Plutus scripts. This includes,
+In Figure 3 we give the helper functions needed to retrieve all the data relevant to validation of Plutus scripts. This includes,
 
 - $\fun{indexof}$ finds the index of a given certificate, value, input, or withdrawal in the list, finite map, or set of things of the corresponding type. This function assumes there is some ordering on each of these structures. This function is abstract because it assumes there is some ordering rather than giving it explicitly. The specific ordering of a set or a finite map could be implementation-dependent. A list ordering should be unambiguous.
 
@@ -194,7 +194,7 @@ In Figure [3](#fig:functions:script1) we give the helper functions needed to ret
 \end{align*}$$
 
 **Combining Script Validators and their Inputs**
-**Matching Scripts and Inputs.** In Figures [4](#fig:functions:script2) and [5](#fig:functions:script3), we give the four functions that gather all data inside a transaction and in the UTxO that is needed for script validation.
+**Matching Scripts and Inputs.** In Figures 4 and 5, we give the four functions that gather all data inside a transaction and in the UTxO that is needed for script validation.
 
 - $\fun{allCertScrts}$ returns the set of all the validators for the key deregistration certificates, together with the data needed for validation
 
@@ -299,7 +299,7 @@ The first phase two-phase validation approach performs every aspect of transacti
 
 Recall that, unlike native multisignature scripts, Plutus scripts are opaque to the ledger. Recall also that a transaction states a $\ExUnits$ \"budget\" to cover running all Plutus scripts it is carrying. There is no way to check that this budget is enough, except running the scripts. To avoid over-spending, we run them sequentially, stopping whenever one does not validate, and charging the transaction the fees. From the point of view of the ledger, there is no difference between a script runnig out of $\ExUnits$ during validation, or not validating. If a transaction contains an invalid script, the only change to the ledger as a result of applying this transaction is the fees. Other parts of the transaction cannot be processed correctly in this case.
 
-Two phase validation requires a new transition system (see Figure [6](#fig:ts-types:utxos)) to sequentially run scripts and keep track of the execution units being spent as part of its state ($\var{remExU}$). The signal here is a sequence of pairs of a validator script and the corresponding input data.
+Two phase validation requires a new transition system (see Figure 6) to sequentially run scripts and keep track of the execution units being spent as part of its state ($\var{remExU}$). The signal here is a sequence of pairs of a validator script and the corresponding input data.
 
 Note that there is one state variable in the SVAL transition system. The reason for this is that in the second, script-running validation phase, we separate the UTxO state update from sequentially running scripts. This transition system is strictly for running the scripts, and a transition of this type will be used by another rule to perform the correct UTxO update.
 
@@ -328,7 +328,7 @@ Running scripts sequentially to verify that they all validate in the allotted $\
 \end{equation*}$$
 
 **UTxO script validation types**
-The rules for the second-phase script validation SVAL are given in Figure [7](#fig:rules:utxo-scrval). Again, there is no UTxO state update done in this rule. Its function is essentially verifying that the validation tag ($\fun{txvaltag}$) is applied correctly by the creater of the block by running all the scripts.
+The rules for the second-phase script validation SVAL are given in Figure 7. Again, there is no UTxO state update done in this rule. Its function is essentially verifying that the validation tag ($\fun{txvaltag}$) is applied correctly by the creater of the block by running all the scripts.
 
 Note that following the Shelley ledger spec approach, every function we define and use in the preconditions or calculations in the rules is necessarily total. This way, all errors (validation failures) we encounter always come from rule applications, i.e. a precondition of a rule is not met. We mention this here because the SVAL rule looks as if it could be simply a function. However, we want the incorrect application of the validation tag to be an error, so it must be an error that comes form an unmet precondition of a rule.
 
@@ -362,7 +362,7 @@ It is always in the interest of the slot leader to have the new block validate, 
 
 - exclude any transactions that are invalid in some way *other than 2nd step script validation failure*
 
-We want to throw away all the blocks which have transactions with these tags applied incorrectly. One of the reasons for having the correct validation tag added by the slot leader to a transaction is that re-applying blocks would not require repeat execution of scripts in the transactions inside a block. In fact, when replaying blocks, all the witnessing info can be thrown away. We also rely on correct use of tags in other rules (at this time, only in the rules in Figure [\[fig:rules:ledger\]](#fig:rules:ledger)).
+We want to throw away all the blocks which have transactions with these tags applied incorrectly. One of the reasons for having the correct validation tag added by the slot leader to a transaction is that re-applying blocks would not require repeat execution of scripts in the transactions inside a block. In fact, when replaying blocks, all the witnessing info can be thrown away. We also rely on correct use of tags in other rules (at this time, only in the rules in Figure fig:rules:ledger).
 
 **Non-integral calculations inside the Plutus interpreter.** If there will be some in the future (from the Actus contracts implemented using the Marlowe interpreter, for e.g.), they should be done the same way they are done in the Shelley ledger. This is a matter of deterministic script validation outcomes. Inconsistent rounding could result in different validation outcomes running the same script on the same arguments. For how this is done in the ledger calculations, see  [@non_int].
 
@@ -472,7 +472,7 @@ $$\begin{equation}
 
 **Script validation rules**
 ## Updating the UTxO State
-We have defined a separate transition system, UTXOS, to represent the two distinct UTxO state changes, one resulting from all scripts in a transaction validating, the other - from at least one failing to validate. Its transition types are all the same as for the for the UTXO transition, see Figure [12](#fig:ts-types:utxo-scripts).
+We have defined a separate transition system, UTXOS, to represent the two distinct UTxO state changes, one resulting from all scripts in a transaction validating, the other - from at least one failing to validate. Its transition types are all the same as for the for the UTXO transition, see Figure 12.
 
 
 *State transitions* $$\begin{equation*}
@@ -482,7 +482,7 @@ We have defined a separate transition system, UTXOS, to represent the two distin
 \end{equation*}$$
 
 **UTxO and UTxO script state update types**
-There are two rules corresponding to the two possible state changes of the UTxO state in the UTXOS transition system, see Figure [9](#fig:rules:utxo-state-upd).
+There are two rules corresponding to the two possible state changes of the UTxO state in the UTXOS transition system, see Figure 9.
 
 In both cases, the SVAL transition is called upon to verify that the $\IsValidating$ tag has been applied correctly. The function $\fun{mkPLCLst}$ is used to build the signal list $\var{sLst}$ for the SVAL transition.
 
@@ -612,7 +612,7 @@ $$\begin{equation}
 \end{equation}$$
 
 **State update rules**
-In Figure [10](#fig:rules:utxo-shelley), we present the $\type{UTxO-inductive}$ transition rule for the UTXO transition type. Note that the signal for this transition is now specifically of type $\GoguenTx$, it does not work with Shelley transactions (see explanation about transforming one type into the other below). This rule It has the following preconditions (the relevant ones remain from the original Shelley spec):
+In Figure 10, we present the $\type{UTxO-inductive}$ transition rule for the UTXO transition type. Note that the signal for this transition is now specifically of type $\GoguenTx$, it does not work with Shelley transactions (see explanation about transforming one type into the other below). This rule It has the following preconditions (the relevant ones remain from the original Shelley spec):
 
 - The transaction is being processed within its validity interval
 
@@ -728,7 +728,7 @@ $$\begin{equation}
 
 **UTxO inference rules**
 ## Witnessing
-Plutus script validation is not part of witnessing because of the introduction of two-phase validation, as this type of validation may result in two different ways of updating the UTxO (fee payment only, or a full update). Native script validation still is, and we need to pick only the native scripts to validate as part of witnessing. We have changed the definition of the function $\fun{scriptsNeeded}$, see Figure [11](#fig:functions-witnesses). It now includes both MSig and Plutus scripts, and scripts used for every validation purpose (forging, outputs, certificates, withdrawals), see Figure [11](#fig:functions-witnesses).
+Plutus script validation is not part of witnessing because of the introduction of two-phase validation, as this type of validation may result in two different ways of updating the UTxO (fee payment only, or a full update). Native script validation still is, and we need to pick only the native scripts to validate as part of witnessing. We have changed the definition of the function $\fun{scriptsNeeded}$, see Figure 11. It now includes both MSig and Plutus scripts, and scripts used for every validation purpose (forging, outputs, certificates, withdrawals), see Figure 11.
 
 
 $$\begin{align*}
@@ -747,7 +747,7 @@ $$\begin{align*}
 \end{align*}$$
 
 **Functions used in witness rule**
-Recall here that in the Goguen era, we must be able to validate both Shelley type and Goguen type transactions. To do this, we transform the transaction being processed into a Goguen transaction (if it's already a Goguen one, it stays the same). Goguen transactions have more data, so it we use defaul values to fill it in. The only time we need the original Shelley transaction is to check the signatures on the hash of the the orignal transaction body, see Figure [13](#fig:rules:utxow-goguen). In addition to the Shelley UTXOW preconditions that still apply, we have made the following changes and additions to the preconditions:
+Recall here that in the Goguen era, we must be able to validate both Shelley type and Goguen type transactions. To do this, we transform the transaction being processed into a Goguen transaction (if it's already a Goguen one, it stays the same). Goguen transactions have more data, so it we use defaul values to fill it in. The only time we need the original Shelley transaction is to check the signatures on the hash of the the orignal transaction body, see Figure 13. In addition to the Shelley UTXOW preconditions that still apply, we have made the following changes and additions to the preconditions:
 
 - All the multisig scripts the transaction is carrying validate
 

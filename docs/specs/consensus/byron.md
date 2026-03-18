@@ -1,6 +1,6 @@
 # Byron
 
-Some details specific to the Byron ledger. EBBs already discussed at length in [\[ebbs\]](#ebbs).
+Some details specific to the Byron ledger. EBBs already discussed at length in ebbs.
 
 The Byron specification can be found at <https://github.com/input-output-hk/cardano-ledger-specs>.
 
@@ -38,7 +38,7 @@ The general mechanism for updating protocol parameters in Byron is as follows:
 
     When a candidate is adopted, all record of other proposals/votes/endorsements---regardless of their state---is discarded. The explanation for this is that such proposals would now be interpreted as an update to the newly adopted parameter values, whereas they were validated as an update to the previously adopted parameter values.
 
-The diagram shown in [1.1](#byron:update-process) summarises the progress of a proposal that's eventually adopted. For other proposals, the path short circuits to a "rejected/discarded" status at some point.
+The diagram shown in 1.1 summarises the progress of a proposal that's eventually adopted. For other proposals, the path short circuits to a "rejected/discarded" status at some point.
 
 ::::: {#byron:update-process .figure}
 

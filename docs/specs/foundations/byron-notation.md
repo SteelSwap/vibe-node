@@ -33,7 +33,7 @@ Domain and range
 
 Domain and range operations
 
-:   Given a relation $R \in \powerset{(A \times B)}$ we make use of the *domain-restriction*, *domain-exclusion*, and *range-restriction* operators, which are defined in [1](#fig:domain-and-range-ops). Note that a map $A \mapsto B$ can be seen as a relation, which means that these operators can be applied to maps as well.
+:   Given a relation $R \in \powerset{(A \times B)}$ we make use of the *domain-restriction*, *domain-exclusion*, and *range-restriction* operators, which are defined in 1. Note that a map $A \mapsto B$ can be seen as a relation, which means that these operators can be applied to maps as well.
 
 Integer ranges
 

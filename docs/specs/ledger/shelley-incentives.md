@@ -3,12 +3,12 @@
 ::: landscape
 <!-- [Image from original LaTeX source: d4-depends.pdf] Positioning of this Deliverable (outlined in red). -->
 
-***Note: this document is subject to change. In particular, it may be necessary to include a simplified fees calculation in the incentivised TestNet, where all the fees accrue to the Treasury. Also note that some terms and symbols that were used in SL-D1 have been changed in this document in order to simplify the explanations that are given here. These are outlined in Appendix [4](#app:diffs).***
+***Note: this document is subject to change. In particular, it may be necessary to include a simplified fees calculation in the incentivised TestNet, where all the fees accrue to the Treasury. Also note that some terms and symbols that were used in SL-D1 have been changed in this document in order to simplify the explanations that are given here. These are outlined in Appendix 4.***
 
 # Introduction
 The purpose of this document is to precisely explain the incentives schemes that will be used by the Shelley implementation of the Cardano blockchain, giving step-by-step explanations of the rewards calculations. It follows Section 5 of SL-D1 (Delegation/Incentives Design) [@delegation_design] and the more theoretical description of reward sharing schemes in [@bkks2018][^1], but aims to provide a more approachable description that can be used by e.g. StakePool owners/operators, delegators etc. It also explains the differences between the simplified scheme that will be used in the Shelley Incentivised TestNet implementation and the full scheme that will be used in the Shelley MainNet implementation.
 
-Figure [1](#fig:terminology) gives some basic terminology that will be used in this document. The Shelley implementation rewards those ADA holders who either own active stake pools (*Owners*) or who delegate stake to active stake pools (*Delegators*). In line with the design of the Ouroboros protocol [@ouroboros_classic], the *StakePool* receives rewards in proportion to the stake that it *controls* ("proof of stake") rather than in proportion to the work that it does ("proof of work"). This has cost, efficiency and safety advantages. The rewards scheme is designed to help ensure that no single entity can dominate the system by *controlling* excessive amounts of ADA. This is achieved by creating intrinsic balancing mechanisms that will naturally spread all the active stake among a large number of StakePools. In particular, the rewards to any one *StakePool* may be capped to a pre-determined limit, meaning that both delegators and owners will receive less reward if too much stake is controlled by a single StakePool, so encouraging the creation of additional, smaller StakePools. It is also designed to ensure *non-myopic* behaviour. That is, it avoids chaotic system behaviour by encouraging the delegation of ADA to those StakePools that will provide the best overall returns over an extended period of time rather than over the short term. The overall theory that ensures this is described in the Ouroboros Praos research paper [@ouroboros_praos]; Section 5 of SL-D1 [@delegation_design] provides the design rationale for the actual incentives scheme.
+Figure 1 gives some basic terminology that will be used in this document. The Shelley implementation rewards those ADA holders who either own active stake pools (*Owners*) or who delegate stake to active stake pools (*Delegators*). In line with the design of the Ouroboros protocol [@ouroboros_classic], the *StakePool* receives rewards in proportion to the stake that it *controls* ("proof of stake") rather than in proportion to the work that it does ("proof of work"). This has cost, efficiency and safety advantages. The rewards scheme is designed to help ensure that no single entity can dominate the system by *controlling* excessive amounts of ADA. This is achieved by creating intrinsic balancing mechanisms that will naturally spread all the active stake among a large number of StakePools. In particular, the rewards to any one *StakePool* may be capped to a pre-determined limit, meaning that both delegators and owners will receive less reward if too much stake is controlled by a single StakePool, so encouraging the creation of additional, smaller StakePools. It is also designed to ensure *non-myopic* behaviour. That is, it avoids chaotic system behaviour by encouraging the delegation of ADA to those StakePools that will provide the best overall returns over an extended period of time rather than over the short term. The overall theory that ensures this is described in the Ouroboros Praos research paper [@ouroboros_praos]; Section 5 of SL-D1 [@delegation_design] provides the design rationale for the actual incentives scheme.
 
 ::::: {#fig:terminology .figure latex-placement="t"}
 ::: center
@@ -93,9 +93,9 @@ If the pool charge rate (${\textit{Pool}}^{\textit{Margin}}$) is set to 100%, th
 
 Rewards are taken from three sources:
 
-1.  the monetary expansion distribution (Section [3.1](#sec:expansion));
+1.  the monetary expansion distribution (Section 3.1);
 
-2.  transaction fees (Section [3.2](#sec:fees));
+2.  transaction fees (Section 3.2);
 
 3.  non-refundable deposits.
 
@@ -103,7 +103,7 @@ In the Incentivised TestNet, only the first source is likely to be used.
 
 ### The Rewards that are received by a StakePool
 
-The rewards that are received by a StakePool will be proportional to the total amount of ADA that it controls as a fraction of the total ADA that is in circulation. The *treasury top slice* is deducted from the total *rewards* for the epoch, then the remainder is distributed proportionately to each StakePool, depending on the stake it controls. In order to avoid domination by large StakePools, in the MainNet, a rewards *cap* will be applied to any single pool, based on the target number of StakePools, $N^{\textit{Pools}}$. This is described in more detail in Section [3](#sec:MainNet).
+The rewards that are received by a StakePool will be proportional to the total amount of ADA that it controls as a fraction of the total ADA that is in circulation. The *treasury top slice* is deducted from the total *rewards* for the epoch, then the remainder is distributed proportionately to each StakePool, depending on the stake it controls. In order to avoid domination by large StakePools, in the MainNet, a rewards *cap* will be applied to any single pool, based on the target number of StakePools, $N^{\textit{Pools}}$. This is described in more detail in Section 3.
 
 ::::: {.figure latex-placement="h!"}
 ::: center
@@ -292,7 +292,7 @@ In addition, the number of days per epoch will be changed. Collectively, these c
   **$\textit{Deposits}_E$**   **The non-refundable deposits for Epoch $E$**
 
   **$\textit{MER}_E$**        **The "Monetary Expansion Rate" for Epoch $E$**.\
-                              ***See Section [3.1](#sec:expansion).***
+                              ***See Section 3.1.***
   ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 **New Parameters used in the MainNet Incentives Calculation.**
@@ -324,7 +324,7 @@ The total ADA that will initially circulate in the MainNet, that is the ADA in c
 +----------------------------------+----------------------------+-----------------------------------------------------+---------------------------------------------------------------------------------------------------+
 | **$\textit{Deposits}_E$**        |                            | **The non-refundable deposits for Epoch $E$**       |                                                                                                   |
 +----------------------------------+----------------------------+-----------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| $\textit{MER}_E$                 | 10%-15%                    | The "Monetary Expansion Rate" for Epoch $E$         | *See Section [3.1](#sec:expansion).*              |
+| $\textit{MER}_E$                 | 10%-15%                    | The "Monetary Expansion Rate" for Epoch $E$         | *See Section 3.1.*              |
 +----------------------------------+----------------------------+-----------------------------------------------------+---------------------------------------------------------------------------------------------------+
 | $\textit{Perf}_E$                | 80%-100%                   | The Overall Performance of the MainNet in Epoch $E$ |                                                                                                   |
 +----------------------------------+----------------------------+-----------------------------------------------------+---------------------------------------------------------------------------------------------------+
@@ -439,7 +439,7 @@ The rewards that are received by an individual delegator are calculated in exact
   $R^\textit{Owner}$   The Reward to the Owner(s).                                                                                                                                                                                                                                                   $R^{\textit{Net}} \times {\textit{Pool}}^{\textit{Margin}}$
   $O^\textit{Stake}$   The ADA that is pledged by Owner $O$                                                                                                                                                                                                                                          
   $O^\%$               The proportion of ADA in the StakePool that is pledged by $O$                                                                                                                                                                                                                 $\frac{O^{Stake}}{Pool^{Tot}}$
-  $O^{Rewards}$        The ADA rewards that are received by $O$. This may be capped if the owner fraction is too large, as described in Section [\[sec:penalties\]](#sec:penalties), or reduced to zero if any owner fails to honour their pledge.   $R^{\textit{Net}} \times O^\%$
+  $O^{Rewards}$        The ADA rewards that are received by $O$. This may be capped if the owner fraction is too large, as described in Section sec:penalties, or reduced to zero if any owner fails to honour their pledge.   $R^{\textit{Net}} \times O^\%$
 
 **The Rewards that are received by each Owner, $O$.**
 :::::
@@ -465,7 +465,7 @@ iv) because the Owner(s)' stake has exceeded the target size as governed by the 
 Returning the rewards to the Treasury ensures that the ADA remains in circulation and can be re-allocated in future.
 
 ## Calculating Rewards in External Currencies
-Rewards can be converted to other currencies using the current exchange rate, exactly as described in Section [2.2](#sec:conversion). Realising these funds will require the use of an external *exchange* service.
+Rewards can be converted to other currencies using the current exchange rate, exactly as described in Section 2.2. Realising these funds will require the use of an external *exchange* service.
 
 ## Worked Example: Full Scheme
 
@@ -499,7 +499,7 @@ This diagram shows the StakePool-specific parameters, including the total contro
 
 <!-- [Image from original LaTeX source] -->
 
-This diagram shows the corresponding rewards that accrue to the owner(s) and delegators, plus a calculation of the total income that is received by the owners. As before, we will assume that the average and actual gross rewards are the same, i.e. if the StakePool controls 1% of the total ADA in circulation, it will produce exactly 1% of the blocks, that it has 100% performance, and will therefore receive exactly 1% of the rewards. In total, the owners and delegators to this StakePool would receive a net reward that was equivalent to 8.33% per year (the "staking yield"), representing a 17% better return than with the simplified scheme. The final rows calculate the *non-myopic* rewards (i.e. long-term rewards that ensure a stable and well-functioning system). As described in [@delegation_design], these values will be used to guide stakeholder behaviour through a ranking system that will encourage convergence to the $N^{\textit{Pools}}$ best-performing pools. For this pool, which is *saturated*, the non-myopic rewards are identical to the *optimal rewards*. Rewards will be returned as described in Section [2.4](#sec:rewards-return). In the MainNet, when multiple owners are involved, this return could be through a multi-signature transaction [@shelley_multisig], according to an agreed formula.
+This diagram shows the corresponding rewards that accrue to the owner(s) and delegators, plus a calculation of the total income that is received by the owners. As before, we will assume that the average and actual gross rewards are the same, i.e. if the StakePool controls 1% of the total ADA in circulation, it will produce exactly 1% of the blocks, that it has 100% performance, and will therefore receive exactly 1% of the rewards. In total, the owners and delegators to this StakePool would receive a net reward that was equivalent to 8.33% per year (the "staking yield"), representing a 17% better return than with the simplified scheme. The final rows calculate the *non-myopic* rewards (i.e. long-term rewards that ensure a stable and well-functioning system). As described in [@delegation_design], these values will be used to guide stakeholder behaviour through a ranking system that will encourage convergence to the $N^{\textit{Pools}}$ best-performing pools. For this pool, which is *saturated*, the non-myopic rewards are identical to the *optimal rewards*. Rewards will be returned as described in Section 2.4. In the MainNet, when multiple owners are involved, this return could be through a multi-signature transaction [@shelley_multisig], according to an agreed formula.
 
 ### Delegator Rewards
 

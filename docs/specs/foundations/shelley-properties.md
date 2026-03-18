@@ -4,7 +4,7 @@ This section describes the properties that the ledger should have. The goal is t
 ## Header-Only Validation
 The header-only validation properties of the Shelley Ledger are the analogs of those from Section 8.1 of [@byron_chain_spec].
 
-In any given chain state, the consensus layer needs to be able to validate the block headers without having to download the block bodies. Property [\[prop:header-only-validation\]](#prop:header-only-validation) states that if an extension of a chain that spans less than $\StabilityWindow$ slots is valid, then validating the headers of that extension is also valid. This property is useful for its converse: if the header validation check for a sequence of headers does not pass, then we know that the block validation that corresponds to those headers will not pass either.
+In any given chain state, the consensus layer needs to be able to validate the block headers without having to download the block bodies. Property prop:header-only-validation states that if an extension of a chain that spans less than $\StabilityWindow$ slots is valid, then validating the headers of that extension is also valid. This property is useful for its converse: if the header validation check for a sequence of headers does not pass, then we know that the block validation that corresponds to those headers will not pass either.
 
 First we define the header-only version of the $\mathsf{CHAIN}$ transition, which we call $\mathsf{CHAINHEAD}$. It is very similiar to $\mathsf{CHAIN}$, the only difference being that it does not call $\mathsf{BBODY}$.
 
@@ -105,7 +105,7 @@ $$\begin{equation}
   \implies
   e_{i-1} \vdash s_{i-1}\trans{\hyperref[fig:rules:chainhead]{chainhead}}{h_i} s'_{h}$$ where $t_E$ is the maximum slot number appearing in the blocks contained in $E$.
 
-Property [\[prop:body-only-validation\]](#prop:body-only-validation) states that if we validate a sequence of headers, we can validate their bodies independently and be sure that the blocks will pass the chain validation rule. To see this, given an environment $e$ and initial state $s$, assume that a sequence of headers $H = [h_0, \ldots, h_n]$ corresponding to blocks in $E = [b_0, \ldots, b_n]$ is valid according to the $\mathsf{chainhead}$ transition system: $$e \vdash s \xlongrightarrow[\textsc{\hyperref[fig:rules:chainhead]{chainhead}}]{H}\negthickspace^{*} s'$$ Assume the bodies of $E$ are valid according to the $\mathsf{bbody}$ rules, but $E$ is not valid according to the $\mathsf{chain}$ rule. Assume that there is a $b_j \in E$ such that it is **the first block** such that does not pass the $\mathsf{chain}$ validation. Then: $$e \vdash s \xlongrightarrow[\textsc{\hyperref[fig:rules:chain]{chain}}]{[b_0, \ldots b_{j-1}]}\negthickspace^{*} s_j$$ But by Property [\[prop:body-only-validation\]](#prop:body-only-validation) we know that $$e_j \vdash s_j \trans{\hyperref[fig:rules:chainhead]{chainhead}}{h_j} s_{j+1}$$ which means that block $b_j$ has valid headers, and this in turn means that the validation of $b_j$ according to the chain rules must have failed because it contained an invalid block body. But this contradicts our assumption that the block bodies were valid.
+Property prop:body-only-validation states that if we validate a sequence of headers, we can validate their bodies independently and be sure that the blocks will pass the chain validation rule. To see this, given an environment $e$ and initial state $s$, assume that a sequence of headers $H = [h_0, \ldots, h_n]$ corresponding to blocks in $E = [b_0, \ldots, b_n]$ is valid according to the $\mathsf{chainhead}$ transition system: $$e \vdash s \xlongrightarrow[\textsc{\hyperref[fig:rules:chainhead]{chainhead}}]{H}\negthickspace^{*} s'$$ Assume the bodies of $E$ are valid according to the $\mathsf{bbody}$ rules, but $E$ is not valid according to the $\mathsf{chain}$ rule. Assume that there is a $b_j \in E$ such that it is **the first block** such that does not pass the $\mathsf{chain}$ validation. Then: $$e \vdash s \xlongrightarrow[\textsc{\hyperref[fig:rules:chain]{chain}}]{[b_0, \ldots b_{j-1}]}\negthickspace^{*} s_j$$ But by Property prop:body-only-validation we know that $$e_j \vdash s_j \trans{\hyperref[fig:rules:chainhead]{chainhead}}{h_j} s_{j+1}$$ which means that block $b_j$ has valid headers, and this in turn means that the validation of $b_j$ according to the chain rules must have failed because it contained an invalid block body. But this contradicts our assumption that the block bodies were valid.
 
 ::: property
 []{#prop:roll-back-funk label="prop:roll-back-funk"} There exists a function $\fun{f}$ such that for all chains $$C = C_0 ; b; C_1$$ we have that if for all alternative chains $C'_1$, $\size{C'_1} \leq \frac{\StabilityWindow}{2}$, with corresponding headers $H'_1$ $$e \vdash s_0 \xlongrightarrow[\textsc{\hyperref[fig:rules:chain]{chain}}]{C_0;b}\negthickspace^{*} s_1 \xlongrightarrow[\textsc{\hyperref[fig:rules:chain]{chain}}]{C_1}\negthickspace^{*} s_2
@@ -114,10 +114,10 @@ Property [\[prop:body-only-validation\]](#prop:body-only-validation) states tha
   \implies
   (\fun{f}~(\bheader{b})~s_2) \xlongrightarrow[\textsc{\hyperref[fig:rules:chainhead]{chainhead}}]{H'_1}\negthickspace^{*} s_h$$
 
-Property [\[prop:roll-back-funk\]](#prop:roll-back-funk) expresses the fact the there is a function that allow us to recover the header-only state by rolling back at most $k$ blocks, and use this state to validate the headers of an alternate chain. Note that this property is not inherent to the $\mathsf{chain}$ rules and can be trivially satisfied by any function that keeps track of the history of the intermediate chain states up to $k$ blocks back. This property is stated here so that it can be used as a reference for the tests in the consensus layer, which uses the rules presented in this document.
+Property prop:roll-back-funk expresses the fact the there is a function that allow us to recover the header-only state by rolling back at most $k$ blocks, and use this state to validate the headers of an alternate chain. Note that this property is not inherent to the $\mathsf{chain}$ rules and can be trivially satisfied by any function that keeps track of the history of the intermediate chain states up to $k$ blocks back. This property is stated here so that it can be used as a reference for the tests in the consensus layer, which uses the rules presented in this document.
 
 ## Validity of a Ledger State
-Many properties only make sense when applied to a valid ledger state. In informal terms, a valid ledger state $l$ can only be reached when starting from an initial state $l_{0}$ (ledger in the genesis state) and only executing LEDGER state transition rules as specified in Section [\[sec:ledger-trans\]](#sec:ledger-trans) which changes wither the UTxO or the delegation state.
+Many properties only make sense when applied to a valid ledger state. In informal terms, a valid ledger state $l$ can only be reached when starting from an initial state $l_{0}$ (ledger in the genesis state) and only executing LEDGER state transition rules as specified in Section sec:ledger-trans which changes wither the UTxO or the delegation state.
 
 
 $$\begin{align*}
@@ -137,7 +137,7 @@ $$\begin{align*}
 \end{align*}$$
 
 **Definitions and Functions for Valid Ledger State**
-In Figure [2](#fig:valid-ledger) marks the transaction identifier of the initial coin distribution, where represents the initial UTxO. It should be noted that no corresponding inputs exists, i.e., the transaction inputs are the empty set for the initial transaction. The function extracts the UTxO from a UTxO state.
+In Figure 2 marks the transaction identifier of the initial coin distribution, where represents the initial UTxO. It should be noted that no corresponding inputs exists, i.e., the transaction inputs are the empty set for the initial transaction. The function extracts the UTxO from a UTxO state.
 
 ::: definition
 $$\begin{multline*}
@@ -158,7 +158,7 @@ $$\begin{multline*}
     \applyFun{validLedgerState} l_{n}
 \end{multline*}$$ []{#def:valid-ledger-state label="def:valid-ledger-state"}
 
-Definition [\[def:valid-ledger-state\]](#def:valid-ledger-state) defines a valid ledger state reachable from the genesis state via valid LEDGER STS transitions. This gives a constructive rule how to reach a valid ledger state.
+Definition def:valid-ledger-state defines a valid ledger state reachable from the genesis state via valid LEDGER STS transitions. This gives a constructive rule how to reach a valid ledger state.
 
 ## Ledger Properties
 The following properties state the desired features of updating a valid ledger state.
@@ -172,7 +172,7 @@ $$\begin{multline*}
     \applyFun{created}{pc~stPools~tx}
 \end{multline*}$$ []{#prop:ledger-properties-1 label="prop:ledger-properties-1"}
 
-Property [\[prop:ledger-properties-1\]](#prop:ledger-properties-1) states that for each valid ledger $l$, if a transaction $tx$ is added to the ledger via the state transition rule UTXOW to the new ledger state $l'$, the balance of the UTxOs in $l$ equals the balance of the UTxOs in $l'$ in the sense that the amount of created value in $l'$ equals the amount of destroyed value in $l$. This means that the total amount of value is left unchanged by a transaction.
+Property prop:ledger-properties-1 states that for each valid ledger $l$, if a transaction $tx$ is added to the ledger via the state transition rule UTXOW to the new ledger state $l'$, the balance of the UTxOs in $l$ equals the balance of the UTxOs in $l'$ in the sense that the amount of created value in $l'$ equals the amount of destroyed value in $l$. This means that the total amount of value is left unchanged by a transaction.
 
 ::: property
 $$\begin{multline*}
@@ -185,7 +185,7 @@ $$\begin{multline*}
     \applyFun{txfee}{tx} + depositChange
 \end{multline*}$$ []{#prop:ledger-properties-2 label="prop:ledger-properties-2"}
 
-Property [\[prop:ledger-properties-2\]](#prop:ledger-properties-2) states a slightly more detailed relation of the balances change. For ledgers $l, l'$ and a transaction $tx$ as above, the balance of the UTxOs of $l$ restricted to those whose domain is in the set of transaction inputs of $tx$ equals the balance of the transaction outputs of $tx$ minus the transaction fees and the change in the deposit $depositChange$ (cf. Fig. [\[fig:rules:utxo-shelley\]](#fig:rules:utxo-shelley)).
+Property prop:ledger-properties-2 states a slightly more detailed relation of the balances change. For ledgers $l, l'$ and a transaction $tx$ as above, the balance of the UTxOs of $l$ restricted to those whose domain is in the set of transaction inputs of $tx$ equals the balance of the transaction outputs of $tx$ minus the transaction fees and the change in the deposit $depositChange$ (cf. Fig. fig:rules:utxo-shelley).
 
 ::: property
 $$\begin{multline*}
@@ -196,7 +196,7 @@ $$\begin{multline*}
     \applyFun{outs}{tx}, out \in \applyFun{getUTxO}{u'}
 \end{multline*}$$ []{#prop:ledger-properties-3 label="prop:ledger-properties-3"}
 
-Property [\[prop:ledger-properties-3\]](#prop:ledger-properties-3) states that for all ledger states $l, l'$ and transaction $tx$ as above, all output UTxOs of $tx$ are in the UTxO set of $l'$, i.e., they are now available as unspent transaction output.
+Property prop:ledger-properties-3 states that for all ledger states $l, l'$ and transaction $tx$ as above, all output UTxOs of $tx$ are in the UTxO set of $l'$, i.e., they are now available as unspent transaction output.
 
 ::: property
 $$\begin{multline*}
@@ -207,7 +207,7 @@ $$\begin{multline*}
     \applyFun{txins}{tx}, in \not\in \fun{dom}(\applyFun{getUTxO}{u'})
 \end{multline*}$$ []{#prop:ledger-properties-4 label="prop:ledger-properties-4"}
 
-Property [\[prop:ledger-properties-4\]](#prop:ledger-properties-4) states that for all ledger states $l, l'$ and transaction $tx$ as above, all transaction inputs $in$ of $tx$ are not in the domain of the UTxO of $l'$, i.e., these are no longer available to spend.
+Property prop:ledger-properties-4 states that for all ledger states $l, l'$ and transaction $tx$ as above, all transaction inputs $in$ of $tx$ are not in the domain of the UTxO of $l'$, i.e., these are no longer available to spend.
 
 ::: property
 $$\begin{multline*}
@@ -219,7 +219,7 @@ $$\begin{multline*}
     \in\applyFun{getUTxO}{u} \implies \var{txId'} \neq \var{txId}
 \end{multline*}$$ []{#prop:ledger-properties-5 label="prop:ledger-properties-5"}
 
-Property [\[prop:ledger-properties-5\]](#prop:ledger-properties-5) states that for ledger states $l, l'$ and a transaction $tx$ as above, the UTxOs of $l'$ contain all newly created UTxOs and the referred transaction id of each new UTxO is not used in the UTxO set of $l$.
+Property prop:ledger-properties-5 states that for ledger states $l, l'$ and a transaction $tx$ as above, the UTxOs of $l'$ contain all newly created UTxOs and the referred transaction id of each new UTxO is not used in the UTxO set of $l$.
 
 ::: property
 $$\begin{multline*}
@@ -244,7 +244,7 @@ $$\begin{multline*}
     \applyFun{txins}{tx_{i}} = \emptyset
 \end{multline*}$$ []{#prop:ledger-properties-no-double-spend label="prop:ledger-properties-no-double-spend"}
 
-Property [\[prop:ledger-properties-no-double-spend\]](#prop:ledger-properties-no-double-spend) states that for each valid ledger state $l_{n}$ reachable from the genesis state, each transaction $t_{i}$ does not share any input with any previous transaction $t_{j}$. This means that each output of a transition is spent at most once.
+Property prop:ledger-properties-no-double-spend states that for each valid ledger state $l_{n}$ reachable from the genesis state, each transaction $t_{i}$ does not share any input with any previous transaction $t_{j}$. This means that each output of a transition is spent at most once.
 
 ## Ledger State Properties for Delegation Transitions
 $$\begin{align*}
@@ -284,7 +284,7 @@ $$\begin{multline*}
     (\applyFun{getRewards}\var{d'})[\fun{addr_{rwd}}{hk}] = 0
 \end{multline*}$$ []{#prop:ledger-properties-6 label="prop:ledger-properties-6"}
 
-Property [\[prop:ledger-properties-6\]](#prop:ledger-properties-6) states that for each valid ledger state $l$, if a delegation transaction of type $\DCertRegKey$ is executed, then in the resulting ledger state $l'$, the set of staking credential of $l'$ includes the credential $hk$ associated with the key registration certificate and the associated reward is set to 0 in $l'$.
+Property prop:ledger-properties-6 states that for each valid ledger state $l$, if a delegation transaction of type $\DCertRegKey$ is executed, then in the resulting ledger state $l'$, the set of staking credential of $l'$ includes the credential $hk$ associated with the key registration certificate and the associated reward is set to 0 in $l'$.
 
 ::: property
 $$\begin{multline*}
@@ -299,7 +299,7 @@ $$\begin{multline*}
     \wedge hk \not\in \fun{dom}(\applyFun{getDelegations}{d'}))
 \end{multline*}$$ []{#prop:ledger-properties-7 label="prop:ledger-properties-7"}
 
-Property [\[prop:ledger-properties-7\]](#prop:ledger-properties-7) states that for $l, l'$ as above but with a delegation transition of type $\DCertDeRegKey$, the staking credential $hk$ associated with the deregistration certificate is not in the set of staking credentials of $l'$ and is not in the domain of either the rewards or the delegation map of $l'$.
+Property prop:ledger-properties-7 states that for $l, l'$ as above but with a delegation transition of type $\DCertDeRegKey$, the staking credential $hk$ associated with the deregistration certificate is not in the set of staking credentials of $l'$ and is not in the domain of either the rewards or the delegation map of $l'$.
 
 ::: property
 $$\begin{multline*}
@@ -311,7 +311,7 @@ $$\begin{multline*}
     (\applyFun{getDelegations}{d'})[hk] = \applyFun{dpool}{c}
 \end{multline*}$$ []{#prop:ledger-properties-8 label="prop:ledger-properties-8"}
 
-Property [\[prop:ledger-properties-8\]](#prop:ledger-properties-8) states that for $l, l'$ as above but with a delegation transition of type $\DCertDeleg$, the staking credential $hk$ associated with the deregistration certificate is in the set of staking credentials of $l$ and delegates to the staking pool associated with the delegation certificate in $l'$.
+Property prop:ledger-properties-8 states that for $l, l'$ as above but with a delegation transition of type $\DCertDeleg$, the staking credential $hk$ associated with the deregistration certificate is in the set of staking credentials of $l$ and delegates to the staking pool associated with the delegation certificate in $l'$.
 
 ::: property
 []{#prop:genkeys-delegated label="prop:genkeys-delegated"} $$\begin{multline*}
@@ -320,7 +320,7 @@ Property [\[prop:ledger-properties-8\]](#prop:ledger-properties-8) states that 
     env \vdash\var{l} \trans{ledgers}{\Gamma} \var{l'} \implies |genDelegs| = 7
 \end{multline*}$$
 
-Property [\[prop:genkeys-delegated\]](#prop:genkeys-delegated) states that all seven of the genesis keys are constantly all delegated after applying a list of transactions to a valid ledger state.
+Property prop:genkeys-delegated states that all seven of the genesis keys are constantly all delegated after applying a list of transactions to a valid ledger state.
 
 ## Ledger State Properties for Staking Pool Transitions
 ::: property
@@ -333,7 +333,7 @@ $$\begin{multline*}
     \applyFun{getRetiring}{p'}
 \end{multline*}$$ []{#prop:ledger-properties-9 label="prop:ledger-properties-9"}
 
-Property [\[prop:ledger-properties-9\]](#prop:ledger-properties-9) states that for $l, l'$ as above but with a delegation transition of type $\DCertRegPool$, the key $hk$ is associated with the author of the pool registration certificate in $\var{stpools}$ of $l'$ and that $hk$ is not in the set of retiring stake pools in $l'$.
+Property prop:ledger-properties-9 states that for $l, l'$ as above but with a delegation transition of type $\DCertRegPool$, the key $hk$ is associated with the author of the pool registration certificate in $\var{stpools}$ of $l'$ and that $hk$ is not in the set of retiring stake pools in $l'$.
 
 ::: property
 $$\begin{multline*}
@@ -349,7 +349,7 @@ $$\begin{multline*}
     )
 \end{multline*}$$ []{#prop:ledger-properties-10 label="prop:ledger-properties-10"}
 
-Property [\[prop:ledger-properties-10\]](#prop:ledger-properties-10) states that for $l, l'$ as above but with a delegation transition of type $\DCertRetirePool$, the key $hk$ is associated with the author of the pool registration certificate in $\var{stpools}$ of $l'$ and that $hk$ is in the map of retiring staking pools of $l'$ with retirement epoch $e$, as well as that $hk$ is in the map of stake pools in $l$ and $l'$.
+Property prop:ledger-properties-10 states that for $l, l'$ as above but with a delegation transition of type $\DCertRetirePool$, the key $hk$ is associated with the author of the pool registration certificate in $\var{stpools}$ of $l'$ and that $hk$ is in the map of retiring staking pools of $l'$ with retirement epoch $e$, as well as that $hk$ is in the map of stake pools in $l$ and $l'$.
 
 ::: property
 $$\begin{multline*}
@@ -364,10 +364,10 @@ $$\begin{multline*}
     \wedge\var{retire} \cap \fun{dom}(\applyFun{getRetiring}{p'}) = \emptyset
 \end{multline*}$$ []{#prop:ledger-properties-11 label="prop:ledger-properties-11"}
 
-Property [\[prop:ledger-properties-11\]](#prop:ledger-properties-11) states that for $l, l'$ as above but with a delegation transition of type POOLREAP, there exist registered stake pools in $l$ which are associated to stake pool registration certificates and which are to be retired at the current epoch $\var{e}$. In $l'$ all those stake pools are removed from the maps $stpools$ and $retiring$.
+Property prop:ledger-properties-11 states that for $l, l'$ as above but with a delegation transition of type POOLREAP, there exist registered stake pools in $l$ which are associated to stake pool registration certificates and which are to be retired at the current epoch $\var{e}$. In $l'$ all those stake pools are removed from the maps $stpools$ and $retiring$.
 
 ## Properties of Numerical Calculations
-The numerical calculations for refunds and rewards in (see Section [\[sec:epoch\]](#sec:epoch)) are also required to have certain properties. In particular we need to make sure that the functions that use non-integral arithmetic have properties which guarantee consistency of the system. Here, we state those properties and formulate them in a way that makes them usable in properties-based testing for validation in the executable spec.
+The numerical calculations for refunds and rewards in (see Section sec:epoch) are also required to have certain properties. In particular we need to make sure that the functions that use non-integral arithmetic have properties which guarantee consistency of the system. Here, we state those properties and formulate them in a way that makes them usable in properties-based testing for validation in the executable spec.
 
 ::: property
 []{#prop:minimal-refund label="prop:minimal-refund"}

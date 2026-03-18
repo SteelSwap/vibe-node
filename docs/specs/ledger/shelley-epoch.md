@@ -1,7 +1,7 @@
 # Rewards and the Epoch Boundary
 This chapter introduces the epoch boundary transition system and the related reward calculation.
 
-The transition system is defined in Section [1.7](#sec:total-epoch), and involves taking stake distribution snapshots (Sections [1.3](#sec:stake-dist-calc) and [1.4](#sec:snapshots)), retiring stake pools (Section [1.5](#sec:pool-reap)), and performing protocol updates (Section [1.6](#sec:pparam-update)). The reward calculation, defined in Sections [1.8](#sec:reward-dist) and [1.9](#sec:reward-calc), distributes the leader election rewards.
+The transition system is defined in Section 1.7, and involves taking stake distribution snapshots (Sections 1.3 and 1.4), retiring stake pools (Section 1.5), and performing protocol updates (Section 1.6). The reward calculation, defined in Sections 1.8 and 1.9, distributes the leader election rewards.
 
 ## Overview of the Reward Calculation
 The rewards for a given epoch $e_i$ involve the two epochs surrounding it. In particular, the stake distribution will come from the previous epoch and the rewards will be calculated in the following epoch. More concretely:
@@ -24,15 +24,15 @@ We must therefore store the last three stake distributions. The mnemonic "mark, 
 
 The two main transition systems in this section are:
 
-- The transition system named $\mathsf{EPOCH}$, which is defined in Section [1.7](#sec:total-epoch), covers what happens at the epoch boundary, such as at (A), (C), (D) and (G).
+- The transition system named $\mathsf{EPOCH}$, which is defined in Section 1.7, covers what happens at the epoch boundary, such as at (A), (C), (D) and (G).
 
-- The transition named $\mathsf{RUPD}$, which is defined in Section [\[sec:reward-update-trans\]](#sec:reward-update-trans), covers the reward calculation that happens between (E) and (F).
+- The transition named $\mathsf{RUPD}$, which is defined in Section sec:reward-update-trans, covers the reward calculation that happens between (E) and (F).
 
 ::: note
 Between time D and E we are concerned with chain growth and stability. Therefore this duration can be stated as 2k blocks (to state it in slots requires details about the particular version of the Ouroboros protocol). The duration between F and G is also 2k blocks. Between E and F a single honest block is enough to ensure a random nonce.
 
 ## Helper Functions and Accounting Fields
-Figure [1](#fig:funcs:epoch-helper-rewards) defines four helper functions needed throughout the rest of the section.
+Figure 1 defines four helper functions needed throughout the rest of the section.
 
 - The function $\fun{obligation}$ calculates the the minimal amount of coin needed to pay out all deposit refunds.
 
@@ -54,13 +54,13 @@ Figure [1](#fig:funcs:epoch-helper-rewards) defines four helper functions neede
 \end{align*}$$
 
 **Helper Functions used in Rewards and Epoch Boundary**
-The Figure [2](#fig:defs:accounting) lists the accounting fields, denoted by $\Acnt$, which will be used throughout this section. It consists of:
+The Figure 2 lists the accounting fields, denoted by $\Acnt$, which will be used throughout this section. It consists of:
 
 - The value $\var{treasury}$ tracks the amount of coin currently stored in the treasury. Initially there will be no way to remove these funds.
 
 - The value $\var{reserves}$ tracks the amount of coin currently stored in the reserves. This pot is used to pay rewards.
 
-More will be said about the general accounting system in Section [1.9](#sec:reward-calc).
+More will be said about the general accounting system in Section 1.9.
 
 
 *Accounting Fields* $$\begin{equation*}
@@ -75,7 +75,7 @@ More will be said about the general accounting system in Section [1.9](#sec:rew
 
 **Accounting fields**
 ## Stake Distribution Calculation
-This section defines the stake distribution calculations. Figure [3](#fig:epoch-defs) introduces three new derived types:
+This section defines the stake distribution calculations. Figure 3 introduces three new derived types:
 
 - $\type{BlocksMade}$ represents the number of blocks each stake pool produced during an epoch.
 
@@ -96,7 +96,7 @@ This section defines the stake distribution calculations. Figure [3](#fig:epoch
 \end{equation*}$$
 
 **Epoch definitions**
-The stake distribution calculation is given in Figure [4](#fig:functions:stake-distribution).
+The stake distribution calculation is given in Figure 4.
 
 - $\fun{aggregate_{+}}$ takes a relation on $A\times B$, where $B$ is any monoid $(B,+,e)$ and returns a map from each $a\in A$ to the "sum" (using the monoidal $+$ operation) of all $b\in B$ such that $(a, b)\in A\times B$.
 
@@ -110,7 +110,7 @@ The stake distribution calculation is given in Figure [4](#fig:functions:stake-
 
   - $\fun{stakeCred_r}^{-1}\circ\var{rewards}$, relating (reward) addresses to coins
 
-  The notation for relations is explained in Section [\[sec:notation-shelley\]](#sec:notation-shelley).
+  The notation for relations is explained in Section sec:notation-shelley.
 
 
 *Aggregation (for a monoid B)* $$\begin{align*}
@@ -138,9 +138,9 @@ The stake distribution calculation is given in Figure [4](#fig:functions:stake-
 
 **Stake Distribution Function**
 ## Snapshot Transition
-The state transition types for stake distribution snapshots are given in Figure [5](#fig:ts-types:snapshot). Each snapshot consists of:
+The state transition types for stake distribution snapshots are given in Figure 5. Each snapshot consists of:
 
-- $\var{stake}$, a stake distribution, which is defined in Figure [3](#fig:epoch-defs) as a mapping of credentials to coin.
+- $\var{stake}$, a stake distribution, which is defined in Figure 3 as a mapping of credentials to coin.
 
 - $\var{delegations}$, a delegation map, mapping credentials to stake pools.
 
@@ -148,7 +148,7 @@ The state transition types for stake distribution snapshots are given in Figure�
 
 The type $\type{\type{Snapshots}}$ contains the information needing to be saved on the epoch boundary:
 
-- $\var{pstake_{mark}}$, $\var{pstake_{set}}$ and $\var{pstake_{go}}$ are the three snapshots as explained in Section [1.1](#sec:reward-overview).
+- $\var{pstake_{mark}}$, $\var{pstake_{set}}$ and $\var{pstake_{go}}$ are the three snapshots as explained in Section 1.1.
 
 - $\var{feeSS}$ stores the fees which are added to the reward pot during the next reward update calculation, which is then subtracted from the fee pot on the epoch boundary.
 
@@ -182,7 +182,7 @@ $$\begin{equation*}
 \end{equation*}$$
 
 **Snapshot transition-system types**
-The snapshot transition rule is given in Figure [6](#fig:rules:snapshot). This transition has no preconditions and results in the following state change:
+The snapshot transition rule is given in Figure 6. This transition has no preconditions and results in the following state change:
 
 - The oldest snapshot is replaced with the penultimate one.
 
@@ -231,7 +231,7 @@ $$\begin{equation}
 
 **Snapshot Inference Rule**
 ## Pool Reaping Transition
-Figure [7](#fig:ts-types:pool-reap) defines the types for the pool reap transition, which is responsible for removing pools slated for retirement in the given epoch.
+Figure 7 defines the types for the pool reap transition, which is responsible for removing pools slated for retirement in the given epoch.
 
 
 *Pool Reap State* $$\begin{equation*}
@@ -250,7 +250,7 @@ Figure [7](#fig:ts-types:pool-reap) defines the types for the pool reap transit
 \end{equation*}$$
 
 **Pool Reap Transition**
-The pool-reap transition rule is given in Figure [8](#fig:rules:pool-reap). This transition has no preconditions and results in the following state change:
+The pool-reap transition rule is given in Figure 8. This transition has no preconditions and results in the following state change:
 
 - For each retiring pool, the refund for the pool registration deposit is added to the pool's registered reward account, provided the reward account is still registered.
 
@@ -348,7 +348,7 @@ $$\begin{equation}
 
 **Pool Reap Inference Rule**
 ## Protocol Parameters Update Transition
-Finally, reaching the epoch boundary may trigger a change in the protocol parameters. The protocol parameters environment consists of the delegation and pool states, and the signal is an optional new collection of protocol parameters The state change is a change of the $\UTxOState$, the $\Acnt$ states and the current $\PParams$. The type of this state transition is given in Figure [9](#fig:ts-types:new-proto-param).
+Finally, reaching the epoch boundary may trigger a change in the protocol parameters. The protocol parameters environment consists of the delegation and pool states, and the signal is an optional new collection of protocol parameters The state change is a change of the $\UTxOState$, the $\Acnt$ states and the current $\PParams$. The type of this state transition is given in Figure 9.
 
 
 *New Proto Param environment* $$\begin{equation*}
@@ -395,7 +395,7 @@ Finally, reaching the epoch boundary may trigger a change in the protocol parame
 \end{align*}$$
 
 **New Proto Param transition-system types**
-Figure [10](#fig:rules:new-proto-param) defines the new protocol parameter transition. The transition has two rules, depending on whether or not the new protocol parameters meet some requirements. In particular, we require that the new parameters would not incur a debt of the system that can not be covered by the reserves, and that the max block size is greater than the sum of the max transaction size and the max header size. If the requirements are met, the new protocol parameters are accepted, the proposal is reset, and the reserves are adjusted to account for changes in the deposits. Otherwise, the only change is that the proposal is reset.
+Figure 10 defines the new protocol parameter transition. The transition has two rules, depending on whether or not the new protocol parameters meet some requirements. In particular, we require that the new parameters would not incur a debt of the system that can not be covered by the reserves, and that the max block size is greater than the sum of the max transaction size and the max header size. If the requirements are met, the new protocol parameters are accepted, the proposal is reset, and the reserves are adjusted to account for changes in the deposits. Otherwise, the only change is that the proposal is reset.
 
 The $\mathsf{NEWPP}$ rule also cleans up the protocol parameter update proposals, by calling $\fun{updatePpup}$ on the UTxO state. The $\fun{updatePpup}$ sets the protocol parameter updates to the future protocol parameter updates provided the protocol versions all can follow from the version given in the protocol parameters, or the emptyset otherwise. In any case, the future protocol parameters update proposals are set to the empty set. If new protocol parameters are being adopted, then these is the value given to $\fun{updatePpup}$, otherwise the old parameters are given.
 
@@ -405,7 +405,7 @@ Regarding adjusting the reserves for changes in the deposits, one of three thing
 
 - If the new protocol parameters mean that **more** funds are required in the deposit pot to cover all possible refunds and the difference is **less** than the reserve pot, then funds are moved from the reserve pot to cover the difference.
 
-- If the new protocol parameters mean that **more** funds are required in the deposit pot to cover all possible refunds and the difference is **more** than the reserve pot, then Rule [\[eq:new-pc-denied\]](#eq:new-pc-denied) meets the precondition and the only change of state is that the update proposals are reset.
+- If the new protocol parameters mean that **more** funds are required in the deposit pot to cover all possible refunds and the difference is **more** than the reserve pot, then Rule eq:new-pc-denied meets the precondition and the only change of state is that the update proposals are reset.
 
 Note that here, unlike most of the inference rules in this document, the $\var{utxoSt'}$ and the $\var{acnt'}$ do not come from valid UTxO or accounts transitions in the antecedent. We simply define the consequent transition using these directly (instead of listing all the fields in both states in the consequent transition). It is done this way here for ease of reading.
 
@@ -514,7 +514,7 @@ $$\begin{equation}
 
 **New Proto Param Inference Rule**
 ## Complete Epoch Boundary Transition
-Finally, it is possible to define the complete epoch boundary transition type, which is defined in Figure [11](#fig:ts-types:epoch). The transition has no evironment. The state is made up of the the accounting state, the snapshots, the ledger state and the protocol parameters. The transition uses a helper function $\fun{votedValue}$ which returns the consensus value of update proposals in the event that consensus is met. **Note that** $\fun{votedValue}$ **is only well-defined if** $\var{quorum}$ **is greater than half the number of core nodes, i.e.** $\Quorum > |\var{genDelegs}|/2$ **.**
+Finally, it is possible to define the complete epoch boundary transition type, which is defined in Figure 11. The transition has no evironment. The state is made up of the the accounting state, the snapshots, the ledger state and the protocol parameters. The transition uses a helper function $\fun{votedValue}$ which returns the consensus value of update proposals in the event that consensus is met. **Note that** $\fun{votedValue}$ **is only well-defined if** $\var{quorum}$ **is greater than half the number of core nodes, i.e.** $\Quorum > |\var{genDelegs}|/2$ **.**
 
 
 *Epoch States* $$\begin{equation*}
@@ -652,7 +652,7 @@ $$\begin{equation}
 
 **Epoch Inference Rule**
 ## Rewards Distribution Calculation
-This section defines the reward calculation for the proof of stake leader election. Figure [13](#fig:functions:rewards) defines the pool reward as described in section 5.5.2 of [@delegation_design].
+This section defines the reward calculation for the proof of stake leader election. Figure 13 defines the pool reward as described in section 5.5.2 of [@delegation_design].
 
 - The function $\fun{maxPool}$ gives the maximum reward a stake pool can receive in an epoch. This is a fraction of the total available rewards for the epoch. The result depends on the pool's relative stake, the pool's pledge and the following protocol parameters:
 
@@ -694,7 +694,7 @@ This section defines the reward calculation for the proof of stake leader electi
 \end{align*}$$
 
 **Functions used in the Reward Calculation**
-Figure [14](#fig:functions:reward-splitting) gives the calculation for splitting the pool rewards with its members, as described in 6.5.2 of [@delegation_design]. The portion of rewards allocated to the pool operator and owners is different than that of the members.
+Figure 14 gives the calculation for splitting the pool rewards with its members, as described in 6.5.2 of [@delegation_design]. The portion of rewards allocated to the pool operator and owners is different than that of the members.
 
 - The $\fun{r_{operator}}$ function calculates the leader reward, based on the pool cost, margin and the proportion of the pool's total stake. Note that this reward will go to the reward account specified in the pool registration certificate.
 
@@ -728,7 +728,7 @@ Figure [14](#fig:functions:reward-splitting) gives the calculation for splittin
 \end{align*}$$
 
 **Functions used in the Reward Splitting**
-Finally, the full reward calculation is presented in Figure [15](#fig:functions:reward-calc). The calculation is done pool-by-pool.
+Finally, the full reward calculation is presented in Figure 15. The calculation is done pool-by-pool.
 
 - The $\fun{rewardOnePool}$ function calculates the rewards given out to each member of a given pool. The pool leader is identified by the stake credential of the pool operator. The function returns the rewards, calculated as follows:
 
@@ -825,7 +825,7 @@ Finally, the full reward calculation is presented in Figure [15](#fig:functions
 ## Reward Update Calculation
 This section defines the calculation of a reward update. A reward update is the information needed to account for the movement of lovelace in the system due to paying out rewards.
 
-Figure [16](#fig:fund-preservation) captures the potential movement of funds in the entire system, taking every transition system in this document into account. Value is moved between accounting pots, but the total amount of value in the system remains constant. In particular, the red subgraph represents the inputs and outputs to the "reward pot", a temporary variable used during the reward update calculation in Figure [18](#fig:functions:reward-update-creation). The blue arrows represent the movement of funds that pass through the "reward pot".
+Figure 16 captures the potential movement of funds in the entire system, taking every transition system in this document into account. Value is moved between accounting pots, but the total amount of value in the system remains constant. In particular, the red subgraph represents the inputs and outputs to the "reward pot", a temporary variable used during the reward update calculation in Figure 18. The blue arrows represent the movement of funds that pass through the "reward pot".
 
 ::::: {#fig:fund-preservation .figure latex-placement="htb"}
 ::: center
@@ -833,7 +833,7 @@ Figure [16](#fig:fund-preservation) captures the potential movement of funds in
 **Preservation of Value**
 :::::
 
-Figure [17](#fig:defs:reward-update) defines a reward update. It consists of four pots:
+Figure 17 defines a reward update. It consists of four pots:
 
 - The change to the treasury. This will be a positive value.
 
@@ -857,7 +857,7 @@ Figure [17](#fig:defs:reward-update) defines a reward update. It consists of fo
 \end{equation*}$$
 
 **Rewards Update type**
-Figure [18](#fig:functions:reward-update-creation) defines two functions, $\fun{createRUpd}$ to create a reward update and $\fun{applyRUpd}$ to apply a reward update to an instance of $\type{EpochState}$.
+Figure 18 defines two functions, $\fun{createRUpd}$ to create a reward update and $\fun{applyRUpd}$ to apply a reward update to an instance of $\type{EpochState}$.
 
 The $\fun{createRUpd}$ function does the following:
 
@@ -871,7 +871,7 @@ The $\fun{createRUpd}$ function does the following:
 
   - The amount of monetary expansion from the reserves, calculated above.
 
-  Note that the fee pot is taken from the snapshot taken at the epoch boundary. (See Figure[6](#fig:rules:snapshot)).
+  Note that the fee pot is taken from the snapshot taken at the epoch boundary. (See Figure6).
 
 - Next we calculate the proportion of the reward pot that will move to the treasury, as determined by the $\tau$ protocol parameter. The remaining pot is called the $\var{R}$, just as in section 6.5 of [@delegation_design].
 
@@ -891,7 +891,7 @@ The $\fun{applyRUpd}$ function does the following:
 
   - The sum of the unregistered rewards are added to the reserves.
 
-These two functions will be used in the blockchain transition systems in Section [\[sec:chain\]](#sec:chain). In particular, $\fun{createRUpd}$ will be used in Equation [\[eq:reward-update\]](#eq:reward-update), and $\fun{applyRUpd}$ will be used in Equation [\[eq:new-epoch\]](#eq:new-epoch).
+These two functions will be used in the blockchain transition systems in Section sec:chain. In particular, $\fun{createRUpd}$ will be used in Equation eq:reward-update, and $\fun{applyRUpd}$ will be used in Equation eq:new-epoch.
 
 
 *Calculation to create a reward update* $$\begin{align*}

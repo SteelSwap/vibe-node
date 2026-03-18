@@ -1,5 +1,5 @@
 # Cryptographic primitives
-Figure [1](#fig:crypto-defs-shelley) introduces the cryptographic abstractions used in this document. We begin by listing the abstract types, which are meant to represent the corresponding concepts in cryptography. Their exact implementation remains open to interpretation and we do not rely on any additional properties of public key cryptography that are not explicitly stated in this document. The types and rules we give here are needed in order to guarantee certain security properties of the delegation process, which we discuss later.
+Figure 1 introduces the cryptographic abstractions used in this document. We begin by listing the abstract types, which are meant to represent the corresponding concepts in cryptography. Their exact implementation remains open to interpretation and we do not rely on any additional properties of public key cryptography that are not explicitly stated in this document. The types and rules we give here are needed in order to guarantee certain security properties of the delegation process, which we discuss later.
 
 The cryptographic concepts required for the formal definition of witnessing include public-private key pairs, one-way functions, signatures and multi-signature scripts. The constraint we introduce states that a signature of some data signed with a (private) key is only correct whenever we can verify it using the corresponding public key.
 
@@ -44,7 +44,7 @@ Serialization is a physical manifestation of data on a given storage device. In 
 \end{align*}$$
 
 **Cryptographic definitions**
-When we get to the blockchain layer validation, we will use key evolving signatures (KES) according to the MMM scheme [@cryptoeprint:2001:034]. This is another asymmetric key cryptographic scheme, also relying on the use of public and private key pairs. These signature schemes provide forward cryptographic security, meaning that a compromised key does not make it easier for an adversary to forge a signature that allegedly had been signed in the past. Figure [2](#fig:kes-defs-shelley) introduces the additional cryptographic abstractions needed for KES.
+When we get to the blockchain layer validation, we will use key evolving signatures (KES) according to the MMM scheme [@cryptoeprint:2001:034]. This is another asymmetric key cryptographic scheme, also relying on the use of public and private key pairs. These signature schemes provide forward cryptographic security, meaning that a compromised key does not make it easier for an adversary to forge a signature that allegedly had been signed in the past. Figure 2 introduces the additional cryptographic abstractions needed for KES.
 
 In KES, the public verification key stays constant, but the corresponding private key evolves incrementally. For this reason, KES signing keys are indexed by integers representing the step in the key's evolution. This evolution step parameter is also an additional parameter needed for the signing (denoted by $\fun{sign_{ev}}$) and verification (denoted by $\fun{verify_{ev}}$) functions.
 
@@ -80,7 +80,7 @@ Since the private key evolves incrementally in a KES scheme, the ledger rules re
 \end{align*}$$
 
 **KES Cryptographic definitions**
-Figure [3](#fig:types-msig) shows the types for multi-signature schemes. Multi-signatures effectively specify one or more combinations of cryptographic signatures which are considered valid. This is realized in a native way via a script-like DSL which allows for defining terms that can be evaluated. Multi-signature scripts is the only type of script (for any purpose, including output-locking) that exist in Shelley.
+Figure 3 shows the types for multi-signature schemes. Multi-signatures effectively specify one or more combinations of cryptographic signatures which are considered valid. This is realized in a native way via a script-like DSL which allows for defining terms that can be evaluated. Multi-signature scripts is the only type of script (for any purpose, including output-locking) that exist in Shelley.
 
 The terms form a tree like structure and are evaluated via the function. The parameters are a script and a set of key hashes. The function returns $\mathsf{True}$ when the supplied key hashes are a valid combination for the script, otherwise it returns $\mathsf{False}$. The following are the four constructors that make up the multisignature script scheme:
 

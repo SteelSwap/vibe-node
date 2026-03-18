@@ -2,7 +2,7 @@
 In the ledger there are several cases where non-integral calculations are required, particularly calculations relating to delegation transitions.
 
 ## Types of Non-Integral Calculations
-The specification employs non-integral calculations for different mathematical operations. Table [1](#tab:func-non-integral) shows the function and transition rules that use non-integral calculations and which type.
+The specification employs non-integral calculations for different mathematical operations. Table 1 shows the function and transition rules that use non-integral calculations and which type.
 
 
   name    page   multiplication   division   exponential function   exponentiation

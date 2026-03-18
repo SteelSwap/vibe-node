@@ -3,7 +3,7 @@ Updates to the software will include increasing the protocol version. An increas
 
 The current protocol version ($\ProtVer$) is a member of the protocol parameters. It represents a specific version of the *ledger rules*. If $\var{pv}$ changes, this document may have to be updated with the new rules and types if there is a change in the logic. If there is a change in the transition rules, nodes must have software installed that can implement these rules at the epoch boundary when the protocol parameter adoption occurs. Switching to using these new rules is mandatory in the sense that if the nodes do not have the applications implementing them, this will prevent a user from reading and writing to the ledger.
 
-Applications must sometimes support *several different versions* of ledger rules in order to accommodate the timely switch of the $\ProtVer$ at the epoch boundary. In this situation, the newest protocol version a node is ready to use is included in the block header of the blocks it produces, see [\[sec:defs-blocks\]](#sec:defs-blocks). This is either:
+Applications must sometimes support *several different versions* of ledger rules in order to accommodate the timely switch of the $\ProtVer$ at the epoch boundary. In this situation, the newest protocol version a node is ready to use is included in the block header of the blocks it produces, see sec:defs-blocks. This is either:
 
 - the current version (if there is no protocol version update pending or the node has not updated to an upcoming software version capable of of implementing a newer protocol version), or
 
@@ -11,4 +11,4 @@ Applications must sometimes support *several different versions* of ledger rules
 
 Stake pools have some agency in the process of adoption of new protocol versions. They may refuse to download and install updates. Since software updates cannot be *forced* on the users, if the majority of users do not perform an update which allows the switch to the next $\ProtVer$, it cannot happen.
 
-Note that if there is a *new protocol version* implemented by new software, the core nodes can monitor how many nodes are ready to use the new protocol version via the block headers. Once enough nodes are ready for the new protocol version, this may now be updated as well (by the mechanism in described in Section [\[sec:update\]](#sec:update)).
+Note that if there is a *new protocol version* implemented by new software, the core nodes can monitor how many nodes are ready to use the new protocol version via the block headers. Once enough nodes are ready for the new protocol version, this may now be updated as well (by the mechanism in described in Section sec:update).

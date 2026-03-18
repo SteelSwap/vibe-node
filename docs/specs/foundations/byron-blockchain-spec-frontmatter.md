@@ -36,7 +36,7 @@ Option type
 
 Union override
 
-:   The union override operation is defined in Figure [1](#fig:unionoverride).
+:   The union override operation is defined in Figure 1.
 
     :::: {#fig:unionoverride .figure}
     $$\begin{align*}
@@ -83,7 +83,7 @@ Natural numbers
 
 # Update interface
 
-We define a general update interface to abstract over the various update state transitions which happen when a new block is processed. Figure [2](#fig:defs:bupi) defines the type of signals used for this system. Figure [4](#fig:rules:bupi) defines the rules for this system. The two rules handle the cases where there is or is not an update proposal contained within the block.
+We define a general update interface to abstract over the various update state transitions which happen when a new block is processed. Figure 2 defines the type of signals used for this system. Figure 4 defines the rules for this system. The two rules handle the cases where there is or is not an update proposal contained within the block.
 
 
 *Update interface signals* $$\begin{equation*}
@@ -171,13 +171,13 @@ Shelley/Praos
 
 :   In the Shelley/Praos era, blocks will be issued according to the Ouroboros Praos ([@ouroboros_praos]) protocol, with stake distribution determined according to the new delegation design in [@delegation_design].
 
-During the handover era (as described in this document), while blocks will be issued according to Ouroboros BFT, they will be validated according to a variant known as Permissive BFT. This is designed such that it will successfully validate blocks issued both under Ouroboros and under Ouroboros BFT (with a high probability - see Appendix [9](#apdx:calculating-t)).
+During the handover era (as described in this document), while blocks will be issued according to Ouroboros BFT, they will be validated according to a variant known as Permissive BFT. This is designed such that it will successfully validate blocks issued both under Ouroboros and under Ouroboros BFT (with a high probability - see Appendix 9).
 
 This section therefore will describe the section of the rules concerned with the Permissive BFT protocol. Note that all of these are concerned only with the block header, since the block body is entirely concerned with the ledger.
 
 ## Counting signed blocks
 
-To guard against the compromise of a minority of the genesis keys, we require that in the rolling window of the last $k$ blocks, where $k$ is the chain stability parameter, the number of blocks signed by keys that $sk_s$ delegated to is no more than a threshold $k \cdot t$, where $t$ is a constant that will be picked in the range $1/5 \leq t \leq 1/4$. Initial research suggests setting $t=0.22$ as a good value. Specifically, given $k=2160$, we would allow a single genesis key to issue (via delegates) $475$ blocks (since $2160 \cdot 0.22 = 475.2$), but a $476^{\text{th}}$ block would be rejected. See Appendix [9](#apdx:calculating-t) for the background on this value. The abstract constant (nullary functions) related to the protocol are defined in [5](#fig:defs:proto-abstract-funcs).
+To guard against the compromise of a minority of the genesis keys, we require that in the rolling window of the last $k$ blocks, where $k$ is the chain stability parameter, the number of blocks signed by keys that $sk_s$ delegated to is no more than a threshold $k \cdot t$, where $t$ is a constant that will be picked in the range $1/5 \leq t \leq 1/4$. Initial research suggests setting $t=0.22$ as a good value. Specifically, given $k=2160$, we would allow a single genesis key to issue (via delegates) $475$ blocks (since $2160 \cdot 0.22 = 475.2$), but a $476^{\text{th}}$ block would be rejected. See Appendix 9 for the background on this value. The abstract constant (nullary functions) related to the protocol are defined in 5.
 
 
 *Abstract functions* $$\begin{equation*}
@@ -189,7 +189,7 @@ To guard against the compromise of a minority of the genesis keys, we require th
 \end{equation*}$$
 
 **Protocol abstract functions**
-Figure [7](#fig:rules:sigcnt) gives the rules for signature counting. We verify that the key that delegates to the signer of this block has not already signed more than its allowed threshold of blocks. If there are no delegators for the given key, or if there is more than one delegator, the rule will fail to trigger. We then update the sequence of signers, and drop those elements that fall outside the size of the moving window ($k$).
+Figure 7 gives the rules for signature counting. We verify that the key that delegates to the signer of this block has not already signed more than its allowed threshold of blocks. If there are no delegators for the given key, or if there is more than one delegator, the rule will fail to trigger. We then update the sequence of signers, and drop those elements that fall outside the size of the moving window ($k$).
 
 
 *Block signature count environments* $$\begin{equation*}
@@ -322,11 +322,11 @@ $$\begin{equation*}
 
 During each block transition, we must determine whether that block sits on an epoch boundary and, if so, carry out various actions which are done on that boundary. In the BFT era, the only computation carried out at the epoch boundary is the update of protocol versions.
 
-We rely on a function $\mathsf{sEpoch}$, whose type is given in [11](#fig:defs:epoch), to determine the epoch corresponding to a given slot. We do not provide an implementation for such function in this specification, but in practice a possible way of implementing such function is to rely on map from the epochs to their corresponding length (given in number of slots they contain). Such a map would also be required by the database layer to find the requisite epoch file to look up a given block. We envision that an implementation may of course choose a more compact representation for this partial function that only records the changes in epoch length, rather than storing a length for each epoch. In addition, we rely on abstract constant (nullary function) $\mathit{ngk}$, which determines the number of genesis keys.
+We rely on a function $\mathsf{sEpoch}$, whose type is given in 11, to determine the epoch corresponding to a given slot. We do not provide an implementation for such function in this specification, but in practice a possible way of implementing such function is to rely on map from the epochs to their corresponding length (given in number of slots they contain). Such a map would also be required by the database layer to find the requisite epoch file to look up a given block. We envision that an implementation may of course choose a more compact representation for this partial function that only records the changes in epoch length, rather than storing a length for each epoch. In addition, we rely on abstract constant (nullary function) $\mathit{ngk}$, which determines the number of genesis keys.
 
 It is also worth noticing that in the Byron era, the number of slots per-epoch is fixed to $10 \cdot k$, where $k$ is the chain stability parameter.
 
-Figure [13](#fig:rules:epoch) determines when an epoch change has occurred and updates the update state to the correct version.
+Figure 13 determines when an epoch change has occurred and updates the update state to the correct version.
 
 
 *Abstract functions* $$\begin{equation*}
@@ -430,7 +430,7 @@ We delineate here between processing the header and body of a block. It's useful
 **Basic Block-related Types and Functions**
 ## Block header processing
 
-Processing headers doesn't require any changes to the state, so we simply check predicates. Figure [\[eq:func:header-is-valid\]](#eq:func:header-is-valid) gives the validity predicate for a header. We verify that the block header does not exceed the maximum size specified in the protocol parameters. The $\mathsf{maxHeaderSize}{}$ protocol parameter is defined in [@byron_ledger_spec].
+Processing headers doesn't require any changes to the state, so we simply check predicates. Figure eq:func:header-is-valid gives the validity predicate for a header. We verify that the block header does not exceed the maximum size specified in the protocol parameters. The $\mathsf{maxHeaderSize}{}$ protocol parameter is defined in [@byron_ledger_spec].
 
 
 *Abstract types* $$\begin{equation*}
@@ -455,7 +455,7 @@ $$\begin{equation}
 **Block header validity functions**
 ## Block body processing
 
-During processing of the block body, we perform two main functions: verification of the body integrity using the proofs contained in the block header, and update of the various state components. These rules are given in [18](#fig:rules:bbody), where the types and the functions used there are defined in [17](#fig:ts-types:bbody). The UTxO, delegation, and update state as well as the $\mathsf{maxBlockSize}{}$ protocol parameter are defined in [@byron_ledger_spec].
+During processing of the block body, we perform two main functions: verification of the body integrity using the proofs contained in the block header, and update of the various state components. These rules are given in 18, where the types and the functions used there are defined in 17. The UTxO, delegation, and update state as well as the $\mathsf{maxBlockSize}{}$ protocol parameter are defined in [@byron_ledger_spec].
 
 Verification is done independently for the three components of the body payload: UTxO, delegation and update. Each of these three has a hash in the block header. Note that Byron-era block payload also has an additional component: the VSS payload. This part of the block is unnecessary during the BFT era, and hence we do not verify it.
 
@@ -588,15 +588,15 @@ $$\begin{equation*}
 
 **Block body processing rules**
 # Blockchain extension
-Figure [21](#fig:rules:chain-extension) captures the central chain extension rule. This has two variants, depending on whether the block in question is an epoch boundary block. Epoch boundary blocks are not required during the BFT era, but whilst they are not distributed, epoch boundary blocks must still be processed since their hash forms part of the chain. Since we do not care about the contents of an epoch boundary block, we check that it does not exceed some suitably large size, and otherwise simply update the header hash to the block hash.
+Figure 21 captures the central chain extension rule. This has two variants, depending on whether the block in question is an epoch boundary block. Epoch boundary blocks are not required during the BFT era, but whilst they are not distributed, epoch boundary blocks must still be processed since their hash forms part of the chain. Since we do not care about the contents of an epoch boundary block, we check that it does not exceed some suitably large size, and otherwise simply update the header hash to the block hash.
 
 If the block is not an epoch boundary block, then we process:
 
-- a potential epoch change according to the rules in figure [13](#fig:rules:epoch),
+- a potential epoch change according to the rules in figure 13,
 
-- the header using the validity predicate of equation [\[eq:func:header-is-valid\]](#eq:func:header-is-valid), and
+- the header using the validity predicate of equation eq:func:header-is-valid, and
 
-- the body according to the rules in figure [18](#fig:rules:bbody).
+- the body according to the rules in figure 18.
 
 
 *Abstract functions* $$\begin{equation*}
@@ -856,21 +856,21 @@ The following transition system is used in the properties enunciated in this sec
      }
    }$$*
 
-In any given ledger state, the consensus layer needs to be able to validate the block headers without having to download the block bodies. Property [1](#prop:header-only-validation) states that if an extension of a chain that spans less than $2 \cdot k$ slots is valid, then validating the headers of that extension is also valid. This property is useful for its converse: if the header validation check for a sequence of headers does not pass, then we know that the block validation that corresponds to those headers will not pass either.
+In any given ledger state, the consensus layer needs to be able to validate the block headers without having to download the block bodies. Property 1 states that if an extension of a chain that spans less than $2 \cdot k$ slots is valid, then validating the headers of that extension is also valid. This property is useful for its converse: if the header validation check for a sequence of headers does not pass, then we know that the block validation that corresponds to those headers will not pass either.
 
 
 **Property 1** (Header only validation). *For all environments $e$, states $s$ with slot number $t$[^1], and chain extensions $E$ with corresponding headers $H$ such that: $$0 \leq t_E - t  \leq 2 \cdot k$$ we have: $$e \vdash s \xlongrightarrow[\textsc{chain}]{E}\negthickspace^{*} s' \implies e_h \vdash s_h \xlongrightarrow[\textsc{epoch+bhead+pbft}]{H}\negthickspace^{*} s'_h$$ where $t_E$ is the maximum slot number appearing in the blocks contained in $E$, $e_h \mathrel{\mathop:=}\mathsf{h_e}~e~s$ and $s_h \mathrel{\mathop:=}\mathsf{h_s}~e~s$, and functions $\mathsf{h_e}$ and $\mathsf{h_s}$ select the appropriate environment and state components needed by the $\footnotesize{\textsc{epoch+bhead+pbft}}$ transition system in the obvious way.*
 
-Property [2](#prop:body-only-validation) states that if we validate a sequence of headers, we can validate their bodies independently and be sure that the blocks will pass the chain validation rule. To see this, given an environment $e$ and initial state $s$, assume that a sequence of headers $H = [h_0, \ldots, h_n]$ corresponding to blocks in $E = [b_0, \ldots, b_n]$ is valid according to the $\footnotesize{\textsc{epoch+bhead+pbft}}$ transition system: $$e_h \vdash s_h \xlongrightarrow[\textsc{epoch+bhead+pbft}]{H}\negthickspace^{*} s'_h$$ where $e_h$ and $s_h$ are obtained from $e$ and $s$ as described in Property [1](#prop:header-only-validation). Assume the bodies of $E$ are valid according to the $\footnotesize{\textsc{bbody}}$ rules, but $E$ is not valid according to the $\footnotesize{\textsc{chain}}$ rule. Assume that there is a $b_j \in E$ such that it is **the first block** such that does not pass the $\footnotesize{\textsc{chain}}$ validation. Then: $$e \vdash s \xlongrightarrow[\textsc{chain}]{[b_0, \ldots b_{j-1}]}\negthickspace^{*} s_j$$ But by Property [2](#prop:body-only-validation) we know that $$e_{h_j} \vdash s_{h_j} \xlongrightarrow[\textsc{epoch+bhead+pbft}]{h_j} s_{h_{j+1}}$$ which means that block $b_j$ has valid headers, and this in turn means that the validation of $b_j$ according to the chain rules must have failed because it contained an invalid block body. But this contradicts our assumption that the block bodies were valid.
+Property 2 states that if we validate a sequence of headers, we can validate their bodies independently and be sure that the blocks will pass the chain validation rule. To see this, given an environment $e$ and initial state $s$, assume that a sequence of headers $H = [h_0, \ldots, h_n]$ corresponding to blocks in $E = [b_0, \ldots, b_n]$ is valid according to the $\footnotesize{\textsc{epoch+bhead+pbft}}$ transition system: $$e_h \vdash s_h \xlongrightarrow[\textsc{epoch+bhead+pbft}]{H}\negthickspace^{*} s'_h$$ where $e_h$ and $s_h$ are obtained from $e$ and $s$ as described in Property 1. Assume the bodies of $E$ are valid according to the $\footnotesize{\textsc{bbody}}$ rules, but $E$ is not valid according to the $\footnotesize{\textsc{chain}}$ rule. Assume that there is a $b_j \in E$ such that it is **the first block** such that does not pass the $\footnotesize{\textsc{chain}}$ validation. Then: $$e \vdash s \xlongrightarrow[\textsc{chain}]{[b_0, \ldots b_{j-1}]}\negthickspace^{*} s_j$$ But by Property 2 we know that $$e_{h_j} \vdash s_{h_j} \xlongrightarrow[\textsc{epoch+bhead+pbft}]{h_j} s_{h_{j+1}}$$ which means that block $b_j$ has valid headers, and this in turn means that the validation of $b_j$ according to the chain rules must have failed because it contained an invalid block body. But this contradicts our assumption that the block bodies were valid.
 
 
 **Property 2** (Body only validation). *For all environments $e$, states $s$ with slot number $t$, and chain extensions $E = [b_0, \ldots, b_n]$ with corresponding headers $H$ such that: $$0 \leq t_E - t  \leq 2 \cdot k$$ we have that for all $i \in [1, n]$: $$e_h \vdash s_h \xlongrightarrow[\textsc{epoch+bhead+pbft}]{H}\negthickspace^{*} s'_h
   \wedge
   e \vdash s \xlongrightarrow[\textsc{chain}]{[b_0 \ldots b_{i-1}]}\negthickspace^{*} s_{i-1}
   \implies
-  e_{h_{i-1}} \vdash s_{h_{i-1}}\xlongrightarrow[\textsc{epoch+bhead+pbft}]{h_i} s''_{h_{i}}$$ where $t_E$ is the maximum slot number appearing in the blocks contained in $E$, $e_h \mathrel{\mathop:=}\mathsf{h_e}~e~s$ and $s_h \mathrel{\mathop:=}\mathsf{h_s}~e~s$, $e_{h_{i-1}} \mathrel{\mathop:=}\mathsf{h_e}~e~s_{i-1}$ and $s_{h_{i-i}} \mathrel{\mathop:=}\mathsf{h_s}~e~s_{i-1}$, and $\mathsf{h_e}$ and $\mathsf{h_s}$ are the same functions mentioned in Property [1](#prop:header-only-validation).*
+  e_{h_{i-1}} \vdash s_{h_{i-1}}\xlongrightarrow[\textsc{epoch+bhead+pbft}]{h_i} s''_{h_{i}}$$ where $t_E$ is the maximum slot number appearing in the blocks contained in $E$, $e_h \mathrel{\mathop:=}\mathsf{h_e}~e~s$ and $s_h \mathrel{\mathop:=}\mathsf{h_s}~e~s$, $e_{h_{i-1}} \mathrel{\mathop:=}\mathsf{h_e}~e~s_{i-1}$ and $s_{h_{i-i}} \mathrel{\mathop:=}\mathsf{h_s}~e~s_{i-1}$, and $\mathsf{h_e}$ and $\mathsf{h_s}$ are the same functions mentioned in Property 1.*
 
-Property [3](#prop:roll-back-funk) expresses the fact the there is a function that allow us to recover the header-only state by rolling back at most $k$ blocks, and use this state to validate the headers of an alternate chain. Note that this property is not inherent to the $\footnotesize{\textsc{chain}}$ rules and can be trivially satisfied by any function that keeps track of the history of the intermediate chain states up to $k$ blocks back. This property is stated here so that it can be used as a reference for the tests in the consensus layer, which uses the rules presented in this document.
+Property 3 expresses the fact the there is a function that allow us to recover the header-only state by rolling back at most $k$ blocks, and use this state to validate the headers of an alternate chain. Note that this property is not inherent to the $\footnotesize{\textsc{chain}}$ rules and can be trivially satisfied by any function that keeps track of the history of the intermediate chain states up to $k$ blocks back. This property is stated here so that it can be used as a reference for the tests in the consensus layer, which uses the rules presented in this document.
 
 
 **Property 3** (Existence of roll back function). *There exists a function $\mathsf{f}$ such that for all chains $$C = C_0 ; b; C_1$$ we have that if for all alternative chains $C'_1$, $\left| C'_1 \right| \leq k$, with corresponding headers $H'_1$ $$e \vdash s_0 \xlongrightarrow[\textsc{chain}]{C_0;b}\negthickspace^{*} s_1 \xlongrightarrow[\textsc{chain}]{C_1}\negthickspace^{*} s_2
@@ -891,7 +891,7 @@ $$(n-k+1)\cdot P(X > t*k)$$
 
 Appealing to Boole's inequality again, we may multiply this by the number of epochs and the number of stakeholders to give a bound for the likelihood of generating an invalid chain.
 
-Figure [22](#fig:calculating-t) gives the bound on the likelihood of threshold violation for $t$ in our plausible range: from this we can see that the likelihood decreases to a negligible level around $0.21$, and so we choose the value of $t=0.22$, giving an upper bound on the likelihood around $6e-10$. Increasing $t$ beyond this point gives no decrease in the likelihood of violation.
+Figure 22 gives the bound on the likelihood of threshold violation for $t$ in our plausible range: from this we can see that the likelihood decreases to a negligible level around $0.21$, and so we choose the value of $t=0.22$, giving an upper bound on the likelihood around $6e-10$. Increasing $t$ beyond this point gives no decrease in the likelihood of violation.
 
 ::::: {#fig:calculating-t .figure latex-placement="ht"}
 ::: center

@@ -8,7 +8,7 @@ In what follows, we describe the multi-currency UTxO ledger model using mostly s
 
 # Scripts
 
-We use an abstract scripting language $\mathsf{Script}$ to generalize authorization mechanisms such as pay-to-pubkey-hash. In pay-to-pubkey-hash, an address is the hash of a public key. UTxO held by that address are authorized by providing the public key and a digital signature. Similarly, in the generalized script model, an address is the hash of a verification script and the redeemer script plays the role of the digital signature. UTxO held by script addresses are authorized by providing both the validator and redeemer script. Analogously to checking a digital signature, the authorization succeeds if the redeemer scripts provides evidence to that causes the validator script to return true. This is made precise in [1](#fig:scripts).
+We use an abstract scripting language $\mathsf{Script}$ to generalize authorization mechanisms such as pay-to-pubkey-hash. In pay-to-pubkey-hash, an address is the hash of a public key. UTxO held by that address are authorized by providing the public key and a digital signature. Similarly, in the generalized script model, an address is the hash of a verification script and the redeemer script plays the role of the digital signature. UTxO held by script addresses are authorized by providing both the validator and redeemer script. Analogously to checking a digital signature, the authorization succeeds if the redeemer scripts provides evidence to that causes the validator script to return true. This is made precise in 1.
 
 
 *Scripts* $$\begin{equation*}
@@ -41,7 +41,7 @@ Multi-currency is explained in detail in [@multi_currency], but here we give som
 
 # Basic Types and Operations
 
-The basic types and operations for this specification are given in [2](#fig:basic_definitions). Transaction inputs are references to previous unspent outputs, together with the scripts needed to authorize it. Outputs are the pair of an address (the hash of a validator script) and a multi-currency value. A transaction is a collection of inputs and outputs, together with other data for creating new currencies, minting currency, and paying fees. Currency is authorized to be minted using the same mechanism of validator and redeemer scripts. Other needed operations on transactions and UTxO are given in [3](#fig:auxiliary_ops).
+The basic types and operations for this specification are given in 2. Transaction inputs are references to previous unspent outputs, together with the scripts needed to authorize it. Outputs are the pair of an address (the hash of a validator script) and a multi-currency value. A transaction is a collection of inputs and outputs, together with other data for creating new currencies, minting currency, and paying fees. Currency is authorized to be minted using the same mechanism of validator and redeemer scripts. Other needed operations on transactions and UTxO are given in 3.
 
 
 *Primitive types* $$\begin{equation*}
@@ -179,11 +179,11 @@ $$\begin{align*}
 **Operations on transactions and UTxOs**
 # Validation and Ledger State
 
-Validation is the determination that a transaction is permitted to be appended to the ledger and hence manipulate the state of the ledger. The data in the ledger state is given by [5](#fig:ledger_state). Though $\mathit{totalMinted}$ and $\mathit{slot}$ do not appear to be used in this specification, they are important since they are used by the validator scripts. For example, expirations can be implemented using $\mathit{slot}$ and a currency's policy may depend on $\mathit{totalMinted}$.
+Validation is the determination that a transaction is permitted to be appended to the ledger and hence manipulate the state of the ledger. The data in the ledger state is given by 5. Though $\mathit{totalMinted}$ and $\mathit{slot}$ do not appear to be used in this specification, they are important since they are used by the validator scripts. For example, expirations can be implemented using $\mathit{slot}$ and a currency's policy may depend on $\mathit{totalMinted}$.
 
-The ledger state is defined inductively. The initial state is defined in [5](#fig:ledger_state). Given a transaction and a ledger state, first we check that the transaction is valid. To be valid, it must pass every test given in [4](#fig:validation_rules). Note that these rules depend only on the transaction and the ledger state. If a transaction is valid for a given ledger state, it is then applied using the state transformation rule given in [6](#fig:state_transition).
+The ledger state is defined inductively. The initial state is defined in 5. Given a transaction and a ledger state, first we check that the transaction is valid. To be valid, it must pass every test given in 4. Note that these rules depend only on the transaction and the ledger state. If a transaction is valid for a given ledger state, it is then applied using the state transformation rule given in 6.
 
-Note that two rules from [@multi_currency] do not appear in [4](#fig:validation_rules), namely "creator has enough money\" and "fee is non-negative\". In a model without account transactions, as we have here, we do not need additive inverses and can assume that all quantities are nonnegative.
+Note that two rules from [@multi_currency] do not appear in 4, namely "creator has enough money\" and "fee is non-negative\". In a model without account transactions, as we have here, we do not need additive inverses and can assume that all quantities are nonnegative.
 
 
 *Valid-Inputs* $$\begin{equation*}
@@ -278,7 +278,7 @@ $$\begin{equation}
 **State Transitions**
 # Disabling Multi-Currency
 
-If we want to disable multi-currency, we can remove the "Forge Obeys Policy\" rule and add [7](#fig:only_ada_rule)
+If we want to disable multi-currency, we can remove the "Forge Obeys Policy\" rule and add 7
 
 
 *Only ADA* $$\begin{equation*}

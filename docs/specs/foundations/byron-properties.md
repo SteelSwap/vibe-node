@@ -32,7 +32,7 @@ For instance: $$\bigcup_{\txins{}} \txs$$ denotes the sequence of unions: $$\big
 In a set operation quantification over a sequence $\mathcal{A}$, the operation is applied to the elements the order in which they appear in $\mathcal{A}$. This is crucial in the case of non-commutative operations, such as union override ($\unionoverrideRight$).
 
 ## UTxO Properties
-Property [\[prop:no-double-spending\]](#prop:no-double-spending) expresses the fact that transaction inputs cannot be used more than once. This property requires that the starting UTxO does not contain any future outputs, which is a reasonable constraint.
+Property prop:no-double-spending expresses the fact that transaction inputs cannot be used more than once. This property requires that the starting UTxO does not contain any future outputs, which is a reasonable constraint.
 
 ::: property
 []{#prop:no-double-spending label="prop:no-double-spending"} For all
@@ -59,7 +59,7 @@ we have:
 
 $$\forall \txs_i,~\txs_j \cdot i < j \Rightarrow \txins{\txs_i} \cap \txins{\txs_j} = \emptyset$$
 
-Property [\[prop:utxo-out-min-in\]](#prop:utxo-out-min-in) expresses the fact that all inputs and outputs are accounted for, in such a way that we can reconstruct the final (UTxO) state by adding all the outputs to the initial state, and removing the spent outputs.
+Property prop:utxo-out-min-in expresses the fact that all inputs and outputs are accounted for, in such a way that we can reconstruct the final (UTxO) state by adding all the outputs to the initial state, and removing the spent outputs.
 
 ::: property
 []{#prop:utxo-out-min-in label="prop:utxo-out-min-in"} For all
@@ -86,7 +86,7 @@ we have:
 
 $$\bigcup_{\txins{}} \txs \subtractdom (\var{utxo_0} \cup \bigcup_{\txouts{}} \txs) = \var{utxo}$$
 
-Property [\[prop:utxo-money-supply-cnst\]](#prop:utxo-money-supply-cnst) models the fact that the amount of money in the system (counted as Lovelaces) remains constant.
+Property prop:utxo-money-supply-cnst models the fact that the amount of money in the system (counted as Lovelaces) remains constant.
 
 ::: property
 []{#prop:utxo-money-supply-cnst label="prop:utxo-money-supply-cnst"} For all
@@ -110,7 +110,7 @@ we have:
 $$\var{reserves} + \balance{utxo} =  \var{reserves_0} + \balance{utxo_0}$$
 
 ## Delegation Properties
-Property [\[prop:no-dcert-replay\]](#prop:no-dcert-replay) states that delegation certificates cannot be replayed. Remember that $\Delta_i$ is the $i^{\text{th}}$ element of $\Delta$, which is a sequence of sequences of delegation certificates, so $\Delta_i \in \seqof{\DCert}$ and $\Delta_{i_j} \in \DCert$ (assuming $j$ is a valid index of $\Delta_i$).
+Property prop:no-dcert-replay states that delegation certificates cannot be replayed. Remember that $\Delta_i$ is the $i^{\text{th}}$ element of $\Delta$, which is a sequence of sequences of delegation certificates, so $\Delta_i \in \seqof{\DCert}$ and $\Delta_{i_j} \in \DCert$ (assuming $j$ is a valid index of $\Delta_i$).
 
 ::: property
 []{#prop:no-dcert-replay label="prop:no-dcert-replay"} For all $$\left(

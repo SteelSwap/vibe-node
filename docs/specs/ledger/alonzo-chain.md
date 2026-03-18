@@ -1,6 +1,6 @@
 # Blockchain layer
 ## Block Body Transition
-In Figure [1](#fig:rules:bbody), we have added the check that the sum total of script fees all transactions in a block pay do not exceed the maximum total fees per block (stored as a protocol parameter).
+In Figure 1, we have added the check that the sum total of script fees all transactions in a block pay do not exceed the maximum total fees per block (stored as a protocol parameter).
 
 
 $$\begin{equation}
@@ -51,7 +51,7 @@ $$\begin{equation}
 \end{equation}$$
 
 **BBody rules**
-We have also defined a function that transforms the Shelley ledger state into the Goguen one, see Figure [3](#fig:functions:to-shelley). Note that here we refer to Shelley-era protocol parameter type as $\ShelleyPParams$, and the Goguen type as $\PParams$. We use the notation $\var{chainstate}_{x}$ to represent variable $x$ in the chain state. We do not specify the variables that remain unchanged during the transition.
+We have also defined a function that transforms the Shelley ledger state into the Goguen one, see Figure 3. Note that here we refer to Shelley-era protocol parameter type as $\ShelleyPParams$, and the Goguen type as $\PParams$. We use the notation $\var{chainstate}_{x}$ to represent variable $x$ in the chain state. We do not specify the variables that remain unchanged during the transition.
 
 ::: note
 **What creation slots should Shelley era UTxOs have?** It is not yet clear whether we will follow the approach of making the creation slot of every Shelley-era UTxO entry the first slot of Goguen. It is possible to look through all the blocks and add the correct one, but not clear if necessary. The other option is to allow both types out outputs, some without the creation slot.
@@ -79,7 +79,7 @@ We have also defined a function that transforms the Shelley ledger state into th
 \end{align*}$$
 
 **Shelley to Goguen State Transtition**
-The transformation we use in the preceeding rules to turn a Shelley transaction into a Goguen one is given in Figure [3](#fig:functions:to-shelley). Recall that it stays the same if the same if it was already a Goguen one.
+The transformation we use in the preceeding rules to turn a Shelley transaction into a Goguen one is given in Figure 3. Recall that it stays the same if the same if it was already a Goguen one.
 
 
 *Functions* $$\begin{align*}

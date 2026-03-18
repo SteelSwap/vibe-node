@@ -2,7 +2,7 @@
 As mentioned above, Plutus Core is generic over a universe $\Uni$ of types and a set $\Fun$ of built-in functions. As the terminology suggests, built-in functions are interpreted as functions over terms and elements of the built-in types: in this section we make this interpretation precise by giving a specification of built-in types and functions in a set-theoretic denotational style. We require a considerable amount of extra notation in order to do this, and we emphasise that nothing in this section is part of the syntax of Plutus Core: it is meta-notation introduced purely for specification purposes.
 
 ## Built-in types
-We require some extra syntactic notation for built-in types: see Figure [\[fig:type-names-operators\]](#fig:type-names-operators).
+We require some extra syntactic notation for built-in types: see Figure fig:type-names-operators.
 
 ::: minipage
 $$\begin{array}{rclr}
@@ -20,12 +20,12 @@ T^{\prime} \in \Uni$ and $T \ne T^{\prime}$ then $\denote{T}$ and $\denote{T^{\p
 
 $$\denote{\Uni} = \bigdisj{\{\denote{T}: T \in \Uni\}}.$$
 
-See Section [\[sec:cardano-builtins\]](#sec:cardano-builtins) for a description of the types and functions which have already been deployed on the Cardano blockchain (or will be in the near future).
+See Section sec:cardano-builtins for a description of the types and functions which have already been deployed on the Cardano blockchain (or will be in the near future).
 
 For non-atomic type names $\tn = \op(\tn_1, \ldots, \tn_r)$ we would generally expect the denotation of $\tn$ to be obtained in some uniform way (ie, parametrically) from the denotations of $\tn_1, \ldots, \tn_r$; we do not insist on this though.
 
 ### Type variables
-Built-in functions can be polymorphic, and to deal with this we need *type variables*. An argument of a polymorphic function can be either restricted to built-in types or can be an arbitrary term, and we define two different kinds of type variables to cover these two situations. See Figure [\[fig:type-variables\]](#fig:type-variables).
+Built-in functions can be polymorphic, and to deal with this we need *type variables*. An argument of a polymorphic function can be either restricted to built-in types or can be an arbitrary term, and we define two different kinds of type variables to cover these two situations. See Figure fig:type-variables.
 
 ::: minipage
 $$\begin{array}{lrclr}
@@ -102,7 +102,7 @@ We require $\Inputs$ to have the following two properties:
 
 It is also convenient to let $\denote{\Inputs} = \Inputs$ and define both $\denote{\cdot}_{\Inputs}$ and $\reify{\cdot}_{\Inputs}$ to be the identity function, and we write $$\denote{\Uni}_{\Inputs} = \denote{\Uni} \disj \Inputs.$$
 
-For example, we could take $\Inputs$ to be the set of all Plutus Core values (see Section [\[sec:uplc-values\]](#sec:uplc-values)), $\Con{\tn}$ to be the set of all terms of the form $\con{\tn}{c}$, and $\denote{\cdot}_{\tn}$ to be the function which maps $\con{\tn}{c}$ to $c$. For simplicity we are assuming that mathematical entities occurring as members of type denotations $\denote{\tn}$ are embedded directly as values $c$ in Plutus Core constant terms. In reality, tools which work with Plutus Core will need some concrete syntactic representation of constants; we do not specify this here, but see Section [\[sec:cardano-builtins\]](#sec:cardano-builtins) for suggested syntax for the built-in types currently in use on the Cardano blockchain.
+For example, we could take $\Inputs$ to be the set of all Plutus Core values (see Section sec:uplc-values), $\Con{\tn}$ to be the set of all terms of the form $\con{\tn}{c}$, and $\denote{\cdot}_{\tn}$ to be the function which maps $\con{\tn}{c}$ to $c$. For simplicity we are assuming that mathematical entities occurring as members of type denotations $\denote{\tn}$ are embedded directly as values $c$ in Plutus Core constant terms. In reality, tools which work with Plutus Core will need some concrete syntactic representation of constants; we do not specify this here, but see Section sec:cardano-builtins for suggested syntax for the built-in types currently in use on the Cardano blockchain.
 
 ### Outputs of built-in functions
 All built-in functions either fail or conceptually return a non-empty list whose entries lie either in the denotation of some built-in type $T$ or in the set of inputs $\Inputs$, i.e., builtins return elements of the set ${(\R^+)_{\errorX}}$, where
@@ -155,7 +155,7 @@ Also, given an arity $= [\iota_1, \ldots, \iota_n]$, the *reduced arity* is $$\a
 
 #### Commentary.
 
-What is the intended meaning of the notation introduced above? In Typed Plutus Core we have to instantiate polymorphic functions (both built-in functions and polymorphic lambda terms) at concrete types before they can be applied, and in Untyped Plutus Core instantiation is replaced by an application of `force`. When we are applying a built-in function we supply its arguments one by one, and we can also apply `force` (or perform type instantiation in the typed case) to a partially-applied builtin "between" arguments (and also after the final argument); no computation occurs until all arguments have been supplied and all `force`s have been applied. The arity (read from left to right) specifies what types of arguments are expected and how they should be interleaved with applications of `force`, and $\chi(b)$ tells you the total number of arguments and applications of `force` that a built-in function $b$ requires. The fully-polymorphic type variable $\star$ indicates that an arbitrary value from $\Inputs$ can be provided, whereas a type from $\Unihash$ indicates that a value of the specified built-in type is expected. Occurrences of quantifications indicate that `force` is to be applied to a partially-applied builtin; we allow this purely so that partially-applied builtins can be treated in the same way as delayed lambda-abstractions: `force` has no effect unless it is the very last item in the signature. In Plutus Core, partially-applied builtins are values which can be treated like any others (for example, by being passed as an argument to a `lam`-expression): see Section [\[sec:uplc-values\]](#sec:uplc-values).
+What is the intended meaning of the notation introduced above? In Typed Plutus Core we have to instantiate polymorphic functions (both built-in functions and polymorphic lambda terms) at concrete types before they can be applied, and in Untyped Plutus Core instantiation is replaced by an application of `force`. When we are applying a built-in function we supply its arguments one by one, and we can also apply `force` (or perform type instantiation in the typed case) to a partially-applied builtin "between" arguments (and also after the final argument); no computation occurs until all arguments have been supplied and all `force`s have been applied. The arity (read from left to right) specifies what types of arguments are expected and how they should be interleaved with applications of `force`, and $\chi(b)$ tells you the total number of arguments and applications of `force` that a built-in function $b$ requires. The fully-polymorphic type variable $\star$ indicates that an arbitrary value from $\Inputs$ can be provided, whereas a type from $\Unihash$ indicates that a value of the specified built-in type is expected. Occurrences of quantifications indicate that `force` is to be applied to a partially-applied builtin; we allow this purely so that partially-applied builtins can be treated in the same way as delayed lambda-abstractions: `force` has no effect unless it is the very last item in the signature. In Plutus Core, partially-applied builtins are values which can be treated like any others (for example, by being passed as an argument to a `lam`-expression): see Section sec:uplc-values.
 
 In general a builtin returns a sequence $(v|v_1,\ldots,v_k) \in \R^+$, but in fact the majority of builtins currently deployed on Cardano only return a single value, and in this case we can specify a signature where $\omega$ is either a built-in type name $T$ or $\star$, denoting an input (typically a value in the ambient language), and this tells us exactly what sort of value is returned. The general case is considerably more complicated: the size of the list returned, and the types of its entries, may be different for different inputs. To specify this sort of behaviour precisely in a signature would require a considerable increase in the complexity of the notation for signatures, so instead we approximate all return types involving elements of $\R^+\backslash
 \R$ by $\ap$. However, when specifying the semantics of particular builtins with $\omega = \ap$ we will always give a precise description of the possible return values.
@@ -163,7 +163,7 @@ In general a builtin returns a sequence $(v|v_1,\ldots,v_k) \in \R^+$, but in fa
 ### Denotations of built-in functions
 The basic idea is that a built-in function $b$ should represent some mathematical function on the denotations of the types of its inputs. However, this is complicated by the presence of polymorphism and we have to require that there is such a function for every possible monomorphisation of $b$.
 
-More precisely, suppose that we have a builtin $b$ with reduced signature $[\tau_1, \ldots \tau_n] \rightarrow \omega$. For every type assignment $S$ with $\dom S = \fv{\tau_1} \cup \cdots \cup \fv{\tau_n}$ (which contains $\fv{\omega}$ by the conditions on signatures in Section [1.2.3](#sec:signatures)) we require a *denotation of $b$ at $S$*, a function $$\denote{b}_S: \denote{\Sext(\tau_1)} \times \cdots \times \denote{\Sext(\tau_n)} \rightarrow \withError{\denote{\Sext(\omega)}}$$ where $$\denote{\star} = \Inputs \quad\text{and}\quad \denote{\ap} = \R^+.$$ This makes sense because $\Sext(\tau_i) \in \Uni \disj
+More precisely, suppose that we have a builtin $b$ with reduced signature $[\tau_1, \ldots \tau_n] \rightarrow \omega$. For every type assignment $S$ with $\dom S = \fv{\tau_1} \cup \cdots \cup \fv{\tau_n}$ (which contains $\fv{\omega}$ by the conditions on signatures in Section 1.2.3) we require a *denotation of $b$ at $S$*, a function $$\denote{b}_S: \denote{\Sext(\tau_1)} \times \cdots \times \denote{\Sext(\tau_n)} \rightarrow \withError{\denote{\Sext(\omega)}}$$ where $$\denote{\star} = \Inputs \quad\text{and}\quad \denote{\ap} = \R^+.$$ This makes sense because $\Sext(\tau_i) \in \Uni \disj
 \Inputs$ for all $i$, so $\denote{\Sext(\tau_i)}$ is always defined, and similarly for $\omega$ (extending $\Sext$ by setting $\Sext(\ap) = \ap$).
 
 If $\fv{\sigmabar(b)} = \varnothing$ (in which case we say that $b$ is *monomorphic*) then the only relevant type assignment will be the empty one; in this case we have a single denotation $$\denote{b}_\varnothing: \denote{\tau_1} \times \cdots \times \denote{\tau_n} \rightarrow \withError{\denote{\omega}}.$$
@@ -173,12 +173,12 @@ Denotations of builtins are mathematical functions which terminate on every poss
 In practice we expect most builtins to be *parametrically polymorphic* [@Wadler-theorems-for-free; @Reynolds-parametric], so that the denotation $\denote{b}_S$ will be the "same" for all type assignments $S$; we do not insist on this though.
 
 ### Results of built-in functions.
-Recall from Section [1.2.2](#sec:builtin-outputs) that the result of the evaluation of a built-in function lies in the set $$(\R^+)_{\errorX} = \left(\bigdisj\left\{\denote{\tn}: \tn \in \Uni \right\} \disj \Inputs \right)^+ \disj \{\errorX\}.$$ Since we have assumed that all denotations $\denote{T}$ with $T \in
-\Uni$ are disjoint from each other and from $\Inputs$ (Section [1.2.1](#sec:builtin-inputs)) we can define a function $$\reify{\cdot}: \R \rightarrow \withError{\Inputs}$$ which converts elements $r \in \R$ back into inputs by $$\reify{r} = 
+Recall from Section 1.2.2 that the result of the evaluation of a built-in function lies in the set $$(\R^+)_{\errorX} = \left(\bigdisj\left\{\denote{\tn}: \tn \in \Uni \right\} \disj \Inputs \right)^+ \disj \{\errorX\}.$$ Since we have assumed that all denotations $\denote{T}$ with $T \in
+\Uni$ are disjoint from each other and from $\Inputs$ (Section 1.2.1) we can define a function $$\reify{\cdot}: \R \rightarrow \withError{\Inputs}$$ which converts elements $r \in \R$ back into inputs by $$\reify{r} = 
 \begin{cases}
   \reify{r}_{\tn} \in \Con{\tn} \subseteq \Inputs & \text{if $r \in \denote{\tn}$}\\
   r & \text{if $r \in \Inputs$}
-\end{cases}$$ (see Section [1.2.1](#sec:builtin-inputs) for the definition of $\reify{\cdot}_{\tn}$), and we can extend this to a function $\reify{\cdot}: (\R^+)_{\errorX} \rightarrow \withError{\Inputs}$ by defining
+\end{cases}$$ (see Section 1.2.1 for the definition of $\reify{\cdot}_{\tn}$), and we can extend this to a function $\reify{\cdot}: (\R^+)_{\errorX} \rightarrow \withError{\Inputs}$ by defining
 
 $$\begin{align*}
   \reify{(r, r_1, \ldots, r_k)} &= (\reify{r}|\reify{r_1}, \ldots, \reify{r_k})\\
@@ -198,11 +198,11 @@ In detail, given a reduced arity $\alphabar = [\tau_1, \ldots,
 
 - For all $i \in I$ there exists $T_i \in \Uni$ such that $V_i \in \Con{T_i}$ and $T_i \preceq_{S_i} \tau_i$.
 
-- $\{S_i: i \in I\}$ is consistent (see Section [1.1.3](#sec:type-assignments)).
+- $\{S_i: i \in I\}$ is consistent (see Section 1.1.3).
 
 - $S = \bigcup\{S_i: i \in I\}$.
 
-If these conditions are all satisfied then we can find suitable $S_i$ using the procedure described in Section [1.1.3](#sec:type-assignments) and this allows us to construct $S$ explicitly since the $S_i$ are consistent. Note that in this case $\dom S = \dom S_1 \cup \ldots \cup \dom S_n = \fv{\tau_1} \cup
+If these conditions are all satisfied then we can find suitable $S_i$ using the procedure described in Section 1.1.3 and this allows us to construct $S$ explicitly since the $S_i$ are consistent. Note that in this case $\dom S = \dom S_1 \cup \ldots \cup \dom S_n = \fv{\tau_1} \cup
 \cdots \cup \fv{\tau_n} = \fv{\alpha}$, so $S$ is minimal in the sense that no $S'$ with $\dom S'$ strictly smaller than $\dom S$ is sufficient to monomorphise all of the $\tau_i$ simultaneously. We write $$[V_1, \ldots, V_m] \approx_S [\tau_1, \ldots, \tau_n]$$ in this case. If $\bar{V}$ is not compatible with $\alphabar$ then we write $\bar{V} \napprox \alphabar$.
 
 ### Evaluation
@@ -212,7 +212,7 @@ For later use we define a function $\Eval$ which attempts to evaluate an applica
 Otherwise, the conditions for the existence of a denotation of $b$ are met and we can apply that denotation to the denotations of the inputs and then reify the result. If $[V_1, \ldots, V_n] \approx_S \alphabar(b) = [\tau_1,
   \ldots, \tau_n]$, let $T_i = \Sext(\tau_i)$ for $1 \leq i \leq n$; then we define
 
-$$\Eval(b,[V_1, \ldots, V_n]) = \reify{\denote{b}_S (\denote{V_1}_{T_1}, \ldots, \denote{V_n}_{T_n})}.$$ It can be checked that the compatibility condition guarantees that this makes sense according to the definition of $\denote{b}_S$ in Section [1.2.4](#sec:builtin-denotations).
+$$\Eval(b,[V_1, \ldots, V_n]) = \reify{\denote{b}_S (\denote{V_1}_{T_1}, \ldots, \denote{V_n}_{T_n})}.$$ It can be checked that the compatibility condition guarantees that this makes sense according to the definition of $\denote{b}_S$ in Section 1.2.4.
 
 #### Notes.
 

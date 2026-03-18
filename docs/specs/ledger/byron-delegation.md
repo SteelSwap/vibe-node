@@ -15,7 +15,7 @@ There are several restrictions on a certificate posted on the blockchain:
 
 6.  Certificates do not become active immediately, but they require a certain number of slots till they become stable in all the nodes.
 
-These conditions are formalized in [3](#fig:rules:delegation-scheduling). Rule [\[eq:rule:delegation-scheduling\]](#eq:rule:delegation-scheduling) determines when a certificate can become "scheduled". The definitions used in these rules are presented in [1](#fig:defs:delegation-scheduling), and the types of the system induced by $\trans{sdeleg}{\wcard}$ are presented in [2](#fig:ts-types:delegation-scheduling). Here and in the remaining rules we will be using $k$ as an abstract constant that gives us the chain stability parameter.
+These conditions are formalized in 3. Rule eq:rule:delegation-scheduling determines when a certificate can become "scheduled". The definitions used in these rules are presented in 1, and the types of the system induced by $\trans{sdeleg}{\wcard}$ are presented in 2. Here and in the remaining rules we will be using $k$ as an abstract constant that gives us the chain stability parameter.
 
 
 *Abstract types* $$\begin{equation*}
@@ -141,7 +141,7 @@ $$\begin{equation}
 \end{equation}$$
 
 **Delegation scheduling rules**
-The rules in Figure [6](#fig:rules:delegation) model the activation of delegation certificates. Once a scheduled certificate becomes active (see [\[sec:delegation-interface-rules\]](#sec:delegation-interface-rules)), the delegation map is changed by it only if:
+The rules in Figure 6 model the activation of delegation certificates. Once a scheduled certificate becomes active (see sec:delegation-interface-rules), the delegation map is changed by it only if:
 
 - The delegating key ($\var{vk_s}$) did not activate a delegation certificate in a slot greater or equal than the certificate slot ($s$). This check is performed to avoid having the constraint that the delegation certificates have to be activated in slot order.
 
@@ -151,9 +151,9 @@ The reason why we check that the delegation map is injective is to avoid a poten
 
 As an additional advantage, by having an injective delegation map, we are able to simplify our specification when it comes to counting the blocks issued by (delegates of) genesis keys.
 
-Note also, that we could not impose the injectivity constraint in Rule [\[eq:rule:delegation-scheduling\]](#eq:rule:delegation-scheduling) since we do not have information about the delegations that will become effective. We could of course detect a violation in the injectivity constraint when scheduling a delegation certificate, but this will lead to a complex computation and larger state in said rule.
+Note also, that we could not impose the injectivity constraint in Rule eq:rule:delegation-scheduling since we do not have information about the delegations that will become effective. We could of course detect a violation in the injectivity constraint when scheduling a delegation certificate, but this will lead to a complex computation and larger state in said rule.
 
-Finally, note that we do not want to reject a scheduled delegation that would violate the injectivity constraint (since delegation might not have been scheduled by the node issuing the block). Instead, we simply ignore the delegation certificate (Rule [\[eq:rule:delegation-nop\]](#eq:rule:delegation-nop)).
+Finally, note that we do not want to reject a scheduled delegation that would violate the injectivity constraint (since delegation might not have been scheduled by the node issuing the block). Instead, we simply ignore the delegation certificate (Rule eq:rule:delegation-nop).
 
 
 $$\begin{align*}

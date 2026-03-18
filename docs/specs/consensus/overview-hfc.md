@@ -6,6 +6,6 @@ We should mention that era transitions happen at epoch boundaries only.
 
 Mention that we had to adjust the consensus layer in some ways:
 
-- Simplified chain selection (tip only; [\[consensus:overview:chainsel\]](#consensus:overview:chainsel))
+- Simplified chain selection (tip only; consensus:overview:chainsel)
 
-- Remove the assumption slot/time conversion is always possible ([\[time\]](#time))
+- Remove the assumption slot/time conversion is always possible (time)

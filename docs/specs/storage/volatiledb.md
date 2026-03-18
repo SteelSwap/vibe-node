@@ -1,7 +1,7 @@
 # Volatile Database
-The Volatile DB is tasked with storing the blocks that are part of the *volatile* part of the chain. Do not be misled by its name, the Volatile DB *should persist* blocks stored to disk. The volatile part of the chain consists of the last $k$ (the security parameter, see [\[consensus:overview:k\]](#consensus:overview:k)) blocks of the chain, which can still be rolled back when switching to a fork. This means that unlike the Immutable DB, which stores the immutable prefix of *the* chosen chain, the Volatile DB can store potentially multiple chains, one of which will be the current chain. It will also store forks that we have switched away from, or will still switch to, when they grow longer and become preferable to our current chain. Moreover, the Volatile DB can contain disconnected blocks, as the block fetch client might download or receive blocks out of order.
+The Volatile DB is tasked with storing the blocks that are part of the *volatile* part of the chain. Do not be misled by its name, the Volatile DB *should persist* blocks stored to disk. The volatile part of the chain consists of the last $k$ (the security parameter, see consensus:overview:k) blocks of the chain, which can still be rolled back when switching to a fork. This means that unlike the Immutable DB, which stores the immutable prefix of *the* chosen chain, the Volatile DB can store potentially multiple chains, one of which will be the current chain. It will also store forks that we have switched away from, or will still switch to, when they grow longer and become preferable to our current chain. Moreover, the Volatile DB can contain disconnected blocks, as the block fetch client might download or receive blocks out of order.
 
-We list the requirements and non-requirements of this component in no particular order. Note that some of these requirements were defined in response to the requirements of the Immutable DB (see [\[immutable\]](#immutable)), and vice versa.
+We list the requirements and non-requirements of this component in no particular order. Note that some of these requirements were defined in response to the requirements of the Immutable DB (see immutable), and vice versa.
 
 - **Add-only**: new blocks are always added, never modified.
 
@@ -15,7 +15,7 @@ We list the requirements and non-requirements of this component in no particular
 
 - **Durability**: similar to the Immutable DB's durability *non-requirement*, losing a block because of a crash in the middle or right after appending a block is inconsequential. The block can be downloaded again.
 
-- **Size**: because of garbage collection, there is a bound on the size of the Volatile DB in terms of blocks: in the order of $k$, which is 2160 for mainnet (we give a more detailed estimate of the size in [1.2.1](#volatile:implementation:gc)). This makes the size of the Volatile DB relatively small, allowing for some information to be kept in memory instead of on disk.
+- **Size**: because of garbage collection, there is a bound on the size of the Volatile DB in terms of blocks: in the order of $k$, which is 2160 for mainnet (we give a more detailed estimate of the size in 1.2.1). This makes the size of the Volatile DB relatively small, allowing for some information to be kept in memory instead of on disk.
 
 - **Reading**: the database should be able to return the block or header corresponding to the given hash efficiently. Unlike the Immutable DB, we do not index by slot numbers, as multiple blocks, from different forks, can have the same slot number. Instead, we use header hashes.
 
@@ -56,11 +56,11 @@ The `closeDB` operation closes the database, allowing all opened resources, incl
 
 The `putBlock` operation adds a block to the Volatile DB. There are no requirements on this block. This operation is idempotent, as duplicate blocks are ignored.
 
-The `getBlockComponent` operation allows reading one or more components of the block in the database with the given hash. See [\[immutable:api:block-component\]](#immutable:api:block-component) for a discussion about block components. As no block with the given hash might be in the Volatile DB, this operation returns a `Maybe`.
+The `getBlockComponent` operation allows reading one or more components of the block in the database with the given hash. See immutable:api:block-component for a discussion about block components. As no block with the given hash might be in the Volatile DB, this operation returns a `Maybe`.
 
 The `garbageCollect` operation will try to garbage collect all blocks with a slot number less than the given one. This will be called after copying a block with the given slot number to the Immutable DB. Note that the condition is "less than", not "less than or equal to", even though after a block with slot $s$ has become immutable, any other blocks produced in the same slot $s$ can never be adopted again and can thus safely be garbage collected. Moreover, the block we have just copied to the Immutable DB will not even be garbage collected from the Volatile DB (that will be done after copying its successor and triggering a garbage collection for the successor's slot number).
 
-The reason for "less than" is because of EBBs ([\[ebbs\]](#ebbs)). An EBB has the same slot number as its successor. This means that if an EBB has become immutable, and we were to garbage collected all blocks with a slot less than or *equal* to its slot number, we would garbage collect its successor block too, before having copied it to the Immutable DB.
+The reason for "less than" is because of EBBs (ebbs). An EBB has the same slot number as its successor. This means that if an EBB has become immutable, and we were to garbage collected all blocks with a slot less than or *equal* to its slot number, we would garbage collect its successor block too, before having copied it to the Immutable DB.
 
 The next two operations, `getBlockInfo` and `filterByPredecessor`, allow querying the Volatile DB. Both operations are `STM`-transactions that return a function. This means that they can both be called in the same transaction to ensure they produce results that are consistent w.r.t. each other.
 
@@ -76,7 +76,7 @@ The `getBlockInfo` operation returns a function to look up the `BlockInfo` corre
         , biHeaderSize   :: !Word16
         }
 
-This is similar to the information stored in the Immutable DB's on-disk indices, see [\[immutable:implementation:indices\]](#immutable:implementation:indices). However, in this case, the information has to be retrieved from an in-memory index, as the function returned from the `STM` transaction is pure.
+This is similar to the information stored in the Immutable DB's on-disk indices, see immutable:implementation:indices. However, in this case, the information has to be retrieved from an in-memory index, as the function returned from the `STM` transaction is pure.
 
 The `filterByPredecessor` operation returns a function to look up the successors of a given `ChainHash`. The `ChainHash` data type is defined as follows:
 
@@ -99,7 +99,7 @@ We will now give a high-level overview of our custom implementation of the Volat
 
 - We append each new block, without any extra information before or after it, to a file. When $x$ blocks have been appended to the file, the file is closed and a new file is created.
 
-  The smaller $x$, the more files are created. The higher $x$, the longer it will take for a block to be garbage collected, as explained in [1.2.1](#volatile:implementation:gc). The default value for $x$ is currently 1000.
+  The smaller $x$, the more files are created. The higher $x$, the longer it will take for a block to be garbage collected, as explained in 1.2.1. The default value for $x$ is currently 1000.
 
   For each file, we track the following information:
 
@@ -126,24 +126,24 @@ We will now give a high-level overview of our custom implementation of the Volat
             , ibiNestedCtxt  :: !(SomeSecond (NestedCtxt Header) blk)
             }
 
-  In addition to the `BlockInfo` that `getBlockInfo` should return, we also store in which file the block is stored, the offset in the file, the size of the block, and the nested context (see [\[serialisation:storage:nested-contents\]](#serialisation:storage:nested-contents)).
+  In addition to the `BlockInfo` that `getBlockInfo` should return, we also store in which file the block is stored, the offset in the file, the size of the block, and the nested context (see serialisation:storage:nested-contents).
 
   The second index, called the `SuccessorsIndex` is defined as follows:
 
         type SuccessorsIndex blk = Map (ChainHash blk) (Set (HeaderHash blk))
 
-  Both indices are updated when new blocks are added and when blocks are removed due to garbage collection, see [1.2.1](#volatile:implementation:gc).
+  Both indices are updated when new blocks are added and when blocks are removed due to garbage collection, see 1.2.1.
 
   The `Map` type used is a strict ordered map from the standard `containers` package. As for any data that is stored as long-lived state, we use strict data types to avoid space leaks. We opt for an ordered map, i.e., a sized balanced binary tree, instead of a hashing-based map to avoid hash collisions. If an attacker manages to feed us blocks that are hashed to the same bucket in the hash map, the performance will deteriorate. An ordered map is not vulnerable to this type of attack.
 
-- Besides the mappings we discussed above, the in-memory state of the Volatile DB consists of the path, file handle, and offset into the file to which new blocks will be appended. We store this state, a pure data type, in a *read-append-write lock*, which we discuss in [1.2.2](#volatile:implementation:rawlock).
+- Besides the mappings we discussed above, the in-memory state of the Volatile DB consists of the path, file handle, and offset into the file to which new blocks will be appended. We store this state, a pure data type, in a *read-append-write lock*, which we discuss in 1.2.2.
 
-- To read a block, header, or any other block component from the Volatile DB, we obtain read access to the state (see [1.2.2](#volatile:implementation:rawlock)) and look up the `InternalBlockInfo` corresponding to the hash in the `ReverseIndex`. The found `InternalBlockInfo` contains the file path, the block offset, and the block size, which is all what is needed to read the block. To read the header, we can use the file path, the block offset, the nested context (see [\[serialisation:storage:nested-contents\]](#serialisation:storage:nested-contents)), the header offset, and header size. The other block components can also be derived from the `InternalBlockInfo`.
+- To read a block, header, or any other block component from the Volatile DB, we obtain read access to the state (see 1.2.2) and look up the `InternalBlockInfo` corresponding to the hash in the `ReverseIndex`. The found `InternalBlockInfo` contains the file path, the block offset, and the block size, which is all what is needed to read the block. To read the header, we can use the file path, the block offset, the nested context (see serialisation:storage:nested-contents), the header offset, and header size. The other block components can also be derived from the `InternalBlockInfo`.
 
-- Note that unlike the Immutable DB, the Volatile DB does not maintain CRC32 checksums of the stored blocks to detect corruption. Instead, after reading a block from the Volatile DB and before copying it to the Immutable DB, we validate the block using the `nodeCheckIntegrity` method, as described in [\[immutable:implementation:recovery\]](#immutable:implementation:recovery).
+- Note that unlike the Immutable DB, the Volatile DB does not maintain CRC32 checksums of the stored blocks to detect corruption. Instead, after reading a block from the Volatile DB and before copying it to the Immutable DB, we validate the block using the `nodeCheckIntegrity` method, as described in immutable:implementation:recovery.
 
 ### Garbage collection
-Sync with [\[chaindb:gc\]](#chaindb:gc).
+Sync with chaindb:gc.
 
 As mentioned above, when a garbage collection for slot $s$ is triggered, all blocks with a slot less than $s$ should be removed from the Volatile DB.
 
@@ -166,12 +166,12 @@ We use a *read-append-write* lock to store the state of the Volatile DB. This is
 
 The `getBlockComponent` operation corresponds to *reading*, the `putBlock` operation to *appending*, and the `garbageCollect` operation to *writing*. Adding a new block can safely happen at the same time as blocks are being read. The new block will be appended to the current file or a new file will be started. This does not affect any concurrent reads of other blocks in the Volatile DB. At most one block can be added at a time, as blocks are appended one-by-one to the current file. To garbage collect the Volatile DB, we must obtain an exclusive lock on the state, as we might be deleting a file while trying to read from it at the same time. During garbage collection, we ignore the current file and will thus never try to delete it. This means that, strictly speaking, it would be possible to safely append blocks and garbage collect blocks concurrently. However, for simplicity (how should the concurrent changes to the indices be resolved?), we did not pursue this.
 
-As mentioned in [1.2.1](#volatile:implementation:gc), it is often the case that no files can be garbage collected. As a (premature) optimisation, we first check (which is cheap) whether any files can be garbage collected before trying to obtain the corresponding, more expensive lock on the state.
+As mentioned in 1.2.1, it is often the case that no files can be garbage collected. As a (premature) optimisation, we first check (which is cheap) whether any files can be garbage collected before trying to obtain the corresponding, more expensive lock on the state.
 
 ### Recovery
 Whenever a file-system operation fails, or a file is missing or corrupted, we shut down the Volatile DB and consequently the whole system. When this happens, either the system's file system is no longer reliable (e.g., disk corruption), manual intervention (e.g., disk is full) is required, or there is a bug in the system. In all cases, there is no point in trying to continue operating. We shut down the system and flag the shutdown as *dirty*, triggering a full validation on the next start-up.
 
-When opening the Volatile DB, the previous in-memory state, including the indices, is reconstructed based on the on-disk files. The block in each file are read and deserialised. There are two validation modes: a standard validation and a full validation. The difference between the two is that during a full validation, the integrity of each block is verified to detect silent corruption using the `nodeCheckIntegrity` method, as described in [\[immutable:implementation:recovery\]](#immutable:implementation:recovery).
+When opening the Volatile DB, the previous in-memory state, including the indices, is reconstructed based on the on-disk files. The block in each file are read and deserialised. There are two validation modes: a standard validation and a full validation. The difference between the two is that during a full validation, the integrity of each block is verified to detect silent corruption using the `nodeCheckIntegrity` method, as described in immutable:implementation:recovery.
 
 When a block fails to deserialise or it is detected as a corrupt block when the full validation mode is enabled, the file is truncated to the last valid block before it. As mentioned at the start of this chapter, it is not crucial to recover every single block. Therefore, we do not try to deserialise the blocks after a corrupt one.
 
@@ -179,4 +179,4 @@ When a block fails to deserialise or it is detected as a corrupt block when the 
 
 [^2]: In a sense, this is the reverse of the mapping from file to `FileInfo`, hence the name `ReverseIndex`.
 
-[^3]: When using the PBFT consensus protocol ([\[bft\]](#bft)), exactly one block will be produced every 20 seconds. However, when using the Praos consensus protocol ([\[praos\]](#praos)), on average there will be one block every 20 seconds, but it is natural to have a fork now and then, leading to one or more extra blocks. For the purposes of this calculation, the difference is negligible.
+[^3]: When using the PBFT consensus protocol (bft), exactly one block will be produced every 20 seconds. However, when using the Praos consensus protocol (praos), on average there will be one block every 20 seconds, but it is natural to have a fork now and then, leading to one or more extra blocks. For the purposes of this calculation, the difference is negligible.

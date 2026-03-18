@@ -1,7 +1,7 @@
 # Ledger State Transition
 The entire state transformation of the ledger state caused by a valid transaction can now be given as the combination of the UTxO transition and the delegation transitions.
 
-Figure [1](#fig:ts-types:ledger) defines the types for this transition. The environment for this rule consists of:
+Figure 1 defines the types for this transition. The environment for this rule consists of:
 
 - The current slot.
 
@@ -43,7 +43,7 @@ The ledger state consists of:
 \end{equation*}$$
 
 **Ledger transition-system types**
-Figure [1](#fig:ts-types:ledger) defines the ledger state transition. It has a single rule, which first calls the $\mathsf{UTXOW}$ transition, then calls the $\mathsf{DELEGS}$ transition.
+Figure 1 defines the ledger state transition. It has a single rule, which first calls the $\mathsf{UTXOW}$ transition, then calls the $\mathsf{DELEGS}$ transition.
 
 
 $$\begin{equation}
@@ -102,7 +102,7 @@ $$\begin{equation}
 \end{equation}$$
 
 **Ledger inference rule**
-The transition system $\mathsf{LEDGER}$ in Figure [2](#fig:rules:ledger) is iterated in $\mathsf{LEDGERS}$ in order to process a list of transactions.
+The transition system $\mathsf{LEDGER}$ in Figure 2 is iterated in $\mathsf{LEDGERS}$ in order to process a list of transactions.
 
 
 *Ledger Sequence transitions* $$\begin{equation*}

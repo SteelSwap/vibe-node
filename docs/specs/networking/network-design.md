@@ -89,7 +89,7 @@ This document is structured as follows:
 
 5.  In [9](#key-design-decisions) we discuss our development approach and design decisions.
 
-6.  In [10](#outstanding-unresolved-issues) we look at currently unresolved issues.
+6.  In 10 we look at currently unresolved issues.
 
 7.  In the appendix we provide: the previously-agreed business requirements ([11.1](#business-requirements)); numerical models of TCP performance ([11.2](#tcp-rpc-response-behavior)), the network scaling ([11.3](#model-of-network-scaling)), and the leadership distribution in Ouroboros Praos ([11.4](#performance-model-of-ouroboros-praos)); and give a detailed description of the software components that are required by our solution ([11.7](#ouroboros-network-components)).
 
@@ -525,7 +525,7 @@ As discussed in [5.1.1](#interleaving-transmission-and-validation), there are st
 
 ### PolderCast
 
-PolderCast [@SSVV12] is an implementation of pub/sub. As such it is not useful for an implementation of Ouroboros data diffusion as discussed in [5.1.1](#interleaving-transmission-and-validation), (namely the asymmetry in favour of adeversies). PolderCast, however, also establishes a P2P graph which is a necessary feature of a fully distributed Cardano implementation. This is discussed in summary in [5.8](#related-work-decentralisation) and PolderCast is considered in more detail in [7.3](#poldercast-1).
+PolderCast [@SSVV12] is an implementation of pub/sub. As such it is not useful for an implementation of Ouroboros data diffusion as discussed in [5.1.1](#interleaving-transmission-and-validation), (namely the asymmetry in favour of adeversies). PolderCast, however, also establishes a P2P graph which is a necessary feature of a fully distributed Cardano implementation. This is discussed in summary in [5.8](#related-work-decentralisation) and PolderCast is considered in more detail in 7.3.
 
 ### Other blockchain systems
 
@@ -725,7 +725,7 @@ Note that it is *not sufficient* to distribute blocks in a timely way 'on averag
 
 Note that the 'hard' does not refer to the level of difficulty -- increasing the slot length would make the problem easier -- but to the consequences of failing to meet the deadline. It is rarely catastrophic if, e.g., a web page takes a long time to load, whereas failing to deliver blocks on time (whatever that time is chosen to be) has the potential to arm an adversary to disrupt Cardano.
 
-The table [\[table:data-diffusion-budgets\]](#table:data-diffusion-budgets) gives a per-hop budget for "data diffusion", based on the business requirement of a 20s inter-block interval[^51]. Note that each 'hop' includes both reception and validation of the block. The next slot leader needs to receive the block in time to fully verify it and update its local mempool/UTxO before creating the next block.
+The table table:data-diffusion-budgets gives a per-hop budget for "data diffusion", based on the business requirement of a 20s inter-block interval[^51]. Note that each 'hop' includes both reception and validation of the block. The next slot leader needs to receive the block in time to fully verify it and update its local mempool/UTxO before creating the next block.
 
                  Threshold        Target           Stretch
   -------------- ---------------- ---------------- ----------------
@@ -1091,7 +1091,7 @@ The intrinsic nature of any distributed consensus process (as discussed in [5.6]
 
   - Both of these drive up the peak capacity requirement at a node.
 
-Table [\[table:transaction-size\]](#table:transaction-size) shows the effect of transaction rate and block size on the resulting average transaction size (in bytes), assuming a 20s average block interval.
+Table table:transaction-size shows the effect of transaction rate and block size on the resulting average transaction size (in bytes), assuming a 20s average block interval.
 
 +------------------:+--------:+--------:+--------:+--------:+--------:+--------:+--------:+
 |                   | *transactions per second*                                           |
@@ -1670,7 +1670,7 @@ The tables show the time in seconds to achieve the bulk transfer (as per the out
 
 : Unrestricted Window Size
 
-The table [2](#table:large-max-window-size) represents the "best credible case" (between AWS instances before kernel parameters have to be changed) for a large window size that can be set from within a user program.
+The table 2 represents the "best credible case" (between AWS instances before kernel parameters have to be changed) for a large window size that can be set from within a user program.
 
 :::: {#table:large-max-window-size}
 
@@ -1706,7 +1706,7 @@ The table [2](#table:large-max-window-size) represents the "best credible case"
 
 Note a $\Delta{}Q|_{G,S}$ of (300ms, $8\times{}10^{-8}$ o/s) is not the absolute worst case -- the worst we've measured (in other work) is $\Delta{}Q|_{G,S}$ of (188ms, $6.14\times{}10^{-5}$ o/s) *one-way* between San Paulo and Singapore. This would give a time-to-complete of 5.38s in the 2000 ko transfer case.
 
-The table [4](#table:medium-max-window-size) represents the default case -- i.e. no special action on the code and hence acceptance of the contemporary window size default.
+The table 4 represents the default case -- i.e. no special action on the code and hence acceptance of the contemporary window size default.
 
 :::: {#table:medium-max-window-size}
 
@@ -1754,7 +1754,7 @@ Note that the outliers in round trip time are (most likely) relating to those pa
 
 ## Model of network scaling
 
-Table [\[tab:per-hop-budgets\]](#tab:per-hop-budgets) below shows how the overall data diffusion time budget translates into a per-hop budget as a function of the depth of the spanning tree.
+Table tab:per-hop-budgets below shows how the overall data diffusion time budget translates into a per-hop budget as a function of the depth of the spanning tree.
 
 ::: tabular
 \@c\|\...@ & & & & & & & & 10.0s & 7.5s & 5.0s & 6.6s & 5.0s & 3.3s & 5.0s & 3.75s & 2.5s & 4.0s & 3.0s & 2.0s
@@ -1780,7 +1780,7 @@ These budgets should be compared with the time-to-complete for delivering a bloc
 
 : Size of spanning tree as a function of depth and node valency
 
-Table [5](#tab:span-tree-size) above shows the size of a (homogeneous) spanning tree as a function of depth and valency. The shading represents increasing 'success' in reaching a large number of nodes. However, as discussed in [5.6](#decentralisation-constraints), a large depth is problematic because it reduces the per-hop time budget, and a large valency is problematic because it increases the resources required by a node. The figures in bold italics represent reasonable compromises.
+Table 5 above shows the size of a (homogeneous) spanning tree as a function of depth and valency. The shading represents increasing 'success' in reaching a large number of nodes. However, as discussed in [5.6](#decentralisation-constraints), a large depth is problematic because it reduces the per-hop time budget, and a large valency is problematic because it increases the resources required by a node. The figures in bold italics represent reasonable compromises.
 
 ## Performance model of Ouroboros Praos
 
