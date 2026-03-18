@@ -34,10 +34,30 @@ EXTRACTION_MODEL = os.environ.get("EXTRACTION_MODEL", "bedrock:anthropic.claude-
 LINKING_MODEL = os.environ.get("LINKING_MODEL", "bedrock:anthropic.claude-sonnet-4-6-v1")
 
 
+def _get_model(model_str: str):
+    """Create a PydanticAI model, handling Bedrock bearer token auth.
+
+    If AWS_BEARER_TOKEN is set, creates a BedrockProvider with api_key.
+    Otherwise falls back to default auth (env vars, AWS profile, etc).
+    """
+    bearer_token = os.environ.get("AWS_BEARER_TOKEN")
+    region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+
+    if bearer_token and model_str.startswith("bedrock:"):
+        from pydantic_ai.models.bedrock import BedrockConverseModel
+        from pydantic_ai.providers.bedrock import BedrockProvider
+
+        model_name = model_str.removeprefix("bedrock:")
+        provider = BedrockProvider(api_key=bearer_token, region_name=region)
+        return BedrockConverseModel(model_name, provider=provider)
+
+    return model_str  # Let PydanticAI resolve it via string
+
+
 # === Stage 1: Rule Extraction Agent ===
 
 extraction_agent = Agent(
-    model=EXTRACTION_MODEL,
+    model=_get_model(EXTRACTION_MODEL),
     result_type=ExtractionResult,
     system_prompt="""You are a formal specification analyst. You read Cardano protocol specification chunks
 and extract individual rules, definitions, equations, and type declarations.
@@ -60,7 +80,7 @@ IMPORTANT: Use the era and subsystem provided. The section_id should follow the 
 # === Stage 3: Link Evaluation Agent ===
 
 link_eval_agent = Agent(
-    model=LINKING_MODEL,
+    model=_get_model(LINKING_MODEL),
     result_type=LinkDecision,
     system_prompt="""You evaluate whether a candidate code function, test, or GitHub discussion
 is related to a formal specification rule.
@@ -88,7 +108,7 @@ if you're genuinely confident the relationship exists.
 # === Stage 4: Gap Detection + Test Proposal Agent ===
 
 analysis_agent = Agent(
-    model=EXTRACTION_MODEL,
+    model=_get_model(EXTRACTION_MODEL),
     result_type=AnalysisResult,
     system_prompt="""You analyze a formal specification rule and its implementing Haskell code
 to detect divergences and propose tests.
