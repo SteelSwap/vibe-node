@@ -86,6 +86,18 @@ nav:
     - Database Schema: reference/schema.md
     - Architecture: reference/architecture.md
     - Development Workflow: reference/workflow.md
+    - Node Subsystems:
+      - Overview: reference/subsystems/index.md
+      - Networking: reference/subsystems/networking.md
+      - "Miniprotocols (N2N)": reference/subsystems/miniprotocols-n2n.md
+      - "Miniprotocols (N2C)": reference/subsystems/miniprotocols-n2c.md
+      - Consensus: reference/subsystems/consensus.md
+      - Ledger Rules: reference/subsystems/ledger.md
+      - Plutus: reference/subsystems/plutus.md
+      - Serialization: reference/subsystems/serialization.md
+      - Mempool: reference/subsystems/mempool.md
+      - Storage: reference/subsystems/storage.md
+      - Block Production: reference/subsystems/block-production.md
     - Pipelines:
       - Spec Ingestion: reference/pipelines/spec-ingestion.md
       - Code Indexing: reference/pipelines/code-indexing.md
