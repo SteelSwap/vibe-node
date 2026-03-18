@@ -111,6 +111,19 @@ Elder Millenial is the committer. Agent Millenial is the co-author. Every commit
 2. The prompt or task context that drove the change
 3. A `Co-Authored-By` tag identifying the AI model used
 
+### Branch Policy
+
+**NEVER commit directly to main.** All work must go through a branch and pull request:
+
+1. Create a feature branch for each module or logical unit of work (e.g., `m1.2-public-docs`, `m1.3-cross-ref-infrastructure`)
+2. Commit to the feature branch
+3. Push and open a PR for Elder Millenial to review
+4. Only Elder Millenial merges to main
+
+This is non-negotiable — the git history is public proof of the vibe-coding process, and PRs ensure every change is reviewed.
+
+### Commit Message Format
+
 Example:
 ```
 Implement chain-sync miniprotocol client state machine
