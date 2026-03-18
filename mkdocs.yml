@@ -35,6 +35,20 @@ theme:
     - content.code.copy
     - content.code.annotate
 
+not_in_nav: |
+  /specs/foundations/*.md
+  /specs/serialization/*.md
+  /specs/transactions/*.md
+  /specs/ledger/*.md
+  /specs/consensus/*.md
+  /specs/storage/*.md
+  /specs/networking/*.md
+  /specs/plutus/*.md
+  /specs/governance/*.md
+  /specs/papers/*.md
+  /superpowers/**
+  /development/devlog/phase0-wave3.md
+
 nav:
   - Home: index.md
   - About:
@@ -65,6 +79,7 @@ nav:
       - Journal: development/devlog/index.md
       - "Phase 0, Wave 1 — Foundation": development/devlog/phase0-wave1.md
       - "Phase 0, Wave 2 — Ingestion & CLI": development/devlog/phase0-wave2.md
+      - "Phase 0, Wave 3 — Search & MCP": development/devlog/phase0-wave3.md
   - Reference:
     - Overview: reference/index.md
     - CLI Reference: reference/cli-reference.md
