@@ -487,9 +487,19 @@ def research_callback(ctx: typer.Context):
         typer.echo(ctx.get_help())
 
 
+VALID_SUBSYSTEMS = [
+    "networking", "miniprotocols-n2n", "miniprotocols-n2c", "consensus",
+    "ledger", "plutus", "serialization", "mempool", "storage", "block-production",
+]
+
+
 @research_app.command(name="extract-rules")
 def extract_rules(
-    subsystem: str = typer.Argument(help="Subsystem to extract rules for"),
+    subsystem: str = typer.Argument(
+        help="Subsystem to extract rules for. Valid values: "
+        "networking, miniprotocols-n2n, miniprotocols-n2c, consensus, "
+        "ledger, plutus, serialization, mempool, storage, block-production",
+    ),
     limit: int | None = typer.Option(None, "--limit", "-n", help="Max spec chunks to process"),
 ) -> None:
     """Run the PydanticAI rule extraction and linking pipeline for a subsystem.
@@ -497,10 +507,21 @@ def extract_rules(
     Extracts spec rules, finds implementing code and related discussions,
     detects spec-vs-code gaps, and proposes Hypothesis tests.
 
+    Valid subsystems: networking, miniprotocols-n2n, miniprotocols-n2c,
+    consensus, ledger, plutus, serialization, mempool, storage, block-production
+
     Requires either AWS credentials (for Bedrock, default) or ANTHROPIC_API_KEY.
     Override models via EXTRACTION_MODEL and LINKING_MODEL env vars.
     """
     import asyncio
+
+    if subsystem not in VALID_SUBSYSTEMS:
+        typer.echo(
+            f"Invalid subsystem: '{subsystem}'\n"
+            f"Valid options: {', '.join(VALID_SUBSYSTEMS)}",
+            err=True,
+        )
+        raise typer.Exit(1)
 
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 
