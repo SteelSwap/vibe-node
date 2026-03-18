@@ -544,13 +544,31 @@ def extract_rules(
                 task = progress.add_task(f"[green]{subsystem}", total=0)
                 stats = await run_pipeline(conn, subsystem, limit=limit, progress=progress, concurrency=concurrency)
 
+        # Query actual totals from the DB (more reliable than in-memory counters)
+        pool2 = await get_pool()
+        async with pool2.acquire() as conn2:
+            db_stats = await conn2.fetchrow("""
+                SELECT
+                    (SELECT COUNT(*) FROM spec_sections WHERE subsystem = $1) AS rules,
+                    (SELECT COUNT(*) FROM cross_references cr
+                     JOIN spec_sections ss ON cr.source_id = ss.id AND cr.source_type = 'spec_section'
+                     WHERE ss.subsystem = $1) AS links,
+                    (SELECT COUNT(*) FROM gap_analysis WHERE subsystem = $1) AS gaps,
+                    (SELECT COUNT(*) FROM test_specifications WHERE subsystem = $1) AS tests
+            """, subsystem)
+
         await close_pool()
 
-        typer.echo(f"\n=== Pipeline Complete ===")
+        typer.echo(f"\n=== Pipeline Complete (this run) ===")
         typer.echo(f"  Chunks processed:  {stats['chunks_processed']}")
         typer.echo(f"  Rules extracted:   {stats['rules_extracted']}")
         typer.echo(f"  Links created:     {stats['links_created']}")
         typer.echo(f"  Gaps found:        {stats['gaps_found']}")
         typer.echo(f"  Tests proposed:    {stats['tests_proposed']}")
+        typer.echo(f"\n=== Database Totals for {subsystem} ===")
+        typer.echo(f"  Spec sections:     {db_stats['rules']}")
+        typer.echo(f"  Cross-references:  {db_stats['links']}")
+        typer.echo(f"  Gap analysis:      {db_stats['gaps']}")
+        typer.echo(f"  Test specs:        {db_stats['tests']}")
 
     asyncio.run(_run())

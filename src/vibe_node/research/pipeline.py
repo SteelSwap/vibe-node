@@ -353,11 +353,18 @@ async def _process_chunk(
     }
 
     async with pool.acquire() as conn:
-        # Check if already processed
+        # Check if already processed — use a marker in spec_documents metadata
+        # to track chunks that were processed (even if they produced no rules)
         existing = await conn.fetchval(
             "SELECT COUNT(*) FROM spec_sections WHERE spec_chunk_id = $1", chunk_id,
         )
-        if existing > 0:
+        # Also check if we previously processed this chunk and got no rules
+        # by looking for a marker we set after extraction
+        already_extracted = await conn.fetchval(
+            "SELECT (metadata->>'extraction_processed')::boolean FROM spec_documents WHERE id = $1",
+            chunk_id,
+        )
+        if existing > 0 or already_extracted:
             logger.debug("Skipping already-processed chunk %s", chunk_id)
             return chunk_stats
 
@@ -367,6 +374,14 @@ async def _process_chunk(
         except Exception as e:
             logger.warning("Extraction failed for chunk %s: %s", chunk_id, e)
             return chunk_stats
+
+        # Mark chunk as processed (even if no rules extracted)
+        await conn.execute(
+            """UPDATE spec_documents
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || '{"extraction_processed": true}'::jsonb
+            WHERE id = $1""",
+            chunk_id,
+        )
 
         embed_client = EmbeddingClient()
 
