@@ -21,7 +21,7 @@ async def add_spec_section(
     embedding_str = (
         "[" + ",".join(str(x) for x in embedding) + "]" if embedding else None
     )
-    await conn.execute(
+    result = await conn.fetchrow(
         """
         INSERT INTO spec_sections (id, spec_chunk_id, section_id, title, section_type,
             era, subsystem, verbatim, extracted_rule, embedding, metadata)
@@ -31,12 +31,13 @@ async def add_spec_section(
             extracted_rule = EXCLUDED.extracted_rule,
             embedding = EXCLUDED.embedding,
             metadata = EXCLUDED.metadata
+        RETURNING id
         """,
         row_id, spec_chunk_id, section_id, title, section_type,
         era, subsystem, verbatim, extracted_rule, embedding_str,
         metadata,
     )
-    return row_id
+    return result["id"]
 
 
 async def list_spec_sections(
