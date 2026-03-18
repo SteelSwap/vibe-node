@@ -51,6 +51,18 @@ not_in_nav: |
 
 nav:
   - Home: index.md
+  - How It Works:
+    - Overview: how-it-works/index.md
+    - Networking: how-it-works/networking.md
+    - Miniprotocols: how-it-works/miniprotocols.md
+    - Consensus: how-it-works/consensus.md
+    - Ledger Rules: how-it-works/ledger.md
+    - Script Evaluation: how-it-works/plutus.md
+    - Serialization: how-it-works/serialization.md
+    - Mempool: how-it-works/mempool.md
+    - Storage: how-it-works/storage.md
+    - Block Production: how-it-works/block-production.md
+    - Transaction Lifecycle: how-it-works/transaction-lifecycle.md
   - About:
     - Overview: about/index.md
     - The Challenge: about/challenge.md
@@ -85,6 +97,7 @@ nav:
     - CLI Reference: reference/cli-reference.md
     - Database Schema: reference/schema.md
     - Architecture: reference/architecture.md
+    - Data Architecture: reference/data-architecture.md
     - Package Structure: reference/package-structure.md
     - Development Workflow: reference/workflow.md
     - Node Subsystems:

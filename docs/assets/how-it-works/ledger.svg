@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" font-family="Inter, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="lgGrad" gradientTransform="rotate(110)">
+      <stop offset="0%" style="stop-color:#ED458E"/>
+      <stop offset="100%" style="stop-color:#F48020"/>
+    </linearGradient>
+    <linearGradient id="lgUtxo">
+      <stop offset="0%" style="stop-color:#d94080"/>
+      <stop offset="100%" style="stop-color:#E86040"/>
+    </linearGradient>
+    <filter id="lgShadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="720" height="360" rx="16" fill="#1a1b1e"/>
+  <rect width="720" height="4" fill="url(#lgGrad)"/>
+
+  <text x="360" y="34" text-anchor="middle" fill="url(#lgGrad)" font-size="18" font-weight="800">Ledger Rules</text>
+  <text x="360" y="52" text-anchor="middle" fill="#909296" font-size="10">The rulebook that decides if a transaction is valid</text>
+
+  <!-- UTxO model -->
+  <text x="50" y="82" fill="#d94080" font-size="12" font-weight="700">The UTxO Model</text>
+
+  <!-- Input UTxOs -->
+  <rect x="50" y="100" width="120" height="44" rx="6" fill="url(#lgUtxo)" filter="url(#lgShadow)"/>
+  <text x="110" y="120" text-anchor="middle" fill="white" font-size="11" font-weight="600">5 ADA</text>
+  <text x="110" y="136" text-anchor="middle" fill="#ffd0b0" font-size="9">UTxO (unspent)</text>
+
+  <rect x="50" y="154" width="120" height="44" rx="6" fill="url(#lgUtxo)" filter="url(#lgShadow)"/>
+  <text x="110" y="174" text-anchor="middle" fill="white" font-size="11" font-weight="600">10 ADA</text>
+  <text x="110" y="190" text-anchor="middle" fill="#ffd0b0" font-size="9">UTxO (unspent)</text>
+
+  <!-- Transaction box -->
+  <rect x="250" y="110" width="160" height="80" rx="10" fill="#25262b" stroke="#ED458E" stroke-width="2"/>
+  <text x="330" y="140" text-anchor="middle" fill="#ED458E" font-size="14" font-weight="700">Transaction</text>
+  <text x="330" y="160" text-anchor="middle" fill="#909296" font-size="10">Consumes inputs</text>
+  <text x="330" y="175" text-anchor="middle" fill="#909296" font-size="10">Creates outputs</text>
+
+  <!-- Output UTxOs -->
+  <rect x="490" y="100" width="120" height="44" rx="6" fill="url(#lgUtxo)" filter="url(#lgShadow)"/>
+  <text x="550" y="120" text-anchor="middle" fill="white" font-size="11" font-weight="600">12 ADA</text>
+  <text x="550" y="136" text-anchor="middle" fill="#ffd0b0" font-size="9">To recipient</text>
+
+  <rect x="490" y="154" width="120" height="44" rx="6" fill="url(#lgUtxo)" filter="url(#lgShadow)"/>
+  <text x="550" y="174" text-anchor="middle" fill="white" font-size="11" font-weight="600">3 ADA</text>
+  <text x="550" y="190" text-anchor="middle" fill="#ffd0b0" font-size="9">Change back</text>
+
+  <!-- Arrows -->
+  <line x1="170" y1="122" x2="248" y2="140" stroke="#ED458E" stroke-width="2"/>
+  <polygon points="246,136 254,140 246,144" fill="#ED458E"/>
+  <line x1="170" y1="176" x2="248" y2="160" stroke="#ED458E" stroke-width="2"/>
+  <polygon points="246,156 254,160 246,164" fill="#ED458E"/>
+  <line x1="410" y1="140" x2="488" y2="122" stroke="#F48020" stroke-width="2"/>
+  <polygon points="486,118 494,122 486,126" fill="#F48020"/>
+  <line x1="410" y1="160" x2="488" y2="176" stroke="#F48020" stroke-width="2"/>
+  <polygon points="486,172 494,176 486,180" fill="#F48020"/>
+
+  <!-- Fee note -->
+  <text x="650" y="150" fill="#909296" font-size="10" font-style="italic">5 + 10 = 12 + 3</text>
+  <text x="650" y="165" fill="#909296" font-size="9">(+ fee from inputs)</text>
+
+  <!-- Rules -->
+  <rect x="50" y="228" width="620" height="90" rx="10" fill="#25262b" stroke="#373a40" stroke-width="1"/>
+  <text x="360" y="254" text-anchor="middle" fill="url(#lgGrad)" font-size="13" font-weight="700">What the Ledger Checks</text>
+  <text x="140" y="278" text-anchor="middle" fill="#ED458E" font-size="10" font-weight="600">Inputs exist?</text>
+  <text x="280" y="278" text-anchor="middle" fill="#d94080" font-size="10" font-weight="600">Signatures valid?</text>
+  <text x="430" y="278" text-anchor="middle" fill="#E86040" font-size="10" font-weight="600">Balance correct?</text>
+  <text x="570" y="278" text-anchor="middle" fill="#F48020" font-size="10" font-weight="600">Fee sufficient?</text>
+  <text x="360" y="304" text-anchor="middle" fill="#909296" font-size="10">Plus: native tokens balanced, metadata valid, scripts pass, datums match</text>
+
+  <rect y="356" width="720" height="4" fill="url(#lgGrad)" rx="2"/>
+</svg>
