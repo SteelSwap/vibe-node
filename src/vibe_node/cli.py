@@ -28,6 +28,12 @@ app.add_typer(infra_app, name="infra")
 # Register snapshot, restore, search on the db app
 register_db_extras(db_app)
 
+# Register cross-referencing and test-specs subcommands
+from vibe_node.cli_xref import xref_app, test_spec_app
+
+db_app.add_typer(xref_app, name="xref")
+db_app.add_typer(test_spec_app, name="test-specs")
+
 
 def version_callback(value: bool) -> None:
     if value:
@@ -167,6 +173,14 @@ def status() -> None:
             SELECT 'github_pull_requests', count(*) FROM github_pull_requests
             UNION ALL
             SELECT 'github_pr_comments', count(*) FROM github_pr_comments
+            UNION ALL
+            SELECT 'spec_sections', count(*) FROM spec_sections
+            UNION ALL
+            SELECT 'cross_references', count(*) FROM cross_references
+            UNION ALL
+            SELECT 'test_specifications', count(*) FROM test_specifications
+            UNION ALL
+            SELECT 'gap_analysis', count(*) FROM gap_analysis
             ORDER BY table_name;
             """,
         ],
