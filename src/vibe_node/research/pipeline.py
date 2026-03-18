@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # Anthropic format: "anthropic:claude-sonnet-4-20250514"
 # Override via environment variables.
 EXTRACTION_MODEL = os.environ.get("EXTRACTION_MODEL", "bedrock:us.anthropic.claude-opus-4-6-v1")
-LINKING_MODEL = os.environ.get("LINKING_MODEL", "bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0")
+LINKING_MODEL = os.environ.get("LINKING_MODEL", "bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0")
 
 
 def _get_model(model_str: str):
