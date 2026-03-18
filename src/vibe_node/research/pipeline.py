@@ -494,30 +494,36 @@ async def run_pipeline(
                 continue
 
             if analysis.gap:
-                await conn.execute(
-                    """INSERT INTO gap_analysis (id, spec_section_id, subsystem, era,
-                        spec_says, haskell_does, delta, implications, discovered_during)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
-                    uuid.uuid4(), section_uuid, subsystem, era,
-                    analysis.gap.spec_says, analysis.gap.haskell_does,
-                    analysis.gap.delta, analysis.gap.implications,
-                    f"Phase 1 pipeline, subsystem={subsystem}",
-                )
-                stats["gaps_found"] += 1
+                try:
+                    await conn.execute(
+                        """INSERT INTO gap_analysis (id, spec_section_id, subsystem, era,
+                            spec_says, haskell_does, delta, implications, discovered_during)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                        uuid.uuid4(), section_uuid, subsystem, era,
+                        analysis.gap.spec_says, analysis.gap.haskell_does,
+                        analysis.gap.delta, analysis.gap.implications,
+                        f"Phase 1 pipeline, subsystem={subsystem}",
+                    )
+                    stats["gaps_found"] += 1
+                except Exception as e:
+                    logger.warning("Gap insert failed for %s: %s", rule.section_id, e)
 
             for test in analysis.proposed_tests:
-                await add_test_spec(
-                    conn,
-                    subsystem=subsystem,
-                    test_type=test.test_type.value,
-                    test_name=test.test_name,
-                    description=test.description,
-                    priority=test.priority.value,
-                    phase="phase-2" if subsystem in ("serialization", "networking", "miniprotocols-n2n") else "phase-3",
-                    spec_section_id=section_uuid,
-                    hypothesis_strategy=test.hypothesis_strategy,
-                )
-                stats["tests_proposed"] += 1
+                try:
+                    await add_test_spec(
+                        conn,
+                        subsystem=subsystem,
+                        test_type=test.test_type.value,
+                        test_name=test.test_name,
+                        description=test.description,
+                        priority=test.priority.value,
+                        phase="phase-2" if subsystem in ("serialization", "networking", "miniprotocols-n2n") else "phase-3",
+                        spec_section_id=section_uuid,
+                        hypothesis_strategy=test.hypothesis_strategy,
+                    )
+                    stats["tests_proposed"] += 1
+                except Exception as e:
+                    logger.warning("Test spec insert failed for %s: %s", test.test_name, e)
 
         await embed_client.close()
         stats["chunks_processed"] += 1
