@@ -19,7 +19,16 @@ Persistent chain state management. The largest module namespace in the consensus
 - Iterator API — for serving chain-sync to downstream peers
 
 ## Library Recommendations
-*To be populated during Phase 1 analysis (M1.8)*
+
+See the full **[Data Architecture Evaluation](../data-architecture.md)** for benchmarks and rationale.
+
+| Component | Engine | Python Package |
+|-----------|--------|---------------|
+| UTxO set (LedgerDB) | LMDB | `lmdb` (py-lmdb) |
+| Volatile blocks (VolatileDB) | LMDB | `lmdb` (py-lmdb) |
+| Immutable blocks (ImmutableDB) | Chunked flat files | stdlib `io` / `mmap` |
+| Ledger snapshots | CBOR files | `cbor2` |
+| Offline analysis (optional) | DuckDB + Arrow | `duckdb`, `pyarrow` |
 
 ## Test Strategy
 *To be populated during Phase 1 analysis (M1.8)*
