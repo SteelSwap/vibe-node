@@ -393,13 +393,13 @@ async def run_pipeline(
             stats["chunks_processed"] += 1
             continue
 
+        # Create embedding client once per chunk (not per rule)
+        from vibe_node.embed.client import EmbeddingClient
+        embed_client = EmbeddingClient()
+
         for rule in extraction.rules:
             # Store the extracted rule
-            from vibe_node.embed.client import EmbeddingClient
-
-            client = EmbeddingClient()
-            embedding = await client.embed(rule.extracted_rule[:8000])
-            await client.close()
+            embedding = await embed_client.embed(rule.extracted_rule[:8000])
 
             section_uuid = await add_spec_section(
                 conn,
@@ -418,17 +418,27 @@ async def run_pipeline(
             # Stage 2: Semantic search for candidates
             candidates = await stage2_search(conn, rule.extracted_rule, subsystem)
 
-            # Stage 3: Evaluate each candidate
-            implementing_code = None
-            for candidate in candidates:
+            # Stage 3: Evaluate all candidates concurrently
+            import asyncio as _asyncio
+
+            async def _eval_candidate(candidate):
                 try:
                     decision = await stage3_evaluate_link(
                         rule.verbatim, rule.extracted_rule, candidate,
                     )
+                    return candidate, decision
                 except Exception as e:
                     logger.warning("Link eval failed: %s", e)
-                    continue
+                    return candidate, None
 
+            # Run all link evaluations in parallel (Sonnet calls)
+            eval_tasks = [_eval_candidate(c) for c in candidates]
+            eval_results = await _asyncio.gather(*eval_tasks)
+
+            implementing_code = None
+            for candidate, decision in eval_results:
+                if decision is None:
+                    continue
                 if decision.is_linked and decision.relationship:
                     await add_xref(
                         conn,
@@ -491,6 +501,7 @@ async def run_pipeline(
                 )
                 stats["tests_proposed"] += 1
 
+        await embed_client.close()
         stats["chunks_processed"] += 1
         if progress:
             progress.update(progress.task_ids[0], advance=1)
