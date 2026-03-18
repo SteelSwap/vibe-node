@@ -239,27 +239,66 @@ This is pure Python logic with no storage engine dependency.
 
 ## Recommendation
 
-**Use LMDB as the primary storage engine, with flat files for immutable blocks.**
+**Hybrid architecture: LMDB for persistence + Arrow for in-memory compute + DuckDB for analytics.**
 
-The rationale:
+### Persistence Layer: LMDB
 
-1. **Fastest point lookups** — 1.1 us per UTxO lookup, the operation that dominates block validation
+LMDB handles all on-disk state:
+
+1. **Fastest point lookups** — 1.1 μs per UTxO lookup, the operation that dominates block validation
 2. **Matches the Haskell reference** — the V1LMDB backend gives us an apples-to-apples comparison for memory and correctness
 3. **Zero-copy reads** — `mmap` eliminates data copying between kernel and userspace
 4. **ACID without complexity** — copy-on-write B+ tree provides crash safety with no WAL management
 5. **No tuning required** — unlike RocksDB, there are no compaction strategies or bloom filter configurations
 6. **Clean Python bindings** — `py-lmdb` is mature, well-documented, and installs cleanly on Python 3.14
-7. **Memory profile is OS-managed** — the OS evicts mmap pages under pressure, giving us automatic memory adaptation
 
-**SQLite remains available** as a fallback or for metadata storage (peer lists, configuration, chain analytics exports). Its stdlib availability and zero-dependency nature make it useful for non-performance-critical data.
+### In-Memory Layer: Apache Arrow
 
-**DuckDB + Arrow** is reserved for offline chain analysis tooling, not the node's hot path.
+Arrow provides the in-memory compute format for bulk operations:
+
+1. **Columnar UTxO set** — the active UTxO set as an Arrow table enables vectorized operations (stake distribution aggregation, balance queries, epoch snapshots) without iterating row-by-row through LMDB
+2. **Zero-copy between storage and compute** — LMDB values can be deserialized directly into Arrow arrays, and Arrow tables can be serialized back to LMDB
+3. **Efficient epoch boundary processing** — stake distribution snapshots require scanning and aggregating the entire delegation map. Arrow's columnar layout makes this dramatically faster than key-value iteration
+4. **Memory-mapped Feather for immutable blocks** — append-only immutable chain data stored as Feather (Arrow IPC) files. These can be memory-mapped for read access without loading into RAM, giving us efficient historical block access
+
+The key insight: **LMDB handles the OLTP hot path (point lookups, small mutations), Arrow handles the analytical operations (aggregations, snapshots, bulk scans)**. Neither is sufficient alone — LMDB is slow at bulk scans, Arrow is slow at point mutations.
+
+### Analytics Layer: DuckDB (optional, not on hot path)
+
+DuckDB queries over Arrow tables and Feather files for:
+- Chain analytics and debugging
+- Historical query tools
+- Development and research
+
+DuckDB is explicitly **not** on the node's hot path. It's a convenience layer.
+
+### Component Mapping to Haskell
+
+| Component | Persistence | In-Memory | Rationale |
+|-----------|------------|-----------|-----------|
+| **LedgerDB** (UTxO set) | LMDB | Arrow table | LMDB for point lookups, Arrow for epoch aggregation |
+| **VolatileDB** (recent forks) | LMDB | Key-value map | Small dataset, LMDB sufficient |
+| **ImmutableDB** (finalized blocks) | Feather/Arrow IPC files | Memory-mapped | Append-only, columnar, zero-copy reads |
+| **Ledger snapshots** | CBOR serialized files | — | Periodic full-state dump for crash recovery |
+| **Stake distribution** | Derived from LedgerDB | Arrow table | Bulk aggregation at epoch boundaries |
+| **ChainDB** (coordinator) | — | In-memory indices | Coordinates access across all stores |
+
+### Memory Strategy
+
+The memory requirement (match or beat Haskell) is met by:
+
+- **LMDB mmap** — OS manages page eviction automatically under memory pressure
+- **Arrow tables** — only the active working set (current UTxO, current delegation) is materialized as Arrow tables
+- **Feather mmap** — immutable blocks are memory-mapped, not loaded. OS caches only recently accessed pages
+- **No duplication** — the Arrow UTxO table IS the in-memory representation, not a copy of LMDB. On startup, deserialize from LMDB → Arrow. During operation, mutations go to both LMDB (persistence) and Arrow (compute). On shutdown, Arrow state is already persisted in LMDB.
+
+**SQLite** remains available for metadata storage (peer lists, configuration) where its stdlib availability and zero-dependency nature are valuable.
 
 ## Future Considerations
 
 - **LSM-tree backend**: The Haskell team is developing an LSM-tree backend to replace LMDB for LedgerDB. We should monitor this and evaluate when it ships. LSM trees offer better write amplification characteristics at the cost of read performance.
-- **Memory-mapped Arrow for ImmutableDB queries**: For chain analytics and historical queries, we could memory-map immutable block files as Arrow IPC and query with DuckDB — a read-only analytical path that doesn't affect node performance.
-- **Compression**: LMDB doesn't compress data. If disk footprint becomes a concern, we can add application-level compression (LZ4 for values) while keeping keys uncompressed for ordered traversal.
+- **Arrow Flight for N2C queries**: Local state queries (node-to-client miniprotocol) could potentially serve Arrow-formatted results directly, enabling efficient analytical queries from wallets and tools.
+- **Compression**: LMDB doesn't compress data. If disk footprint becomes a concern, we can add application-level compression (LZ4 for values) while keeping keys uncompressed for ordered traversal. Arrow/Feather supports built-in compression (LZ4, ZSTD).
 
 ## Appendix: Running the Benchmarks
 
