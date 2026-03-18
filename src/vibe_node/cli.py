@@ -532,28 +532,7 @@ def extract_rules(
 
         pool = await get_pool()
         async with pool.acquire() as conn:
-            # Count chunks for progress bar
-            terms = {
-                "networking": ["ouroboros-network", "network", "multiplexer"],
-                "serialization": ["cddl", "cbor"],
-                "ledger": ["ledger", "utxo", "delegation"],
-                "consensus": ["ouroboros", "praos", "consensus"],
-                "plutus": ["plutus", "script", "cost-model"],
-                "mempool": ["mempool"],
-                "storage": ["immutable", "volatile", "storage"],
-            }.get(subsystem, [subsystem])
-
-            chunk_ids = set()
-            for term in terms:
-                rows = await conn.fetch(
-                    "SELECT id FROM spec_documents WHERE content_markdown ILIKE $1 LIMIT 50",
-                    f"%{term}%",
-                )
-                for row in rows:
-                    chunk_ids.add(row["id"])
-
-            total = min(len(chunk_ids), limit) if limit else len(chunk_ids)
-            typer.echo(f"Processing {total} spec chunks for subsystem={subsystem}...")
+            typer.echo(f"Discovering spec chunks for subsystem={subsystem}...")
 
             with Progress(
                 SpinnerColumn(),
@@ -562,7 +541,7 @@ def extract_rules(
                 TextColumn("{task.completed}/{task.total}"),
                 TimeElapsedColumn(),
             ) as progress:
-                task = progress.add_task(f"[green]{subsystem}", total=total)
+                task = progress.add_task(f"[green]{subsystem}", total=0)
                 stats = await run_pipeline(conn, subsystem, limit=limit, progress=progress, concurrency=concurrency)
 
         await close_pool()

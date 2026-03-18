@@ -497,6 +497,9 @@ async def run_pipeline(
     import asyncio as _asyncio
     from vibe_node.db.pool import get_pool
 
+    # Track in-progress chunks to prevent concurrent processing of the same chunk
+    _in_progress: set[uuid.UUID] = set()
+
     # Map subsystem names to search terms for finding relevant spec chunks
     subsystem_terms = {
         "networking": ["ouroboros-network", "network", "multiplexer"],
@@ -549,13 +552,21 @@ async def run_pipeline(
         len(unique_chunks), subsystem, concurrency,
     )
 
+    # Set progress bar total now that we know the real deduplicated count
+    if progress:
+        progress.update(progress.task_ids[0], total=len(unique_chunks))
+
     pool = await get_pool()
     semaphore = _asyncio.Semaphore(concurrency)
 
     async def _process_with_semaphore(chunk_id, era):
+        # Skip if another concurrent task is already processing this chunk
+        if chunk_id in _in_progress:
+            return
+        _in_progress.add(chunk_id)
+
         async with semaphore:
             chunk_stats = await _process_chunk(pool, chunk_id, era, subsystem)
-            # Merge stats
             for key in chunk_stats:
                 stats[key] += chunk_stats[key]
             stats["chunks_processed"] += 1
