@@ -32,13 +32,13 @@ Every candidate is scored on six dimensions (1–5 scale):
 
 | Subsystem | Verdict | Library/Approach | Rationale |
 |-----------|---------|-----------------|-----------|
-| **Serialization** | USE | cbor2 | MIT, 3.14 wheels, C extension, active maintainer |
+| **Serialization** | USE (with caveats) | cbor2 (pure Python mode) | MIT, 3.14 wheels; C extension has deserialization bugs — must use pure Python build (see pycardano's cbor2pure) |
 | **Crypto (general)** | USE | PyNaCl + cryptography | Ed25519/X25519 via PyNaCl; KES/hashing via cryptography |
 | **Crypto (VRF)** | BUILD | Custom libsodium FFI | No Python VRF library implements Cardano's ECVRF-ED25519-SHA512-Elligator2 |
 | **Networking** | USE | asyncio (stdlib) | Zero-dependency; sufficient for multiplexed TCP; broader ecosystem support |
 | **Ledger types** | REUSE | pycardano (selected modules) | Extract transaction/address/UTxO types; avoid tx-builder coupling |
 | **Plutus** | BUILD | From spec (with pyaiken for conformance testing) | uplc is wallet-grade; node needs precise cost accounting and all builtins |
-| **Storage** | USE | LMDB (py-lmdb) + SQLite (stdlib) | LMDB for hot state (append-heavy, mmap'd); SQLite for metadata/indexes |
+| **Storage** | USE | LMDB + Arrow + Feather + SQLite | LMDB for persistence, Arrow for in-memory compute, Feather for immutable blocks, SQLite for metadata. See [Data Architecture](data-architecture.md). |
 
 ---
 
@@ -59,7 +59,12 @@ Cardano is CBOR-native — every block, transaction, and protocol message is CBO
 | Coupling | 5 | Standalone CBOR codec; zero Cardano-specific opinions |
 | Bus Factor | 3 | Primarily single-maintainer (agronholm), but 220+ GitHub stars and Debian-packaged |
 
-**Verdict: USE.** cbor2 is the clear choice. It implements RFC 8949, supports deterministic encoding (critical for Cardano canonical CBOR), and has a C extension path for performance. We will need to build our own CDDL-schema-aware encoding layer on top, but the low-level codec is exactly what we need.
+!!! warning "C Extension Has Known Deserialization Bugs"
+    The cbor2 C extension produces incorrect results for certain Cardano CBOR structures. **pycardano created [cbor2pure](https://github.com/Chia-Network/cbor2)** — a pure Python fork — to work around this. By default, pycardano uses cbor2pure for decoding and only falls back to the C extension when `CBOR_C_EXTENSION=1` is set.
+
+    We must use the **pure Python mode** of cbor2 for correctness. This is slower than the C extension but is the only way to get bit-perfect deserialization for Cardano's CBOR. If performance becomes a bottleneck, we should investigate the specific C extension bugs and potentially contribute fixes upstream rather than accepting incorrect results.
+
+**Verdict: USE (pure Python mode).** cbor2 implements RFC 8949 and supports deterministic encoding (critical for Cardano canonical CBOR). However, we must enforce pure Python mode due to C extension bugs that affect Cardano deserialization. Follow pycardano's approach: use cbor2 with the pure Python decoder by default. We will need to build our own CDDL-schema-aware encoding layer on top.
 
 **Gaps to address:**
 
