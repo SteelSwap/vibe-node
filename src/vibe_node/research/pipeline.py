@@ -219,21 +219,39 @@ async def stage2_search(
     available = await get_available_configs(conn)
     candidates = []
 
-    # Search code (including tests)
-    if "code" in available:
-        cfg = available["code"]
-        sql, params = build_vector_query(
-            cfg["table"], embedding, {}, cfg.get("filter_columns", {}), 10, 0,
+    # Search code (including tests) — only latest tag per repo
+    # First, get the latest release tag for each repo
+    latest_tags = await conn.fetch(
+        "SELECT repo, MAX(release_tag) as latest_tag FROM code_tag_completion GROUP BY repo"
+    )
+    latest_tag_set = {(row["repo"], row["latest_tag"]) for row in latest_tags}
+
+    if latest_tag_set:
+        # Build a filter for latest tags only
+        tag_conditions = " OR ".join(
+            f"(repo = '{repo}' AND release_tag = '{tag}')"
+            for repo, tag in latest_tag_set
         )
         try:
-            rows = await conn.fetch(sql, *params)
+            # Vector search with tag filter — use raw SQL for the complex WHERE
+            embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+            rows = await conn.fetch(
+                f"""SELECT id, function_name, content,
+                       1 - (embedding <=> $1::vector) AS similarity
+                FROM code_chunks
+                WHERE ({tag_conditions})
+                AND embedding IS NOT NULL
+                ORDER BY embedding <=> $1::vector
+                LIMIT 10""",
+                embedding_str,
+            )
             for row in rows:
                 candidates.append(SearchCandidate(
                     entity_type="code_chunk",
                     entity_id=str(row["id"]),
                     title=row.get("function_name", ""),
                     content_preview=(row.get("content", "") or "")[:500],
-                    similarity=1.0 - float(row.get("vector_distance", 1.0)),
+                    similarity=float(row.get("similarity", 0)),
                 ))
         except Exception as e:
             logger.warning("Code search failed: %s", e)
