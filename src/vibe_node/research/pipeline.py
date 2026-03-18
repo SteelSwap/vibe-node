@@ -54,12 +54,7 @@ def _get_model(model_str: str):
     return model_str  # Let PydanticAI resolve it via string
 
 
-# === Stage 1: Rule Extraction Agent ===
-
-extraction_agent = Agent(
-    model=_get_model(EXTRACTION_MODEL),
-    result_type=ExtractionResult,
-    system_prompt="""You are a formal specification analyst. You read Cardano protocol specification chunks
+EXTRACTION_SYSTEM_PROMPT = """You are a formal specification analyst. You read Cardano protocol specification chunks
 and extract individual rules, definitions, equations, and type declarations.
 
 For each rule you find:
@@ -73,16 +68,9 @@ If a chunk contains no extractable rules (e.g., it's just prose introduction), r
 
 IMPORTANT: Use the era and subsystem provided. The section_id should follow the pattern:
 {era}-{subsystem}:{type}-{descriptive-name}
-""",
-)
+"""
 
-
-# === Stage 3: Link Evaluation Agent ===
-
-link_eval_agent = Agent(
-    model=_get_model(LINKING_MODEL),
-    result_type=LinkDecision,
-    system_prompt="""You evaluate whether a candidate code function, test, or GitHub discussion
+LINKING_SYSTEM_PROMPT = """You evaluate whether a candidate code function, test, or GitHub discussion
 is related to a formal specification rule.
 
 You will be given:
@@ -101,16 +89,9 @@ For 'discusses': the issue/PR must contain substantive discussion about the rule
 
 Be strict — false positives are worse than false negatives. Only mark is_linked=True
 if you're genuinely confident the relationship exists.
-""",
-)
+"""
 
-
-# === Stage 4: Gap Detection + Test Proposal Agent ===
-
-analysis_agent = Agent(
-    model=_get_model(EXTRACTION_MODEL),
-    result_type=AnalysisResult,
-    system_prompt="""You analyze a formal specification rule and its implementing Haskell code
+ANALYSIS_SYSTEM_PROMPT = """You analyze a formal specification rule and its implementing Haskell code
 to detect divergences and propose tests.
 
 You will be given:
@@ -132,8 +113,49 @@ B) TEST PROPOSALS: Propose concrete tests for this rule:
 
 Focus on the most important tests — don't propose trivial tests.
 For property tests, be specific about value ranges (e.g., "lovelace values 0 to 45e15").
-""",
-)
+"""
+
+
+# === Lazy Agent Creation ===
+# Agents are created on first use, not at import time.
+# This avoids crashes when API keys aren't configured yet.
+
+_extraction_agent: Agent | None = None
+_link_eval_agent: Agent | None = None
+_analysis_agent: Agent | None = None
+
+
+def get_extraction_agent() -> Agent:
+    global _extraction_agent
+    if _extraction_agent is None:
+        _extraction_agent = Agent(
+            model=_get_model(EXTRACTION_MODEL),
+            result_type=ExtractionResult,
+            system_prompt=EXTRACTION_SYSTEM_PROMPT,
+        )
+    return _extraction_agent
+
+
+def get_link_eval_agent() -> Agent:
+    global _link_eval_agent
+    if _link_eval_agent is None:
+        _link_eval_agent = Agent(
+            model=_get_model(LINKING_MODEL),
+            result_type=LinkDecision,
+            system_prompt=LINKING_SYSTEM_PROMPT,
+        )
+    return _link_eval_agent
+
+
+def get_analysis_agent() -> Agent:
+    global _analysis_agent
+    if _analysis_agent is None:
+        _analysis_agent = Agent(
+            model=_get_model(EXTRACTION_MODEL),
+            result_type=AnalysisResult,
+            system_prompt=ANALYSIS_SYSTEM_PROMPT,
+        )
+    return _analysis_agent
 
 
 # === Pipeline Orchestration ===
@@ -162,7 +184,7 @@ async def stage1_extract(
         f"Content:\n{row['content_markdown']}"
     )
 
-    result = await extraction_agent.run(
+    result = await get_extraction_agent().run(
         f"Extract all rules, definitions, and equations from this spec chunk:\n\n{context}",
     )
     # Override the chunk metadata in case the agent changed them
@@ -260,7 +282,7 @@ async def stage3_evaluate_link(
         f"Content: {candidate.content_preview}\n"
         f"Similarity: {candidate.similarity:.3f}"
     )
-    result = await link_eval_agent.run(prompt)
+    result = await get_link_eval_agent().run(prompt)
     return result.data
 
 
@@ -279,7 +301,7 @@ async def stage4_analyze(
     else:
         prompt += "\nNo implementing code found — propose tests based on the spec rule alone."
 
-    result = await analysis_agent.run(prompt)
+    result = await get_analysis_agent().run(prompt)
     return result.data
 
 
