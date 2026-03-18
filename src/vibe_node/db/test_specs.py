@@ -22,6 +22,10 @@ async def add_test_spec(
         INSERT INTO test_specifications (id, spec_section_id, subsystem, test_type,
             test_name, description, hypothesis_strategy, priority, phase, metadata)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+        ON CONFLICT (spec_section_id, test_name) DO UPDATE SET
+            description = EXCLUDED.description,
+            hypothesis_strategy = EXCLUDED.hypothesis_strategy,
+            priority = EXCLUDED.priority
         """,
         row_id, spec_section_id, subsystem, test_type,
         test_name, description, hypothesis_strategy,

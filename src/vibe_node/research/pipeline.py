@@ -462,7 +462,11 @@ async def _process_chunk(
                     await conn.execute(
                         """INSERT INTO gap_analysis (id, spec_section_id, subsystem, era,
                             spec_says, haskell_does, delta, implications, discovered_during)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                        ON CONFLICT (spec_section_id, delta) DO UPDATE SET
+                            spec_says = EXCLUDED.spec_says,
+                            haskell_does = EXCLUDED.haskell_does,
+                            implications = EXCLUDED.implications""",
                         uuid.uuid4(), section_uuid, subsystem, era,
                         analysis.gap.spec_says, analysis.gap.haskell_does,
                         analysis.gap.delta, analysis.gap.implications,

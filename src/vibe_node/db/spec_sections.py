@@ -26,8 +26,8 @@ async def add_spec_section(
         INSERT INTO spec_sections (id, spec_chunk_id, section_id, title, section_type,
             era, subsystem, verbatim, extracted_rule, embedding, metadata)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11::jsonb)
-        ON CONFLICT (section_id) DO UPDATE SET
-            title = EXCLUDED.title,
+        ON CONFLICT (spec_chunk_id, title) DO UPDATE SET
+            section_id = EXCLUDED.section_id,
             extracted_rule = EXCLUDED.extracted_rule,
             embedding = EXCLUDED.embedding,
             metadata = EXCLUDED.metadata

@@ -281,7 +281,7 @@ CREATE TABLE IF NOT EXISTS spec_sections (
     extracted_rule  TEXT NOT NULL,
     embedding       vector(1536),
     metadata        JSONB,
-    UNIQUE (section_id)
+    UNIQUE (spec_chunk_id, title)
 );
 
 CREATE INDEX IF NOT EXISTS idx_spec_sections_era
@@ -331,7 +331,8 @@ CREATE TABLE IF NOT EXISTS test_specifications (
     hypothesis_strategy  TEXT,
     priority             TEXT NOT NULL,
     phase                TEXT NOT NULL,
-    metadata             JSONB
+    metadata             JSONB,
+    UNIQUE (spec_section_id, test_name)
 );
 
 CREATE INDEX IF NOT EXISTS idx_test_specs_subsystem
@@ -358,7 +359,8 @@ CREATE TABLE IF NOT EXISTS gap_analysis (
     discovered_during TEXT NOT NULL,
     code_chunk_id     UUID REFERENCES code_chunks(id) ON DELETE SET NULL,
     embedding         vector(1536),
-    metadata          JSONB
+    metadata          JSONB,
+    UNIQUE (spec_section_id, delta)
 );
 
 CREATE INDEX IF NOT EXISTS idx_gap_analysis_subsystem
