@@ -44,17 +44,17 @@ See [Phase 0 Tasks](tasks.md) for the full breakdown of 56 tasks across these mo
 
 Phase 1 uses the Phase 0 knowledge base to perform deep research into the Cardano specs and Haskell codebase. The output is a complete architectural design for the Python node, informed by spec analysis and gap documentation.
 
-| Module | Description | Status |
-|--------|-------------|--------|
-| M1.1 — Networking Spec Analysis | Ouroboros network spec deep-dive, multiplexer design | :material-clock-outline: Planned |
-| M1.2 — Chain-Sync Protocol Analysis | Chain-sync miniprotocol spec and Haskell implementation study | :material-clock-outline: Planned |
-| M1.3 — Block-Fetch Protocol Analysis | Block-fetch miniprotocol spec and implementation study | :material-clock-outline: Planned |
-| M1.4 — CBOR & Serialization Analysis | CDDL schemas, CBOR encoding rules, era-specific formats | :material-clock-outline: Planned |
-| M1.5 — Ledger Rules Analysis | Shelley through Conway ledger transition rules | :material-clock-outline: Planned |
-| M1.6 — Consensus Analysis | Ouroboros Praos, VRF/KES, chain selection | :material-clock-outline: Planned |
-| M1.7 — Storage Architecture Design | Block storage, ledger state, UTxO set persistence | :material-clock-outline: Planned |
-| M1.8 — Node Architecture Design | Overall Python node architecture, module boundaries, data flow | :material-clock-outline: Planned |
-| M1.9 — Gap Analysis Compilation | Comprehensive spec-vs-Haskell gap analysis across all subsystems | :material-clock-outline: Planned |
+| Module | Wave | Description | Status |
+|--------|------|-------------|--------|
+| M1.1 — Subsystem Decomposition | 1 | 10 subsystems, boundaries, specs, dependency graph, phase sequencing | :material-progress-wrench: In Progress |
+| M1.2 — Public-Facing Documentation | 2 | "How It Works" pages with SVG infographics for non-technical users | :material-clock-outline: Planned |
+| M1.3 — Cross-Referencing Infrastructure | 2 | DB tables (spec_sections, cross_references, gap_analysis), CLI commands | :material-clock-outline: Planned |
+| M1.4 — Spec Rule Extraction | 3 | Extract rules from specs into spec_sections (~500-2000 rules) | :material-clock-outline: Planned |
+| M1.5 — Haskell Code & Discussion Mapping | 4 | Cross-reference specs ↔ code ↔ issues, gap analysis entries | :material-clock-outline: Planned |
+| M1.6 — Library Audit | 3 | Python library evaluation per subsystem, pycardano deep eval | :material-clock-outline: Planned |
+| M1.7 — Data Architecture | 3 | Arrow/DuckDB/Feather evaluation, benchmarks, decision | :material-clock-outline: Planned |
+| M1.8 — Test Strategy & Specifications | 4 | 5-type test taxonomy, planned tests per spec rule | :material-clock-outline: Planned |
+| M1.9 — Architecture Blueprint | 5 | Package structure, synthesis, phase 2-6 with testable deliverables | :material-clock-outline: Planned |
 
 ---
 
