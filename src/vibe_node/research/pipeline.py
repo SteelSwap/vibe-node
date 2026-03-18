@@ -333,16 +333,169 @@ async def stage4_analyze(
     return result.output
 
 
-async def run_pipeline(
-    conn, subsystem: str, limit: int | None = None, progress=None,
+async def _process_chunk(
+    pool, chunk_id: uuid.UUID, era: str, subsystem: str,
 ) -> dict:
-    """Run the full 4-stage pipeline for a subsystem.
+    """Process a single spec chunk through all 4 pipeline stages.
 
-    Returns summary stats.
+    Uses its own DB connection from the pool for concurrency safety.
+    Returns per-chunk stats.
     """
+    import asyncio as _asyncio
     from vibe_node.db.spec_sections import add_spec_section
     from vibe_node.db.test_specs import add_test_spec
     from vibe_node.db.xref import add_xref
+    from vibe_node.embed.client import EmbeddingClient
+
+    chunk_stats = {
+        "rules_extracted": 0, "links_created": 0,
+        "gaps_found": 0, "tests_proposed": 0,
+    }
+
+    async with pool.acquire() as conn:
+        # Check if already processed
+        existing = await conn.fetchval(
+            "SELECT COUNT(*) FROM spec_sections WHERE spec_chunk_id = $1", chunk_id,
+        )
+        if existing > 0:
+            logger.debug("Skipping already-processed chunk %s", chunk_id)
+            return chunk_stats
+
+        # Stage 1: Extract rules
+        try:
+            extraction = await stage1_extract(conn, chunk_id, era, subsystem)
+        except Exception as e:
+            logger.warning("Extraction failed for chunk %s: %s", chunk_id, e)
+            return chunk_stats
+
+        embed_client = EmbeddingClient()
+
+        for rule in extraction.rules:
+            embedding = await embed_client.embed(rule.extracted_rule[:8000])
+
+            section_uuid = await add_spec_section(
+                conn,
+                section_id=rule.section_id,
+                title=rule.title,
+                section_type=rule.section_type.value,
+                era=era,
+                subsystem=subsystem,
+                verbatim=rule.verbatim,
+                extracted_rule=rule.extracted_rule,
+                spec_chunk_id=chunk_id,
+                embedding=embedding,
+            )
+            chunk_stats["rules_extracted"] += 1
+
+            # Stage 2: Semantic search for candidates
+            candidates = await stage2_search(conn, rule.extracted_rule, subsystem)
+
+            # Stage 3: Evaluate all candidates concurrently
+            async def _eval_candidate(cand):
+                try:
+                    decision = await stage3_evaluate_link(
+                        rule.verbatim, rule.extracted_rule, cand,
+                    )
+                    return cand, decision
+                except Exception as e:
+                    logger.warning("Link eval failed: %s", e)
+                    return cand, None
+
+            eval_results = await _asyncio.gather(*[_eval_candidate(c) for c in candidates])
+
+            implementing_code = None
+            for candidate, decision in eval_results:
+                if decision is None:
+                    continue
+                if decision.is_linked and decision.relationship:
+                    await add_xref(
+                        conn,
+                        source_type="spec_section",
+                        source_id=section_uuid,
+                        target_type=candidate.entity_type,
+                        target_id=uuid.UUID(candidate.entity_id),
+                        relationship=decision.relationship.value,
+                        confidence=decision.confidence,
+                        notes=decision.notes,
+                        created_by="pipeline",
+                    )
+                    chunk_stats["links_created"] += 1
+
+                    if (
+                        decision.relationship.value == "implements"
+                        and candidate.entity_type == "code_chunk"
+                        and implementing_code is None
+                    ):
+                        code_row = await conn.fetchrow(
+                            "SELECT content FROM code_chunks WHERE id = $1",
+                            uuid.UUID(candidate.entity_id),
+                        )
+                        if code_row:
+                            implementing_code = code_row["content"]
+
+            # Stage 4: Gap detection + test proposals
+            try:
+                analysis = await stage4_analyze(
+                    rule.verbatim, rule.extracted_rule, implementing_code,
+                )
+            except Exception as e:
+                logger.warning("Analysis failed for %s: %s", rule.section_id, e)
+                continue
+
+            if analysis.gap:
+                try:
+                    await conn.execute(
+                        """INSERT INTO gap_analysis (id, spec_section_id, subsystem, era,
+                            spec_says, haskell_does, delta, implications, discovered_during)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                        uuid.uuid4(), section_uuid, subsystem, era,
+                        analysis.gap.spec_says, analysis.gap.haskell_does,
+                        analysis.gap.delta, analysis.gap.implications,
+                        f"Phase 1 pipeline, subsystem={subsystem}",
+                    )
+                    chunk_stats["gaps_found"] += 1
+                except Exception as e:
+                    logger.warning("Gap insert failed for %s: %s", rule.section_id, e)
+
+            for test in analysis.proposed_tests:
+                try:
+                    await add_test_spec(
+                        conn,
+                        subsystem=subsystem,
+                        test_type=test.test_type.value,
+                        test_name=test.test_name,
+                        description=test.description,
+                        priority=test.priority.value,
+                        phase="phase-2" if subsystem in ("serialization", "networking", "miniprotocols-n2n") else "phase-3",
+                        spec_section_id=section_uuid,
+                        hypothesis_strategy=test.hypothesis_strategy,
+                    )
+                    chunk_stats["tests_proposed"] += 1
+                except Exception as e:
+                    logger.warning("Test spec insert failed for %s: %s", test.test_name, e)
+
+        await embed_client.close()
+
+    return chunk_stats
+
+
+async def run_pipeline(
+    conn, subsystem: str, limit: int | None = None, progress=None,
+    concurrency: int = 3,
+) -> dict:
+    """Run the full 4-stage pipeline for a subsystem.
+
+    Args:
+        conn: asyncpg connection (used only for initial chunk discovery).
+        subsystem: Which subsystem to process.
+        limit: Max chunks to process.
+        progress: Rich Progress instance.
+        concurrency: Number of chunks to process in parallel.
+
+    Returns summary stats.
+    """
+    import asyncio as _asyncio
+    from vibe_node.db.pool import get_pool
 
     # Map subsystem names to search terms for finding relevant spec chunks
     subsystem_terms = {
@@ -391,143 +544,26 @@ async def run_pipeline(
         "tests_proposed": 0,
     }
 
-    logger.info("Processing %d spec chunks for subsystem=%s", len(unique_chunks), subsystem)
+    logger.info(
+        "Processing %d spec chunks for subsystem=%s (concurrency=%d)",
+        len(unique_chunks), subsystem, concurrency,
+    )
 
-    for chunk_id, era in unique_chunks:
-        # Check if already processed
-        existing = await conn.fetchval(
-            "SELECT COUNT(*) FROM spec_sections WHERE spec_chunk_id = $1", chunk_id,
-        )
-        if existing > 0:
-            logger.debug("Skipping already-processed chunk %s", chunk_id)
+    pool = await get_pool()
+    semaphore = _asyncio.Semaphore(concurrency)
+
+    async def _process_with_semaphore(chunk_id, era):
+        async with semaphore:
+            chunk_stats = await _process_chunk(pool, chunk_id, era, subsystem)
+            # Merge stats
+            for key in chunk_stats:
+                stats[key] += chunk_stats[key]
             stats["chunks_processed"] += 1
-            continue
+            if progress:
+                progress.update(progress.task_ids[0], advance=1)
 
-        # Stage 1: Extract rules
-        try:
-            extraction = await stage1_extract(conn, chunk_id, era, subsystem)
-        except Exception as e:
-            logger.warning("Extraction failed for chunk %s: %s", chunk_id, e)
-            stats["chunks_processed"] += 1
-            continue
-
-        # Create embedding client once per chunk (not per rule)
-        from vibe_node.embed.client import EmbeddingClient
-        embed_client = EmbeddingClient()
-
-        for rule in extraction.rules:
-            # Store the extracted rule
-            embedding = await embed_client.embed(rule.extracted_rule[:8000])
-
-            section_uuid = await add_spec_section(
-                conn,
-                section_id=rule.section_id,
-                title=rule.title,
-                section_type=rule.section_type.value,
-                era=era,
-                subsystem=subsystem,
-                verbatim=rule.verbatim,
-                extracted_rule=rule.extracted_rule,
-                spec_chunk_id=chunk_id,
-                embedding=embedding,
-            )
-            stats["rules_extracted"] += 1
-
-            # Stage 2: Semantic search for candidates
-            candidates = await stage2_search(conn, rule.extracted_rule, subsystem)
-
-            # Stage 3: Evaluate all candidates concurrently
-            import asyncio as _asyncio
-
-            async def _eval_candidate(candidate):
-                try:
-                    decision = await stage3_evaluate_link(
-                        rule.verbatim, rule.extracted_rule, candidate,
-                    )
-                    return candidate, decision
-                except Exception as e:
-                    logger.warning("Link eval failed: %s", e)
-                    return candidate, None
-
-            # Run all link evaluations in parallel (Sonnet calls)
-            eval_tasks = [_eval_candidate(c) for c in candidates]
-            eval_results = await _asyncio.gather(*eval_tasks)
-
-            implementing_code = None
-            for candidate, decision in eval_results:
-                if decision is None:
-                    continue
-                if decision.is_linked and decision.relationship:
-                    await add_xref(
-                        conn,
-                        source_type="spec_section",
-                        source_id=section_uuid,
-                        target_type=candidate.entity_type,
-                        target_id=uuid.UUID(candidate.entity_id),
-                        relationship=decision.relationship.value,
-                        confidence=decision.confidence,
-                        notes=decision.notes,
-                        created_by="pipeline",
-                    )
-                    stats["links_created"] += 1
-
-                    # Save implementing code for gap detection
-                    if (
-                        decision.relationship.value == "implements"
-                        and candidate.entity_type == "code_chunk"
-                        and implementing_code is None
-                    ):
-                        code_row = await conn.fetchrow(
-                            "SELECT content FROM code_chunks WHERE id = $1",
-                            uuid.UUID(candidate.entity_id),
-                        )
-                        if code_row:
-                            implementing_code = code_row["content"]
-
-            # Stage 4: Gap detection + test proposals
-            try:
-                analysis = await stage4_analyze(
-                    rule.verbatim, rule.extracted_rule, implementing_code,
-                )
-            except Exception as e:
-                logger.warning("Analysis failed for %s: %s", rule.section_id, e)
-                continue
-
-            if analysis.gap:
-                try:
-                    await conn.execute(
-                        """INSERT INTO gap_analysis (id, spec_section_id, subsystem, era,
-                            spec_says, haskell_does, delta, implications, discovered_during)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
-                        uuid.uuid4(), section_uuid, subsystem, era,
-                        analysis.gap.spec_says, analysis.gap.haskell_does,
-                        analysis.gap.delta, analysis.gap.implications,
-                        f"Phase 1 pipeline, subsystem={subsystem}",
-                    )
-                    stats["gaps_found"] += 1
-                except Exception as e:
-                    logger.warning("Gap insert failed for %s: %s", rule.section_id, e)
-
-            for test in analysis.proposed_tests:
-                try:
-                    await add_test_spec(
-                        conn,
-                        subsystem=subsystem,
-                        test_type=test.test_type.value,
-                        test_name=test.test_name,
-                        description=test.description,
-                        priority=test.priority.value,
-                        phase="phase-2" if subsystem in ("serialization", "networking", "miniprotocols-n2n") else "phase-3",
-                        spec_section_id=section_uuid,
-                        hypothesis_strategy=test.hypothesis_strategy,
-                    )
-                    stats["tests_proposed"] += 1
-                except Exception as e:
-                    logger.warning("Test spec insert failed for %s: %s", test.test_name, e)
-
-        await embed_client.close()
-        stats["chunks_processed"] += 1
-        if progress:
-            progress.update(progress.task_ids[0], advance=1)
+    # Launch all chunks concurrently (semaphore limits actual parallelism)
+    tasks = [_process_with_semaphore(cid, era) for cid, era in unique_chunks]
+    await _asyncio.gather(*tasks)
 
     return stats

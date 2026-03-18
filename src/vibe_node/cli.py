@@ -501,6 +501,7 @@ def extract_rules(
         "ledger, plutus, serialization, mempool, storage, block-production",
     ),
     limit: int | None = typer.Option(None, "--limit", "-n", help="Max spec chunks to process"),
+    concurrency: int = typer.Option(3, "--concurrency", "-c", help="Number of chunks to process in parallel"),
 ) -> None:
     """Run the PydanticAI rule extraction and linking pipeline for a subsystem.
 
@@ -562,7 +563,7 @@ def extract_rules(
                 TimeElapsedColumn(),
             ) as progress:
                 task = progress.add_task(f"[green]{subsystem}", total=total)
-                stats = await run_pipeline(conn, subsystem, limit=limit, progress=progress)
+                stats = await run_pipeline(conn, subsystem, limit=limit, progress=progress, concurrency=concurrency)
 
         await close_pool()
 
