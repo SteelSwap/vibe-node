@@ -1,4 +1,4 @@
-:::: {#fig:defs:utxo-shelley-1 .figure latex-placement="t!"}
+
 *Abstract Types* $$\begin{equation*}
     \begin{array}{rllr}
       \var{s_{mc}} & \ScriptMPS & \text{monetary policy script}
@@ -38,20 +38,15 @@
 %   \caption{Languages}
 \end{align*}$$
 
-::: caption
-Type Definitions used in the UTxO transition system ($\mathbb{H}_{\leq 32}$ is a string of exactly 32 bytes)
-:::
-::::
-
-# Transactions {#sec:transactions}
-
+**Type Definitions used in the UTxO transition system ($\mathbb{H}_{\leq 32}$ is a string of exactly 32 bytes)**
+# Transactions
 This section describes the changes that are necessary to the transaction and UTxO type structure to support native multi-asset functionality in Cardano.
 
-## Representing Multi-asset Types and Values. {#representing-multi-asset-types-and-values. .unnumbered}
+## Representing Multi-asset Types and Values.
 
-Some new types (and some changes to existing types) are required for the ledger to support multi-assets, as shown in Figure [1](#fig:defs:utxo-shelley-1){reference-type="ref" reference="fig:defs:utxo-shelley-1"}. All other types are as specified in the Shelley ledger design and implementation [\[\...\]](#...){reference-type="ref" reference="..."}. An *Asset* comprises a set of different *Asset Classes*, each of which has a unique identifier, $\AssetID$ (of type $\mathbb{H}_{\leq 32}$, that is *byte strings of length $\leq 32$*). We will informally refer to a pair $(\var{pid}, \var{aid})$ of a Policy ID and an Asset ID as a "token". The set of tokens that are referred to by the underlying monetary policy represents the coinage that the asset supports. A multi-asset value, $\Value$ is a map over zero or more assets to single asset values. A single asset value is then a finite map from $\AssetID$s to quantities.
+Some new types (and some changes to existing types) are required for the ledger to support multi-assets, as shown in Figure [1](#fig:defs:utxo-shelley-1). All other types are as specified in the Shelley ledger design and implementation [\[\...\]](#...). An *Asset* comprises a set of different *Asset Classes*, each of which has a unique identifier, $\AssetID$ (of type $\mathbb{H}_{\leq 32}$, that is *byte strings of length $\leq 32$*). We will informally refer to a pair $(\var{pid}, \var{aid})$ of a Policy ID and an Asset ID as a "token". The set of tokens that are referred to by the underlying monetary policy represents the coinage that the asset supports. A multi-asset value, $\Value$ is a map over zero or more assets to single asset values. A single asset value is then a finite map from $\AssetID$s to quantities.
 
-## Value Operations and Partial Order. {#value-operations-and-partial-order. .unnumbered}
+## Value Operations and Partial Order.
 
 We require basic operations on $\Value$, which include, equality, addition and $\leq$ comparison. For convenience, here and in the rest of the document, we will also treat values of type $\Value$ as non-partial functions where any omitted tokens in the domain of an asset are assumed to be zero.
 
@@ -75,13 +70,13 @@ $$v~R~w :\Leftrightarrow \forall~\var{pid}~\var{aid}, (v~\var{pid}~\var{aid})~R~
 
 - $\UTxO$ entries are stored in the finite map $\TxIn\mapsto \UTxOOut$. This type also differs from the Shelley $\UTxO$ type only in that $\Coin$ is replaced by $\Value$.
 
-#### The Monetary Policy Scripting Language. {#the-monetary-policy-scripting-language. .unnumbered}
+#### The Monetary Policy Scripting Language.
 
-Recall that an asset is identified by the hash of its MPS. Figure [\[fig:defs:tx-mc-script\]](#fig:defs:tx-mc-script){reference-type="ref" reference="fig:defs:tx-mc-script"} gives the types that relate to monetary policy scripts. As discussed below, the monetary policy script type, $\ScriptMPS$, groups multisig scripts and resourced scripts. The abstract function $\fun{language}$ returns a value of type $\type{Language}$, corresponding to the language that is used by a given script.
+Recall that an asset is identified by the hash of its MPS. Figure [\[fig:defs:tx-mc-script\]](#fig:defs:tx-mc-script) gives the types that relate to monetary policy scripts. As discussed below, the monetary policy script type, $\ScriptMPS$, groups multisig scripts and resourced scripts. The abstract function $\fun{language}$ returns a value of type $\type{Language}$, corresponding to the language that is used by a given script.
 
-#### Multi-Asset Script Evaluation. {#multi-asset-script-evaluation. .unnumbered}
+#### Multi-Asset Script Evaluation.
 
-A monetary policy is a collection of restrictions on the tokens of a specific multi-asset. MP scripts are evaluated for the purpose of checking that the given asset adheres to its monetary policy. The monetary policy scripting language is a basic scripting language that allows for expressing some of the most common restrictions, e.g. the maximum total number of different kinds of tokens of a given asset. A suggestion for $\ScriptMPS$ and the implementation of the function $\fun{evalMPSScript}$, which evaluates MPS scripts, is given in Appendix [\[sec:mps-lang\]](#sec:mps-lang){reference-type="ref" reference="sec:mps-lang"}. As inputs, $\fun{evalMPSScript}$ takes
+A monetary policy is a collection of restrictions on the tokens of a specific multi-asset. MP scripts are evaluated for the purpose of checking that the given asset adheres to its monetary policy. The monetary policy scripting language is a basic scripting language that allows for expressing some of the most common restrictions, e.g. the maximum total number of different kinds of tokens of a given asset. A suggestion for $\ScriptMPS$ and the implementation of the function $\fun{evalMPSScript}$, which evaluates MPS scripts, is given in Appendix [\[sec:mps-lang\]](#sec:mps-lang). As inputs, $\fun{evalMPSScript}$ takes
 
 - the script getting evaluated
 
@@ -95,13 +90,13 @@ A monetary policy is a collection of restrictions on the tokens of a specific mu
 
 - the inputs of the transaction as a UTxO finite map (with addresses and values), i.e. the outputs it is spending
 
-## MPS Script Validation. {#mps-script-validation. .unnumbered}
+## MPS Script Validation.
 
-In the Shelley ledger specification, a script validation function is used to evaluate all types of native (ledger-rule-defined) scripts. In Figure [2](#fig:defs:tx-mc-valid){reference-type="ref" reference="fig:defs:tx-mc-valid"}, we modify this function to also call the evaluation function that is specific to our new MPS script type.
+In the Shelley ledger specification, a script validation function is used to evaluate all types of native (ledger-rule-defined) scripts. In Figure [2](#fig:defs:tx-mc-valid), we modify this function to also call the evaluation function that is specific to our new MPS script type.
 
 The arguments that are passed to the $\fun{validateScript}$ function include all those that are needed for MPS and MSig script evaluation. Because of the extra arguments (the slot number and the UTxO), we also modify the call to this function within the UTXOW rule.
 
-:::: {#fig:defs:tx-mc-valid .figure latex-placement="htb"}
+
 $$\begin{align*}
       \fun{validateScript} & \in\Script\to\ScriptHash\to\Slot\to
       \powerset{\KeyHash}\to\TxBody\to\UTxO\to\Bool \\
@@ -115,26 +110,22 @@ $$\begin{align*}
                              \end{cases} \\
 \end{align*}$$
 
-::: caption
-Script Validation
-:::
-::::
+**Script Validation**
+## The Forge Field.
 
-## The Forge Field. {#the-forge-field. .unnumbered}
-
-The body of a transaction with multi-asset support contains one additional field, the $\fun{forge}$ field (see Figure [3](#fig:defs:utxo-shelley-2){reference-type="ref" reference="fig:defs:utxo-shelley-2"}). The $\fun{forge}$ field is a term of type $\Value$, which contains tokens the transaction is putting into circulation or taking out of circulation. Here, by \"circulation\", we mean specifically \"the UTxO on the ledger\". Since the administrative fields cannot contain tokens other than Ada, and Ada cannot be forged, they are not affected in any way by forging.
+The body of a transaction with multi-asset support contains one additional field, the $\fun{forge}$ field (see Figure [3](#fig:defs:utxo-shelley-2)). The $\fun{forge}$ field is a term of type $\Value$, which contains tokens the transaction is putting into circulation or taking out of circulation. Here, by \"circulation\", we mean specifically \"the UTxO on the ledger\". Since the administrative fields cannot contain tokens other than Ada, and Ada cannot be forged, they are not affected in any way by forging.
 
 Putting tokens into circulation is done with positive values in the $\Quantity$ fields of the tokens forged, and taking tokens out of circulation can be done with negative quantities.
 
-A transaction cannot simply forge arbitrary tokens. Recall that restrictions on Multi-Asset tokens are imposed, for each asset with ID $\var{pid}$, by the script with the hash $\var{pid}$. Whether a given asset adheres to the restrictions prescribed by its script is verified at forging time (i.e. when the transaction forging it is being processed). Another restriction on forging is imposed by the preservation of value conditition. Also, no forging Ada is permitted. In Section [\[sec:utxo\]](#sec:utxo){reference-type="ref" reference="sec:utxo"}, we specify the mechanism by which forging is done, and rules that enforce these restrictions.
+A transaction cannot simply forge arbitrary tokens. Recall that restrictions on Multi-Asset tokens are imposed, for each asset with ID $\var{pid}$, by the script with the hash $\var{pid}$. Whether a given asset adheres to the restrictions prescribed by its script is verified at forging time (i.e. when the transaction forging it is being processed). Another restriction on forging is imposed by the preservation of value conditition. Also, no forging Ada is permitted. In Section [\[sec:utxo\]](#sec:utxo), we specify the mechanism by which forging is done, and rules that enforce these restrictions.
 
-## Transaction Body. {#transaction-body. .unnumbered}
+## Transaction Body.
 
 Besides the addition of the $\fun{forge}$ field to the transaction body, note that the $\TxOut$ type in the body is not the same as the $\TxOut$ in the system without multi-asset support. Instead of $\Coin$, the transaction outputs now have type $\Value$.
 
 The only change to the types related to transaction witnessing is the addition of MPS scripts to the $\Script$ type, so we do not include the whole $\Tx$ type here.
 
-:::: {#fig:defs:utxo-shelley-2 .figure latex-placement="htb"}
+
 *Transaction Type* $$\begin{equation*}
     \begin{array}{rlll}
       \var{txbody} ~\in~ \TxBody ~=~
@@ -155,18 +146,14 @@ The only change to the types related to transaction witnessing is the addition o
     \end{array}
 \end{equation*}$$
 
-::: caption
-Definitions used in the UTxO transition system (continued).
-:::
-::::
-
-## Coin and Multi-Asset Tokens {#coin-and-multi-asset-tokens .unnumbered}
+**Definitions used in the UTxO transition system (continued).**
+## Coin and Multi-Asset Tokens
 
 When multi-asset is introduced, Ada is still expected to be the most common type of token on the ledger. The $\Coin$ type is used to represent an amount of Ada. It is the only type of token that can be used for all non-UTxO ledger accounting, including deposits, fees, rewards, treasury, and the proof of stake protocol. Under no circumstances are these administrative fields and calculations ever expected to operate on any types of tokens besides Ada. These fields will continue to have the type $\Coin$.
 
 The exact representation of tokens in the UTxO and inside transactions is an implementation detail, which we omit here. Note that it necessarily is equivalent to $\Value$, optimized for Ada-only cases, has a unique representation for Ada tokens, and does not allow Ada to have tokens denoted by anything other than $\mathsf{adaToken}$.
 
-In Figure [4](#fig:defs:functions-helper){reference-type="ref" reference="fig:defs:functions-helper"} we give the following helper functions and constants. These are needed to use Ada in a multi-asset setting.
+In Figure [4](#fig:defs:functions-helper) we give the following helper functions and constants. These are needed to use Ada in a multi-asset setting.
 
 - $\mathsf{adaID}$ is a random script hash value with no known associated script. It is the policy ID of Ada. Even if a script that hashes to this value and validates is found, the UTXO rule forbids forging Ada
 
@@ -180,9 +167,9 @@ In Figure [4](#fig:defs:functions-helper){reference-type="ref" reference="fig:de
 
 - $\fun{coinToValue}$ takes a coin value and generates a $\Value$ type representation of it
 
-An amount of Ada can also be represented as a multi-asset value using the notation in Figure [4](#fig:defs:functions-helper){reference-type="ref" reference="fig:defs:functions-helper"}, as $\fun{coinToValue}~c$ where $c \in \Coin$. We must use this representation when adding or subtracting Ada and other tokens as $\Value$, e.g. in the *preservation of value* calculations.
+An amount of Ada can also be represented as a multi-asset value using the notation in Figure [4](#fig:defs:functions-helper), as $\fun{coinToValue}~c$ where $c \in \Coin$. We must use this representation when adding or subtracting Ada and other tokens as $\Value$, e.g. in the *preservation of value* calculations.
 
-:::: {#fig:defs:functions-helper .figure latex-placement="htb"}
+
 *Abstract Functions and Values* $$\begin{align*}
     \mathsf{adaID} \in& ~\PolicyID
     & \text{Ada asset ID} \\
@@ -198,7 +185,4 @@ An amount of Ada can also be represented as a multi-asset value using the notati
     &\text{convert a Coin amount to a Value} \\
 \end{align*}$$
 
-::: caption
-Auxiliary Functions to Support Multi-Asset Capability
-:::
-::::
+**Auxiliary Functions to Support Multi-Asset Capability**

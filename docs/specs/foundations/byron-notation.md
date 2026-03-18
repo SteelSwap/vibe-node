@@ -1,5 +1,4 @@
-# Notation {#sec:notation}
-
+# Notation
 Natural Numbers
 
 :   The set $\mathbb{N}$ refers to the set of all natural numbers $\{0, 1, 2, \ldots\}$. The set $\mathbb{Q}$ refers to the set of rational numbers.
@@ -34,7 +33,7 @@ Domain and range
 
 Domain and range operations
 
-:   Given a relation $R \in \powerset{(A \times B)}$ we make use of the *domain-restriction*, *domain-exclusion*, and *range-restriction* operators, which are defined in [1](#fig:domain-and-range-ops){reference-type="ref+label" reference="fig:domain-and-range-ops"}. Note that a map $A \mapsto B$ can be seen as a relation, which means that these operators can be applied to maps as well.
+:   Given a relation $R \in \powerset{(A \times B)}$ we make use of the *domain-restriction*, *domain-exclusion*, and *range-restriction* operators, which are defined in [1](#fig:domain-and-range-ops). Note that a map $A \mapsto B$ can be seen as a relation, which means that these operators can be applied to maps as well.
 
 Integer ranges
 
@@ -60,7 +59,7 @@ Ceiling
 
 :   Given a number $n \in \mathbb{R}$, $\ceil{n}$ represents the ceiling of $n$, and $\floor{n}$ represents its floor.
 
-:::: {#fig:domain-and-range-ops .figure latex-placement="htb"}
+
 $$\begin{align*}
     \var{S} \restrictdom \var{R}
     & = \{ (a, b) \mid (a, b) \in R, ~ a \in S \}
@@ -75,7 +74,4 @@ $$\begin{align*}
     & \text{range restriction}
 \end{align*}$$
 
-::: caption
-Domain and range operations
-:::
-::::
+**Domain and range operations**

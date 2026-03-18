@@ -1,8 +1,7 @@
-# Addresses {#sec:addresses}
+# Addresses
+Addresses are described in section 4.2 of the delegation design document [@delegation_design]. The types needed for the addresses are defined in Figure [1](#fig:defs:addresses). They all involve a credential, which is either a key or a multi-signature script. There are four types of UTxO addresses:
 
-Addresses are described in section 4.2 of the delegation design document [@delegation_design]. The types needed for the addresses are defined in Figure [1](#fig:defs:addresses){reference-type="ref" reference="fig:defs:addresses"}. They all involve a credential, which is either a key or a multi-signature script. There are four types of UTxO addresses:
-
-- Base addresses, $\AddrB$, containing the hash of a payment credential and the hash of a staking credential. Note that the payment credential hash is the hash of the key (or script) which has contol of the funds at this address, i.e. is able to witness spending them. The staking credential controls the delegation decision for the Ada at this address (i.e. it is used for rewards, staking, etc.). The staking credential must be a (registered) delegation credential (see Section [\[sec:delegation-shelley\]](#sec:delegation-shelley){reference-type="ref" reference="sec:delegation-shelley"} for a discussion of the delegation mechanism).
+- Base addresses, $\AddrB$, containing the hash of a payment credential and the hash of a staking credential. Note that the payment credential hash is the hash of the key (or script) which has contol of the funds at this address, i.e. is able to witness spending them. The staking credential controls the delegation decision for the Ada at this address (i.e. it is used for rewards, staking, etc.). The staking credential must be a (registered) delegation credential (see Section [\[sec:delegation-shelley\]](#sec:delegation-shelley) for a discussion of the delegation mechanism).
 
 - Pointer addresses, $\AddrP$, containing the hash of a payment credential and a pointer to a stake credential registration certificate.
 
@@ -10,7 +9,7 @@ Addresses are described in section 4.2 of the delegation design document [@deleg
 
 - Bootstrap addresses, $\AddrBS$, corresponding to the addresses in Byron, behaving exactly like enterprise addresses with a key hash payment credential.
 
-Where a credential is either a key or a multi-signature script. Together, these four address types make up the $\Addr$ type, which will be used in transaction outputs in Section [\[sec:utxo\]](#sec:utxo){reference-type="ref" reference="sec:utxo"}. The notations $\Credential_{pay}$ and $\Credential_{stake}$ do not represent distinct types. The subscripts are annotations indicating how the credential is being used.
+Where a credential is either a key or a multi-signature script. Together, these four address types make up the $\Addr$ type, which will be used in transaction outputs in Section [\[sec:utxo\]](#sec:utxo). The notations $\Credential_{pay}$ and $\Credential_{stake}$ do not represent distinct types. The subscripts are annotations indicating how the credential is being used.
 
 Section 5.5.2 of [@delegation_design] provides the motivation behind enterprise addresses and explains why one might forgo staking rights. Bootstrap addresses are needed for the Byron-Shelley transition in order to accommodate having UTxO entries from the Byron era during the Shelley era.
 
@@ -18,13 +17,13 @@ There are also subtypes of the address types which correspond to the credential 
 
 Note that for security, privacy and usability reasons, the staking (delegating) credential associated with an address should be different from its payment credential. Before the stake credential is registered and delegated to an existing stake pool, the payment credential can be used for transactions, though it will not receive rewards from staking. Once a stake credential is registered, the shorter pointer addresses can be generated.
 
-Finally, there is an account style address $\AddrRWD$ which contains the hash of a staking credential. These account addresses will only be used for receiving rewards from the proof of stake leader election. Appendix A of [@delegation_design] explains this design choice. The mechanism for transferring rewards from these accounts will be explained in Section [\[sec:utxo\]](#sec:utxo){reference-type="ref" reference="sec:utxo"} and follows the approach outlined in the document [@chimeric].
+Finally, there is an account style address $\AddrRWD$ which contains the hash of a staking credential. These account addresses will only be used for receiving rewards from the proof of stake leader election. Appendix A of [@delegation_design] explains this design choice. The mechanism for transferring rewards from these accounts will be explained in Section [\[sec:utxo\]](#sec:utxo) and follows the approach outlined in the document [@chimeric].
 
-Note that, even though in the Cardano system, most of the accounting is UTxO-style, the reward addresses are a special case. Their use is restricted to only special cases (e.g. collecting rewards from them), outlined in the rules in Sections [\[sec:utxo\]](#sec:utxo){reference-type="ref" reference="sec:utxo"} and Section [\[sec:epoch\]](#sec:epoch){reference-type="ref" reference="sec:epoch"}. For each staking credential, we use the function $\fun{addr_{rwd}}$ to create the reward address corresponding to the credential, or to access an existing one if it already exists. Note that $\fun{addr_{rwd}}$ uses the global constant $\NetworkId$ to attach a network ID to the given stake credential.
+Note that, even though in the Cardano system, most of the accounting is UTxO-style, the reward addresses are a special case. Their use is restricted to only special cases (e.g. collecting rewards from them), outlined in the rules in Sections [\[sec:utxo\]](#sec:utxo) and Section [\[sec:epoch\]](#sec:epoch). For each staking credential, we use the function $\fun{addr_{rwd}}$ to create the reward address corresponding to the credential, or to access an existing one if it already exists. Note that $\fun{addr_{rwd}}$ uses the global constant $\NetworkId$ to attach a network ID to the given stake credential.
 
 Base, pointer and enterprise addresses contain a payment credential which is either a key hash or a script hash. Base addresses contain a staking credential which is also either a key hash or a script hash.
 
-:::: {#fig:defs:addresses .figure latex-placement="hbt"}
+
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
       \var{slot} & \Slot & \text{absolute slot}\\
@@ -143,7 +142,4 @@ Base, pointer and enterprise addresses contain a payment credential which is eit
     ~~~ \left( \fun{addr_{rwd}} \text{ is injective} \right)
 \end{equation*}$$
 
-::: caption
-Definitions used in Addresses
-:::
-::::
+**Definitions used in Addresses**

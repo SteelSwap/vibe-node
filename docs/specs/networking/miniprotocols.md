@@ -1,5 +1,4 @@
-# Mini Protocols {#chapter:mini-protocols}
-
+# Mini Protocols
 ## Mini Protocols and Protocol Families
 
 A mini protocol is a well-defined and modular building block of the network protocol. Structuring a protocol around mini-protocols helps manage the overall complexity of the design and adds useful flexibility. The design turns into a family of mini-protocols that can be specialised to particular requirements by choosing a particular set of mini-protocols.
@@ -71,88 +70,76 @@ Client and server implementation
 Dummy mini-protocols are not used by 'cardano-node'; however, they might be helpful when writing demos, testing purposes or getting familiar with the framework.
 
 ::: framed
-**Ping Pong Protocol**Section [1.5.1](#ping-pong-protocol){reference-type="ref" reference="ping-pong-protocol"}\
+**Ping Pong Protocol**Section [1.5.1](#ping-pong-protocol)\
 A simple ping-pong protocol for testing.\
 [`typed-protocols/src/Network/TypedProtocol/PingPong/Type.hs`](https://input-output-hk.github.io/typed-protocols/typed-protocols-examples/Network-TypedProtocol-PingPong-Type.html#t:PingPong)
-:::
 
 ::: framed
-**Request Response Protocol**Section [1.5.2](#request-response-protocol){reference-type="ref" reference="request-response-protocol"}\
+**Request Response Protocol**Section [1.5.2](#request-response-protocol)\
 A ping-pong-like protocol which allows the exchange of data.\
 [`typed-protocols/src/Network/TypedProtocol/ReqResp/Type.hs`](https://input-output-hk.github.io/typed-protocols/typed-protocols-examples/Network-TypedProtocol-ReqResp-Type.html#t:ReqResp)
-:::
 
 ### Handshake
 
 Handshake mini-protocol is shared by the node-to-node and node-to-client protocols (it is polymorphic to allow that).
 
 ::: framed
-**Handshake Mini Protocol**Section [\[handshake-protocol\]](#handshake-protocol){reference-type="ref" reference="handshake-protocol"}\
+**Handshake Mini Protocol**Section [\[handshake-protocol\]](#handshake-protocol)\
 This protocol is used for version negotiation.\
 [`ouroboros-network-framework/src/Ouroboros/Network/Protocol/Handshake/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-framework/Ouroboros-Network-Protocol-Handshake-Type.html#t:Handshake)
-:::
 
 ### Node-to-node mini-protocols
 
 In this section, we list all the mini-protocols that constitute the node-to-node protocol.
 
 ::: framed
-**Chain Synchronisation Protocol**Section [1.7](#chain-sync-protocol){reference-type="ref" reference="chain-sync-protocol"}\
+**Chain Synchronisation Protocol**Section [1.7](#chain-sync-protocol)\
 The protocol by which a downstream chain consumer follows an upstream chain producer.\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/ChainSync/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-ChainSync-Type.html#t:ChainSync)
-:::
 
 ::: framed
-**Block Fetch Protocol**Section [1.8](#block-fetch-protocol){reference-type="ref" reference="block-fetch-protocol"}\
+**Block Fetch Protocol**Section [1.8](#block-fetch-protocol)\
 The block fetching mechanism enables a node to download ranges of blocks.\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/BlockFetch/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-BlockFetch-Type.html#t:BlockFetch)
-:::
 
 ::: framed
-**Transaction Submission Protocol v2**Section [\[tx-submission-protocol2\]](#tx-submission-protocol2){reference-type="ref" reference="tx-submission-protocol2"}\
+**Transaction Submission Protocol v2**Section [\[tx-submission-protocol2\]](#tx-submission-protocol2)\
 A Protocol for transmitting transactions between core nodes.\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/TxSubmission2/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-TxSubmission2-Type.html#t:TxSubmission2)
-:::
 
 ::: framed
-**Keep Alive Protocol**Section [\[keep-alive-protocol\]](#keep-alive-protocol){reference-type="ref" reference="keep-alive-protocol"}\
+**Keep Alive Protocol**Section [\[keep-alive-protocol\]](#keep-alive-protocol)\
 A protocol for sending keep alive messages and doing round trip measurements\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/KeepAlive/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-KeepAlive-Type.html#t:KeepAlive)
-:::
 
 ::: framed
-**Peer Sharing Protocol**Section [\[peer-sharing-protocol\]](#peer-sharing-protocol){reference-type="ref" reference="peer-sharing-protocol"}\
+**Peer Sharing Protocol**Section [\[peer-sharing-protocol\]](#peer-sharing-protocol)\
 A mini-protocol which allows to share peer addresses\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/PeerSharing/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-PeerSharing-Type.html#t:PeerSharing)
-:::
 
 ### Node-to-client mini-protocols
 
 Mini-protocols used by node-to-client protocol. The chain-sync mini-protocol is shared between node-to-node and node-to-client protocols, but it is instantiated differently. In node-to-client protocol, it is used with full blocks rather than just headers.
 
 ::: framed
-**Chain Synchronisation Protocol**Section [1.7](#chain-sync-protocol){reference-type="ref" reference="chain-sync-protocol"}\
+**Chain Synchronisation Protocol**Section [1.7](#chain-sync-protocol)\
 The protocol by which a downstream chain consumer follows an upstream chain producer.\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/ChainSync/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-ChainSync-Type.html#t:ChainSync)
-:::
 
 ::: framed
-**Local State Query Mini Protocol**Section [1.13](#local-state-query-protocol){reference-type="ref" reference="local-state-query-protocol"}\
+**Local State Query Mini Protocol**Section [1.13](#local-state-query-protocol)\
 Protocol used by local clients to query ledger state\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/LocalStateQuery/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-LocalStateQuery-Type.html#t:LocalStateQuery)
-:::
 
 ::: framed
-**Local Tx Submission Mini Protocol**Section [\[local-tx-submission-protocol\]](#local-tx-submission-protocol){reference-type="ref" reference="local-tx-submission-protocol"}\
+**Local Tx Submission Mini Protocol**Section [\[local-tx-submission-protocol\]](#local-tx-submission-protocol)\
 Protocol used by local clients to submit transactions\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/LocalTxSubmission/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-LocalTxSubmission-Type.html#t:LocalTxSubmission)
-:::
 
 ::: framed
-**Local Tx Monitor Mini Protocol**Section [\[local-tx-monitor-protocol\]](#local-tx-monitor-protocol){reference-type="ref" reference="local-tx-monitor-protocol"}\
+**Local Tx Monitor Mini Protocol**Section [\[local-tx-monitor-protocol\]](#local-tx-monitor-protocol)\
 Protocol used by local clients to monitor transactions\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/LocalTxMonitor/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-LocalTxMonitor-Type.html#t:LocalTxMonitor)
-:::
 
 ## CBOR and CDDL
 
@@ -166,23 +153,18 @@ We want to retain the ability to decode messages incrementally, which for the Pr
 
 Dummy protocols are only used for testing and are not needed either for Node-to-Node nor for the Node-to-Client protocols.
 
-### Ping-Pong mini-protocol {#ping-pong-protocol}
-
+### Ping-Pong mini-protocol
 #### Description
 
 A client can use the Ping-Pong protocol to check that the server is responsive. The Ping-Pong protocol is very simple because the messages do not carry any data and because the Ping-Pong client and the Ping-Pong server do not access the internal state of the node.
 
 #### State Machine
 
-::: {.figure latex-placement="h"}
-:::
 
-::: {.figure latex-placement="ht"}
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
   -- --------------------------------------
-:::
 
 The protocol uses the following messages. The messages of the Ping-Pong protocol do not carry any data.
 
@@ -200,20 +182,18 @@ The protocol uses the following messages. The messages of the Ping-Pong protocol
 
   : Ping-Pong mini-protocol messages.
 
-### Request-Response mini-protocol {#request-response-protocol}
-
+### Request-Response mini-protocol
 #### Description
 
 The request-response protocol is polymorphic in the request and response data that is being transmitted. This means that there are different possible applications of this protocol, and the application of the protocol determines the types of requests and responses.
 
 #### State machine
 
-::: {.figure latex-placement="ht"}
+
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
   -- --------------------------------------
-:::
 
 The protocol uses the following messages.
 
@@ -255,15 +235,11 @@ The handshake mini protocol is designed to handle simultaneous TCP open.
 
 ### State machine
 
-::: {.figure latex-placement="h"}
-:::
 
-::: {.figure latex-placement="h"}
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
   -- --------------------------------------
-:::
 
 Messages of the protocol:
 
@@ -295,30 +271,27 @@ Messages of the protocol:
 These bounds limit how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:handshake-size-limits}
+
   -- --------
        `5760`
        `5760`
   -- --------
-:::
 
 []{#table:handshake-size-limits label="table:handshake-size-limits"}
-::::
+
 
 ### Timeouts per state
 
 These limits bound how much time the receiver side can wait for the arrival of a message. If a timeout is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:handshake-timeouts}
+
   -- -------
        `10`s
        `10`s
   -- -------
 
   : timeouts per state
-:::
-::::
 
 ### Node-to-node handshake
 
@@ -361,7 +334,6 @@ These bounds limit how many bytes can be sent in a given state; indirectly, this
        `5760`
        `5760`
   -- --------
-:::
 
 #### Timeouts per state
 
@@ -372,7 +344,6 @@ These limits bound how much time the receiver side can wait for the arrival of a
        `10`s
        `10`s
   -- -------
-:::
 
 ### Node-to-client handshake
 
@@ -403,7 +374,6 @@ These bounds limit how many bytes can be sent in a given state; indirectly, this
        `5760`
        `5760`
   -- --------
-:::
 
 #### Timeouts per state
 
@@ -411,7 +381,7 @@ No timeouts are used for node-to-client handshake.
 
 ### Client and Server Implementation
 
-Section [1.6.9](#handshake-cddl){reference-type="ref" reference="handshake-cddl"} contains the CDDL specification of the binary format of the handshake messages. The version table is encoded as a CBOR table with the version number as the key and the protocol parameters as a value. The handshake protocol requires that the version numbers ( i.e. the keys) in the version table are unique and appear in ascending order. (Note that CDDL is not expressive enough to precisely specify that requirement on the keys of the CBOR table. Therefore, the CDDL specification uses a table with keys from 1 to 4 as an example.)
+Section [1.6.9](#handshake-cddl) contains the CDDL specification of the binary format of the handshake messages. The version table is encoded as a CBOR table with the version number as the key and the protocol parameters as a value. The handshake protocol requires that the version numbers ( i.e. the keys) in the version table are unique and appear in ascending order. (Note that CDDL is not expressive enough to precisely specify that requirement on the keys of the CBOR table. Therefore, the CDDL specification uses a table with keys from 1 to 4 as an example.)
 
 In a run of the handshake mini protocol, the peers exchange only two messages: The client initiates the protocol with a message that contains information about all protocol versions it wants to support. The server replies either with an message containing the negotiated version number and version data or a message. The message contains one of three alternative refuse reasons: , or just .
 
@@ -431,7 +401,7 @@ When a server receives a message, it uses the following algorithm to compute the
 
 7.  If the test refuses the parameters: Reply with (), the selected version number and an error message.
 
-8.  Otherwise, compute negotiation parameters according to the algorithm [\[alg:node-to-node-negotiation\]](#alg:node-to-node-negotiation){reference-type="ref" reference="alg:node-to-node-negotiation"} or [\[alg:node-to-client-negotiation\]](#alg:node-to-client-negotiation){reference-type="ref" reference="alg:node-to-client-negotiation"}, encode them with the corresponding CBOR codec and reply with , the selected version number and the extra parameters.
+8.  Otherwise, compute negotiation parameters according to the algorithm [\[alg:node-to-node-negotiation\]](#alg:node-to-node-negotiation) or [\[alg:node-to-client-negotiation\]](#alg:node-to-client-negotiation), encode them with the corresponding CBOR codec and reply with , the selected version number and the extra parameters.
 
 Note that in step 4), 6) and 8) the handshake protocol uses the callback functions that are specific for a set of protocols that the server supports. The handshake protocol is designed so that a server can always handle requests for protocol versions that it does not support. The server simply ignores the CBOR terms that represent the protocol parameters of unsupported versions.
 
@@ -459,8 +429,7 @@ The fact that we are using non-injective encoding in the handshake protocol side
 
 The handshake mini protocol runs before the multiplexer is initialised. Each message is transmitted within a single MUX segment, i.e. with a proper segment header, but as the multiplexer is not yet running, the messages MUST not be split into multiple segments. The Handshake protocol uses the mini-protocol number $0$ in both node-to-node and node-to-client cases.
 
-### CDDL encoding specification {#handshake-cddl}
-
+### CDDL encoding specification
 There are two flavours of the mini-protocol that only differ with type instantiations, e.g., different protocol versions and version data carried in messages. First, one is used by the node-to-node protocol, and the other is used by the node-to-client protocol.
 
 #### Node-to-node handshake mini-protocol
@@ -473,8 +442,7 @@ There are two flavours of the mini-protocol that only differ with type instantia
 ``` {style="cddl"}
 ```
 
-## Chain-Sync mini-protocol {#chain-sync-protocol}
-
+## Chain-Sync mini-protocol
 \
 \
 [*node-to-node mini-protocol number*](#table:node-to-node-protocol-numbers): `2`\
@@ -482,18 +450,14 @@ There are two flavours of the mini-protocol that only differ with type instantia
 
 ### Description
 
-The chain synchronisation protocol is used by a blockchain consumer to replicate the producer's blockchain locally. A node communicates with several upstream and downstream nodes and runs an independent client instance and an independent server instance for every other node it communicates with. (See Figure [\[node-diagram-concurrency\]](#node-diagram-concurrency){reference-type="ref" reference="node-diagram-concurrency"}.)
+The chain synchronisation protocol is used by a blockchain consumer to replicate the producer's blockchain locally. A node communicates with several upstream and downstream nodes and runs an independent client instance and an independent server instance for every other node it communicates with. (See Figure [\[node-diagram-concurrency\]](#node-diagram-concurrency).)
 
-The chain synchronisation protocol is polymorphic. The node-to-client protocol uses an instance of the chain synchronisation protocol that transfers full blocks, while the node-to-node instance only transfers block headers. In the node-to-node case, the block fetch protocol (Section [1.8](#block-fetch-protocol){reference-type="ref" reference="block-fetch-protocol"}) is used to diffuse full blocks.
+The chain synchronisation protocol is polymorphic. The node-to-client protocol uses an instance of the chain synchronisation protocol that transfers full blocks, while the node-to-node instance only transfers block headers. In the node-to-node case, the block fetch protocol (Section [1.8](#block-fetch-protocol)) is used to diffuse full blocks.
 
 ### State Machine
 
-:::: {#chain-sync-automata .figure latex-placement="ht"}
-::: caption
-State machine of the Chain-Sync mini-protocol
-:::
-::::
 
+**State machine of the Chain-Sync mini-protocol**
 ::::: {.figure latex-placement="h"}
 ::: center
   -- --------------------------------------
@@ -502,11 +466,8 @@ State machine of the Chain-Sync mini-protocol
      [**Server**]{style="color: myblue"}
      [**Server**]{style="color: myblue"}
   -- --------------------------------------
-:::
 
-::: caption
-Chain-Sync state agencies
-:::
+**Chain-Sync state agencies**
 :::::
 
 The protocol uses the following messages:
@@ -554,10 +515,10 @@ The protocol uses the following messages:
 
 ### Node-to-node size limits per state
 
-Table [1.3](#table:chain-sync-size-limits){reference-type="ref" reference="table:chain-sync-size-limits"} specifies how many bytes can be sent in a given state in the chain-sync mini-protocol of the node-to-node protocol; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
+Table [1.3](#table:chain-sync-size-limits) specifies how many bytes can be sent in a given state in the chain-sync mini-protocol of the node-to-node protocol; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:chain-sync-size-limits}
+
   -- ---------
        `65535`
        `65535`
@@ -566,15 +527,12 @@ Table [1.3](#table:chain-sync-size-limits){reference-type="ref" reference="tabl
   -- ---------
 
   : size limits per state
-:::
-::::
 
-### Node-to-node timeouts per state {#subsec:chain-sync-timeouts}
-
-The table [1.4](#table:chain-sync-timeouts){reference-type="ref" reference="table:chain-sync-timeouts"} specifies message timeouts in a given state. If a timeout is violated, the connection SHOULD be torn down.
+### Node-to-node timeouts per state
+The table [1.4](#table:chain-sync-timeouts) specifies message timeouts in a given state. If a timeout is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:chain-sync-timeouts}
+
   -- ----------------------------------
                                 `3673`s
                                   `10`s
@@ -583,8 +541,6 @@ The table [1.4](#table:chain-sync-timeouts){reference-type="ref" reference="tab
   -- ----------------------------------
 
   : timeouts per state
-:::
-::::
 
 ### Node-to-client size limits and timeouts
 
@@ -594,7 +550,7 @@ There are no size-limits nor timeouts for the chain-sync mini-protocol of the no
 
 This section describes a stateful implementation of a chain producer that is suitable for a setting where the producer cannot trust the chain consumer. An important requirement in this setting is that a chain consumer must never be able to cause excessive resource use on the producer side. The presented implementation meets this requirement. It uses a constant amount of memory to store the state that the producer maintains per chain consumer. This protocol is only used to reproduce the producer chain locally by the consumer. By running many instances of this protocol against different peers, a node can reproduce chains in the network and make chain selection, which by design is not part of this protocol. Note that when we refer to the consumer's chain in this section, we mean the chain that is reproduced by the consumer with the instance of the chain-sync protocol and not the result of the chain selection algorithm.
 
-We call the state which the producer maintains about the consumer the *read-pointer*. The *read-pointer* basically tracks what the producer knows about the head of the consumer's chain without storing it locally. It points to a block on the current chain of the chain producer. The *read-pointer*s are part of the shared state of the node (Figure [\[node-diagram-concurrency\]](#node-diagram-concurrency){reference-type="ref" reference="node-diagram-concurrency"}), and *read-pointer*s are concurrently updated by the thread that runs the chain-sync mini-protocol and the chain tracking logic of the node itself.
+We call the state which the producer maintains about the consumer the *read-pointer*. The *read-pointer* basically tracks what the producer knows about the head of the consumer's chain without storing it locally. It points to a block on the current chain of the chain producer. The *read-pointer*s are part of the shared state of the node (Figure [\[node-diagram-concurrency\]](#node-diagram-concurrency)), and *read-pointer*s are concurrently updated by the thread that runs the chain-sync mini-protocol and the chain tracking logic of the node itself.
 
 We first describe how the mini-protocol updates a *read-pointer* and later address what happens in case of a fork.
 
@@ -608,11 +564,8 @@ A typical situation is when the consumer follows the chain of the producer but i
 
 ::::: {#read-pointer-consumer-driver .figure latex-placement="ht"}
 ::: center
-:::
 
-::: caption
-Consumer-driven block download.
-:::
+**Consumer-driven block download.**
 :::::
 
 ###### Producer driven updates
@@ -631,14 +584,11 @@ The node of the chain producer can switch to a new fork at any time, independent
 
 ::::: {#read-pointer-rollback .figure latex-placement="ht"}
 ::: center
-:::
 
-::: caption
-*read-pointer* update for a fork switch in case of a rollback.
-:::
+***read-pointer* update for a fork switch in case of a rollback.**
 :::::
 
-Figure [1.3](#read-pointer-rollback){reference-type="ref" reference="read-pointer-rollback"} illustrates a fork switch that requires an update of the *read-pointer* for one of the chain consumers. Before the switch, the *read-pointer* of the consumer points to block $0x660f$. The producer switches to a new chain with the head of the chain at block $0xcdf0$. The node must update the *read-pointer* to block $0xfa40$, and the next message to the consumer will be a .
+Figure [1.3](#read-pointer-rollback) illustrates a fork switch that requires an update of the *read-pointer* for one of the chain consumers. Before the switch, the *read-pointer* of the consumer points to block $0x660f$. The producer switches to a new chain with the head of the chain at block $0xcdf0$. The node must update the *read-pointer* to block $0xfa40$, and the next message to the consumer will be a .
 
 Note that a node typically communicates with several consumers. For each consumer, it runs an independent version of the chain-sync-protocol state machine in an independent thread and with its own *read-pointer*. Each of those *read-pointer*s has to be updated independently, and for each consumer, either case 1) or case 2) can apply.
 
@@ -680,15 +630,13 @@ The Producer is just passive/slow
 
 :   The consumer's node will switch to a longer chain coming from another producer via another instance of chain-sync protocol.
 
-### CDDL encoding specification {#cddl-encoding-specification}
-
+### CDDL encoding specification
 ``` {style="cddl"}
 ```
 
-See appendix [\[cddl-common\]](#cddl-common){reference-type="ref" reference="cddl-common"} for common definitions.
+See appendix [\[cddl-common\]](#cddl-common) for common definitions.
 
-## Block-Fetch mini-protocol {#block-fetch-protocol}
-
+## Block-Fetch mini-protocol
 \
 \
 [*node-to-node mini-protocol number*](#table:node-to-node-protocol-numbers): `3`\
@@ -700,11 +648,7 @@ The block fetching mechanism enables a node to download a range of blocks.
 ### State machine
 
 :::: {.figure latex-placement="h"}
-::: caption
-State machine of the block-fetch mini-protocol
-:::
-::::
-
+**State machine of the block-fetch mini-protocol**
 ::::: {.figure latex-placement="h"}
 ::: center
   -- --------------------------------------
@@ -712,11 +656,8 @@ State machine of the block-fetch mini-protocol
      [**Server**]{style="color: myblue"}
      [**Server**]{style="color: myblue"}
   -- --------------------------------------
-:::
 
-::: caption
-Block-Fetch state agencies
-:::
+**Block-Fetch state agencies**
 :::::
 
 ##### Protocol messages
@@ -737,10 +678,10 @@ Block-Fetch state agencies
 
 :   The client terminates the protocol.
 
-The transitions are shown in table [1.5](#table:block-fetch){reference-type="ref" reference="table:block-fetch"}.
+The transitions are shown in table [1.5](#table:block-fetch).
 
 :::: center
-::: {#table:block-fetch}
+
   -- -- --------- --
                   
         $range$   
@@ -751,31 +692,28 @@ The transitions are shown in table [1.5](#table:block-fetch){reference-type="re
   -- -- --------- --
 
   : Block-Fetch mini-protocol messages.
-:::
-::::
 
 ### Size limits per state
 
 These bounds limit how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:block-fetch-size-limits}
+
   -- -----------
          `65535`
          `65535`
        `2500000`
   -- -----------
-:::
 
 []{#table:block-fetch-size-limits label="table:block-fetch-size-limits"}
-::::
+
 
 ### Timeouts per state
 
 These limits bound how much time the receiver side can wait for the arrival of a message. If a timeout is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:block-fetch-timeouts}
+
   -- -------
           \-
        `60`s
@@ -783,15 +721,12 @@ These limits bound how much time the receiver side can wait for the arrival of a
   -- -------
 
   : timeouts per state
-:::
-::::
 
-### CDDL encoding specification {#cddl-encoding-specification-1}
-
+### CDDL encoding specification
 ``` {style="cddl"}
 ```
 
-See appendix [\[cddl-common\]](#cddl-common){reference-type="ref" reference="cddl-common"} for common definitions.
+See appendix [\[cddl-common\]](#cddl-common) for common definitions.
 
 ## Tx-Submission mini-protocol
 
@@ -802,7 +737,7 @@ See appendix [\[cddl-common\]](#cddl-common){reference-type="ref" reference="cdd
 
 #### Description
 
-The node-to-node transaction submission protocol is used to transfer transactions between full nodes. The protocol follows a pull-based strategy where the initiator asks for new transactions, and the responder sends them back. It is suitable for a trustless setting where both sides need to guard against resource consumption attacks from the other side. The local transaction submission protocol, is a simpler which is used when the server trusts a local client, is described in Section [\[local-tx-submission-protocol\]](#local-tx-submission-protocol){reference-type="ref" reference="local-tx-submission-protocol"}.
+The node-to-node transaction submission protocol is used to transfer transactions between full nodes. The protocol follows a pull-based strategy where the initiator asks for new transactions, and the responder sends them back. It is suitable for a trustless setting where both sides need to guard against resource consumption attacks from the other side. The local transaction submission protocol, is a simpler which is used when the server trusts a local client, is described in Section [\[local-tx-submission-protocol\]](#local-tx-submission-protocol).
 
 The *tx-submission* mini-protocol is designed in a way that the information (e.g. transactions) flows across the system in the other direction than in the *chain-sync* or *block-fetch* protocols. Transactions must flow toward the block producer, while headers and blocks disseminate from it to the rest of the system. This is reflected in the protocol graphs, transactions are sent from a client to a server. However, to preserve that all mini-protocols start on the client, the state was added in version 2 of the protocol.
 
@@ -810,12 +745,8 @@ Note that Version 1 of the tx-submission protocol is no longer supported. Versio
 
 ### State machine
 
-:::: {#tx-submission-automata-v2 .figure latex-placement="h!"}
-::: caption
-State machine of the Tx-Submission mini-protocol (version 2).
-:::
-::::
 
+**State machine of the Tx-Submission mini-protocol (version 2).**
 ::::: {.figure latex-placement="h"}
 ::: center
   -- --------------------------------------
@@ -825,11 +756,8 @@ State machine of the Tx-Submission mini-protocol (version 2).
      [**Client**]{style="color: mygreen"}
      [**Client**]{style="color: mygreen"}
   -- --------------------------------------
-:::
 
-::: caption
-Tx-Submission state agencies
-:::
+**Tx-Submission state agencies**
 :::::
 
 ##### Protocol messages
@@ -842,7 +770,7 @@ Tx-Submission state agencies
 
     This is a non-blocking operation: the response may be an empty list and this does expect a prompt response. This covers high throughput use cases where we wish to pipeline, by interleaving requests for additional transaction identifiers with requests for transactions, which requires these requests not block.
 
-    The request gives the maximum number of transaction identifiers that can be accepted in the response. Either the numbers acknowledged or the number requested MUST be non-zero. In either case, the number requested MUST not put the total outstanding over the fixed protocol limit (see below in section [1.9.2](#tx-submission-size-limits){reference-type="ref" reference="tx-submission-size-limits"}).
+    The request gives the maximum number of transaction identifiers that can be accepted in the response. Either the numbers acknowledged or the number requested MUST be non-zero. In either case, the number requested MUST not put the total outstanding over the fixed protocol limit (see below in section [1.9.2](#tx-submission-size-limits)).
 
     The request also gives the number of outstanding transaction identifiers that can now be acknowledged. The actual transactions to acknowledge are known to the peer based on the FIFO order in which they were provided.
 
@@ -854,7 +782,7 @@ Tx-Submission state agencies
 
     This is a blocking operation: the response will always have at least one transaction identifier, and it does not expect a prompt response: there is no timeout. This covers the case when there is nothing else to do but wait. For example this covers leaf nodes that rarely, if ever, create and submit a transaction.
 
-    The request gives the maximum number of transaction identifiers that can be accepted in the response. This must be greater than zero. The number requested ids MUST not put the total outstanding over the fixed protocol limit (see below in section [1.9.2](#tx-submission-size-limits){reference-type="ref" reference="tx-submission-size-limits"}).
+    The request gives the maximum number of transaction identifiers that can be accepted in the response. This must be greater than zero. The number requested ids MUST not put the total outstanding over the fixed protocol limit (see below in section [1.9.2](#tx-submission-size-limits)).
 
     The request also gives the number of outstanding transaction identifiers that can now be acknowledged. The actual transactions to acknowledge are known to the peer based on the FIFO order in which they were provided.
 
@@ -901,12 +829,11 @@ Tx-Submission state agencies
 
   : Tx-Submission mini-protocol (version 2) messages.
 
-### Size limits per state {#tx-submission-size-limits}
-
-Table [1.8](#table:tx-submission-size-limits){reference-type="ref" reference="table:tx-submission-size-limits"} specifies how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
+### Size limits per state
+Table [1.8](#table:tx-submission-size-limits) specifies how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:tx-submission-size-limits}
+
   -- -----------
           `5760`
           `5760`
@@ -916,8 +843,6 @@ Table [1.8](#table:tx-submission-size-limits){reference-type="ref" reference="t
   -- -----------
 
   : size limits per state
-:::
-::::
 
 #### Maximum number of unacknowledged transaction identifiers
 
@@ -925,10 +850,10 @@ The maximal number of unacknowledged transactions ids is `10`. It is a protocol 
 
 ### Timeouts per state
 
-The table [1.9](#table:tx-submission-timeouts){reference-type="ref" reference="table:tx-submission-timeouts"} specifies message timeouts in a given state. If a timeout is violated, the connection SHOULD be torn down.
+The table [1.9](#table:tx-submission-timeouts) specifies message timeouts in a given state. If a timeout is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:tx-submission-timeouts}
+
   -- -------
           \-
           \-
@@ -938,11 +863,8 @@ The table [1.9](#table:tx-submission-timeouts){reference-type="ref" reference="
   -- -------
 
   : timeouts per state
-:::
-::::
 
-### CDDL encoding specification {#tx-submission2-cddl}
-
+### CDDL encoding specification
 ``` {style="cddl"}
 ```
 
@@ -972,22 +894,15 @@ Keep-alive mini-protocol is a member of the node-to-node protocol. It is used fo
 ### State machine
 
 :::: {.figure latex-placement="h"}
-::: caption
-State machine of the keep-alive protocol.
-:::
-::::
-
+**State machine of the keep-alive protocol.**
 ::::: {.figure latex-placement="h"}
 ::: center
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
   -- --------------------------------------
-:::
 
-::: caption
-Keep-Alive state agencies
-:::
+**Keep-Alive state agencies**
 :::::
 
 ##### Protocol messages
@@ -1002,38 +917,33 @@ Keep-Alive state agencies
 
 :   Terminating message.
 
-### Size limits per state {#size-limits-per-state-4}
-
+### Size limits per state
 These bounds limit how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:keep-alive-size-limits}
+
   -- ---------
        `65535`
        `65535`
   -- ---------
-:::
 
 []{#table:keep-alive-size-limits label="table:keep-alive-size-limits"}
-::::
+
 
 ### Timeouts per state
 
 These limits bound how much time the receiver side can wait for the arrival of a message. If a timeout is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:keep-alive-timeouts}
+
   -- -------
        `97`s
        `60`s
   -- -------
 
   : timeouts per state
-:::
-::::
 
-### CDDL encoding specification {#cddl-encoding-specification-2}
-
+### CDDL encoding specification
 ``` {style="cddl"}
 ```
 
@@ -1051,22 +961,15 @@ The Peer-Sharing mini-protocol is a simple Request-Reply mini-protocol. The mini
 ### State machine
 
 :::: {.figure latex-placement="h"}
-::: caption
-State machine of the peer sharing protocol.
-:::
-::::
-
+**State machine of the peer sharing protocol.**
 ::::: {.figure latex-placement="h"}
 ::: center
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
   -- --------------------------------------
-:::
 
-::: caption
-Peer-Sharing state agencies
-:::
+**Peer-Sharing state agencies**
 :::::
 
 ##### Protocol messages
@@ -1085,35 +988,31 @@ Peer-Sharing state agencies
 
 :   Terminating message.
 
-### Size limits per state {#size-limits-per-state-5}
-
+### Size limits per state
 These bounds limit how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:peer-share-size-limits}
+
   -- --------
        `5760`
        `5760`
   -- --------
-:::
 
 []{#table:peer-share-size-limits label="table:peer-share-size-limits"}
-::::
+
 
 ### Timeouts per state
 
 These limits bound how much time the receiver side can wait for the arrival of a message. If a timeout is violated, the connection SHOULD be torn down.
 
 :::: center
-::: {#table:peer-share-timeouts}
+
   -- -------
           \-
        `60`s
   -- -------
 
   : timeouts per state
-:::
-::::
 
 ### Client Implementation Details
 
@@ -1159,8 +1058,7 @@ As soon as the server receives a share request, it needs to pick a subset not bi
 
 Computing the result (i.e. random sampling of available peers) needs access to the `PeerSelectionState`, which is specific to the `peerSelectionGovernorLoop`. However, when initialising the server side of the mini-protocol, we have to provide the result computing function early on the consensus side. This means we will have to find a way to delay the function application all the way to diffusion and share the relevant parts of `PeerSelectionState` with this function via a `TVar`.
 
-### CDDL encoding specification ($\geq 14$) {#peersharing-cddl}
-
+### CDDL encoding specification ($\geq 14$)
 ``` {style="cddl"}
 ```
 
@@ -1173,7 +1071,7 @@ Computing the result (i.e. random sampling of available peers) needs access to t
 
 ### Description
 
-The local transaction submission mini protocol is used by local clients, For example, wallets or CLI tools are used to submit transactions to a local node. The protocol is **not** used to forward transactions from one core node to another. The protocol for the transfer of transactions between full nodes is described in Section [\[tx-submission-protocol2\]](#tx-submission-protocol2){reference-type="ref" reference="tx-submission-protocol2"}.
+The local transaction submission mini protocol is used by local clients, For example, wallets or CLI tools are used to submit transactions to a local node. The protocol is **not** used to forward transactions from one core node to another. The protocol for the transfer of transactions between full nodes is described in Section [\[tx-submission-protocol2\]](#tx-submission-protocol2).
 
 The protocol follows a simple request-response pattern:
 
@@ -1186,22 +1084,15 @@ Note that the local transaction submission protocol is a push-based protocol whe
 ### State machine
 
 :::: {.figure latex-placement="h"}
-::: caption
-State machine of the Local Tx-Submission mini-protocol.
-:::
-::::
-
+**State machine of the Local Tx-Submission mini-protocol.**
 ::::: {.figure latex-placement="h"}
 ::: center
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
   -- --------------------------------------
-:::
 
-::: caption
-Local Tx-Submission state agencies
-:::
+**Local Tx-Submission state agencies**
 :::::
 
 ##### Protocol messages
@@ -1218,23 +1109,20 @@ Local Tx-Submission state agencies
 
 :   The client terminates the mini protocol.
 
-### Size limits per state {#size-limits-per-state-6}
-
+### Size limits per state
 No size limits.
 
 ### Timeouts per state
 
 No timeouts.
 
-### CDDL encoding specification {#cddl-encoding-specification-3}
-
+### CDDL encoding specification
 ``` {style="cddl"}
 ```
 
-See appendix [\[cddl-common\]](#cddl-common){reference-type="ref" reference="cddl-common"} for common definitions.
+See appendix [\[cddl-common\]](#cddl-common) for common definitions.
 
-## Local State Query mini-protocol {#local-state-query-protocol}
-
+## Local State Query mini-protocol
 \
 \
 [*node-to-client mini-protocol number*](#table:node-to-client-protocol-numbers): `7`\
@@ -1246,11 +1134,7 @@ Local State Query mini-protocol allows querying of the consensus/ledger state. T
 ### State machine
 
 :::: {.figure latex-placement="h"}
-::: caption
-State machine of the Local State Query mini-protocol.
-:::
-::::
-
+**State machine of the Local State Query mini-protocol.**
 :::: {.figure latex-placement="h"}
 ::: center
   -- --------------------------------------
@@ -1259,12 +1143,10 @@ State machine of the Local State Query mini-protocol.
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
   -- --------------------------------------
-:::
-::::
 
 ##### Protocol messages
 
-See Figure [1.5](#fig:lsq-messages){reference-type="ref" reference="fig:lsq-messages"}, where $AcquireFailure$ is either:
+See Figure [1.5](#fig:lsq-messages), where $AcquireFailure$ is either:
 
 - $AcquireFailurePointTooOld$, or
 
@@ -1292,7 +1174,7 @@ The primary motivation for being able to acquire the $ImmutableTip$ is that it's
 
 :   The client can terminate the protocol.
 
-:::: {#fig:lsq-messages .figure latex-placement="h"}
+
   -- -- ------------------ --
         $Target\ point$    
         $AcquireFailure$   
@@ -1304,25 +1186,19 @@ The primary motivation for being able to acquire the $ImmutableTip$ is that it's
                            
   -- -- ------------------ --
 
-::: caption
-Local State Query mini-protocol messages.
-:::
-::::
-
-### Size limits per state {#size-limits-per-state-7}
-
+**Local State Query mini-protocol messages.**
+### Size limits per state
 No size limits.
 
 ### Timeouts per state
 
 No timeouts.
 
-### CDDL encoding specification {#cddl-encoding-specification-4}
-
+### CDDL encoding specification
 ``` {style="cddl"}
 ```
 
-See appendix [\[cddl-common\]](#cddl-common){reference-type="ref" reference="cddl-common"} for common definitions.
+See appendix [\[cddl-common\]](#cddl-common) for common definitions.
 
 ## Local Tx-Monitor mini-protocol
 
@@ -1338,11 +1214,7 @@ A mini-protocol which allows the monitoring of transactions in the local mempool
 ### State machine
 
 :::: {.figure latex-placement="h"}
-::: caption
-State machine of the Local Tx-Monitor mini-protocol.
-:::
-::::
-
+**State machine of the Local Tx-Monitor mini-protocol.**
 ::::: {.figure latex-placement="h"}
 ::: center
   -- --------------------------------------
@@ -1351,11 +1223,8 @@ State machine of the Local Tx-Monitor mini-protocol.
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
   -- --------------------------------------
-:::
 
-::: caption
-Local Tx-Monitor state agencies
-:::
+**Local Tx-Monitor state agencies**
 :::::
 
 ##### Protocol messages
@@ -1406,7 +1275,7 @@ Local Tx-Monitor state agencies
 
 :   The server responds with the total number of transactions currently in the mempool, and a map of the measures known to the mempool. The keys of this map are textual labels of the measure names, which should typically be considered stable for a given node version, and the values are a pair of integers representing the current size and maximum capacity respectively for that measure. The maximum capacity should not be considered fixed and is likely to change due to mempool conditions. The size should always be less than or equal to the capacity.
 
-:::: {#fig:ltxm-messages .figure latex-placement="h"}
+
   --- -- ----------------------------------- ---
                                              
          SlotNo                              
@@ -1423,52 +1292,44 @@ Local Tx-Monitor state agencies
                                              
   --- -- ----------------------------------- ---
 
-::: caption
-Local Transaction Monitor mini-protocol messages.
-:::
-::::
-
-### Size limits per state {#size-limits-per-state-8}
-
+**Local Transaction Monitor mini-protocol messages.**
+### Size limits per state
 No size limits.
 
 ### Timeouts per state
 
 No timeouts.
 
-### CDDL encoding specification {#cddl-encoding-specification-5}
-
+### CDDL encoding specification
 ``` {style="cddl"}
 ```
 
-See appendix [\[cddl-common\]](#cddl-common){reference-type="ref" reference="cddl-common"} for common definitions.
+See appendix [\[cddl-common\]](#cddl-common) for common definitions.
 
-## Pipelining of Mini Protocols {#pipelining}
-
+## Pipelining of Mini Protocols
 Protocol pipelining is a technique that improves the performance of some protocols. The underlying idea is that a client that wants to perform several requests just transmits those requests in sequence without blocking and waiting for the reply from the server. In the reference implementation, pipelining is used by the clients of all mini-protocols except Chain-Sync. Those mini-protocols follow a request-response pattern that is amenable to pipelining such that pipelining becomes a feature of the client implementation and does not require any modifications to the server implementation.
 
-As an example, let's consider the Block-Fetch mini protocol. When a client follows the protocol and sends a sequence of  messages to the server, the data stream from the client to the server will only consist of  messages (and a final  message) and no other message types. The server can simply follow the state machine of the protocol and process the messages in turn, regardless of whether the client uses pipelining or not. The MUX/DEMUX layer (Chapter [\[chapter:multiplexer\]](#chapter:multiplexer){reference-type="ref" reference="chapter:multiplexer"}) guarantees that messages of the same mini protocol are delivered in transmission order. Therefore, the client can determine which response belongs to which request.
+As an example, let's consider the Block-Fetch mini protocol. When a client follows the protocol and sends a sequence of  messages to the server, the data stream from the client to the server will only consist of  messages (and a final  message) and no other message types. The server can simply follow the state machine of the protocol and process the messages in turn, regardless of whether the client uses pipelining or not. The MUX/DEMUX layer (Chapter [\[chapter:multiplexer\]](#chapter:multiplexer)) guarantees that messages of the same mini protocol are delivered in transmission order. Therefore, the client can determine which response belongs to which request.
 
-The MUX/DEMUX layer also provides a fixed-size buffer between the egress of DEMUX and the ingress of mini protocol thread. The size of this buffer is a protocol parameter that determines how many messages a client can send before waiting for a reply from the server (see Section [\[mux-flow-control\]](#mux-flow-control){reference-type="ref" reference="mux-flow-control"}). The protocol requires that a client must never cause an overrun of these buffers on a server node. If a message arrives at the server that would cause the buffer to overrun, the server treats this case as a protocol violation of the peer (and closes the connection to the peer).
+The MUX/DEMUX layer also provides a fixed-size buffer between the egress of DEMUX and the ingress of mini protocol thread. The size of this buffer is a protocol parameter that determines how many messages a client can send before waiting for a reply from the server (see Section [\[mux-flow-control\]](#mux-flow-control)). The protocol requires that a client must never cause an overrun of these buffers on a server node. If a message arrives at the server that would cause the buffer to overrun, the server treats this case as a protocol violation of the peer (and closes the connection to the peer).
 
-## Node-to-node protocol {#section:node-to-node-protocol}
-
+## Node-to-node protocol
 \
 \
 
 The *node-to-node protocol* consists of the following protocols:
 
-- *chain-sync mini-protocol* for headers (section [1.7](#chain-sync-protocol){reference-type="ref" reference="chain-sync-protocol"})
+- *chain-sync mini-protocol* for headers (section [1.7](#chain-sync-protocol))
 
-- *block-fetch mini-protocol* (section [1.8](#block-fetch-protocol){reference-type="ref" reference="block-fetch-protocol"})
+- *block-fetch mini-protocol* (section [1.8](#block-fetch-protocol))
 
-- *tx-submission mini-protocol*; from `NodeToNodeV_6` the version 2 is used (section [\[tx-submission-protocol2\]](#tx-submission-protocol2){reference-type="ref" reference="tx-submission-protocol2"})
+- *tx-submission mini-protocol*; from `NodeToNodeV_6` the version 2 is used (section [\[tx-submission-protocol2\]](#tx-submission-protocol2))
 
-- *keep alive mini-protocol*; from `NodeToNodeV_3` (section [\[keep-alive-protocol\]](#keep-alive-protocol){reference-type="ref" reference="keep-alive-protocol"})
+- *keep alive mini-protocol*; from `NodeToNodeV_3` (section [\[keep-alive-protocol\]](#keep-alive-protocol))
 
-- *peer-sharing mini-protocol*; from `NodeToNodeV_11` (section [\[peer-sharing-protocol\]](#peer-sharing-protocol){reference-type="ref" reference="peer-sharing-protocol"})
+- *peer-sharing mini-protocol*; from `NodeToNodeV_11` (section [\[peer-sharing-protocol\]](#peer-sharing-protocol))
 
-Currently supported versions of the *node-to-node protocol* are listed in table [1.7](#table:node-to-node-protocol-versions){reference-type="ref" reference="table:node-to-node-protocol-versions"}.
+Currently supported versions of the *node-to-node protocol* are listed in table [1.7](#table:node-to-node-protocol-versions).
 
 ::::: {#table:node-to-node-protocol-versions .figure latex-placement="h"}
 ::: center
@@ -1476,22 +1337,19 @@ Currently supported versions of the *node-to-node protocol* are listed in table�
   `NodeToNodeV_14`   No changes, identifies Plomin HF nodes mandatory on mainnet as of 2025.01.29
   `NodeToNodeV_15`   No changes, identifies nodes which support SRV records
   ------------------ ------------------------------------------------------------------------------
-:::
 
-::: caption
-Node-to-node protocol versions
-:::
+**Node-to-node protocol versions**
 :::::
 
 \
-Previously supported node-to-node versions are listed in table [\[table:historical-node-to-node-protocol-versions\]](#table:historical-node-to-node-protocol-versions){reference-type="ref" reference="table:historical-node-to-node-protocol-versions"}.
+Previously supported node-to-node versions are listed in table [\[table:historical-node-to-node-protocol-versions\]](#table:historical-node-to-node-protocol-versions).
 
 ### Node-to-node mux mini-protocol numbers
 
-The following table [1.14](#table:node-to-node-protocol-numbers){reference-type="ref" reference="table:node-to-node-protocol-numbers"} shows mux mini-protocol numbers assigned to each node-to-node mini-protocol.
+The following table [1.14](#table:node-to-node-protocol-numbers) shows mux mini-protocol numbers assigned to each node-to-node mini-protocol.
 
 :::: center
-::: {#table:node-to-node-protocol-numbers}
+
   --------------------------------------------------- ------
   [Handshake](#handshake-protocol)                     $0$
   [Chain-Sync](#chain-sync-protocol)                   $2$
@@ -1502,15 +1360,13 @@ The following table [1.14](#table:node-to-node-protocol-numbers){reference-type
   --------------------------------------------------- ------
 
   : Node-to-node protocol numbers
-:::
-::::
 
 ### Node-to-node mux ingress buffer size limits
 
 Ingress buffer is the buffer which holds received data for a given mini-protocol. It is an internal detail of the multiplexer. Each implementation should define its ingress buffer size limits. Here we specify the default choices we made for Cardano Node. These limits depend on how much pipelining depth a given mini-protocol can do. This is an internal implementation detail since the amount of pipelining is controlled by the peer who owns its ingress buffer.
 
 :::: center
-::: {#table:node-to-node-ingress-buffer-limits}
+
   ------------------------------------------- -----------------
   [Handshake](#handshake-protocol)                           \-
   [Chain-Sync](#chain-sync-protocol)                 $462\,000$
@@ -1521,25 +1377,22 @@ Ingress buffer is the buffer which holds received data for a given mini-protocol
   ------------------------------------------- -----------------
 
   : Mux ingress buffer sizes for each mini-protocol
-:::
-::::
 
-## Node-to-client protocol {#section:node-to-client-protocol}
-
+## Node-to-client protocol
 \
 \
 
 The *node-to-client protocol* consists of the following protocols:
 
-- *chain-sync mini-protocol* for blocks (section [1.7](#chain-sync-protocol){reference-type="ref" reference="chain-sync-protocol"})
+- *chain-sync mini-protocol* for blocks (section [1.7](#chain-sync-protocol))
 
-- *local-tx-submission mini-protocol* (section [\[local-tx-submission-protocol\]](#local-tx-submission-protocol){reference-type="ref" reference="local-tx-submission-protocol"})
+- *local-tx-submission mini-protocol* (section [\[local-tx-submission-protocol\]](#local-tx-submission-protocol))
 
-- *local-state-query mini-protocol*; from version `NodeToClientV_2` (section [1.13](#local-state-query-protocol){reference-type="ref" reference="local-state-query-protocol"})
+- *local-state-query mini-protocol*; from version `NodeToClientV_2` (section [1.13](#local-state-query-protocol))
 
-- *local tx-monitor mini-protocol*; from version `NodeToClientV_12` (section [\[local-tx-monitor-protocol\]](#local-tx-monitor-protocol){reference-type="ref" reference="local-tx-monitor-protocol"})
+- *local tx-monitor mini-protocol*; from version `NodeToClientV_12` (section [\[local-tx-monitor-protocol\]](#local-tx-monitor-protocol))
 
-Supported versions of *node-to-client protocol* are listed in table [1.8](#table:node-to-client-protocol-versions){reference-type="ref" reference="table:node-to-client-protocol-versions"}.
+Supported versions of *node-to-client protocol* are listed in table [1.8](#table:node-to-client-protocol-versions).
 
 ::::: {#table:node-to-client-protocol-versions .figure latex-placement="h"}
 ::: center
@@ -1552,22 +1405,19 @@ Supported versions of *node-to-client protocol* are listed in table [1.8](#tabl
                        added `MsgGetMeasures` and `MsgReplyGetMeasures` queries
   `NodeToClientV_21`   new codecs for `PParams` and `CompactGenesis`
   -------------------- ----------------------------------------------------------------
-:::
 
-::: caption
-Node-to-client protocol versions
-:::
+**Node-to-client protocol versions**
 :::::
 
 \
-Previously supported node-to-client versions are listed in table [\[table:historical-node-to-client-protocol-versions\]](#table:historical-node-to-client-protocol-versions){reference-type="ref" reference="table:historical-node-to-client-protocol-versions"}.
+Previously supported node-to-client versions are listed in table [\[table:historical-node-to-client-protocol-versions\]](#table:historical-node-to-client-protocol-versions).
 
 ### Node-to-client mux mini-protocol numbers
 
-The following table [1.16](#table:node-to-client-protocol-numbers){reference-type="ref" reference="table:node-to-client-protocol-numbers"} show mux mini-protocol numbers assigned to each node-to-client mini-protocol.
+The following table [1.16](#table:node-to-client-protocol-numbers) show mux mini-protocol numbers assigned to each node-to-client mini-protocol.
 
 :::: center
-::: {#table:node-to-client-protocol-numbers}
+
   ------------------------------------------------------ -----
   [Handshake](#handshake-protocol)                        $0$
   [Chain-Sync](#chain-sync-protocol)                      $5$
@@ -1577,8 +1427,6 @@ The following table [1.16](#table:node-to-client-protocol-numbers){reference-ty
   ------------------------------------------------------ -----
 
   : Node-to-client protocol numbers
-:::
-::::
 
 ### Node-to-client mux ingress buffer size limits
 

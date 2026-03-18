@@ -1,5 +1,4 @@
-# Term reduction {#sec:reduction}
-
+# Term reduction
 This section defines the semantics of (untyped) Plutus Core.
 
 #### More notation.
@@ -12,14 +11,12 @@ We also define a function $\args{}$ which extracts the arguments which $b$ has r
   \args(\force{A})   &= \args(A).\\
 \end{array}$$
 
-## Term reduction {#term-reduction}
-
-We define the semantics of Plutus Core using contextual semantics (or reduction semantics): see [@Felleisen-Hieb] or [@Felleisen-Semantics-Engineering] or [@Harper:PFPL 5.3], for example. We use $A$ to denote a partial application of a built-in function as in Section [\[sec:uplc-values\]](#sec:uplc-values){reference-type="ref" reference="sec:uplc-values"} above. For builtin evaluation, we instantiate the set $\Inputs$ of Section [\[sec:builtin-inputs\]](#sec:builtin-inputs){reference-type="ref" reference="sec:builtin-inputs"} to be the set of Plutus Core values. Thus all builtins take values as arguments and return a value or $\errorX$. Since values are terms here, we can take $\reify{V} = V$.
+## Term reduction
+We define the semantics of Plutus Core using contextual semantics (or reduction semantics): see [@Felleisen-Hieb] or [@Felleisen-Semantics-Engineering] or [@Harper:PFPL 5.3], for example. We use $A$ to denote a partial application of a built-in function as in Section [\[sec:uplc-values\]](#sec:uplc-values) above. For builtin evaluation, we instantiate the set $\Inputs$ of Section [\[sec:builtin-inputs\]](#sec:builtin-inputs) to be the set of Plutus Core values. Thus all builtins take values as arguments and return a value or $\errorX$. Since values are terms here, we can take $\reify{V} = V$.
 
 The notation $[V/x]M$ below denotes substitution of the value $V$ for the variable $x$ in $M$. This is *capture-avoiding* in that substitution is not performed on occurrences of $x$ inside subterms of $M$ of the form $\lamU{x}{N}$.
 
-:::: {#fig:untyped-term-reduction .figure latex-placement="H"}
-:::: {#fig:untyped-reduction-frames .figure}
+
 $$\begin{array}{lrclr}
         \textrm{Frame} & f  & ::=   & \inAppLeftFrame{M}                                       & \textrm{left application}\\
                        &   &     & \inAppRightFrame{V}                                         & \textrm{right application}\\
@@ -28,45 +25,30 @@ $$\begin{array}{lrclr}
                        &   &     & \inCaseFrame{\repetition{M}}                                & \textrm{case scrutinee}
     \end{array}$$
 
-::: caption
-Grammar of reduction frames for Plutus Core
-:::
-::::
-
+**Grammar of reduction frames for Plutus Core**
 ::::::::::::: {#fig:untyped-reduction .figure}
 ::: prooftree
-:::
 
 ::: prooftree
-:::
 
 ::: prooftree
-:::
 
 ::: prooftree
-:::
 
 ::: prooftree
-:::
 
 ::: prooftree
-:::
 
 ::: prooftree
-:::
 
 ::: prooftree
-:::
 
 ::: prooftree
-:::
 
-::: caption
-Reduction via contextual semantics
-:::
+**Reduction via contextual semantics**
 :::::::::::::
 
-:::: {#fig:bif-appl .figure}
+
 $$\Eval'(b, [V_1, \ldots, V_n]) =
   \begin{cases}
     \errorU  & \text{if $\Eval(b,[V_1, \ldots, V_n]) = \errorX$}\\
@@ -74,14 +56,6 @@ $$\Eval'(b, [V_1, \ldots, V_n]) =
     [V \repetition{V^{\prime}}] & \text{if $\Eval(b,[V_1, \ldots, V_n]) = (V|\repetition{V^{\prime}})$ with $\repetition{V^{\prime}}$ nonempty.}
   \end{cases}$$
 
-::: caption
-Built-in function application
-:::
-::::
-
-::: caption
-Term reduction for Plutus Core
-:::
-::::
-
-It can be shown that any closed Plutus Core term whose evaluation terminates yields either `(error)` or a value. Recall from Section [\[sec:grammar-notes\]](#sec:grammar-notes){reference-type="ref" reference="sec:grammar-notes"} that we require the body of every Plutus Core program to be closed.
+**Built-in function application**
+**Term reduction for Plutus Core**
+It can be shown that any closed Plutus Core term whose evaluation terminates yields either `(error)` or a value. Recall from Section [\[sec:grammar-notes\]](#sec:grammar-notes) that we require the body of every Plutus Core program to be closed.

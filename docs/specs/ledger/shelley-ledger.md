@@ -1,8 +1,7 @@
-# Ledger State Transition {#sec:ledger-trans}
-
+# Ledger State Transition
 The entire state transformation of the ledger state caused by a valid transaction can now be given as the combination of the UTxO transition and the delegation transitions.
 
-Figure [1](#fig:ts-types:ledger){reference-type="ref" reference="fig:ts-types:ledger"} defines the types for this transition. The environment for this rule consists of:
+Figure [1](#fig:ts-types:ledger) defines the types for this transition. The environment for this rule consists of:
 
 - The current slot.
 
@@ -18,7 +17,7 @@ The ledger state consists of:
 
 - The delegation and pool states.
 
-:::: {#fig:ts-types:ledger .figure latex-placement="htb"}
+
 *Ledger environment* $$\begin{equation*}
     \LEnv =
     \left(
@@ -43,14 +42,10 @@ The ledger state consists of:
     \subseteq \powerset (\LEnv \times \LState \times \Tx \times \LState)
 \end{equation*}$$
 
-::: caption
-Ledger transition-system types
-:::
-::::
+**Ledger transition-system types**
+Figure [1](#fig:ts-types:ledger) defines the ledger state transition. It has a single rule, which first calls the $\mathsf{UTXOW}$ transition, then calls the $\mathsf{DELEGS}$ transition.
 
-Figure [1](#fig:ts-types:ledger){reference-type="ref" reference="fig:ts-types:ledger"} defines the ledger state transition. It has a single rule, which first calls the $\mathsf{UTXOW}$ transition, then calls the $\mathsf{DELEGS}$ transition.
 
-:::: {#fig:rules:ledger .figure}
 $$\begin{equation}
     \label{eq:ledger}
     \inference[ledger]
@@ -106,26 +101,17 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Ledger inference rule
-:::
-::::
+**Ledger inference rule**
+The transition system $\mathsf{LEDGER}$ in Figure [2](#fig:rules:ledger) is iterated in $\mathsf{LEDGERS}$ in order to process a list of transactions.
 
-The transition system $\mathsf{LEDGER}$ in Figure [2](#fig:rules:ledger){reference-type="ref" reference="fig:rules:ledger"} is iterated in $\mathsf{LEDGERS}$ in order to process a list of transactions.
 
-:::: {#fig:ts-types:ledgers .figure latex-placement="htb"}
 *Ledger Sequence transitions* $$\begin{equation*}
     \_ \vdash
     \var{\_} \trans{ledgers}{\_} \var{\_}
     \subseteq \powerset ((\Slot\times\PParams\times\Coin) \times \LState \times \seqof{\Tx} \times \LState)
 \end{equation*}$$
 
-::: caption
-Ledger Sequence transition-system types
-:::
-::::
-
-:::: {#fig:rules:ledger-sequence .figure latex-placement="hbt"}
+**Ledger Sequence transition-system types**
 $$\begin{equation}
     \label{eq:ledgers-base}
     \inference[Seq-ledger-base]
@@ -182,7 +168,4 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Ledger sequence rules
-:::
-::::
+**Ledger sequence rules**

@@ -1,5 +1,4 @@
-# Delegation {#sec:delegation}
-
+# Delegation
 An agent owning a key that can sign new blocks can delegate its signing rights to another key by means of *delegation certificates*. These certificates are included in the ledger, and therefore also included in the body of the blocks in the blockchain.
 
 There are several restrictions on a certificate posted on the blockchain:
@@ -16,9 +15,9 @@ There are several restrictions on a certificate posted on the blockchain:
 
 6.  Certificates do not become active immediately, but they require a certain number of slots till they become stable in all the nodes.
 
-These conditions are formalized in [3](#fig:rules:delegation-scheduling){reference-type="ref+label" reference="fig:rules:delegation-scheduling"}. Rule [\[eq:rule:delegation-scheduling\]](#eq:rule:delegation-scheduling){reference-type="ref" reference="eq:rule:delegation-scheduling"} determines when a certificate can become "scheduled". The definitions used in these rules are presented in [1](#fig:defs:delegation-scheduling){reference-type="ref+label" reference="fig:defs:delegation-scheduling"}, and the types of the system induced by $\trans{sdeleg}{\wcard}$ are presented in [2](#fig:ts-types:delegation-scheduling){reference-type="ref+label" reference="fig:ts-types:delegation-scheduling"}. Here and in the remaining rules we will be using $k$ as an abstract constant that gives us the chain stability parameter.
+These conditions are formalized in [3](#fig:rules:delegation-scheduling). Rule [\[eq:rule:delegation-scheduling\]](#eq:rule:delegation-scheduling) determines when a certificate can become "scheduled". The definitions used in these rules are presented in [1](#fig:defs:delegation-scheduling), and the types of the system induced by $\trans{sdeleg}{\wcard}$ are presented in [2](#fig:ts-types:delegation-scheduling). Here and in the remaining rules we will be using $k$ as an abstract constant that gives us the chain stability parameter.
 
-:::: {#fig:defs:delegation-scheduling .figure latex-placement="htb"}
+
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
       c & \DCert & \text{delegation certificate}\\
@@ -52,12 +51,7 @@ These conditions are formalized in [3](#fig:rules:delegation-scheduling){referen
     \end{array}
 \end{equation*}$$
 
-::: caption
-Delegation scheduling definitions
-:::
-::::
-
-:::: {#fig:ts-types:delegation-scheduling .figure latex-placement="htb"}
+**Delegation scheduling definitions**
 *Delegation scheduling environments* $$\begin{equation*}
     \DSEnv =
     \left(
@@ -85,12 +79,7 @@ Delegation scheduling definitions
     \subseteq \powerset (\DSEnv \times \DSState \times \DCert \times \DSState)
 \end{equation*}$$
 
-::: caption
-Delegation scheduling transition-system types
-:::
-::::
-
-:::: {#fig:rules:delegation-scheduling .figure latex-placement="htb"}
+**Delegation scheduling transition-system types**
 $$\begin{equation}
     \label{eq:sdeleg-bootstrap}
     \inference
@@ -151,12 +140,8 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Delegation scheduling rules
-:::
-::::
-
-The rules in Figure [6](#fig:rules:delegation){reference-type="ref" reference="fig:rules:delegation"} model the activation of delegation certificates. Once a scheduled certificate becomes active (see [\[sec:delegation-interface-rules\]](#sec:delegation-interface-rules){reference-type="ref+label" reference="sec:delegation-interface-rules"}), the delegation map is changed by it only if:
+**Delegation scheduling rules**
+The rules in Figure [6](#fig:rules:delegation) model the activation of delegation certificates. Once a scheduled certificate becomes active (see [\[sec:delegation-interface-rules\]](#sec:delegation-interface-rules)), the delegation map is changed by it only if:
 
 - The delegating key ($\var{vk_s}$) did not activate a delegation certificate in a slot greater or equal than the certificate slot ($s$). This check is performed to avoid having the constraint that the delegation certificates have to be activated in slot order.
 
@@ -166,23 +151,18 @@ The reason why we check that the delegation map is injective is to avoid a poten
 
 As an additional advantage, by having an injective delegation map, we are able to simplify our specification when it comes to counting the blocks issued by (delegates of) genesis keys.
 
-Note also, that we could not impose the injectivity constraint in Rule [\[eq:rule:delegation-scheduling\]](#eq:rule:delegation-scheduling){reference-type="ref" reference="eq:rule:delegation-scheduling"} since we do not have information about the delegations that will become effective. We could of course detect a violation in the injectivity constraint when scheduling a delegation certificate, but this will lead to a complex computation and larger state in said rule.
+Note also, that we could not impose the injectivity constraint in Rule [\[eq:rule:delegation-scheduling\]](#eq:rule:delegation-scheduling) since we do not have information about the delegations that will become effective. We could of course detect a violation in the injectivity constraint when scheduling a delegation certificate, but this will lead to a complex computation and larger state in said rule.
 
-Finally, note that we do not want to reject a scheduled delegation that would violate the injectivity constraint (since delegation might not have been scheduled by the node issuing the block). Instead, we simply ignore the delegation certificate (Rule [\[eq:rule:delegation-nop\]](#eq:rule:delegation-nop){reference-type="ref" reference="eq:rule:delegation-nop"}).
+Finally, note that we do not want to reject a scheduled delegation that would violate the injectivity constraint (since delegation might not have been scheduled by the node issuing the block). Instead, we simply ignore the delegation certificate (Rule [\[eq:rule:delegation-nop\]](#eq:rule:delegation-nop)).
 
-:::: {#fig:funcs:delegation .figure latex-placement="htb"}
+
 $$\begin{align*}
     & \unionoverrideRight \in (A \mapsto B) \to (A \mapsto B) \to (A \mapsto B)
     & \text{union override}\\
     & d_0 \unionoverrideRight d_1 = d_1 \cup (\dom d_1 \subtractdom d_0)
 \end{align*}$$
 
-::: caption
-Functions used in delegation rules
-:::
-::::
-
-:::: {#fig:ts-types:delegation .figure latex-placement="htb"}
+**Functions used in delegation rules**
 *Delegation environments* $$\begin{equation*}
     \DEnv =
     \left(
@@ -204,12 +184,7 @@ Functions used in delegation rules
     \powerset (\DEnv \times \DState \times (\Slot \times (\VKeyGen \times \VKey)) \times \DState)
 \end{equation*}$$
 
-::: caption
-Delegation transition-system types
-:::
-::::
-
-:::: {#fig:rules:delegation .figure latex-placement="htb"}
+**Delegation transition-system types**
 $$\begin{equation}
     \label{eq:adeleg-bootstrap}
     \inference
@@ -277,16 +252,11 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Delegation inference rules
-:::
-::::
-
-## Delegation sequences {#sec:delegation-sequences}
-
+**Delegation inference rules**
+## Delegation sequences
 This section presents the rules that model the effect that sequences of delegations have on the ledger.
 
-:::: {#fig:rules:delegation-scheduling-seq .figure latex-placement="htb"}
+
 $$\begin{equation}
     \inference
     {
@@ -341,12 +311,7 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Delegation scheduling sequence rules
-:::
-::::
-
-:::: {#fig:rules:delegation-seq .figure}
+**Delegation scheduling sequence rules**
 $$\begin{equation}
     \inference
     {
@@ -401,11 +366,6 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Delegations sequence rules
-:::
-::::
-
-## Deviation from the `cardano-sl` implementation {#sec:delegation:deviation-cardano-sl-imp}
-
+**Delegations sequence rules**
+## Deviation from the `cardano-sl` implementation
 In the `cardano-sl` implementation, the block issuer needs to include a delegation certificate in the block, which witness the fact that a genesis key gave the issuer the rights of issuing blocks on behalf of this genesis key. The reasons why this was implemented in this way in `cardano-sl` are not clear, since the delegation certificates are posted on the chain, so the ledger state contains the information about who delegates to whom. Hence in the current specification we use a heavyweight delegation scheme, i.e. where the certificates are posted on the chain, but an implementation of this rules that aims at being compatible with the implementation in `cardano-sl` has to take the fact that delegation certificates are also present in a block into account.

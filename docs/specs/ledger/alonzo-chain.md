@@ -1,10 +1,8 @@
-# Blockchain layer {#sec:chain}
+# Blockchain layer
+## Block Body Transition
+In Figure [1](#fig:rules:bbody), we have added the check that the sum total of script fees all transactions in a block pay do not exceed the maximum total fees per block (stored as a protocol parameter).
 
-## Block Body Transition {#sec:block-body-trans}
 
-In Figure [1](#fig:rules:bbody){reference-type="ref" reference="fig:rules:bbody"}, we have added the check that the sum total of script fees all transactions in a block pay do not exceed the maximum total fees per block (stored as a protocol parameter).
-
-:::: {#fig:rules:bbody .figure latex-placement="ht"}
 $$\begin{equation}
 \label{eq:bbody}
     \inference[Block-Body]
@@ -52,18 +50,12 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-BBody rules
-:::
-::::
-
-We have also defined a function that transforms the Shelley ledger state into the Goguen one, see Figure [3](#fig:functions:to-shelley){reference-type="ref" reference="fig:functions:to-shelley"}. Note that here we refer to Shelley-era protocol parameter type as $\ShelleyPParams$, and the Goguen type as $\PParams$. We use the notation $\var{chainstate}_{x}$ to represent variable $x$ in the chain state. We do not specify the variables that remain unchanged during the transition.
+**BBody rules**
+We have also defined a function that transforms the Shelley ledger state into the Goguen one, see Figure [3](#fig:functions:to-shelley). Note that here we refer to Shelley-era protocol parameter type as $\ShelleyPParams$, and the Goguen type as $\PParams$. We use the notation $\var{chainstate}_{x}$ to represent variable $x$ in the chain state. We do not specify the variables that remain unchanged during the transition.
 
 ::: note
 **What creation slots should Shelley era UTxOs have?** It is not yet clear whether we will follow the approach of making the creation slot of every Shelley-era UTxO entry the first slot of Goguen. It is possible to look through all the blocks and add the correct one, but not clear if necessary. The other option is to allow both types out outputs, some without the creation slot.
-:::
 
-:::: {#fig:functions:to-shelley .figure latex-placement="htb"}
 *Types and Constants* $$\begin{align*}
       & s_{last} \\
       & \text{last slot of Shelley era} \\
@@ -86,14 +78,10 @@ We have also defined a function that transforms the Shelley ledger state into th
       & \text{transform Shelley chain state to Goguen state}
 \end{align*}$$
 
-::: caption
-Shelley to Goguen State Transtition
-:::
-::::
+**Shelley to Goguen State Transtition**
+The transformation we use in the preceeding rules to turn a Shelley transaction into a Goguen one is given in Figure [3](#fig:functions:to-shelley). Recall that it stays the same if the same if it was already a Goguen one.
 
-The transformation we use in the preceeding rules to turn a Shelley transaction into a Goguen one is given in Figure [3](#fig:functions:to-shelley){reference-type="ref" reference="fig:functions:to-shelley"}. Recall that it stays the same if the same if it was already a Goguen one.
 
-:::: {#fig:functions:to-shelley .figure latex-placement="htb"}
 *Functions* $$\begin{align*}
       & \fun{mkIns} ~\in~ \powerset{\ShelleyTxIn} \to \powerset{\TxIn}  \\
       & \fun{mkIns}~\var{ins} ~=~ \{~ (\var{txin}, \Yes) ~\vert~
@@ -123,7 +111,4 @@ The transformation we use in the preceeding rules to turn a Shelley transaction 
       & ~~~~~~~ \var{txb'}~=~\txbody{tx'}
 \end{align*}$$
 
-::: caption
-Shelley to Goguen Transaction Interpretation
-:::
-::::
+**Shelley to Goguen Transaction Interpretation**

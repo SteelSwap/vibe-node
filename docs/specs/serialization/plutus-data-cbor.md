@@ -1,8 +1,7 @@
-# Serialising `data` Objects Using the CBOR Format {#appendix:data-cbor-encoding}
-
+# Serialising `data` Objects Using the CBOR Format
 ## Introduction
 
-In this section we define a CBOR encoding for the `data` type introduced in Section [\[sec:built-in-types-1\]](#sec:built-in-types-1){reference-type="ref" reference="sec:built-in-types-1"}. For ease of reference we reproduce the definition of the Haskell `Data` type, which we may regard as the definition of the Plutus `data` type. Other representations are of course possible, but this is useful for the present discussion.
+In this section we define a CBOR encoding for the `data` type introduced in Section [\[sec:built-in-types-1\]](#sec:built-in-types-1). For ease of reference we reproduce the definition of the Haskell `Data` type, which we may regard as the definition of the Plutus `data` type. Other representations are of course possible, but this is useful for the present discussion.
 
 `data``\ `{=latex}`Data``\ `{=latex}`=`\
 `Constr``\ `{=latex}`Integer``\ `{=latex}`[Data]`\
@@ -21,9 +20,9 @@ The CBOR encoding defined here uses basic CBOR encodings as defined in the CBOR 
 
 ## Notation
 
-We introduce some extra notation for use here and in Appendix [\[appendix:flat-serialisation\]](#appendix:flat-serialisation){reference-type="ref" reference="appendix:flat-serialisation"}.
+We introduce some extra notation for use here and in Appendix [\[appendix:flat-serialisation\]](#appendix:flat-serialisation).
 
-The notation $f: X \rightharpoonup Y$ indicates that $f$ is a partial map from $X$ to $Y$. We denote the empty bytestring by $\epsilon$ and (as in [\[sec:notation-lists\]](#sec:notation-lists){reference-type="ref" reference="sec:notation-lists"}) use $\length(s)$ to denote the length of a bytestring $s$ and $\cdot$ to denote the concatenation of two bytestrings, and also the operation of prepending or appending a byte to a bytestring. We will also make use of the $\divfn$ and $\modfn$ functions described in Note [\[note:integer-division-functions\]](#note:integer-division-functions){reference-type="ref" reference="note:integer-division-functions"} in Section [\[sec:default-builtins-1\]](#sec:default-builtins-1){reference-type="ref" reference="sec:default-builtins-1"}.
+The notation $f: X \rightharpoonup Y$ indicates that $f$ is a partial map from $X$ to $Y$. We denote the empty bytestring by $\epsilon$ and (as in [\[sec:notation-lists\]](#sec:notation-lists)) use $\length(s)$ to denote the length of a bytestring $s$ and $\cdot$ to denote the concatenation of two bytestrings, and also the operation of prepending or appending a byte to a bytestring. We will also make use of the $\divfn$ and $\modfn$ functions described in Note [\[note:integer-division-functions\]](#note:integer-division-functions) in Section [\[sec:default-builtins-1\]](#sec:default-builtins-1).
 
 ##### Encoders and decoders.
 
@@ -164,8 +163,7 @@ The decoder $\dZ: \B^* \rightharpoonup \B^* \times \Z$ inverts this process. The
   (s'', -\stoi(b)-1)    & \text{if $\dHead(s) = (s', 6,3)$ and $\dBS(s') = (s'', b)$}.\\
 \end{cases}$$
 
-## Encoding and decoding `data` {#sec:encoding-data}
-
+## Encoding and decoding `data`
 It is now quite straightforward to encode most `data` values. The main complication is in the encoding of constructor tags (the number $i$ in $\mathtt{Constr}\: i\, l$).
 
 ##### The encoder.
@@ -242,4 +240,4 @@ $$\dcTag(s) =
 
 Note that the decoders for `List` and `Constr` accept both definite-length and indefinite-length lists of encoded `data` values, but the decoder for `Map` only accepts definite-length lists (and the length is the number of *pairs* in the map). This is consistent with CBOR's standard encoding of arrays and lists (major type 4) and maps (major type 5).
 
-Note also that the encoder $\ecTag$ accepts arbitrary integer values for `Constr` tags, but (for compatibility with [@CBOR-alternatives]) the decoder $\dcTag$ only accepts tags in $\Nab{0}{2^{64}-1}$. This means that some valid Plutus Core programs can be serialised but not deserialised, and is the reason for the recommendation in Section [\[sec:built-in-types-1\]](#sec:built-in-types-1){reference-type="ref" reference="sec:built-in-types-1"} that only constructor tags between 0 and $2^{64}-1$ should be used.
+Note also that the encoder $\ecTag$ accepts arbitrary integer values for `Constr` tags, but (for compatibility with [@CBOR-alternatives]) the decoder $\dcTag$ only accepts tags in $\Nab{0}{2^{64}-1}$. This means that some valid Plutus Core programs can be serialised but not deserialised, and is the reason for the recommendation in Section [\[sec:built-in-types-1\]](#sec:built-in-types-1) that only constructor tags between 0 and $2^{64}-1$ should be used.

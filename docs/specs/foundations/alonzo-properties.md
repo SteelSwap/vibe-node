@@ -1,5 +1,4 @@
-# Properties of the Goguen Ledger {#sec:properties}
-
+# Properties of the Goguen Ledger
 This section collects properties that the ledger described previously is expected to satisfy.
 
 - Any token with the $\PolicyID$ of Ada is an Ada token, i.e. it also has the $\AssetID$ of Ada.

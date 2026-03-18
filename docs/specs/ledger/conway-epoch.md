@@ -128,7 +128,6 @@ Functions for computing stake distributions
 figure*
 
 
-
 NoConway
 figure*[h]
 ```agda

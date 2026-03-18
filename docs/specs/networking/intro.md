@@ -154,7 +154,6 @@ There are three (at least) the following three distinct modes that the network c
   red                     it has been more that 200s since a slot indication was received.
   amber                   it has been more than 60s since a slot indication was received.
   green                   otherwise.
-:::
 
 This assumes that the slot time remains 20 seconds, or at least that the average time between production of new blocks is 20 seconds.
 
@@ -168,7 +167,6 @@ As a user I want my transaction to be submitted to the blockchain and received b
   Target         60 seconds
   Stretch        30 seconds
   ----------- -------------
-:::
 
 The above time-frames will be achieved for $>95\%$ of all transactions.
 
@@ -252,18 +250,15 @@ Of course it makes no sense if the system design is robust, but so defensive tha
 
 ::::: {#node-diagram-concurrency .figure latex-placement="ht"}
 ::: center
-:::
 
-::: caption
-Data flow inside a Node
-:::
+**Data flow inside a Node**
 :::::
 
 ## Data Flow in a Node
 
-Nodes maintain connections with the peers that have been chosen with help of the peer selection process. Suppose node $A$ is connected to node $B$. The Ouroboros protocol schedules a node $N$ to generate a new block in a given time slot. Depending on the location of nodes $A$, $B$ and $N$ in the network topology and whether the new block arrives first at $A$ or $B$, $A$ can be either up-stream or down-stream of $B$. Therefore, node $A$ runs an instance of the client side of the chain-sync mini protocol that talks with a server instance of chain-sync at node $B$ and also a server instance of chain sync that talks with a client instance at $B$. The situation is similar for the other mini protocols (block fetch, transaction submission, etc). The set of mini protocols that runs over a connection is determined by the version of the network protocol, i.e. Node-to-Node, Node-to-Wallet and Node-to-Chain-Consumer connections use different sets of mini protocols (e.g. different protocol versions). The version is negotiated when a new connection is established using protocol which is described in Chapter [\[connection-management\]](#connection-management){reference-type="ref" reference="connection-management"}.
+Nodes maintain connections with the peers that have been chosen with help of the peer selection process. Suppose node $A$ is connected to node $B$. The Ouroboros protocol schedules a node $N$ to generate a new block in a given time slot. Depending on the location of nodes $A$, $B$ and $N$ in the network topology and whether the new block arrives first at $A$ or $B$, $A$ can be either up-stream or down-stream of $B$. Therefore, node $A$ runs an instance of the client side of the chain-sync mini protocol that talks with a server instance of chain-sync at node $B$ and also a server instance of chain sync that talks with a client instance at $B$. The situation is similar for the other mini protocols (block fetch, transaction submission, etc). The set of mini protocols that runs over a connection is determined by the version of the network protocol, i.e. Node-to-Node, Node-to-Wallet and Node-to-Chain-Consumer connections use different sets of mini protocols (e.g. different protocol versions). The version is negotiated when a new connection is established using protocol which is described in Chapter [\[connection-management\]](#connection-management).
 
-Figure [2.1](#node-diagram-concurrency){reference-type="ref" reference="node-diagram-concurrency"} illustrates parts of the data flow in a node. Circles represents a thread that runs one of the mini protocols (the mini protocols are explained in Chapter [\[chapter:mini-protocols\]](#chapter:mini-protocols){reference-type="ref" reference="chapter:mini-protocols"}). There are two kinds of data flows: mini protocols communicate with mini protocols of other nodes by sending and receiving messages; and, within a node, they communicate by reading from- and writing to- a shared mutable state (represented by boxes in Figure [2.1](#node-diagram-concurrency){reference-type="ref" reference="node-diagram-concurrency"}). [Software transactional memory](https://en.wikipedia.org/wiki/Software_transactional_memory) (STM) is a mechanism for safe and lock-free concurrent access to mutable state and the reference implementation makes intensive use of this abstraction.
+Figure [2.1](#node-diagram-concurrency) illustrates parts of the data flow in a node. Circles represents a thread that runs one of the mini protocols (the mini protocols are explained in Chapter [\[chapter:mini-protocols\]](#chapter:mini-protocols)). There are two kinds of data flows: mini protocols communicate with mini protocols of other nodes by sending and receiving messages; and, within a node, they communicate by reading from- and writing to- a shared mutable state (represented by boxes in Figure [2.1](#node-diagram-concurrency)). [Software transactional memory](https://en.wikipedia.org/wiki/Software_transactional_memory) (STM) is a mechanism for safe and lock-free concurrent access to mutable state and the reference implementation makes intensive use of this abstraction.
 
 ## Real-time Constraints and Coordinated Universal Time
 

@@ -1,5 +1,4 @@
-# Leader Value Calculation {#sec:leader-value-calc}
-
+# Leader Value Calculation
 This section details how we determine whether a node is entitled to lead (under the Praos protocol) given the output of its verifiable random function calculation.
 
 ::: figure
@@ -10,7 +9,6 @@ This section details how we determine whether a node is entitled to lead (under 
     \sigma & [0,1] & \text{Stake proportion}
   \end{array}
 \end{equation*}$$
-:::
 
 ## Computing the leader value
 

@@ -1,9 +1,7 @@
-# Non-functional requirements {#nonfunctional}
-
+# Non-functional requirements
 This whole chapter is Duncan-suitable :)
 
-## Network layer {#nonfunctional:network}
-
+## Network layer
 This report is not intended as a comprehensive discussion of the network layer; see [@network-spec] instead. However, in order to understand some of the design decisions in the consensus layer we need to understand some of the requirements imposed on it by the network layer.
 
 TODOs:
@@ -16,18 +14,15 @@ TODOs:
 
 - Why do we even want to validate headers ahead of time? (Thread model etc.) (Section for Duncan?). Section with a sketch on an analysis of the amortised cost for attackers versus our own costs to defend against it (\"budget for work\" that grows and shrinks as you interact with a node).
 
-### Header/Body Split (aka: Header submission) {#nonfunctional:network:headerbody}
+### Header/Body Split (aka: Header submission)
+Discuss the chain fragments that we store per upstream node. Discuss why we want to validate headers here -- without a full ledger state (necessarily so, since no block bodies -- can't update ledger state): to prevent DoS attacks. ([\[ledger:forecasting\]](#ledger:forecasting) contains a discussion of this from the point of view of the ledger). Forward reference to the chain sync client ([\[chainsyncclient\]](#chainsyncclient)). Discuss why it's useful if the chain sync client can race ahead for *performance* (why it's required for chain selection is the discussed in [\[forecast:ledgerview\]](#forecast:ledgerview)).
 
-Discuss the chain fragments that we store per upstream node. Discuss why we want to validate headers here -- without a full ledger state (necessarily so, since no block bodies -- can't update ledger state): to prevent DoS attacks. ([\[ledger:forecasting\]](#ledger:forecasting){reference-type="ref+label" reference="ledger:forecasting"} contains a discussion of this from the point of view of the ledger). Forward reference to the chain sync client ([\[chainsyncclient\]](#chainsyncclient){reference-type="ref+label" reference="chainsyncclient"}). Discuss why it's useful if the chain sync client can race ahead for *performance* (why it's required for chain selection is the discussed in [\[forecast:ledgerview\]](#forecast:ledgerview){reference-type="ref+label" reference="forecast:ledgerview"}).
+See also section on avoiding the stability window ([\[low-density:pre-genesis\]](#low-density:pre-genesis)).
 
-See also section on avoiding the stability window ([\[low-density:pre-genesis\]](#low-density:pre-genesis){reference-type="ref+label" reference="low-density:pre-genesis"}).
+### Block submission
+Forward reference to [\[servers:blockfetch\]](#servers:blockfetch).
 
-### Block submission {#nonfunctional:network:blocksubmission}
-
-Forward reference to [\[servers:blockfetch\]](#servers:blockfetch){reference-type="ref+label" reference="servers:blockfetch"}.
-
-### Transaction submission {#nonfunctional:network:txsubmission}
-
+### Transaction submission
 Mention that these are defined entirely network side, no consensus involvement (just an abstraction over the mempool).
 
 ## Security \"cost\" concerns
@@ -48,14 +43,12 @@ Must produce a block on time, get it to the next slot leader
 
 Bad counter-example: reward calculation in the Shelley ledger bad (give examples of why).
 
-## Predictable resource requirements {#nonfunctional:best-is-worst}
-
+## Predictable resource requirements
 make best == worst
 
 (not *just* a security concern: a concern even if every node honest)
 
-## Resource registry {#nonfunctional:resourceregistry}
-
+## Resource registry
 In order to deal with resource allocation and deallocation, we use the abstraction of the `ResourceRegistry`. The resource registry is a generalization of the `bracket` pattern. Using a bracket imposes strict rules on the scope of the allocated variables, as once the body of the `bracket` call finishes, the resources will be deallocated.
 
 On some situations this is too constraining and resources, despite the need to ensure they are deallocated, need to live for longer periods or be shared by multiple consumers. The registry itself lives in a `bracket`-like environment, but the resources allocated in it can be opened and closed at any point in the lifetime of the registry and will ultimately be closed when the registry is being closed if they are still open at that time.
@@ -68,8 +61,7 @@ Special care must be used when resources are dependent on one another. For examp
 
 Also when deallocating the resources, we must ensure that the right order of deallocation is preserved. Right order here means that as resources that were allocated later than others could potentially use the latter, the later ones should probably be deallocated before the earlier ones (unless otherwise taken care of). Resources in the registry are indexed by their *age* which is a meaningless backwards counter. A resource is considered older than another if its age is greater than the one of the other resource. Conversely, a resource is considered younger if the opposite holds.
 
-### Temporary registries {#nonfunctional:temporaryregs}
-
+### Temporary registries
 When some resources are not meant to be directly allocated in a registry, one can take advantage of temporary resource registries as a temporary container for those resources. For this purpose, the `WithTempRegistry` is made available. It is basically a `StateT` computation which will check that the resource was indeed transferred properly to the returned value and then the registry will vanish.
 
 Using this construction will ensure that if an exception is thrown while the resources are being allocated but before they are kept track by the resulting state, they will be released as the registry itself will close in presence of an exception. Note that once the resource was transferred to the final state, no more tracking is performed and the resource could be leaked. It is then responsibility of the resulting state to eventually deallocate the resource, and so that resulting state must itself ultimately be for example tracked by a registry.

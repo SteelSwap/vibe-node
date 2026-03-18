@@ -1,4 +1,4 @@
-# Appendix A: Example MPS Language {#sec:mps-lang .unnumbered}
+# Appendix A: Example MPS Language
 
 The language for MP scripts given here is only a suggestion and its implementation may differ from the one given here. The constructors which make up the MPS script scheme are used to express the following aspects of monetary policy:
 
@@ -8,9 +8,9 @@ The language for MP scripts given here is only a suggestion and its implementati
 
 - Others will be here once decided on
 
-The Figures [1](#fig:defs:tx-mc-eval){reference-type="ref" reference="fig:defs:tx-mc-eval"}, [3](#fig:whitelist-example){reference-type="ref" reference="fig:whitelist-example"},  [\[fig:defs:tx-mc-eval-2\]](#fig:defs:tx-mc-eval-2){reference-type="ref" reference="fig:defs:tx-mc-eval-2"}, and [2](#fig:defs:tx-mc-eval-3){reference-type="ref" reference="fig:defs:tx-mc-eval-3"} give possible constructors of the MPS language.
+The Figures [1](#fig:defs:tx-mc-eval), [3](#fig:whitelist-example),  [\[fig:defs:tx-mc-eval-2\]](#fig:defs:tx-mc-eval-2), and [2](#fig:defs:tx-mc-eval-3) give possible constructors of the MPS language.
 
-:::: {#fig:defs:tx-mc-eval .figure latex-placement="htb"}
+
 $$\begin{align*}
     & \fun{evalMPSScript} \in\ScriptMPS\to\PolicyID\to\Slot\to\powerset\KeyHash \\
     &~~~~\to\TxBody\to\UTxO \to\Bool  \\
@@ -57,12 +57,7 @@ $$\begin{align*}
     ~\var{txb}~\var{spentouts}\\
 \end{align*}$$
 
-::: caption
-Multi-asset Script Evaluation
-:::
-::::
-
-:::: {#fig:defs:tx-mc-eval-3 .figure latex-placement="htb"}
+**Multi-asset Script Evaluation**
 $$\begin{align*}
     & \fun{evalMPSScript}
      ~(\type{AssetToAddress}~\var{pid'}~\var{addr})~\var{pid}~ \var{slot}~\var{vhks} ~\var{txb}~\var{spentouts} \\
@@ -89,12 +84,7 @@ $$\begin{align*}
         \fun{nameToken}~(\fun{indexof}~\var{t}~\var{tkns},~\fun{txins}~{txb})~=~t
 \end{align*}$$
 
-::: caption
-Multi-asset Script Evaluation, cont.
-:::
-::::
-
-:::: {#fig:whitelist-example .figure latex-placement="htb"}
+**Multi-asset Script Evaluation, cont.**
 $$\begin{align*}
     & \fun{whitelist} \in\ScriptMSig\to\Script  \\~\\
     %
@@ -110,7 +100,4 @@ $$\begin{align*}
     & \text{an example of an output spending which requires to be on a whitelist made by msig authority}
 \end{align*}$$
 
-::: caption
-Whitelist Script Example
-:::
-::::
+**Whitelist Script Example**

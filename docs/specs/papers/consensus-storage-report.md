@@ -46,7 +46,6 @@ March 11, 2026
 ||4.4|Design decisions constraining the Ouroboros protocol family . . . . . . . . . . . . . . .|21|
 
 
-
 1 
 
 ||4.5|Permissive BFT . . . . .|Permissive BFT . . . . .|Permissive BFT . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|22|
@@ -96,7 +95,6 @@ March 11, 2026
 ||8.2|Implementation . . . . .|||. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|46|
 |||8.2.1||Chunk layout . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|47|
 |||8.2.2||Indices<br>. . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|49|
-
 
 
 2 
@@ -149,7 +147,6 @@ March 11, 2026
 ||13.4|Capacity . . . . . .|. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|79|
 
 
-
 3 
 
 |**III**|**Mini protocols**|**Mini protocols**||||**80**|
@@ -196,7 +193,6 @@ March 11, 2026
 |**V**|**Testing**|||||**96**|
 |**19 **|**Reaching consensus**|||||**97**|
 ||19.1|Dire-but-not-to-dire . .|. . . . . . . .|. . .|. . . . . . . . . . . . . . . . . . . . . . . .|97|
-
 
 
 4 
@@ -254,7 +250,6 @@ March 11, 2026
 ||23.3 Eliminating EBBs altogether . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 127|
 
 
-
 5 
 
 |**24 **|**Miscellaneous**<br>**128**|
@@ -288,7 +283,6 @@ March 11, 2026
 ||B.1.2<br>The update mechanism for the protocol version . . . . . . . . . . . . . . . . . . 138|
 ||B.1.3<br>Initiating the hard fork . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 139|
 ||B.2<br>Forecasting . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 139|
-
 
 
 6 
@@ -1300,7 +1294,6 @@ By writing a block to disk we automatically have written the block’s header to
 |||||
 
 
-
 Extracting the header from a block on disk can be very simple, like in the figure above. The block starts with an envelope, which is followed by the block header and the block body. In this case, we read the bytes starting from the start of the header until the end of the header, which we then decode. We use the following abstraction to represent this information: 
 
 - `data BinaryBlockInfo = BinaryBlockInfo { headerOffset :: !Word16` 
@@ -1648,7 +1641,6 @@ chain database
 |||||
 
 
-
 Discuss the immutable/volatile split (we reference this section for that). 
 
 ## **7.2 In memory** 
@@ -1894,7 +1886,6 @@ In the example below, we show a chunk with chunk number 1 using a chunk size of 
 ||100<br>100<br>101<br>103<br>197<br>199<br>0<br>1<br>2<br>4<br>98<br>100|||||||
 
 
-
 Note that some slots are empty, e.g., 102 and 198 are missing. The first and lasts slots can be empty too. In practice, it will never be the case that an entire chunk is empty, but the implementation allows for it. 
 
 If we were to pick a chunk size of 1 and store each block in its own file, we would need millions of files, as there are millions of blocks. When serving blocks to peer, we would constantly open and close individual block files, which is very inefficient. 
@@ -1937,7 +1928,6 @@ We use a separate index for each task: the _primary index_ for the first task an
 |checksum|4|
 |header hash|X|
 |block or EBB|8|
-
 
 
 - The block offset is used to determine at which offset in the corresponding chunk file the raw block can be read. 
@@ -2008,7 +1998,6 @@ We illustrate this format with an example primary index below, which matches the
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 |||EBB||Block||Block||∅||Block||. . .|||Block||∅||Block|||
 |||100<br>100<br>101<br>102<br>103<br>. . .<br>197<br>198<br>199<br>0<br>1<br>2<br>3<br>4<br>. . .<br>98<br>99<br>100||||||||||||||||||||
-
 
 
 The version number we mentioned above can be used to migrate indices in the old format to a newer format, when the need would arise in the future. We do not include a version number in the secondary 
@@ -3760,7 +3749,6 @@ Depending on the order in which we consider the chains, we might pick any of the
 |**order**|**selected chain**|
 |---|---|
 |_B_,_C_,_A_<br>_C_,_A_,_B_<br>_A_,_B_,_C_|_A_<br>_B_<br>_C_|
-
 
 
 In practice this situation cannot occur, however. The Genesis analysis tells us that there will be single chain (the honest chain) which will be denser than any other chain (within the genesis window) at every intersection point. This is precisely what justifies the greedy nature of the algorithm: it will always hone in on the honest chain. In the counter-example above, there is no single chain with this property, and hence cannot arise. 

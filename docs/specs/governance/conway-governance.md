@@ -218,7 +218,6 @@ itemize
 itemize
 
 
-
 \clearpage
 
 figure*

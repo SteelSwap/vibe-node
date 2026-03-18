@@ -1,12 +1,9 @@
-# Blockchain layer {#sec:chain}
-
-This chapter introduces the view of the blockchain layer as required for the ledger. This includes in particular the information required for the epoch boundary and its rewards calculation as described in Section [\[sec:epoch\]](#sec:epoch){reference-type="ref" reference="sec:epoch"}. It also covers the transitions that keep track of produced blocks in order to calculate rewards and penalties for stake pools.
+# Blockchain layer
+This chapter introduces the view of the blockchain layer as required for the ledger. This includes in particular the information required for the epoch boundary and its rewards calculation as described in Section [\[sec:epoch\]](#sec:epoch). It also covers the transitions that keep track of produced blocks in order to calculate rewards and penalties for stake pools.
 
 The main transition rule is $\mathsf{CHAIN}$ which calls the subrules $\mathsf{NEWEPOCH}$ and $\mathsf{UPDN}$, $\mathsf{VRF}$ and $\mathsf{BBODY}$.
 
-## Verifiable Random Functions (VRF) {#sec:defs-vrf}
-
-:::: {#fig:defs-vrf .figure latex-placement="htb"}
+## Verifiable Random Functions (VRF)
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
       \var{seed} & \Seed  & \text{seed for pseudo-random number generator}\\
@@ -36,14 +33,8 @@ The main transition rule is $\mathsf{CHAIN}$ which calls the subrules $\mathsf{N
     & \mathsf{Seed}_\eta\in \Seed & \text{nonce seed constant}\\
 \end{align*}$$
 
-::: caption
-VRF definitions
-:::
-::::
-
-## Block Definitions {#sec:defs-blocks}
-
-:::: {#fig:defs:blocks .figure latex-placement="htb"}
+**VRF definitions**
+## Block Definitions
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
       \var{h} & \type{HashHeader}& \text{hash of a block header}\\
@@ -123,31 +114,22 @@ VRF definitions
     \end{array}
 \end{equation*}$$
 
-::: caption
-Block Definitions
-:::
-::::
+**Block Definitions**
+## MIR Transition
+The transition which moves the instantaneous rewards is $\mathsf{MIR}$. Figure [3](#fig:ts-types:mir) defines the types for the transition. It has no environment or signal, and the state is $\EpochState$.
 
-## MIR Transition {#sec:mir-trans}
 
-The transition which moves the instantaneous rewards is $\mathsf{MIR}$. Figure [3](#fig:ts-types:mir){reference-type="ref" reference="fig:ts-types:mir"} defines the types for the transition. It has no environment or signal, and the state is $\EpochState$.
-
-:::: {#fig:ts-types:mir .figure}
 *MIR Transitions* $$\begin{equation*}
     \vdash \var{\_} \trans{mir}{} \var{\_} \subseteq
     \powerset (\EpochState \times \EpochState)
 \end{equation*}$$
 
-::: caption
-MIR transition-system types
-:::
-::::
-
-Figure [4](#fig:rules:mir){reference-type="ref" reference="fig:rules:mir"} defines the MIR state transition.
+**MIR transition-system types**
+Figure [4](#fig:rules:mir) defines the MIR state transition.
 
 If the reserve and treasury pots are large enough to cover the sum of the corresponding instantaneous rewards, the reward accounts are increased by the appropriate amount and the two pots are decreased appropriately. In either case, if the pots are large enough or not, we reset both of the instantaneous reward mappings back to the empty mapping.
 
-:::: {#fig:rules:mir .figure latex-placement="ht"}
+
 $$\begin{equation}
 \label{eq:mir}
     \inference[MIR]
@@ -262,20 +244,15 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-MIR rules
-:::
-::::
-
-## New Epoch Transition {#sec:new-epoch-trans}
-
-For the transition to a new epoch ($\mathsf{NEWEPOCH}$), the environment is given in Figure [5](#fig:ts-types:newepoch){reference-type="ref" reference="fig:ts-types:newepoch"}, it consists of
+**MIR rules**
+## New Epoch Transition
+For the transition to a new epoch ($\mathsf{NEWEPOCH}$), the environment is given in Figure [5](#fig:ts-types:newepoch), it consists of
 
 - The current slot.
 
 - The set of genesis keys.
 
-The new epoch state is given in Figure [5](#fig:ts-types:newepoch){reference-type="ref" reference="fig:ts-types:newepoch"}, it consists of
+The new epoch state is given in Figure [5](#fig:ts-types:newepoch), it consists of
 
 - The number of the last epoch.
 
@@ -291,9 +268,9 @@ The new epoch state is given in Figure [5](#fig:ts-types:newepoch){reference-ty
 
 - The OBFT overlay schedule.
 
-Figure [5](#fig:ts-types:newepoch){reference-type="ref" reference="fig:ts-types:newepoch"} also defines an abstract pseudorandom function $\fun{overlaySchedule}$ for creating the OBFT overlay schedule for each new epoch, as explained in section 3.8.2 of [@delegation_design]. The function takes a set of genesis keys, a seed, and the protocol parameters (of which the decentralization parameter $d$ and the active slot coeffient $f$ are used). It must create $(d\cdot\SlotsPerEpoch)$-many OBFT slots, $(f\cdot d\cdot \SlotsPerEpoch)$ of which are active.
+Figure [5](#fig:ts-types:newepoch) also defines an abstract pseudorandom function $\fun{overlaySchedule}$ for creating the OBFT overlay schedule for each new epoch, as explained in section 3.8.2 of [@delegation_design]. The function takes a set of genesis keys, a seed, and the protocol parameters (of which the decentralization parameter $d$ and the active slot coeffient $f$ are used). It must create $(d\cdot\SlotsPerEpoch)$-many OBFT slots, $(f\cdot d\cdot \SlotsPerEpoch)$ of which are active.
 
-:::: {#fig:ts-types:newepoch .figure}
+
 *New Epoch environments* $$\begin{equation*}
     \type{NewEpochEnv}=
     \left(
@@ -350,12 +327,8 @@ Figure [5](#fig:ts-types:newepoch){reference-type="ref" reference="fig:ts-types
                      \right\}\right) \\
 \end{align*}$$
 
-::: caption
-NewEpoch transition-system types
-:::
-::::
-
-Figure [6](#fig:rules:new-epoch){reference-type="ref" reference="fig:rules:new-epoch"} defines the new epoch state transition. It has three rules. The first rule describes the change in the case of $e$ being equal to the next epoch $e_\ell+ 1$. It also calls the $\mathsf{MIR}$ and $\mathsf{EPOCH}$ rules and checks that the reward update is net neutral with respect to the Ada in the system. This should always hold (by the definition of the $\fun{createRUpd}$ function) and is present only for extra assurance and for help in proving that Ada is preserved by this transition. The second rule deals with the case when the epoch signal $e$ is not one greater than the current epoch . This rule does not change the state. The third one deals with the case when the reward update is equal to $\Nothing$. This rule also does not change the state.
+**NewEpoch transition-system types**
+Figure [6](#fig:rules:new-epoch) defines the new epoch state transition. It has three rules. The first rule describes the change in the case of $e$ being equal to the next epoch $e_\ell+ 1$. It also calls the $\mathsf{MIR}$ and $\mathsf{EPOCH}$ rules and checks that the reward update is net neutral with respect to the Ada in the system. This should always hold (by the definition of the $\fun{createRUpd}$ function) and is present only for extra assurance and for help in proving that Ada is preserved by this transition. The second rule deals with the case when the epoch signal $e$ is not one greater than the current epoch . This rule does not change the state. The third one deals with the case when the reward update is equal to $\Nothing$. This rule also does not change the state.
 
 In the first case, the new epoch state is updated as follows:
 
@@ -373,7 +346,7 @@ In the first case, the new epoch state is updated as follows:
 
 - A new OBFT overlay schedule is created.
 
-:::: {#fig:rules:new-epoch .figure latex-placement="ht"}
+
 $$\begin{equation}
 \label{eq:new-epoch}
     \inference[New-Epoch]
@@ -471,16 +444,11 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-New Epoch rules
-:::
-::::
+**New Epoch rules**
+## Tick Nonce Transition
+The Tick Nonce Transition is responsible for updating the epoch nonce and the previous hash nonce at the start of an epoch. Its environment is shown in Figure [7](#fig:ts-types:ticknonce) and consists of the protocol parameters $\var{pp}$, the candidate nonce $\eta_c$ and the previous header hash as a nonce. Its state consists of the epoch nonce $\eta_0$ and the previous hash nonce.
 
-## Tick Nonce Transition {#sec:tick-nonce-trans}
 
-The Tick Nonce Transition is responsible for updating the epoch nonce and the previous hash nonce at the start of an epoch. Its environment is shown in Figure [7](#fig:ts-types:ticknonce){reference-type="ref" reference="fig:ts-types:ticknonce"} and consists of the protocol parameters $\var{pp}$, the candidate nonce $\eta_c$ and the previous header hash as a nonce. Its state consists of the epoch nonce $\eta_0$ and the previous hash nonce.
-
-::: {#fig:ts-types:ticknonce .figure}
 *Tick Nonce environments* $$\begin{equation*}
     \type{TickNonceEnv}=
     \left(
@@ -499,11 +467,10 @@ The Tick Nonce Transition is responsible for updating the epoch nonce and the pr
       \end{array}
     \right)
 \end{equation*}$$ []{#fig:ts-types:ticknonce label="fig:ts-types:ticknonce"}
-:::
 
 The signal to the transition rule $\mathsf{TICKN}$ is a marker indicating whether we are in a new epoch. If we are in a new epoch, we update the epoch nonce and the previous hash. Otherwise, we do nothing.
 
-:::: {#fig:rules:tick-nonce .figure latex-placement="ht"}
+
 $$\begin{equation}
 \label{eq:tick-nonce-notnewepoch}
    \inference[Not-New-Epoch]
@@ -552,16 +519,11 @@ $$\begin{equation}
    }
 \end{equation}$$
 
-::: caption
-Tick Nonce rules
-:::
-::::
+**Tick Nonce rules**
+## Update Nonce Transition
+The Update Nonce Transition updates the nonces until the randomness gets fixed. The environment is shown in Figure [9](#fig:ts-types:updnonce) and consists of the block nonce $\eta$. The update nonce state is shown in Figure [9](#fig:ts-types:updnonce) and consists of the candidate nonce $\eta_c$ and the evolving nonce $\eta_v$.
 
-## Update Nonce Transition {#sec:update-nonces-trans}
 
-The Update Nonce Transition updates the nonces until the randomness gets fixed. The environment is shown in Figure [9](#fig:ts-types:updnonce){reference-type="ref" reference="fig:ts-types:updnonce"} and consists of the block nonce $\eta$. The update nonce state is shown in Figure [9](#fig:ts-types:updnonce){reference-type="ref" reference="fig:ts-types:updnonce"} and consists of the candidate nonce $\eta_c$ and the evolving nonce $\eta_v$.
-
-:::: {#fig:ts-types:updnonce .figure}
 *Update Nonce environments* $$\begin{equation*}
     \type{UpdateNonceEnv}=
     \left(
@@ -586,16 +548,12 @@ The Update Nonce Transition updates the nonces until the randomness gets fixed. 
               )
 \end{equation*}$$
 
-::: caption
-UpdNonce transition-system types
-:::
-::::
-
+**UpdNonce transition-system types**
 The transition rule $\mathsf{UPDN}$ takes the slot as signal. There are two different cases for $\mathsf{UPDN}$: one where is not yet slots from the beginning of the next epoch and one where is less than slots until the start of the next epoch.
 
-Note that in [\[eq:update-both\]](#eq:update-both){reference-type="ref" reference="eq:update-both"}, the nonce candidate $\eta_c$ transitions to $\eta_v\seedOp\eta$, not $\eta_c\seedOp\eta$. The reason for this is that even though the nonce candidate is frozen sometime during the epoch, we want the two nonces to again be equal at the start of a new epoch (so that the entropy added near the end of the epoch is not discarded).
+Note that in [\[eq:update-both\]](#eq:update-both), the nonce candidate $\eta_c$ transitions to $\eta_v\seedOp\eta$, not $\eta_c\seedOp\eta$. The reason for this is that even though the nonce candidate is frozen sometime during the epoch, we want the two nonces to again be equal at the start of a new epoch (so that the entropy added near the end of the epoch is not discarded).
 
-:::: {#fig:rules:update-nonce .figure latex-placement="ht"}
+
 $$\begin{equation}
 \label{eq:update-both}
     \inference[Update-Both]
@@ -642,16 +600,11 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Update Nonce rules
-:::
-::::
+**Update Nonce rules**
+## Reward Update Transition
+The Reward Update Transition calculates a new $\RewardUpdate$ to apply in a $\mathsf{NEWEPOCH}$ transition. The environment is shown in Figure [11](#fig:ts-types:reward-update), it consists of the produced blocks mapping and the epoch state . Its state is an optional reward update.
 
-## Reward Update Transition {#sec:reward-update-trans}
 
-The Reward Update Transition calculates a new $\RewardUpdate$ to apply in a $\mathsf{NEWEPOCH}$ transition. The environment is shown in Figure [11](#fig:ts-types:reward-update){reference-type="ref" reference="fig:ts-types:reward-update"}, it consists of the produced blocks mapping and the epoch state . Its state is an optional reward update.
-
-:::: {#fig:ts-types:reward-update .figure}
 *Reward Update environments* $$\begin{equation*}
     \type{RUpdEnv}=
     \left(
@@ -665,12 +618,8 @@ The Reward Update Transition calculates a new $\RewardUpdate$ to apply in a $\ma
     \powerset (\type{RUpdEnv}\times \RewardUpdate^? \times \Slot \times \RewardUpdate^?)
 \end{equation*}$$
 
-::: caption
-Reward Update transition-system types
-:::
-::::
-
-The transition rules are shown in Figure [12](#fig:rules:reward-update){reference-type="ref" reference="fig:rules:reward-update"}. There are three cases, one which computes a new reward update, one which leaves the rewards update unchanged as it has not yet been applied and finally one that leaves the reward update unchanged as the transition was started too early.
+**Reward Update transition-system types**
+The transition rules are shown in Figure [12](#fig:rules:reward-update). There are three cases, one which computes a new reward update, one which leaves the rewards update unchanged as it has not yet been applied and finally one that leaves the reward update unchanged as the transition was started too early.
 
 The signal of the transition rule $\mathsf{RUPD}$ is the slot . The execution of the transition role is as follows:
 
@@ -680,7 +629,7 @@ The signal of the transition rule $\mathsf{RUPD}$ is the slot . The execution of
 
 - If the current reward update is empty and is less than or equal to the sum of the first slot of its epoch and the duration to start rewards , then the state is not updated.
 
-:::: {#fig:rules:reward-update .figure latex-placement="ht"}
+
 $$\begin{equation}
 \label{eq:reward-update}
     \inference[Create-Reward-Update]
@@ -735,18 +684,13 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Reward Update rules
-:::
-::::
-
-## Chain Tick Transition {#sec:tick-trans}
-
+**Reward Update rules**
+## Chain Tick Transition
 The Chain Tick Transition performs some chain level upkeep. The environment consists of a set of genesis keys, and the state is the epoch specific state necessary for the $\mathsf{NEWEPOCH}$ transition.
 
 Part of the upkeep is updating the genesis key delegation mapping according to the future delegation mapping. For each genesis key, we adopt the most recent delegation in $\var{fGenDelegs}$ that is past the current slot, and any future genesis key delegations past the current slot is removed. The helper function $\fun{adoptGenesisDelegs}$ accomplishes the update.
 
-:::: {#fig:ts-types:tick .figure}
+
 *Chain Tick Transitions* $$\begin{equation*}
     \_ \vdash \var{\_} \trans{tick}{\_} \var{\_} \subseteq
     \powerset (\powerset{\KeyHashGen} \times \type{NewEpochState}\times \Slot \times \type{NewEpochState})
@@ -797,12 +741,8 @@ Part of the upkeep is updating the genesis key delegation mapping according to t
       (\var{acnt},~\var{ss},(\var{us},(\var{ds'},\var{ps})),~\var{prevPp},~\var{pp})
 \end{align*}$$
 
-::: caption
-Tick transition-system types
-:::
-::::
-
-The $\mathsf{TICK}$ transition rule is shown in Figure [14](#fig:rules:tick){reference-type="ref" reference="fig:rules:tick"}. The signal is a slot .
+**Tick transition-system types**
+The $\mathsf{TICK}$ transition rule is shown in Figure [14](#fig:rules:tick). The signal is a slot .
 
 Three transitions are done:
 
@@ -810,7 +750,7 @@ Three transitions are done:
 
 - The $\mathsf{RUPD}$ creates the reward update if it is late enough in the epoch. **Note** that for every block header, either $\mathsf{NEWEPOCH}$ or $\mathsf{RUPD}$ will be the identity transition, and so, for instance, it does not matter if $\mathsf{RUPD}$ uses $\var{nes}$ or $\var{nes}'$ to obtain the needed state.
 
-:::: {#fig:rules:tick .figure latex-placement="ht"}
+
 $$\begin{equation}
 \label{eq:tick}
     \inference[Tick]
@@ -853,16 +793,11 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Tick rules
-:::
-::::
-
-## Operational Certificate Transition {#sec:oper-cert-trans}
-
+**Tick rules**
+## Operational Certificate Transition
 The Operational Certificate Transition environment consists of the genesis key delegation map $\var{genDelegs}$ and the set of stake pools $\var{stpools}$. Its state is the mapping of operation certificate issue numbers. Its signal is a block header.
 
-:::: {#fig:ts-types:ocert .figure}
+
 *Operational Certificate environments* $$\begin{equation*}
     \type{OCertEnv}=
     \left(
@@ -887,12 +822,8 @@ The Operational Certificate Transition environment consists of the genesis key d
       \end{cases}
 \end{align*}$$
 
-::: caption
-OCert transition-system types
-:::
-::::
-
-The transition rule is shown in Figure [16](#fig:rules:ocert){reference-type="ref" reference="fig:rules:ocert"}. From the block header body we first extract the following:
+**OCert transition-system types**
+The transition rule is shown in Figure [16](#fig:rules:ocert). From the block header body we first extract the following:
 
 - The operational certificate, consisting of the hot key , the certificate issue number , the KES period start and the cold key signature.
 
@@ -914,7 +845,7 @@ Using this we verify the preconditions of the operational certificate state tran
 
 After this, the transition system updates the operational certificate state by updating the mapping of operational certificates where it overwrites the entry of the key with the KES period .
 
-:::: {#fig:rules:ocert .figure latex-placement="ht"}
+
 $$\begin{equation}
 \label{eq:ocert}
     \inference[OCert]
@@ -948,11 +879,7 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-OCert rules
-:::
-::::
-
+**OCert rules**
 The OCERT rule has six predicate failures:
 
 - If the KES period is less than the KES period start in the certificate, there is a *KESBeforeStart* failure.
@@ -967,17 +894,16 @@ The OCERT rule has six predicate failures:
 
 - If there is no entry in the key hash to counter mapping for the cold key, there is a *NoCounterForKeyHash* failure.
 
-## Verifiable Random Function {#sec:verif-rand-funct}
-
+## Verifiable Random Function
 In this section we define a function $\fun{vrfChecks}$ which performs all the VRF related checks on a given block header body. In addition to the block header body, the function requires the epoch nonce, the stake distribution (aggregated by pool), and the active slots coefficient from the protocol parameters. The function checks:
 
 - The validity of the proofs for the leader value and the new nonce.
 
 - The verification key is associated with relative stake $\sigma$ in the stake distribution.
 
-- The $\fun{bleader}$ value of indicates a possible leader for this slot. The function $\fun{checkLeaderVal}$ is defined in [\[sec:leader-value-calc\]](#sec:leader-value-calc){reference-type="ref" reference="sec:leader-value-calc"}.
+- The $\fun{bleader}$ value of indicates a possible leader for this slot. The function $\fun{checkLeaderVal}$ is defined in [\[sec:leader-value-calc\]](#sec:leader-value-calc).
 
-::: {#fig:vrf-checks .figure}
+
 *VRF helper function* $$\begin{align*}
       & \fun{vrfChecks} \in \Seed \to \type{BHBody}\to \Bool \\
       & \fun{vrfChecks}~\eta_0~\var{bhb} = \\
@@ -1009,10 +935,8 @@ In this section we define a function $\fun{vrfChecks}$ which performs all the VR
         ~~~~ \land & \fun{vrfChecks}~\eta_0~\var{bhb} \\
       \end{array} \\
 \end{align*}$$ []{#fig:vrf-checks label="fig:vrf-checks"}
-:::
 
-## Overlay Schedule {#sec:overlay-schedule}
-
+## Overlay Schedule
 The transition from the bootstrap era to a fully decentralized network is explained in section 3.9.2 of [@delegation_design]. Key to this transition is a protocol parameter $d$ which controls how many slots are governed by the genesis nodes via OBFT, and which slots are open to any registered stake pool. The transition system introduced in this section, $\type{OVERLAY}$, covers this mechanism.
 
 This transition is responsible for validating the protocol for both the OBFT blocks and the Praos blocks, depending on the overlay schedule.
@@ -1029,7 +953,7 @@ The environments for this transition are:
 
 The states for this transition consist only of the mapping of certificate issue numbers.
 
-This transition establishes that a block producer is in fact authorized. Since there are three key pairs involved (cold keys, VRF keys, and hot KES keys) it is worth examining the interaction closely. First we look at the regular Praos/decentralized setting, which is given by Equation [\[eq:decentralized\]](#eq:decentralized){reference-type="ref" reference="eq:decentralized"}.
+This transition establishes that a block producer is in fact authorized. Since there are three key pairs involved (cold keys, VRF keys, and hot KES keys) it is worth examining the interaction closely. First we look at the regular Praos/decentralized setting, which is given by Equation [\[eq:decentralized\]](#eq:decentralized).
 
 - First we check the operational certificate with $\mathsf{OCERT}$. This uses the cold verification key given in the block header. We do not yet trust that this key is a registered pool key. If this transition is successful, we know that the cold key in the block header has authorized the block.
 
@@ -1037,9 +961,9 @@ This transition establishes that a block producer is in fact authorized. Since t
 
 - Finally, we use the VRF verification key in the header, along with the VRF proofs in the header, to check that the operator is allowed to produce the block.
 
-The situation for the overlay schedule, given by Equation [\[eq:active-pbft\]](#eq:active-pbft){reference-type="ref" reference="eq:active-pbft"}, is similar. The difference is that we check the overlay schedule to see what core node is supposed to make a block, and then use the genesis delegation mapping to check the correct cold key hash and vrf key hash.
+The situation for the overlay schedule, given by Equation [\[eq:active-pbft\]](#eq:active-pbft), is similar. The difference is that we check the overlay schedule to see what core node is supposed to make a block, and then use the genesis delegation mapping to check the correct cold key hash and vrf key hash.
 
-:::: {#fig:ts-types:overlay .figure}
+
 *Overlay environments* $$\begin{equation*}
     \type{OverlayEnv}=
     \left(
@@ -1056,12 +980,7 @@ The situation for the overlay schedule, given by Equation [\[eq:active-pbft\]](
     (\KeyHash_{pool} \mapsto \N))
 \end{equation*}$$
 
-::: caption
-Overlay transition-system types
-:::
-::::
-
-:::: {#fig:rules:overlay .figure latex-placement="ht"}
+**Overlay transition-system types**
 $$\begin{equation}
 \label{eq:active-pbft}
     \inference[Active-OBFT]
@@ -1129,11 +1048,7 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Overlay rules
-:::
-::::
-
+**Overlay rules**
 The OVERLAY rule has nine predicate failures:
 
 - If in the decentralized case the VRF key is not in the pool distribution, there is a *VRFKeyUnknown* failure.
@@ -1154,11 +1069,10 @@ The OVERLAY rule has nine predicate failures:
 
 - In the case of the slot being in the OBFT schedule, if the genesis delegate keyhash is not in the genesis delegation mapping, there is a *UnknownGenesisKey* failure. This case should never happen, and represents a logic error.
 
-## Protocol Transition {#sec:protocol-trans}
-
+## Protocol Transition
 The protocol transition covers the common predicates of OBFT and Praos, and then calls $\mathsf{OVERLAY}$ for the particular transitions, followed by the transition to update the evolving and candidate nonces.
 
-:::: {#fig:ts-types:prtcl .figure}
+
 *Protocol environments* $$\begin{equation*}
     \type{PrtclEnv}=
     \left(
@@ -1182,11 +1096,7 @@ The protocol transition covers the common predicates of OBFT and Praos, and then
     \powerset (\powerset{\type{PrtclEnv}} \times \type{PrtclState}\times \type{BHeader}\times \type{PrtclState})
 \end{equation*}$$
 
-::: caption
-Protocol transition-system types
-:::
-::::
-
+**Protocol transition-system types**
 The environments for this transition are:
 
 - A mapping $\var{osched}$ of slots to an optional genesis key. In the terminology of [@delegation_design], the slots in $\var{osched}$ are the "OBFT slots". A slot in this map with a value of $\Nothing$ is a non-active slot, otherwise it is an active slot and its value designates the genesis key responsible for producing the block.
@@ -1207,7 +1117,7 @@ The states for this transition consists of:
 
 - The canditate nonce for the next epoch.
 
-:::: {#fig:rules:prtcl .figure latex-placement="ht"}
+
 $$\begin{equation}
 \label{eq:prtcl}
     \inference[PRTCL]
@@ -1260,18 +1170,13 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Protocol rules
-:::
-::::
-
+**Protocol rules**
 The PRTCL rule has no predicate failures.
 
-## Block Body Transition {#sec:block-body-trans}
+## Block Body Transition
+The Block Body Transition updates the block body state which comprises the ledger state and the map describing the produced blocks. The environment of the $\mathsf{BBODY}$ transition are overlay schedule slots, the protocol parameters, and the accounting state. The environments and states are defined in Figure [22](#fig:ts-types:bbody), along with a helper function $\fun{incrBlocks}$, which counts the number of non-overlay blocks produced by each stake pool.
 
-The Block Body Transition updates the block body state which comprises the ledger state and the map describing the produced blocks. The environment of the $\mathsf{BBODY}$ transition are overlay schedule slots, the protocol parameters, and the accounting state. The environments and states are defined in Figure [22](#fig:ts-types:bbody){reference-type="ref" reference="fig:ts-types:bbody"}, along with a helper function $\fun{incrBlocks}$, which counts the number of non-overlay blocks produced by each stake pool.
 
-:::: {#fig:ts-types:bbody .figure}
 *BBody environments* $$\begin{equation*}
     \type{BBodyEnv}=
     \left(
@@ -1305,12 +1210,8 @@ The Block Body Transition updates the block body state which comprises the ledge
         \end{cases}
 \end{align*}$$
 
-::: caption
-BBody transition-system types
-:::
-::::
-
-The $\mathsf{BBODY}$ transition rule is shown in Figure [23](#fig:rules:bbody){reference-type="ref" reference="fig:rules:bbody"}, its sub-rule is $\mathsf{LEDGERS}$ which does the update of the ledger state. The signal is a block from which we extract:
+**BBody transition-system types**
+The $\mathsf{BBODY}$ transition rule is shown in Figure [23](#fig:rules:bbody), its sub-rule is $\mathsf{LEDGERS}$ which does the update of the ledger state. The signal is a block from which we extract:
 
 - The sequence of transactions of the block.
 
@@ -1328,7 +1229,7 @@ The transition is executed if the following preconditions are met:
 
 After this, the transition system updates the mapping of the hashed stake pool keys to the incremented value of produced blocks ( + 1), provided the current slot is not an overlay slot.
 
-:::: {#fig:rules:bbody .figure latex-placement="ht"}
+
 $$\begin{equation}
 \label{eq:bbody}
     \inference[Block-Body]
@@ -1374,24 +1275,19 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-BBody rules
-:::
-::::
-
+**BBody rules**
 The BBODY rule has two predicate failures:
 
 - if the size of the block body in the header is not equal to the real size of the block body, there is a *WrongBlockBodySize* failure.
 
 - if the hash of the block body is not also the hash of transactions, there is an *InvalidBodyHash* failure.
 
-## Chain Transition {#sec:chain-trans}
-
+## Chain Transition
 The $\mathsf{CHAIN}$ transition rule is the main rule of the blockchain layer part of the STS. It calls $\mathsf{BHEAD}$, $\mathsf{PRTCL}$, and $\mathsf{BBODY}$ as sub-rules.
 
 The chain rule has no environment.
 
-The transition checks six things (via $\fun{chainChecks}$ and $\fun{prtlSeqChecks}$ from Figure [25](#fig:funcs:chain-helper){reference-type="ref" reference="fig:funcs:chain-helper"}):
+The transition checks six things (via $\fun{chainChecks}$ and $\fun{prtlSeqChecks}$ from Figure [25](#fig:funcs:chain-helper)):
 
 - The slot in the block header body is larger than the last slot recorded.
 
@@ -1401,11 +1297,11 @@ The transition checks six things (via $\fun{chainChecks}$ and $\fun{prtlSeqCheck
 
 - The size of is less than or equal to the maximal size that the protocol parameters allow for block headers.
 
-- The size of the block body, as claimed by the block header, is less than or equal to the maximal size that the protocol parameters allow for block bodies. It will later be verified that the size of the block body matches the size claimed in the header (see Figure [23](#fig:rules:bbody){reference-type="ref" reference="fig:rules:bbody"}).
+- The size of the block body, as claimed by the block header, is less than or equal to the maximal size that the protocol parameters allow for block bodies. It will later be verified that the size of the block body matches the size claimed in the header (see Figure [23](#fig:rules:bbody)).
 
 - The node is not obsolete, meaning that the major component of the protocol version in the protocol parameters is not bigger than the constant $\MaxMajorPV$.
 
-The chain state is shown in Figure [24](#fig:ts-types:chain){reference-type="ref" reference="fig:ts-types:chain"}, it consists of the following:
+The chain state is shown in Figure [24](#fig:ts-types:chain), it consists of the following:
 
 - The epoch specific state $\var{nes}$.
 
@@ -1425,7 +1321,7 @@ The chain state is shown in Figure [24](#fig:ts-types:chain){reference-type="re
 
 - The last block number .
 
-:::: {#fig:ts-types:chain .figure}
+
 *Chain states* $$\begin{equation*}
     \type{LastAppliedBlock}=
     \left(
@@ -1453,14 +1349,10 @@ The chain state is shown in Figure [24](#fig:ts-types:chain){reference-type="re
     \powerset (\type{ChainState}\times \Block \times \type{ChainState})
 \end{equation*}$$
 
-::: caption
-Chain transition-system types
-:::
-::::
+**Chain transition-system types**
+The $\mathsf{CHAIN}$ transition rule is shown in Figure [26](#fig:rules:chain). Its signal is a . The transition uses a few helper functions defined in Figure [25](#fig:funcs:chain-helper).
 
-The $\mathsf{CHAIN}$ transition rule is shown in Figure [26](#fig:rules:chain){reference-type="ref" reference="fig:rules:chain"}. Its signal is a . The transition uses a few helper functions defined in Figure [25](#fig:funcs:chain-helper){reference-type="ref" reference="fig:funcs:chain-helper"}.
 
-:::: {#fig:funcs:chain-helper .figure latex-placement="htb"}
 *Chain Transition Helper Functions* $$\begin{align*}
       & \fun{getGKeys} \in \type{NewEpochState}\to \powerset{\KeyHashGen} \\
       & \fun{getGKeys}~\var{nes} = \dom{genDelegs} \\
@@ -1520,12 +1412,7 @@ The $\mathsf{CHAIN}$ transition rule is shown in Figure [26](#fig:rules:chain){
       & ~~~~~~~~~~\var{ph} \leteq \fun{lastAppliedHash}~\var{lab} \\
 \end{align*}$$
 
-::: caption
-Helper Functions used in the CHAIN transition
-:::
-::::
-
-:::: {#fig:rules:chain .figure latex-placement="ht"}
+**Helper Functions used in the CHAIN transition**
 $$\begin{equation}
 \label{eq:chain}
     \inference[Chain]
@@ -1640,11 +1527,7 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Chain rules
-:::
-::::
-
+**Chain rules**
 The CHAIN rule has six predicate failures:
 
 - If the slot of the block header body is not larger than the last slot or greater than the current slot, there is a *WrongSlotInterval* failure.
@@ -1659,11 +1542,10 @@ The CHAIN rule has six predicate failures:
 
 - If the major component of the protocol version is larger than $\MaxMajorPV$, there is a *ObsoleteNode* failure.
 
-## Byron to Shelley Transition {#sec:byron-to-shelley}
+## Byron to Shelley Transition
+This section defines the valid initial Shelley ledger states and describes how to transition the state held by the Byron ledger to Shelley. The Byron ledger state $\CEState$ is defined in [@byron_chain_spec]. The valid initial Shelley ledger states are exactly the range of the function $\fun{initialShelleyState}$ defined in Figure [27](#fig:functions:initial-shelley-states). Figure [28](#fig:functions:to-shelley) defines the transition function from Byron. Note that we use the hash of the final Byron header as the first evolving and candidate nonces for Shelley.
 
-This section defines the valid initial Shelley ledger states and describes how to transition the state held by the Byron ledger to Shelley. The Byron ledger state $\CEState$ is defined in [@byron_chain_spec]. The valid initial Shelley ledger states are exactly the range of the function $\fun{initialShelleyState}$ defined in Figure [27](#fig:functions:initial-shelley-states){reference-type="ref" reference="fig:functions:initial-shelley-states"}. Figure [28](#fig:functions:to-shelley){reference-type="ref" reference="fig:functions:to-shelley"} defines the transition function from Byron. Note that we use the hash of the final Byron header as the first evolving and candidate nonces for Shelley.
 
-:::: {#fig:functions:initial-shelley-states .figure latex-placement="htb"}
 *Shelley Initial States* $$\begin{align*}
       & \fun{initialShelleyState} \in \type{LastAppliedBlock}^? \to \Epoch \to \UTxO
         \to \Coin \to \GenesisDelegation \\
@@ -1762,12 +1644,7 @@ This section defines the valid initial Shelley ledger states and describes how t
       & ~~~~\where cs = \{\var{hk}\mapsto 0~\mid~(\var{hk},~\wcard)\in\range{genDelegs}\} \\
 \end{align*}$$
 
-::: caption
-Initial Shelley States
-:::
-::::
-
-:::: {#fig:functions:to-shelley .figure latex-placement="htb"}
+**Initial Shelley States**
 *Byron to Shelley Transition* $$\begin{align*}
       & \fun{toShelley} \in \CEState \to \GenesisDelegation \to \BlockNo \to \type{ChainState}\\
       & \fun{toShelley}~
@@ -1801,7 +1678,4 @@ Initial Shelley States
       & ~~~~~~~~~pp = \fun{pps}~{us} \\   % this pps function is defined in the Byron chain spec
 \end{align*}$$
 
-::: caption
-Byron to Shelley State Transtition
-:::
-::::
+**Byron to Shelley State Transtition**

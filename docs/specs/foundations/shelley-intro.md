@@ -1,5 +1,4 @@
-# Introduction {#sec:introduction-shelley}
-
+# Introduction
 This document is a formal specification of the functionality of the ledger on the blockchain. This includes the blockchain layer determining what is a valid block, but does not include any concurrency issues such as chain selection. The details of the background and the larger context for the design decisions formalized in this document are presented in [@delegation_design].
 
 In this document, we present the most important properties that any implementation of the ledger must have. Specifically, we model the following aspects of the functionality of the ledger on the blockchain:

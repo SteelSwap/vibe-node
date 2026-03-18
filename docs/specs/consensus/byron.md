@@ -1,13 +1,11 @@
 # Byron
 
-Some details specific to the Byron ledger. EBBs already discussed at length in [\[ebbs\]](#ebbs){reference-type="ref+label" reference="ebbs"}.
+Some details specific to the Byron ledger. EBBs already discussed at length in [\[ebbs\]](#ebbs).
 
 The Byron specification can be found at <https://github.com/input-output-hk/cardano-ledger-specs>.
 
-## Update proposals {#byron:hardfork}
-
-### Moment of hard fork {#byron:hardfork:moment}
-
+## Update proposals
+### Moment of hard fork
 The Byron ledger state provides the current protocol version in
 
     adoptedProtocolVersion :: ProtocolVersion
@@ -40,24 +38,20 @@ The general mechanism for updating protocol parameters in Byron is as follows:
 
     When a candidate is adopted, all record of other proposals/votes/endorsements---regardless of their state---is discarded. The explanation for this is that such proposals would now be interpreted as an update to the newly adopted parameter values, whereas they were validated as an update to the previously adopted parameter values.
 
-The diagram shown in [1.1](#byron:update-process){reference-type="ref+label" reference="byron:update-process"} summarises the progress of a proposal that's eventually adopted. For other proposals, the path short circuits to a "rejected/discarded" status at some point.
+The diagram shown in [1.1](#byron:update-process) summarises the progress of a proposal that's eventually adopted. For other proposals, the path short circuits to a "rejected/discarded" status at some point.
 
 ::::: {#byron:update-process .figure}
 
 ------------------------------------------------------------------------
 
 ::: center
-:::
 
 ------------------------------------------------------------------------
 
-::: caption
-[]{#byron:update-process label="byron:update-process"}Byron update proposal process
-:::
+**[]{#byron:update-process label="byron:update-process"}Byron update proposal process**
 :::::
 
-### Initiating the hard fork {#byron:hardfork:initiating}
-
+### Initiating the hard fork
 Proposals to initiate the hard fork can be submitted and voted on before all core nodes are ready. After all, once a proposal is stably confirmed, it will effectively remain so indefinitely until nodes endorse it (or it gets superseded by another proposal). This means that nodes can vote to initiate the hard fork, *then* wait for everybody to update their software, and once updated, the proposal is endorsed and eventually the hard fork is initiated.
 
 Endorsement is somewhat implicit. The node operator does not submit an explicit "endorsement transaction", but instead restarts the node[^1] (probably after a software update that makes the node ready to support the hard fork) with a new protocol version (as part of a configuration file or command line parameter), which then gets included in the blocks that the node produces (this value is the `byronProtocolVersion` field in the static `ByronConfig`).

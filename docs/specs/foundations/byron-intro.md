@@ -1,5 +1,4 @@
-# Introduction {#sec:introduction}
-
+# Introduction
 This specification models the *conditions* that the different parts of a transaction have to fulfill so that they can extend a ledger, which is represented here as a list of transactions. In particular, we model the following aspects:
 
 Preservation of value

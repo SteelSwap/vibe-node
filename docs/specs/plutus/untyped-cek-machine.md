@@ -5,10 +5,10 @@ This section contains a description of an abstract machine for efficiently execu
 The machine alternates between two main phases: the *compute* phase ($\triangleright$), where it recurses down the AST looking for values, saving surrounding contexts as frames (or *reduction contexts*) on a stack as it goes; and the *return* phase ($\triangleleft$), where it has obtained a value and pops a frame off the stack to tell it how to proceed next. In addition there is an error state $\cekerror$ which halts execution with an error, and a halting state $\cekhalt{}$ which halts execution and returns a value to the outside world.
 
 To evaluate a program $\texttt{(program}\ v\ M \texttt{)}$, we first check that the version number $v$ is valid, then start the machine in the state $[];[]
-\triangleright M$. It can be proved that the transitions in Figure [5](#fig:untyped-cek-machine){reference-type="ref" reference="fig:untyped-cek-machine"} always preserve validity of states, so that the machine can never enter a state such as $[] \triangleleft M$ or $s,
+\triangleright M$. It can be proved that the transitions in Figure [5](#fig:untyped-cek-machine) always preserve validity of states, so that the machine can never enter a state such as $[] \triangleleft M$ or $s,
 \texttt{(force \_)} \triangleleft \texttt{(lam}\ x\ A \ M\texttt{)}$ which isn't covered by the rules. If such a situation were to occur in an implementation then it would indicate that the machine was incorrectly implemented or that it was attempting to evaluate an ill-formed program (for example, one which attempts to apply a variable to some other term).
 
-:::: {#fig:untyped-cek-states .figure latex-placement="H"}
+
 $$\begin{array}{lrclr}
     \textrm{State} & \Sigma & ::= & s;\rho \compute M \enspace | \enspace s \return V  \enspace |
        \enspace \cekerror{} \enspace | \enspace \cekhalt{V}\\
@@ -20,12 +20,7 @@ $$\begin{array}{lrclr}
     \textrm{Expected builtin arguments} & \eta & ::= & [\iota] \enspace | \enspace \iota \cons \eta\\
     \end{array}$$
 
-::: caption
-Grammar of CEK machine states for Plutus Core
-:::
-::::
-
-:::: {#fig:untyped-cek-reduction-frames .figure latex-placement="H"}
+**Grammar of CEK machine states for Plutus Core**
 $$\begin{array}{lrclr}
         \textrm{Frame} & f  & ::=   & \inForceFrame                                                       & \textrm{force}\\
                        &    &       & \inAppLeftFrame{(M,\rho)}                                           & \textrm{left application to term}\\
@@ -36,20 +31,16 @@ $$\begin{array}{lrclr}
 
     \end{array}$$
 
-::: caption
-Grammar of CEK stack frames
-:::
-::::
-
-Figures [1](#fig:untyped-cek-states){reference-type="ref" reference="fig:untyped-cek-states"} and [2](#fig:untyped-cek-reduction-frames){reference-type="ref" reference="fig:untyped-cek-reduction-frames"} define some notation for *states* of the CEK machine: these involve a modified type of value adapted to the CEK machine, environments which bind names to values, and a stack which stores partially evaluated terms whose evaluation cannot proceed until some more computation has been performed (for example, since Plutus Core is a strict language function arguments have to be reduced to values before application takes place, and because of this a lambda term may have to be stored on the stack while its argument is being reduced to a value). Environments are lists of the form $\rho = [x_1 \mapsto V_1, \ldots, x_n \mapsto
+**Grammar of CEK stack frames**
+Figures [1](#fig:untyped-cek-states) and [2](#fig:untyped-cek-reduction-frames) define some notation for *states* of the CEK machine: these involve a modified type of value adapted to the CEK machine, environments which bind names to values, and a stack which stores partially evaluated terms whose evaluation cannot proceed until some more computation has been performed (for example, since Plutus Core is a strict language function arguments have to be reduced to values before application takes place, and because of this a lambda term may have to be stored on the stack while its argument is being reduced to a value). Environments are lists of the form $\rho = [x_1 \mapsto V_1, \ldots, x_n \mapsto
   V_n]$ which grow by having new entries appended on the right; we say that *$x$ is *bound* in the environment $\rho$* if $\rho$ contains an entry of the form $x \mapsto V$, and in that case we denote by $\rho[x]$ the value $V$ in the rightmost (ie, most recent) such entry.[^1]
 
-To make the CEK machine fit into the built-in evaluation mechanism defined in Section [\[sec:specify-builtins\]](#sec:specify-builtins){reference-type="ref" reference="sec:specify-builtins"} we define $\Inputs = V$ and $\Con{\tn} =
+To make the CEK machine fit into the built-in evaluation mechanism defined in Section [\[sec:specify-builtins\]](#sec:specify-builtins) we define $\Inputs = V$ and $\Con{\tn} =
 \{\VCon{\tn}{c} : \tn \in \Uni, c \in \denote{\tn}\}$.
 
-The rules in Figure [5](#fig:untyped-cek-machine){reference-type="ref" reference="fig:untyped-cek-machine"} show the transitions of the machine; if any situation arises which is not included in these transitions (for example, if a frame $\inAppRightFrame{\VCon{\tn}{c}}$ is encountered or if an attempt is made to apply `force` to a partial builtin application which is expecting a term argument), then the machine stops immediately in an error state.
+The rules in Figure [5](#fig:untyped-cek-machine) show the transitions of the machine; if any situation arises which is not included in these transitions (for example, if a frame $\inAppRightFrame{\VCon{\tn}{c}}$ is encountered or if an attempt is made to apply `force` to a partial builtin application which is expecting a term argument), then the machine stops immediately in an error state.
 
-:::: {#fig:untyped-cek-machine .figure latex-placement="H"}
+
 ::::: {#fig:untyped-cek-transitions .figure}
 ::: minipage
 $$\begin{alignat*}
@@ -91,14 +82,11 @@ $$\begin{alignat*}
 \inCaseFrame{(M_1 \ldots M_n, \rho)} \cons s & \return \VConstr{i}{V_1 \ldots V_m}   &~\mapsto~&
                          \inAppLeftFrame{V_1} \cons \cdots \cons \inAppLeftFrame{V_m} \cons s ;\rho \compute M_{i+1} \enskip \text{if $0 \leq i \leq n-1$}
 \end{alignat*}$$
-:::
 
-::: caption
-CEK machine transitions for Plutus Core
-:::
+**CEK machine transitions for Plutus Core**
 :::::
 
-:::: {#fig:untyped-cek-builtins .figure}
+
 $$\begin{align*}
  \EvalCEK(s, b, [V_1, \ldots, V_n]) =
   &   \begin{cases}
@@ -109,28 +97,19 @@ $$\begin{align*}
   &  \;\;\text{where $r = \Eval\,(b,[V_1, \ldots, V_n])$}\\
 \end{align*}$$
 
-::: caption
-Evaluation of built-in functions
-:::
-::::
-
-::: caption
-A CEK machine for Plutus Core
-:::
-::::
-
+**Evaluation of built-in functions**
+**A CEK machine for Plutus Core**
 ## Converting CEK evaluation results into Plutus Core terms
 
-The purpose of the CEK machine is to evaluate Plutus Core terms, but in the definition in Figure [5](#fig:untyped-cek-machine){reference-type="ref" reference="fig:untyped-cek-machine"} it does not return a Plutus Core term; instead the machine can halt in two different ways:
+The purpose of the CEK machine is to evaluate Plutus Core terms, but in the definition in Figure [5](#fig:untyped-cek-machine) it does not return a Plutus Core term; instead the machine can halt in two different ways:
 
 - The machine can halt in the state $\cekhalt{V}$ for some CEK value $V$.
 
 - The machine can halt in the state $\cekerror{}$ .
 
-To get a complete evaluation strategy for Plutus Core we must convert these states into Plutus Core terms. The term corresponding to $\cekerror{}$ is $\errorU$, and to obtain a term from $\cekhalt{V}$ we perform a process which we refer to as *discharging* the CEK value $V$ (also known as *unloading*: see [@Plotkin-cbn-cbv pp. 129--130], [@Felleisen-pllc pp. 71ff]). This process substitutes bindings in environments for variables occurring in the value $V$ to obtain a term $\unload{V}$: see Figure [6](#fig:discharge-val){reference-type="ref" reference="fig:discharge-val"}. Since environments contain bindings $x \mapsto W$ of variables to further CEK values, we have to recursively discharge those bindings first before substituting: see Figure [7](#fig:discharge-env){reference-type="ref" reference="fig:discharge-env"}, which defines an operation $\Unload{\rho}{}$ which does this. As before $[N/x]M$ denotes the usual (capture-avoiding) process of substituting the term $N$ for all unbound occurrences of the variable $x$ in the term $M$. Note that in Figure [7](#fig:discharge-env){reference-type="ref" reference="fig:discharge-env"} we substitute the rightmost (ie, the most recent) bindings in the environment first.
+To get a complete evaluation strategy for Plutus Core we must convert these states into Plutus Core terms. The term corresponding to $\cekerror{}$ is $\errorU$, and to obtain a term from $\cekhalt{V}$ we perform a process which we refer to as *discharging* the CEK value $V$ (also known as *unloading*: see [@Plotkin-cbn-cbv pp. 129--130], [@Felleisen-pllc pp. 71ff]). This process substitutes bindings in environments for variables occurring in the value $V$ to obtain a term $\unload{V}$: see Figure [6](#fig:discharge-val). Since environments contain bindings $x \mapsto W$ of variables to further CEK values, we have to recursively discharge those bindings first before substituting: see Figure [7](#fig:discharge-env), which defines an operation $\Unload{\rho}{}$ which does this. As before $[N/x]M$ denotes the usual (capture-avoiding) process of substituting the term $N$ for all unbound occurrences of the variable $x$ in the term $M$. Note that in Figure [7](#fig:discharge-env) we substitute the rightmost (ie, the most recent) bindings in the environment first.
 
-:::: {#fig:discharge-cek-val .figure latex-placement="H"}
-:::: {#fig:discharge-val .figure}
+
 $$\begin{align*}
       \unload{\VCon{\tn}{c}} &= \con{\tn}{c}\\
       \unload{\VDelay{M}{\rho}}
@@ -149,27 +128,14 @@ $$\begin{align*}
            }
 \end{align*}$$
 
-::: caption
-Discharging CEK values
-:::
-::::
-
-:::: {#fig:discharge-env .figure}
+**Discharging CEK values**
 $$\begin{align*}
       \Unload{\rho}{M} &= [(\unload{V_1})/x_1]\cdots[(\unload{V_n})/x_n]M \quad
       \text{if $\rho = [x_1 \mapsto V_1, \ldots, x_n \mapsto V_n]$}
 \end{align*}$$
 
-::: caption
-Iterated substitution/discharging
-:::
-::::
-
-::: caption
-Discharging CEK values to obtain Plutus Core terms
-:::
-::::
-
-We can prove that if we evaluate a closed Plutus Core term in the CEK machine and then convert the result back to a term using the above procedure then we get the result that we should get according to the semantics in Figure [\[fig:untyped-term-reduction\]](#fig:untyped-term-reduction){reference-type="ref" reference="fig:untyped-term-reduction"}.
+**Iterated substitution/discharging**
+**Discharging CEK values to obtain Plutus Core terms**
+We can prove that if we evaluate a closed Plutus Core term in the CEK machine and then convert the result back to a term using the above procedure then we get the result that we should get according to the semantics in Figure [\[fig:untyped-term-reduction\]](#fig:untyped-term-reduction).
 
 [^1]: The description of environments we use here is more general than necessary in that it permits a given variable to have multiple bindings; however, in what follows we never actually retrieve bindings other than the most recent one and we never remove bindings to expose earlier ones. The list-based definition has the merit of simplicity and suffices for specification purposes but in an implementation it would be safe to use some data structure where existing bindings of a given variable are discarded when a new binding is added.

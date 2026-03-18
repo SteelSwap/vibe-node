@@ -3,26 +3,21 @@
 
 ::: alertblock
 Density rule A candidate chain is preferred over our current chain if it is denser (contains more blocks) in a window of $s$ slots anchored at the intersection between the two chains.
-:::
 
 ::: alertblock
 Genesis window size The genesis window size $s$ will be set to $s = 3k/f$.
-:::
+
 :::::
 
 :::: frame
 ### Fragment selection
 
 ::: center
-:::
-::::
 
 :::: frame
 ### Fragment selection
 
 ::: center
-:::
-::::
 
 ::: frame
 Known density
@@ -38,19 +33,17 @@ We say that a chain fragment has a *known density* at some point $p$ if either o
 
     ::: center
     :::
-:::
 
 ::::: frame
 Fragment selection
 
 ::: alertblock
 Look-ahead closure []{#lookahead-closure label="lookahead-closure"} Let $\mathcal{S}$ be a set of chain fragments all anchored at the same point. We say that $\mathcal{S}$ is *look-ahead closed* if whenever there are two fragments $A, B \in \mathcal{S}$, the densities of $A$ and $B$ are known at their intersection.
-:::
 
 Unfortunately, requires unbounded lookahead:
 
 ::: center
-:::
+
 :::::
 
 :::: frame
@@ -69,8 +62,6 @@ $$\begin{equation*}
 
 ::: alertblock
 Preferred prefix Given a set $\mathcal{S}$ of chain fragments, all anchored at the same point, a preferred prefix is a prefix $\Pi$ of one of the fragments in $\mathcal{S}$, such that $\Pi$ is guaranteed to be a prefix of a preferred fragment in the lookahead-closure of $\mathcal{S}$.
-:::
-::::
 
 ::::: frame
 Prefix selection
@@ -79,8 +70,7 @@ Prefix selection
 Step 1: Resolve initial fork
 
 ::: center
-:::
-::::
+
 :::::
 
 ::::: frame
@@ -90,8 +80,7 @@ Prefix selection
 Step 2: Adopt common prefix
 
 ::: center
-:::
-::::
+
 :::::
 
 ::::: frame
@@ -101,8 +90,6 @@ Prefix selection
 Step 2: Adopt common prefix (special case)
 
 ::: center
-:::
-::::
 
 Smooth transition to longest chain rule.
 :::::
@@ -117,7 +104,6 @@ Maximum rollback
 3.  This is fine (Praos analysis tells us honest nodes won't diverge by more than $k$ blocks) ...
 
 4.  ...unless we are eclipsed by a malicious node and we adopt more than $k$ of their blocks (reasonably long time)
-:::
 
 ::: frame
 Maximum rollback
@@ -127,7 +113,6 @@ Maximum rollback
 2.  ...as well as the maximum rollback ...
 
 3.  ...but we don't want to do that
-:::
 
 ::: frame
 Maximum rollback
@@ -141,14 +126,12 @@ Maximum rollback
 4.  But if we are behind, being eclipsed even for a very short amount can be disastrous: adversary can feed us $k$ blocks from their chain, we adopt them, and are now stuck.
 
 5.  Solution: make sure to connect to a large number of upstream peers (probably randomly chosen), and refuse to make chain selection decisions if that quota is not reached.
-:::
 
 :::: frame
 Being "up to date"
 
 ::: alertblock
 Recovering "alert" status When prefix selection can see all available chains to their tip, and we have selected and adopted the best one, the node is up to date.
-:::
 
 When not up to date:
 
@@ -161,4 +144,4 @@ When up to date:
 - Danger of being eclipsed same as in Praos (very small, provided not too long)
 
 - Not entirely clear when to conclude we no longer up to date. Proposal from Frisby: "as long as we stay connected to our current peers".
-::::
+

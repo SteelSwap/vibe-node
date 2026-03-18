@@ -1,21 +1,19 @@
-# Serialising Plutus Core Terms and Programs Using the `flat` Format {#appendix:flat-serialisation}
-
-We use the `flat` format [@flat] to serialise Plutus Core terms, and we regard this format as being the definitive concrete representation of Plutus Core programs. For compactness we generally (and *always* for scripts on the blockchain) replace names with de Bruijn indices (see Section [\[sec:grammar-notes\]](#sec:grammar-notes){reference-type="ref" reference="sec:grammar-notes"}) in serialised programs.
+# Serialising Plutus Core Terms and Programs Using the `flat` Format
+We use the `flat` format [@flat] to serialise Plutus Core terms, and we regard this format as being the definitive concrete representation of Plutus Core programs. For compactness we generally (and *always* for scripts on the blockchain) replace names with de Bruijn indices (see Section [\[sec:grammar-notes\]](#sec:grammar-notes)) in serialised programs.
 
 We use bytestrings for serialisation, but it is convenient to define the serialisation and deserialisation process in terms of strings of bits. Some extra bits of padding are added at the end of the encoding of a program to ensure that the number of bits in the output is a multiple of 8, and this allows us to regard serialised programs as bytestrings in the obvious way.
 
-See Section [1.4](#sec:cardano-issues){reference-type="ref" reference="sec:cardano-issues"} for some restrictions on serialisation specific to the Cardano blockchain.
+See Section [1.4](#sec:cardano-issues) for some restrictions on serialisation specific to the Cardano blockchain.
 
 ##### Note: `flat` versus CBOR.
 
 Much of the Cardano codebase uses the CBOR format for serialisation; however, it is important that serialised scripts not be too large. CBOR pays a price for being a self-describing format. The size of the serialised terms is consistently larger than a format that is not self-describing: benchmarks show that `flat` encodings of Plutus Core scripts are smaller than CBOR encodings by about 35% (without using compression).
 
-## Encoding and decoding {#sec:encoding-and-decoding}
-
-Firstly recall some notation from Section [\[sec:notation\]](#sec:notation){reference-type="ref" reference="sec:notation"}. The set of all finite sequences of bits is denoted by $\Bits = \{\bits{0},\bits{1}\}^*$. For brevity we write a sequence of bits in the form $b_{n-1} \cdots b_0$ instead of $[b_{n-1}, \ldots, b_0]$: thus $\bits{011001}$ instead of $[\bits{0},
+## Encoding and decoding
+Firstly recall some notation from Section [\[sec:notation\]](#sec:notation). The set of all finite sequences of bits is denoted by $\Bits = \{\bits{0},\bits{1}\}^*$. For brevity we write a sequence of bits in the form $b_{n-1} \cdots b_0$ instead of $[b_{n-1}, \ldots, b_0]$: thus $\bits{011001}$ instead of $[\bits{0},
   \bits{1},\bits{1},\bits{0},\bits{0},\bits{1}])$. We denote the empty sequence by $\epsilon$, and use $\length(s)$ to denote the length of a sequence of bits, and $\cdot$ to denote concatenation (or prepending or appending a single bit to a sequence of bits).
 
-Similarly to the CBOR encoding for `data` described in Appendix [\[appendix:data-cbor-encoding\]](#appendix:data-cbor-encoding){reference-type="ref" reference="appendix:data-cbor-encoding"}, we will describe the flat encoding by defining families of encoding functions (or *encoders*) $$\E_X : \Bits \times X \rightarrow \Bits$$ and (partial) decoding functions (or *decoders*) $$\D_X : \Bits \rightharpoonup \Bits \times X$$
+Similarly to the CBOR encoding for `data` described in Appendix [\[appendix:data-cbor-encoding\]](#appendix:data-cbor-encoding), we will describe the flat encoding by defining families of encoding functions (or *encoders*) $$\E_X : \Bits \times X \rightarrow \Bits$$ and (partial) decoding functions (or *decoders*) $$\D_X : \Bits \rightharpoonup \Bits \times X$$
 
 for various sets $X$, such as the set $\Z$ of integers and the set of all Plutus Core terms. The encoding function $\E_X$ takes a sequence $s \in
 \Bits$ and an element $x \in X$ and produces a new sequence of bits by appending the encoding of $x$ to $s$, and the decoding function $\D_X$ takes a sequence of bits, decodes some initial prefix of $s$ to a value $x \in X$, and returns the remainder of $s$ together with $x$.
@@ -42,14 +40,12 @@ We also define a (partial) inverse function $\unpad: \Bits \rightharpoonup
 
 This can fail if the padding is not of the expected form or if the input is the empty sequence $\epsilon$.
 
-## Basic `flat` encodings {#sec:basic-flat-encodings}
-
+## Basic `flat` encodings
 ### Fixed-width natural numbers
 
-We often wish to encode and decode natural numbers which fit into some fixed number of bits, and we do this simply by encoding them as their binary expansion (most significant bit first), adding leading zeros if necessary. More precisely for $n \geq 1$ we define an encoder $$\E_n : \Bits \times \Nab{0}{2^{n-1}-1} \rightarrow \Bits$$ by $$\E_n(s, \sum^{n-1}_{i=0}b_i2^i) = s \cdot b_{n-1} \cdots b_0 \quad \text{($b_i \in \{0,1\}$)}$$ and a decoder $$\D_n : \Bits \rightharpoonup \Bits \times \Nab{0}{2^{n-1}-1}$$ by $$\D_n(b_{n-1}\cdots{b_0} \cdot s)= (s,\sum^{n-1}_{i=0}b_i2^i).$$ As in Appendix [\[appendix:data-cbor-encoding\]](#appendix:data-cbor-encoding){reference-type="ref" reference="appendix:data-cbor-encoding"}, $\Nab{a}{b}$ denotes the closed interval of integers $\{n \in \Z : a \leq n \leq b\}$. Note that $n$ here is a variable (not a fixed label) so we are defining whole families of encoders $\E_1, \E_2, \E_3, \ldots$ and decoders $\D_1, \D_2, \D_3\ldots$.
+We often wish to encode and decode natural numbers which fit into some fixed number of bits, and we do this simply by encoding them as their binary expansion (most significant bit first), adding leading zeros if necessary. More precisely for $n \geq 1$ we define an encoder $$\E_n : \Bits \times \Nab{0}{2^{n-1}-1} \rightarrow \Bits$$ by $$\E_n(s, \sum^{n-1}_{i=0}b_i2^i) = s \cdot b_{n-1} \cdots b_0 \quad \text{($b_i \in \{0,1\}$)}$$ and a decoder $$\D_n : \Bits \rightharpoonup \Bits \times \Nab{0}{2^{n-1}-1}$$ by $$\D_n(b_{n-1}\cdots{b_0} \cdot s)= (s,\sum^{n-1}_{i=0}b_i2^i).$$ As in Appendix [\[appendix:data-cbor-encoding\]](#appendix:data-cbor-encoding), $\Nab{a}{b}$ denotes the closed interval of integers $\{n \in \Z : a \leq n \leq b\}$. Note that $n$ here is a variable (not a fixed label) so we are defining whole families of encoders $\E_1, \E_2, \E_3, \ldots$ and decoders $\D_1, \D_2, \D_3\ldots$.
 
-### Lists {#sec:flat:lists}
-
+### Lists
 Suppose that we have a set $X$ for which we have defined an encoder $\E_X$ and a decoder $\D_X$; we define an encoder $\Elist_X$ which encodes lists of elements of $X$ by emitting the encodings of the elements of the list, each preceded by a $\bits{1}$ bit, then emitting a $\bits{0}$ bit to mark the end of the list. $$\begin{align*}
   \Elist_X(s,[]) &= s \cdot \bits{0} \\
   \Elist_X(s,[x_1, \ldots, x_n]) &= \Elist_X (s \cdot \bits{1} \cdot \E_X(x_1), [x_2, \ldots, x_n]).
@@ -137,7 +133,7 @@ $$\E_{\U^*}(s,u) = \E_{\B^*}(s,\utfeight(u))$$
 
 $$\D_{\U^*}(s) = (s', \unutfeight(a)) \quad \text{if $\D_{\B^*}(s) = (s', a)$}$$
 
-where $\utfeight$ and $\unutfeight$ are the UTF8 encoding and decoding functions mentioned in Section [\[sec:default-builtins-1\]](#sec:default-builtins-1){reference-type="ref" reference="sec:default-builtins-1"}. Recall that $\unutfeight$ is partial (not all bytestrings represent valid Unicode sequences), so $\D_{\U^*}$ may fail if the input is invalid.
+where $\utfeight$ and $\unutfeight$ are the UTF8 encoding and decoding functions mentioned in Section [\[sec:default-builtins-1\]](#sec:default-builtins-1). Recall that $\unutfeight$ is partial (not all bytestrings represent valid Unicode sequences), so $\D_{\U^*}$ may fail if the input is invalid.
 
 ## Encoding and decoding Plutus Core
 
@@ -155,11 +151,10 @@ The decoding process is the inverse of the encoding process: three natural numbe
   \text{ and } &\unpad(r) = \epsilon.
 \end{cases}$$
 
-### Terms {#sec:flat-term-encodings}
+### Terms
+Plutus Core terms are encoded by emitting a 4-bit tag identifying the type of the term (see Table [1.1](#table:term-tags); recall that `[]` denotes application) then emitting the encodings for any subterms. We currently only use ten of the sixteen available tags: the remainder are reserved for potential future expansion.
 
-Plutus Core terms are encoded by emitting a 4-bit tag identifying the type of the term (see Table [1.1](#table:term-tags){reference-type="ref" reference="table:term-tags"}; recall that `[]` denotes application) then emitting the encodings for any subterms. We currently only use ten of the sixteen available tags: the remainder are reserved for potential future expansion.
 
-::: {#table:term-tags}
   Term type       Binary       Decimal
   ----------- --------------- ---------
   Variable     $\bits{0000}$      0
@@ -174,7 +169,6 @@ Plutus Core terms are encoded by emitting a 4-bit tag identifying the type of th
   `case`       $\bits{1001}$      9
 
   : Term tags
-:::
 
 The encoder for terms is given below: it refers to other encoders (for names, types, and constants) which will be defined later.
 
@@ -213,13 +207,13 @@ $$\begin{alignat*}
 
 ##### NOTE.
 
-The decoder $\Dterm$ should fail if we are decoding a program with a version less than 1.1.0 and an input of the form $\bits{1000} \cdot s$ or $\bits{1001} \cdot s$ is encountered. It should also fail when decoding a `constr` term if a tag is encountered which is greater than or equal to $2^{64}$ (this enforces the 64-bit limitation mentioned in the paragraph headed **Constructor tags** in Section [\[sec:grammar-notes\]](#sec:grammar-notes){reference-type="ref" reference="sec:grammar-notes"}).
+The decoder $\Dterm$ should fail if we are decoding a program with a version less than 1.1.0 and an input of the form $\bits{1000} \cdot s$ or $\bits{1001} \cdot s$ is encountered. It should also fail when decoding a `constr` term if a tag is encountered which is greater than or equal to $2^{64}$ (this enforces the 64-bit limitation mentioned in the paragraph headed **Constructor tags** in Section [\[sec:grammar-notes\]](#sec:grammar-notes)).
 
 ### Built-in types
 
-Constants from built-in types are essentially encoded by emitting a sequence of 4-bit tags representing the constant's type and then emitting the encoding of the constant itself. However the encoding of types is somewhat complex because it has to be able to deal with type operators such as $\ty{list}$ and $\ty{pair}$. The tags are given in Table [1.2](#table:type-tags){reference-type="ref" reference="table:type-tags"}: they include tags for the basic types together with a tag for a type application operator.
+Constants from built-in types are essentially encoded by emitting a sequence of 4-bit tags representing the constant's type and then emitting the encoding of the constant itself. However the encoding of types is somewhat complex because it has to be able to deal with type operators such as $\ty{list}$ and $\ty{pair}$. The tags are given in Table [1.2](#table:type-tags): they include tags for the basic types together with a tag for a type application operator.
 
-::: {#table:type-tags}
+
   Type                                 Binary       Decimal
   -------------------------------- --------------- ---------
   $\ty{integer}$                    $\bits{0000}$      0
@@ -237,9 +231,8 @@ Constants from built-in types are essentially encoded by emitting a sequence of 
   $\ty{array}$                      $\bits{1100}$     12
 
   : Type tags
-:::
 
-We define auxiliary functions $\mathsf{e}_{\mathsf{type}}: \Uni \rightarrow \N^*$ and $\mathsf{d}_{\mathsf{type}}: \N^* \rightharpoonup \N^* \times \Uni$ ($\mathsf{d}_{\mathsf{type}}$ is partial and $\Uni$ denotes the universe of types defined in Sections [\[sec:default-builtins-1\]](#sec:default-builtins-1){reference-type="ref" reference="sec:default-builtins-1"}, [\[sec:default-builtins-2\]](#sec:default-builtins-2){reference-type="ref" reference="sec:default-builtins-2"}, and [\[sec:default-builtins-3\]](#sec:default-builtins-3){reference-type="ref" reference="sec:default-builtins-3"}).
+We define auxiliary functions $\mathsf{e}_{\mathsf{type}}: \Uni \rightarrow \N^*$ and $\mathsf{d}_{\mathsf{type}}: \N^* \rightharpoonup \N^* \times \Uni$ ($\mathsf{d}_{\mathsf{type}}$ is partial and $\Uni$ denotes the universe of types defined in Sections [\[sec:default-builtins-1\]](#sec:default-builtins-1), [\[sec:default-builtins-2\]](#sec:default-builtins-2), and [\[sec:default-builtins-3\]](#sec:default-builtins-3)).
 
 $$\begin{alignat*}
 {2}
@@ -271,14 +264,13 @@ $$\begin{alignat*}
   &\mathsf{d}_{\mathsf{type}}(8 \cdot l) &&= (l, \ty{data}).
 \end{alignat*}$$
 
-The encoder and decoder for types is obtained by combining $\mathsf{e}_{\mathsf{type}}$ and $\mathsf{d}_{\mathsf{type}}$ with $\Elist_4$ and $\Dlist_4$, the encoder and decoder for lists of four-bit integers (see Section [1.2](#sec:basic-flat-encodings){reference-type="ref" reference="sec:basic-flat-encodings"}).
+The encoder and decoder for types is obtained by combining $\mathsf{e}_{\mathsf{type}}$ and $\mathsf{d}_{\mathsf{type}}$ with $\Elist_4$ and $\Dlist_4$, the encoder and decoder for lists of four-bit integers (see Section [1.2](#sec:basic-flat-encodings)).
 
 $$\Etype(s,t) = \Elist_4 (s, \mathsf{e}_{\mathsf{type}}(t))$$
 
 $$\Dtype(s) = (s', t) \quad \text{if $\Dlist_4(s) = (s', l)$ and $\mathsf{d}_{\mathsf{type}}(l) = ([], t)$}.$$
 
-### Constants {#sec:flat-constants}
-
+### Constants
 Values of built-in types can mostly be encoded quite simply by using encoders already defined:
 
 $$\begin{alignat*}
@@ -321,19 +313,19 @@ The unit value `(con unit ())` does not have an explicit encoding: the type has 
 
 ##### Data.
 
-The $\ty{data}$ type is encoded by converting to a bytestring using the CBOR encoder $\eData$ described in Appendix [\[appendix:data-cbor-encoding\]](#appendix:data-cbor-encoding){reference-type="ref" reference="appendix:data-cbor-encoding"} and then using $\E_{\B^*}$. The decoding process is the opposite of this: a bytestring is obtained using $\D_{\B^*}$ and this is then decoded from CBOR using $\dData$ to obtain a $\ty{data}$ object.
+The $\ty{data}$ type is encoded by converting to a bytestring using the CBOR encoder $\eData$ described in Appendix [\[appendix:data-cbor-encoding\]](#appendix:data-cbor-encoding) and then using $\E_{\B^*}$. The decoding process is the opposite of this: a bytestring is obtained using $\D_{\B^*}$ and this is then decoded from CBOR using $\dData$ to obtain a $\ty{data}$ object.
 
 ##### Arrays.
 
-Arrays use the same encoders and decoders as lists (see Section [1.2.2](#sec:flat:lists){reference-type="ref" reference="sec:flat:lists"}): given a set $X$ for which we have defined an encoder $\E_X$ and a decoder $\D_X$, arrays of elements of $X$ are encoded using $\Elist_X$ and decoded using $\Dlist_X$. In practice the run-time implementations of lists and arrays may differ and some extra work may be required to convert arrays to lists before encoding and lists to arrays after decoding.
+Arrays use the same encoders and decoders as lists (see Section [1.2.2](#sec:flat:lists)): given a set $X$ for which we have defined an encoder $\E_X$ and a decoder $\D_X$, arrays of elements of $X$ are encoded using $\Elist_X$ and decoded using $\Dlist_X$. In practice the run-time implementations of lists and arrays may differ and some extra work may be required to convert arrays to lists before encoding and lists to arrays after decoding.
 
 ##### BLS12-381 elements.
 
-We do not provide serialisation and deserialisation methods for constants of type $\ty{bls12\_381\_G1\_element}$, $\ty{bls12\_381\_G2\_element}$, or $\ty{bls12\_381\_mlresult}$. We have specified tags for these types, but if one of these tags is encountered during deserialisation then deserialisation fails and any subsequent input is ignored. Note however that constants of the first two types can be serialised by using the compression functions defined in Section [\[sec:bls-builtins-4\]](#sec:bls-builtins-4){reference-type="ref" reference="sec:bls-builtins-4"} and serialising the resulting bytestrings. Decoding can similarly be performed indirectly by using `bls12_381_G1_uncompress` and `bls12_381_G2_uncompress` on bytestring constants during program execution.
+We do not provide serialisation and deserialisation methods for constants of type $\ty{bls12\_381\_G1\_element}$, $\ty{bls12\_381\_G2\_element}$, or $\ty{bls12\_381\_mlresult}$. We have specified tags for these types, but if one of these tags is encountered during deserialisation then deserialisation fails and any subsequent input is ignored. Note however that constants of the first two types can be serialised by using the compression functions defined in Section [\[sec:bls-builtins-4\]](#sec:bls-builtins-4) and serialising the resulting bytestrings. Decoding can similarly be performed indirectly by using `bls12_381_G1_uncompress` and `bls12_381_G2_uncompress` on bytestring constants during program execution.
 
 ### Built-in functions
 
-Built-in functions are represented by seven-bit integer tags and encoded and decoded using $\E_7$ and $\D_7$. The tags are specified in Tables [1.3](#table:builtin-tags-batch-1){reference-type="ref" reference="table:builtin-tags-batch-1"}--[1.7](#table:builtin-tags-batch-6){reference-type="ref" reference="table:builtin-tags-batch-6"}. We assume that there are (partial) functions $\Tag$ and $\unTag$ which convert back and forth between builtin names and their tags.
+Built-in functions are represented by seven-bit integer tags and encoded and decoded using $\E_7$ and $\D_7$. The tags are specified in Tables [1.3](#table:builtin-tags-batch-1)--[1.7](#table:builtin-tags-batch-6). We assume that there are (partial) functions $\Tag$ and $\unTag$ which convert back and forth between builtin names and their tags.
 
 $$\begin{alignat*}
 {2}
@@ -341,7 +333,7 @@ $$\begin{alignat*}
   & \Dbuiltin(s)   &&= (s', \unTag(n)) \quad \text{if $\D_7(s) = (s', n)$}.\\
 \end{alignat*}$$
 
-::: {#table:builtin-tags-batch-1}
+
   Builtin         Binary        Decimal  Builtin         Binary        Decimal
   --------- ------------------ --------- --------- ------------------ ---------
              $\bits{0000000}$      0                $\bits{0011010}$     26
@@ -372,15 +364,12 @@ $$\begin{alignat*}
              $\bits{0011001}$     25                                  
 
   : Tags for built-in functions (Batch 1)
-:::
 
-::: {#table:builtin-tags-batch-2}
   Builtin         Binary        Decimal
   --------- ------------------ ---------
              $\bits{0110011}$     51
 
   : Tags for built-in functions (Batch 2)
-:::
 
   Builtin         Binary        Decimal
   --------- ------------------ ---------
@@ -389,7 +378,7 @@ $$\begin{alignat*}
 
   : Tags for built-in functions (Batch 3)
 
-::: {#table:builtin-tags-batch-4}
+
   Builtin         Binary        Decimal
   --------- ------------------ ---------
              $\bits{0110110}$     54
@@ -415,9 +404,7 @@ $$\begin{alignat*}
              $\bits{1001000}$     74
 
   : Tags for built-in functions (Batch 4)
-:::
 
-::: {#table:builtin-tags-batch-5}
   Builtin         Binary        Decimal
   --------- ------------------ ---------
              $\bits{1001011}$     75
@@ -434,9 +421,7 @@ $$\begin{alignat*}
              $\bits{1010110}$     86
 
   : Tags for built-in functions (Batch 5)
-:::
 
-::: {#table:builtin-tags-batch-6}
   Builtin         Binary        Decimal
   --------- ------------------ ---------
              $\bits{1010111}$     87
@@ -448,7 +433,6 @@ $$\begin{alignat*}
              $\bits{1011101}$     93
 
   : Tags for built-in functions (Batch 6)
-:::
 
 ### Variable names
 
@@ -456,7 +440,7 @@ Variable names are encoded and decoded using the $\Ename$ and $\Dname$ functions
 
 ##### De Bruijn indices.
 
-We use serialised de Bruijn-indexed terms for script transmission because this makes serialised scripts significantly smaller. Recall from Section [\[sec:grammar-notes\]](#sec:grammar-notes){reference-type="ref" reference="sec:grammar-notes"} that when we want to use our syntax with de Bruijn indices we replace names with natural numbers and the bound variable in a `lam` expression with 0. During serialisation the zero is ignored, and during deserialisation no input is consumed and the index 0 is always returned:
+We use serialised de Bruijn-indexed terms for script transmission because this makes serialised scripts significantly smaller. Recall from Section [\[sec:grammar-notes\]](#sec:grammar-notes) that when we want to use our syntax with de Bruijn indices we replace names with natural numbers and the bound variable in a `lam` expression with 0. During serialisation the zero is ignored, and during deserialisation no input is consumed and the index 0 is always returned:
 
 $$\Ebinder(s, n) = s$$ $$\Dbinder(s) = 0.$$
 
@@ -466,11 +450,10 @@ For variables we always use indices which are greater than zero, and our encoder
 
 One can serialise code involving other types of name by providing suitable encoders and decoders for name. For example, for textual names one could use $\Ebinder = \Ename = \E_{\U^*}$ and $\Dbinder = \Dname = \D_{\U^*}$. Depending on the method used to represent variable names it may also be necessary to check during deserialisation the more general requirement that variables are well-scoped, but this problem will not arise if de Bruijn indices are used.
 
-## Cardano-specific serialisation issues {#sec:cardano-issues}
-
+## Cardano-specific serialisation issues
 ### Scope checking
 
-To execute a Plutus Core program on the blockchain it will be necessary to deserialise it to some in-memory representation, and during or immediately after deserialisation it should be checked that the body of the program is a closed term (see the requirement in Section [\[sec:grammar-notes\]](#sec:grammar-notes){reference-type="ref" reference="sec:grammar-notes"}); if this is not the case then evaluation should fail immediately.
+To execute a Plutus Core program on the blockchain it will be necessary to deserialise it to some in-memory representation, and during or immediately after deserialisation it should be checked that the body of the program is a closed term (see the requirement in Section [\[sec:grammar-notes\]](#sec:grammar-notes)); if this is not the case then evaluation should fail immediately.
 
 ### CBOR wrapping
 
@@ -498,9 +481,9 @@ The serialised program looks like this:
     0000000c: 00100101 11101110 10001100 00000000 01001000 00111000  %...H8
     00000012: 10110100 00000001 10000001
 
-Figure [1.1](#fig:index-bytestring-example){reference-type="ref" reference="fig:index-bytestring-example"} shows how this encodes the original program. Sequences of bits are followed by explanatory comments and lines beginning with `#` provide further commentary on preceding bit sequences.
+Figure [1.1](#fig:index-bytestring-example) shows how this encodes the original program. Sequences of bits are followed by explanatory comments and lines beginning with `#` provide further commentary on preceding bit sequences.
 
-:::: {#fig:index-bytestring-example .figure latex-placement="H"}
+
 ``` {commandchars="\\\\\\{\\}"}
 00000101 : \textrm{Final integer chunk: \texttt{0000101} \arrow 5}
              00000000 : \textrm{Final integer chunk: \texttt{0000000} \arrow 0}
@@ -541,7 +524,4 @@ Figure [1.1](#fig:index-bytestring-example){reference-type="ref" reference="fig
              000001   : \textrm{Padding}
 ```
 
-::: caption
-`flat` encoding of `index.uplc`
-:::
-::::
+**`flat` encoding of `index.uplc`**

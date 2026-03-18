@@ -1,1 +1,1 @@
-# The storage layer {#testing:storage}
+# The storage layer

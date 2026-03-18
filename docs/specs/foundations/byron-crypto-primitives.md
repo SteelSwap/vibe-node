@@ -1,8 +1,7 @@
-# Cryptographic primitives {#sec:crypto-primitives}
+# Cryptographic primitives
+Figure [1](#fig:crypto-defs) introduces the cryptographic abstractions used in this document. Note that we define a family of serialization functions $\serialised{\wcard}_\type{A}$, for all types $\type{A}$ for which such serialization function can be defined. When the context is clear, we omit the type suffix, and use simply $\serialised{\wcard}$.
 
-Figure [1](#fig:crypto-defs){reference-type="ref" reference="fig:crypto-defs"} introduces the cryptographic abstractions used in this document. Note that we define a family of serialization functions $\serialised{\wcard}_\type{A}$, for all types $\type{A}$ for which such serialization function can be defined. When the context is clear, we omit the type suffix, and use simply $\serialised{\wcard}$.
 
-:::: {#fig:crypto-defs .figure latex-placement="htb"}
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
       \var{vk} & \SKey & \text{signing key}\\
@@ -35,29 +34,25 @@ Figure [1](#fig:crypto-defs){reference-type="ref" reference="fig:crypto-defs"} 
       & \text{shorthand notation for } \fun{verify}
 \end{align*}$$
 
-::: caption
-Cryptographic definitions
-:::
-::::
-
-## A note on serialization {#sec:a-note-on-serialization}
-
+**Cryptographic definitions**
+## A note on serialization
 ::: definition
 For all types $\type{A}$ and $\type{B}$, given a function $\fun{f} \in \type{A} \to \type{B}$, we say that the serialization function for values of type $\type{A}$, namely $\serialised{ }_\type{A}$ distributes over $\fun{f}$ if there exists a function $\fun{f}_{\serialised{ }}$ such that for all $a \in \type{A}$: $$\begin{equation}
     \label{eq:distributivity-serialization}
     \serialised{\fun{f}~a}_\type{B} = \fun{f}_{\serialised{ }}~\serialised{a}_\type{A}
 \end{equation}$$
-:::
 
-The equality defined in [\[eq:distributivity-serialization\]](#eq:distributivity-serialization){reference-type="ref+label" reference="eq:distributivity-serialization"} means that the following diagram commutes:
+The equality defined in [\[eq:distributivity-serialization\]](#eq:distributivity-serialization) means that the following diagram commutes:
 
-$$\begin{tikzcd}
-    A \arrow{r}{\fun{f}} \arrow{d}{\serialised{ }_\type{A}}
-    & B \arrow{d}{\serialised{ }_\type{B}} \\
-    \Data \arrow{r}{\fun{f}_{\serialised{ }}} & \Data
-  \end{tikzcd}$$
+```mermaid
+graph LR
+    A -->|f| B
+    A -->|"serialize_A"| Data1["Data"]
+    B -->|"serialize_B"| Data2["Data"]
+    Data1 -->|"f_serialize"| Data2
+```
 
-Throughout this specification, whenever we use $\serialised{\fun{f}~a}_\type{B}$, for some type $\type{B}$ and function $\fun{f} \in \type{A} \to \type{B}$, we assume that $\serialised{ }_\type{A}$ distributes over $\fun{f}$ (see for example Rule [\[eq:utxo-witness-inductive\]](#eq:utxo-witness-inductive){reference-type="ref" reference="eq:utxo-witness-inductive"}). This property is what allow us to extract a component of the serialized data (if it is available) without deserializing it in the cases in which the deserialization function ($\serialised{\wcard}^{-1}_\type{A}$) doesn't behave as an inverse of serialization:
+Throughout this specification, whenever we use $\serialised{\fun{f}~a}_\type{B}$, for some type $\type{B}$ and function $\fun{f} \in \type{A} \to \type{B}$, we assume that $\serialised{ }_\type{A}$ distributes over $\fun{f}$ (see for example Rule [\[eq:utxo-witness-inductive\]](#eq:utxo-witness-inductive)). This property is what allow us to extract a component of the serialized data (if it is available) without deserializing it in the cases in which the deserialization function ($\serialised{\wcard}^{-1}_\type{A}$) doesn't behave as an inverse of serialization:
 
 $$\begin{equation*}
   \serialised{\wcard}^{-1}_\type{A} \cdot \serialised{\wcard}_\type{A} \neq \fun{id}_\type{A}

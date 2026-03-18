@@ -1,5 +1,4 @@
-# Common CDDL definitions {#cddl-common}
-
+# Common CDDL definitions
 ``` {style="cddl"}
 ```
 
@@ -7,7 +6,7 @@
 
 ## Node-to-node protocol
 
-Previously supported versions of the *node-to-node protocol* are listed in table [2.1](#table:historical-node-to-node-protocol-versions){reference-type="ref" reference="table:historical-node-to-node-protocol-versions"}.
+Previously supported versions of the *node-to-node protocol* are listed in table [2.1](#table:historical-node-to-node-protocol-versions).
 
 ::::: {#table:historical-node-to-node-protocol-versions .figure latex-placement="h"}
 ::: center
@@ -26,16 +25,13 @@ Previously supported versions of the *node-to-node protocol* are listed in table
   `NodeToNodeV_11`   Peer sharing willingness
   `NodeToNodeV_12`   No observable changes
   `NodeToNodeV_13`   Disabled peer sharing for buggy V11 & V12 and for InitiatorOnly nodes
-:::
 
-::: caption
-Node-to-node protocol versions
-:::
+**Node-to-node protocol versions**
 :::::
 
 ## Node-to-client protocol
 
-Previously supported versions of the *node-to-client protocol* are listed in table [2.2](#table:historical-node-to-client-protocol-versions){reference-type="ref" reference="table:historical-node-to-client-protocol-versions"}.
+Previously supported versions of the *node-to-client protocol* are listed in table [2.2](#table:historical-node-to-client-protocol-versions).
 
 ::::: {#table:historical-node-to-client-protocol-versions .figure latex-placement="h"}
 ::: center
@@ -56,11 +52,8 @@ Previously supported versions of the *node-to-client protocol* are listed in tab
   `NodeToClientV_13`   Babbage era
   `NodeToClientV_14`   GetPoolDistr, GetPoolState, GetSnapshots queries
   `NodeToClientV_15`   internal changes
-:::
 
-::: caption
-Node-to-client protocol versions
-:::
+**Node-to-client protocol versions**
 :::::
 
 [^1]: `duncan@well-typed.com`, `duncan.coutts@iohk.io`

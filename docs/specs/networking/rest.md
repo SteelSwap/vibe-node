@@ -1,7 +1,6 @@
 ## Design Discussion
 
-#### Why distinguish between node to node and node-to-consumer IPC {#why_distinguish_protocols}
-
+#### Why distinguish between node to node and node-to-consumer IPC
 We use two different sets of protocols for these two use cases.
 
 node-to-node
@@ -28,8 +27,7 @@ With an efficient *local* IPC protocol we can have applications like wallets and
 
 With an efficient *network* IPC protocol we can do similar things but extend it across multiple machines. This permits: large organisations to achieve better alignment with their security policies; clusters of relays operated by a single organisation to use the more efficient (less resource costly) node-to-consumer protocol instead of the node-to-node protocol; and wallet or explorer-like applications that need to scale out, and are able to make use of a trusted node.
 
-# CDDL Specification of the Protocol Messages {#CBOR-section}
-
+# CDDL Specification of the Protocol Messages
 []{#included-cddl label="included-cddl"} This Sections contains the CDDL[@cddl] specification of the binary serialisation format of the network protocol messages.
 
 To keep this Section in close sync with the actual Haskell implementation the names of the Haskell identifiers have been reused for the corresponding CBOR types (with the first letter converted to lower case). Note, that, for readability, the previous Sections used simplified message identifiers, for example `RequestNext` instead of `msgRequestNext`, etc. Both identifiers refer to the same message format.

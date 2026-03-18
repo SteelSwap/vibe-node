@@ -1,16 +1,15 @@
-# UTxO {#sec:state-trans-utxo-1}
+# UTxO
+The transition rules for unspent transaction outputs are presented in Figure [4](#fig:rules:utxo). The states of the UTxO transition system, along with their types are defined in Figure [1](#fig:defs:utxo):
 
-The transition rules for unspent transaction outputs are presented in Figure [4](#fig:rules:utxo){reference-type="ref" reference="fig:rules:utxo"}. The states of the UTxO transition system, along with their types are defined in Figure [1](#fig:defs:utxo){reference-type="ref" reference="fig:defs:utxo"}:
-
-- we define the protocol parameters as an abstract type, this type is made concrete in Section [\[sec:update\]](#sec:update){reference-type="ref" reference="sec:update"}, where the update mechanism is discussed.
+- we define the protocol parameters as an abstract type, this type is made concrete in Section [\[sec:update\]](#sec:update), where the update mechanism is discussed.
 
 - The lovelace supply cap ($\fun{lovelaceCap}$) is treated as an abstract function in this specification. In the actual system this value equals $$45 \times 10^{15}$$
 
-Functions on the types introduced in [4](#fig:rules:utxo){reference-type="ref+label" reference="fig:rules:utxo"} are defined in [2](#fig:derived-defs:utxo){reference-type="ref+label" reference="fig:derived-defs:utxo"}. In particular, note that in function $\fun{minfee}$ we make use of the fact that the $\Lovelace$ type is an alias for the set of the integers numbers ($\mathbb{Z}$).
+Functions on the types introduced in [4](#fig:rules:utxo) are defined in [2](#fig:derived-defs:utxo). In particular, note that in function $\fun{minfee}$ we make use of the fact that the $\Lovelace$ type is an alias for the set of the integers numbers ($\mathbb{Z}$).
 
-Rule [\[eq:utxo-bootstrap\]](#eq:utxo-bootstrap){reference-type="ref" reference="eq:utxo-bootstrap"}, models the fact that the **reserves** of the system are set to: $$\fun{lovelaceCap} - \balance{utxo_0}$$ The Lovelace amount $45 \times 10^{15}$ is the initial money supply in the system.
+Rule [\[eq:utxo-bootstrap\]](#eq:utxo-bootstrap), models the fact that the **reserves** of the system are set to: $$\fun{lovelaceCap} - \balance{utxo_0}$$ The Lovelace amount $45 \times 10^{15}$ is the initial money supply in the system.
 
-:::: {#fig:defs:utxo .figure latex-placement="htb"}
+
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
       \var{tx} & \Tx & \text{transaction}\\
@@ -68,12 +67,7 @@ Rule [\[eq:utxo-bootstrap\]](#eq:utxo-bootstrap){reference-type="ref" reference
     \txid{\var{tx_i}} = \txid{\var{tx_j}} \Rightarrow \var{tx_i} = \var{tx_j}
 \end{equation}$$
 
-::: caption
-Definitions used in the UTxO transition system
-:::
-::::
-
-:::: {#fig:derived-defs:utxo .figure}
+**Definitions used in the UTxO transition system**
 $$\begin{align*}
     & \fun{txins} \in \Tx \to \powerset{\TxIn}
     & \text{transaction inputs} \\
@@ -99,12 +93,7 @@ $$\begin{align*}
       \fun{a}~\var{pps} + \fun{b}~\var{pps} * \fun{txSize}~\var{tx}
 \end{align*}$$
 
-::: caption
-Functions used in UTxO rules
-:::
-::::
-
-:::: {#fig:ts-types:utxo .figure}
+**Functions used in UTxO rules**
 *UTxO environments* $$\begin{equation*}
     \UTxOEnv =
     \left(
@@ -131,12 +120,7 @@ Functions used in UTxO rules
     \subseteq \powerset (\UTxOEnv \times \UTxOState \times \Tx \times \UTxOState)
 \end{equation*}$$
 
-::: caption
-UTxO transition-system types
-:::
-::::
-
-:::: {#fig:rules:utxo .figure}
+**UTxO transition-system types**
 $$\begin{equation}
 \label{eq:utxo-bootstrap}
     \inference
@@ -188,12 +172,8 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-UTxO inference rules
-:::
-::::
-
-Rule [\[eq:utxo-inductive\]](#eq:utxo-inductive){reference-type="ref" reference="eq:utxo-inductive"} specifies under which conditions a transaction can be applied to a set of unspent outputs, and how the set of unspent output changes with a transaction:
+**UTxO inference rules**
+Rule [\[eq:utxo-inductive\]](#eq:utxo-inductive) specifies under which conditions a transaction can be applied to a set of unspent outputs, and how the set of unspent output changes with a transaction:
 
 - Each input spent in the transaction must be in the set of unspent outputs.
 
@@ -205,11 +185,10 @@ Rule [\[eq:utxo-inductive\]](#eq:utxo-inductive){reference-type="ref" reference
 
 - If the above conditions hold, then the new state will not have the inputs spent in transaction $\var{tx}$ and it will have the new outputs in $\var{tx}$.
 
-## Witnesses {#sec:witnesses}
+## Witnesses
+The rules for witnesses are presented in Figure [8](#fig:rules:utxow). In the initial rules note that $\var{utxoEnv}$ and $\var{utxoSt}$ are tuples, where $\var{utxoEnv} \in \UTxOEnv$ and $\var{utxoSt} \in \UTxOState$. The definitions used in Rule [\[eq:utxo-witness-inductive\]](#eq:utxo-witness-inductive) are given in Figure [5](#fig:defs:utxow). Note that Rule [\[eq:utxo-witness-inductive\]](#eq:utxo-witness-inductive) uses the transition relation defined in Figure [4](#fig:rules:utxo). The main reason for doing this is to define the rules incrementally, modeling different aspects in isolation to keep the rules as simple as possible. Also note that the $\trans{utxo}{}$ relation could have been defined in terms of $\trans{utxow}{}$ (thus composing the rules in a different order). The choice here is arbitrary.
 
-The rules for witnesses are presented in Figure [8](#fig:rules:utxow){reference-type="ref" reference="fig:rules:utxow"}. In the initial rules note that $\var{utxoEnv}$ and $\var{utxoSt}$ are tuples, where $\var{utxoEnv} \in \UTxOEnv$ and $\var{utxoSt} \in \UTxOState$. The definitions used in Rule [\[eq:utxo-witness-inductive\]](#eq:utxo-witness-inductive){reference-type="ref" reference="eq:utxo-witness-inductive"} are given in Figure [5](#fig:defs:utxow){reference-type="ref" reference="fig:defs:utxow"}. Note that Rule [\[eq:utxo-witness-inductive\]](#eq:utxo-witness-inductive){reference-type="ref" reference="eq:utxo-witness-inductive"} uses the transition relation defined in Figure [4](#fig:rules:utxo){reference-type="ref" reference="fig:rules:utxo"}. The main reason for doing this is to define the rules incrementally, modeling different aspects in isolation to keep the rules as simple as possible. Also note that the $\trans{utxo}{}$ relation could have been defined in terms of $\trans{utxow}{}$ (thus composing the rules in a different order). The choice here is arbitrary.
 
-:::: {#fig:defs:utxow .figure latex-placement="htb"}
 *Abstract functions* $$\begin{equation*}
     \begin{array}{rlr}
       \fun{wits} & \Tx \to \powerset{(\VKey \times \Sig)}
@@ -219,12 +198,7 @@ The rules for witnesses are presented in Figure [8](#fig:rules:utxow){reference
     \end{array}
 \end{equation*}$$
 
-::: caption
-Definitions used in the UTxO transition system with witnesses
-:::
-::::
-
-:::: {#fig:derived-defs:utxow .figure latex-placement="htb"}
+**Definitions used in the UTxO transition system with witnesses**
 $$\begin{align*}
     & \addr{}{} \in \UTxO \to \TxIn \mapsto \Addr & \text{addresses of inputs}\\
     & \addr{utxo} = \{ i \mapsto a \mid i \mapsto (a, \wcard) \in \var{utxo} \} \\
@@ -234,12 +208,7 @@ $$\begin{align*}
       \wedge a \mapsto h \in \fun{hash_{vkey}} \}
 \end{align*}$$
 
-::: caption
-Functions used in rules witnesses
-:::
-::::
-
-:::: {#fig:ts-types:utxow .figure}
+**Functions used in rules witnesses**
 *UTxO with witness transitions* $$\begin{equation*}
     \var{\_} \vdash
     \var{\_} \trans{utxow}{\_} \var{\_}
@@ -247,12 +216,7 @@ Functions used in rules witnesses
     (\UTxOEnv \times \UTxOState \times (\Tx \times \powerset{(\VKey \times \Sig)}) \times \UTxOState)
 \end{equation*}$$
 
-::: caption
-UTxO with witness transition-system types
-:::
-::::
-
-:::: {#fig:rules:utxow .figure}
+**UTxO with witness transition-system types**
 $$\begin{equation}
 \label{eq:utxow-bootstrap}
     \inference
@@ -317,16 +281,11 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-UTxO with witnesses inference rules
-:::
-::::
+**UTxO with witnesses inference rules**
+## Transaction sequences
+[9](#fig:rules:utxow-seq) models the application of a sequence of transactions. For the sake of concision we omit the types of this transition system, since they are the same as the ones of $\trans{utxow}{}$.
 
-## Transaction sequences {#sec:transaction-seqs}
 
-[9](#fig:rules:utxow-seq){reference-type="ref+label" reference="fig:rules:utxow-seq"} models the application of a sequence of transactions. For the sake of concision we omit the types of this transition system, since they are the same as the ones of $\trans{utxow}{}$.
-
-:::: {#fig:rules:utxow-seq .figure latex-placement="htb"}
 $$\begin{equation}
 \label{eq:utxows-bootstrap}
     \inference
@@ -366,7 +325,4 @@ $$\begin{equation}
     {\var{utxoEnv} \vdash \var{utxoSt} \trans{utxows}{\Gamma;\var{tx}} \var{utxoSt''}}
 \end{equation}$$
 
-::: caption
-UTxO sequence rules
-:::
-::::
+**UTxO sequence rules**

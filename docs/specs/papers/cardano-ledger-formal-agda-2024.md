@@ -276,7 +276,6 @@ The governance framework has three bodies of governance, the constitutional comm
 |Info<br>:|GovAction|
 
 
-
 For the meaning of these individual actions, see [12]. 
 
 **FMBC 2024** 
@@ -295,7 +294,6 @@ Enactment of a governance action is carried out via the ENACT state machine. We 
 
 |record EnactEnv : Type where<br>gid<br>: GovActionID<br>treasury : Coin<br>epoch<br>: Epoch|record EnactState : Type where<br>cc<br>: HashProtected (Maybe ((Credential _⇀_Epoch) × Q<br>constitution : HashProtected (DocHash × Maybe ScriptHash)<br>pv<br>: HashProtected ProtVer<br>pparams<br>: HashProtected PParams<br>withdrawals : RwdAddr _⇀_Coin|))|
 |---|---|---|
-
 
 
 Enact-NewConst : 
@@ -352,7 +350,6 @@ Some actions take priority over others and, when enacted, delay all further rati
 
 |record RatifyEnv : Type where<br>stakeDistrs<br>: StakeDistrs<br>currentEpoch : Epoch<br>dreps<br>: Credential _⇀_Epoch|record RatifyState : Type where<br>es<br>: EnactState<br>removed : P (GovActionID × GovActionState)<br>delay<br>: Bool|
 |---|---|
-
 
 
 RATIFY-Accept : 

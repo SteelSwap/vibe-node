@@ -1,10 +1,9 @@
-# Ledger State Transition {#sec:ledger-trans}
-
-Figure [1](#fig:rules:ledger){reference-type="ref" reference="fig:rules:ledger"} now separates the cases where all scripts validate in a transaction and the case where there is one that does not. The cases are distinguished by the use of the $\IsValidating$ tag.
+# Ledger State Transition
+Figure [1](#fig:rules:ledger) now separates the cases where all scripts validate in a transaction and the case where there is one that does not. The cases are distinguished by the use of the $\IsValidating$ tag.
 
 Besides fee collection, no side effects should occur when processing a transaction containing a script that does not validate. That is, no delegation or pool state updates, or update proposals should be applied. The UTxO rule is still applied, as this is where the correctness of the validation tag is verified, and script fees are collected.
 
-:::: {#fig:rules:ledger .figure}
+
 $$\begin{equation}
     \label{eq:ledger}
     \inference[ledger-V]
@@ -105,7 +104,4 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Ledger inference rules
-:::
-::::
+**Ledger inference rules**

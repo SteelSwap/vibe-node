@@ -1,8 +1,7 @@
-# Rewards and the Epoch Boundary {#sec:epoch}
-
+# Rewards and the Epoch Boundary
 In order to handle rewards and staking, we must change filter the UTxO for Ada-only values before performing any calculations. We also use the overloaded $\sum$ symbol for monoid addition here.
 
-:::: {#fig:functions:stake-distribution .figure latex-placement="htb"}
+
 *Stake Distribution (using functions and maps as relations)* $$\begin{align*}
       & \fun{stakeDistr} \in \UTxO \to \DState \to \PState \to \type{Stake}\\
       & \fun{stakeDistr}~{utxo}~{dstate}~{pstate} =
@@ -20,7 +19,4 @@ In order to handle rewards and staking, we must change filter the UTxO for Ada-o
                (\dom{stdelegs}) \restrictdom \var{delegations} \restrictrange (\dom{stpools}) \\
 \end{align*}$$
 
-::: caption
-Stake Distribution Function
-:::
-::::
+**Stake Distribution Function**

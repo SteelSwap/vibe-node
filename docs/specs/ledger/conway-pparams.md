@@ -218,7 +218,6 @@ updates at least one group and applying the update preserves
 well-formedness.
 
 
-
 figure*[ht]
 AgdaMultiCode
 *Abstract types \& functions*

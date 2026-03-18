@@ -130,7 +130,6 @@ Types used for CERTS transition system
 figure*
 
 
-
 ## Changes Introduced in Conway Era
 
 ### Delegation

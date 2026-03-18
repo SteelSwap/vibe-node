@@ -577,7 +577,6 @@ TODO discuss how to maintain the extra `.0` component, including a risk assessme
 - We realized the correspondence (obvious in hindsight) with the maintenance of changelogs when reviewing the process documented at https://github.com/input-output-hk/plutus/blob/master/doc/read-the-docs-site/RELEASE.adoc, especially the scripts.
 
 
-
 -----
 
 Desiderata:
@@ -597,8 +596,6 @@ released A.(B+1).0 would might change the version declaration to A.(B+1).0 - eps
 However, it is common practice to cherry-pick that commit onto the commit that
 released A.B.Z, in which case the bugfix's version declaration should instead be
 A.B.(Z+1) - epsilon.
-
-
 
 
 The internal version representation is A.x.B.y.C.z, where x y and z are sets of ids that uniquely map to development work.

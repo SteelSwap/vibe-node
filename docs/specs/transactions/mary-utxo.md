@@ -1,8 +1,6 @@
-# UTxO {#sec:utxo}
-
-## UTxO Transitions {#sec:utxo-trans}
-
-We have added the following helper functions, which are used in defining the UTxO transition system, see Figure [1](#fig:functions:insouts){reference-type="ref" reference="fig:functions:insouts"}. These include:
+# UTxO
+## UTxO Transitions
+We have added the following helper functions, which are used in defining the UTxO transition system, see Figure [1](#fig:functions:insouts). These include:
 
 - the function $\fun{getOut}$ builds a UTxO-type output out of a transaction output
 
@@ -10,7 +8,7 @@ We have added the following helper functions, which are used in defining the UTx
 
 For calculating the minimum size of an output, we also need the function $\fun{valueSize}$ that computes the size of a $\Value$. It is defined as the size of the serialization of the $\Value$, in analogy to $\fun{txSize}$.
 
-:::: {#fig:functions:insouts .figure latex-placement="htb"}
+
 $$\begin{align*}
     & \fun{getOut} \in \TxOut \to \UTxOOut \\
     & \text{tx outputs transformed to UTxO outputs} \\
@@ -26,14 +24,10 @@ $$\begin{align*}
         \right\} \\
 \end{align*}$$
 
-::: caption
-Functions on Tx Outputs
-:::
-::::
-
+**Functions on Tx Outputs**
 **UTxO Helper Functions.**
 
-Figure [2](#fig:functions:utxo){reference-type="ref" reference="fig:functions:utxo"} defines additional calculations that are needed for the UTxO transition system with MA:
+Figure [2](#fig:functions:utxo) defines additional calculations that are needed for the UTxO transition system with MA:
 
 - $\fun{getCoin}$ sums all the Ada in a given output and returns it as a $\Coin$ value
 
@@ -57,13 +51,13 @@ A valid transaction $tx$ satisfies the preservation of value condition by adding
 
 $$pid \mapsto tkns\in\fun{forge}~tx$$
 
-The forge field value is then added to the consumed side. This approach to balancing the *preservation of value* (POV) equation (Equation [\[eqn:pov\]](#eqn:pov){reference-type="ref" reference="eqn:pov"}) extends to cases where the transaction might also be consuming some existing $pid$ tokens, or taking the out of circulation with negative quantities in the forge field.
+The forge field value is then added to the consumed side. This approach to balancing the *preservation of value* (POV) equation (Equation [\[eqn:pov\]](#eqn:pov)) extends to cases where the transaction might also be consuming some existing $pid$ tokens, or taking the out of circulation with negative quantities in the forge field.
 
 The forge field value represents the change in total existing tokens of each given asset as a result of processing the transaction. It is always added to the *consumed* side of the POV equation because of this side, the signs of the quantities in the forge field match the signs of the change. That is, when tokens are added into the UTxO, their quantities are positive, and when they are taken out of circulation via the forge field, the signs are negative.
 
 Note also that the UTXO rule only checks that the transaction is forging the amount it has declared using the forge field (and that no Ada is forged). The forging scripts themselves are not evaluated in this transition rule. That step is part of witnessing, i.e. the UTXOW rule, see below.
 
-:::: {#fig:functions:utxo .figure latex-placement="htb"}
+
 *Helper Functions* $$\begin{align*}
     & \fun{getCoin} \in \UTxOOut \to \Coin \\
     & \fun{getCoin}~{(\wcard,~\var{out})} ~=~\fun{co}~(\var{out}~\mathsf{adaID}~\mathsf{adaToken}) \\
@@ -91,12 +85,8 @@ Note also that the UTXO rule only checks that the transaction is forging the amo
     & \text{\emph{-- value produced}} \\
 \end{align*}$$
 
-::: caption
-UTxO Calculations
-:::
-::::
-
-**The UTXO Transition Rule.** In Figure [3](#fig:rules:utxo-shelley){reference-type="ref" reference="fig:rules:utxo-shelley"}, we give the UTXO transition rule, updated for MA support. There are the following changes to the preconditions of this rule as compared to the original Shelley UTXO rule:
+**UTxO Calculations**
+**The UTXO Transition Rule.** In Figure [3](#fig:rules:utxo-shelley), we give the UTXO transition rule, updated for MA support. There are the following changes to the preconditions of this rule as compared to the original Shelley UTXO rule:
 
 - The transaction is not forging any Ada
 
@@ -106,7 +96,7 @@ UTxO Calculations
 
 Note that updating the $\UTxO$ with the inputs and the outputs of the transaction looks the same as in the Shelley rule, however, there is a type-level difference. Recall that the outputs of a transaction contain a $\Value$ term, rather than $\Coin$. Moreover, the $\fun{outs}$ map converts $\TxOut$ terms into $\UTxOOut$.
 
-:::: {#fig:rules:utxo-shelley .figure latex-placement="htb"}
+
 $$\begin{equation}
 \label{eq:utxo-inductive-shelley}
     \inference[UTxO-inductive]
@@ -174,20 +164,16 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-UTxO inference rules
-:::
-::::
-
+**UTxO inference rules**
 **Witnessing.**
 
-We have changed the definition of the function $\fun{scriptsNeeded}$, see Figure [4](#fig:functions-witnesses){reference-type="ref" reference="fig:functions-witnesses"}. There is now an additional category of scripts that are needed for transaction validation, the forging scripts.
+We have changed the definition of the function $\fun{scriptsNeeded}$, see Figure [4](#fig:functions-witnesses). There is now an additional category of scripts that are needed for transaction validation, the forging scripts.
 
 Note that there are no restrictions on the use of forging scripts. Their hashes may be used as credentials in UTxO entries, certificates, and withdrawals. Non-MPS type scripts can also be used for forging, e.g. MSig scripts.
 
 Note also that UTxO entries containing MA tokens, just like Shelley UTxO entries, can be locked by a script. This script will add an additional set of restrictions to the use of MA tokens (additional to the forging script requirements, but enforced at spending time). This output-locking script can itself also be a forging script.
 
-:::: {#fig:functions-witnesses .figure latex-placement="htb"}
+
 $$\begin{align*}
     & \hspace{-1cm}\fun{scriptsNeeded} \in \UTxO \to \Tx \to
       \powerset{\ScriptHash}
@@ -203,7 +189,4 @@ $$\begin{align*}
       & ~~~~~~~ \var{txb}~=~\txbody{tx} \\
 \end{align*}$$
 
-::: caption
-Scripts Needed
-:::
-::::
+**Scripts Needed**

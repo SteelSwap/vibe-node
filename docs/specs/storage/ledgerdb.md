@@ -1,10 +1,9 @@
-# Ledger Database {#ledgerdb}
-
+# Ledger Database
 The Ledger DB is responsible for the following tasks:
 
 1.  **Maintaining the ledger state at the tip**: Maintaining the ledger state corresponding to the current tip in memory. When we try to extend our chain with a new block fitting onto our tip, the block must first be validated using the right ledger state, i.e., the ledger state corresponding to the tip. The current ledger state is needed for various other purposes.
 
-2.  **Maintaining the past $k$ ledger states**: As discussed in [\[consensus:overview:k\]](#consensus:overview:k){reference-type="ref+label" reference="consensus:overview:k"}, we might roll back up to $k$ blocks when switching to a more preferable fork. Consider the example below:
+2.  **Maintaining the past $k$ ledger states**: As discussed in [\[consensus:overview:k\]](#consensus:overview:k), we might roll back up to $k$ blocks when switching to a more preferable fork. Consider the example below:
 
     ::: center
     :::
@@ -15,15 +14,15 @@ The Ledger DB is responsible for the following tasks:
 
     Access to the last $k$ ledger states is not only needed for validating candidate chains, but also by the:
 
-    - **Local state query server**: To query any of the past $k$ ledger states ([\[servers:lsq\]](#servers:lsq){reference-type="ref+label" reference="servers:lsq"}).
+    - **Local state query server**: To query any of the past $k$ ledger states ([\[servers:lsq\]](#servers:lsq)).
 
-    - **Chain sync client**: To validate headers of a chain that intersects with any of the past $k$ blocks ([\[chainsyncclient:validation\]](#chainsyncclient:validation){reference-type="ref+label" reference="chainsyncclient:validation"}).
+    - **Chain sync client**: To validate headers of a chain that intersects with any of the past $k$ blocks ([\[chainsyncclient:validation\]](#chainsyncclient:validation)).
 
 3.  **Storing on disk**: To obtain a ledger state for the current tip of the chain, one has to apply *all blocks in the chain* one-by-one to the initial ledger state. When starting up the system with an on-disk chain containing millions of blocks, all of them would have to be read from disk and applied. This process can take tens of minutes, depending on the storage and CPU speed, and is thus too costly to perform on each startup.
 
     For this reason, a recent snapshot of the ledger state should be periodically written to disk. Upon the next startup, that snapshot can be read and used to restore the current ledger state, as well as the past $k$ ledger states.
 
-Note that whenever we say "ledger state", we mean the `ExtLedgerState blk` type described in [\[storage:extledgerstate\]](#storage:extledgerstate){reference-type="ref+label" reference="storage:extledgerstate"}.
+Note that whenever we say "ledger state", we mean the `ExtLedgerState blk` type described in [\[storage:extledgerstate\]](#storage:extledgerstate).
 
 The above duties are divided across the following modules:
 
@@ -37,8 +36,7 @@ The above duties are divided across the following modules:
 
 We will now discuss the modules listed above.
 
-## In-memory representation {#ledgerdb:in-memory}
-
+## In-memory representation
 The `LedgerDB`, capable of represent the last $k$ ledger states, is an instantiation of the `AnchoredSeq` data type. This data type is implemented using the *finger tree* data structure [@fingertrees] and has the following time complexities:
 
 - Appending a new ledger state to the end in constant time.
@@ -53,7 +51,7 @@ When a new ledger state is appended to a fully saturated `LedgerDB`, the ledger 
 
 figure?
 
-The `LedgerDB` is parameterised over the ledger state $l$. Conveniently, the `LedgerDB` can implement the same abstract interface (described in [\[ledger:api\]](#ledger:api){reference-type="ref+label" reference="ledger:api"}) that the ledger state itself implements. I.e., the `GetTip`, `IsLedger`, and `ApplyBlock` classes. This means that in most places, wherever a ledger state can be used, it is also possible to wrap it in a `LedgerDB`, causing it to automatically maintain a history of the last $k$ ledger states.
+The `LedgerDB` is parameterised over the ledger state $l$. Conveniently, the `LedgerDB` can implement the same abstract interface (described in [\[ledger:api\]](#ledger:api)) that the ledger state itself implements. I.e., the `GetTip`, `IsLedger`, and `ApplyBlock` classes. This means that in most places, wherever a ledger state can be used, it is also possible to wrap it in a `LedgerDB`, causing it to automatically maintain a history of the last $k$ ledger states.
 
 discuss `Ap` and `applyBlock`? These are actually orthogonal to `LedgerDB` and should be separated.
 
@@ -73,13 +71,12 @@ The representation was much more complex, to account for these missing ledger st
 Consider the example below using `snapEvery` = 3. $L_i$ indicate ledger states and $\emptyset_i$ indicate skipped ledger states. $L_0$ corresponds to the most recent ledger state, at the tip of the chain.
 
 ::: center
-:::
 
 When we need access to the ledger state at position $3$, we are in luck and can use the available $L_3$. However, when we need access to the skipped ledger state at position $1$, we have to do the following: we look for the most recent ledger state before $\emptyset_1$, i.e., $L_3$. Next, we need to reapply blocks $B_2$ and $B_1$ to it, which means we have to read those from disk, deserialise them, and apply them again.
 
 This means that accessing a past ledger state is not a pure operation and might require disk access and extra computation. Consequently, switching to a fork might require reading and revalidating blocks that remain part of the chain, in addition to the new blocks.
 
-As mentioned at the start of this chapter, the chain sync client also needs access to past ledger view ([\[consensus:class:ledgerview\]](#consensus:class:ledgerview){reference-type="ref+label" reference="consensus:class:ledgerview"}), which it can obtain from past ledger states. A malicious peer might try to exploit it and create a chain that intersects with our chain right *before* an in-memory ledger state snapshot. In the worst case, we have to read and reapply `snapEvery` - 1 = 99 blocks. This is not acceptable as the costs are asymmetric and in the advantage of the attacker, i.e., creating and serving such a header is much cheaper than reconstructing the required snapshot. At the time, we solved this by requiring ledger states to store snapshots of past ledger views. The right past ledger view could then be obtained from the current ledger state, which was always available in memory. However, storing snapshots of ledger views within a single ledger state is more complex, as we are in fact storing snapshots *within* snapshots. The switch to keep all $k$ past ledger states significantly simplified the code and sped up the look-ups.
+As mentioned at the start of this chapter, the chain sync client also needs access to past ledger view ([\[consensus:class:ledgerview\]](#consensus:class:ledgerview)), which it can obtain from past ledger states. A malicious peer might try to exploit it and create a chain that intersects with our chain right *before* an in-memory ledger state snapshot. In the worst case, we have to read and reapply `snapEvery` - 1 = 99 blocks. This is not acceptable as the costs are asymmetric and in the advantage of the attacker, i.e., creating and serving such a header is much cheaper than reconstructing the required snapshot. At the time, we solved this by requiring ledger states to store snapshots of past ledger views. The right past ledger view could then be obtained from the current ledger state, which was always available in memory. However, storing snapshots of ledger views within a single ledger state is more complex, as we are in fact storing snapshots *within* snapshots. The switch to keep all $k$ past ledger states significantly simplified the code and sped up the look-ups.
 
 ##### Future design
 
@@ -87,21 +84,18 @@ It is important to note that in the future, this design will have to change agai
 
 For these reasons, we plan to revise our design in the future, and start storing parts of the ledger state on disk again.
 
-## On-disk {#ledgerdb:on-disk}
-
-The `LedgerDB.OnDisk` module provides functions to write a ledger state to disk and read a ledger state from disk. The `EncodeDisk` and `DecodeDisk` classes from [\[serialisation:storage\]](#serialisation:storage){reference-type="ref+label" reference="serialisation:storage"} are used to (de)serialise the ledger state to or from CBOR. Because of its large size, we read and deserialise the snapshot incrementally.
+## On-disk
+The `LedgerDB.OnDisk` module provides functions to write a ledger state to disk and read a ledger state from disk. The `EncodeDisk` and `DecodeDisk` classes from [\[serialisation:storage\]](#serialisation:storage) are used to (de)serialise the ledger state to or from CBOR. Because of its large size, we read and deserialise the snapshot incrementally.
 
 which ledger state to take a snapshot from is determined by the Chain DB. I.e., the background thread that copies blocks from the Volatile DB to the Immutable DB will call the `onDiskShouldTakeSnapshot` function, and if it returns `True`, a snapshot will be taken. double-check whether we're actually taking a snapshot of the right ledger state.
 
-### Disk policy {#ledgerdb:on-disk:disk-policy}
-
+### Disk policy
 The disk policy determines how many snapshots should be stored on disk and when a new snapshot of the ledger state should be written to disk.
 
 worth discussing? We would just be duplicating the existing documentation.
 
-### Initialisation {#ledgerdb:on-disk:initialisation}
-
-During initialisation, the goal is to construct an initial `LedgerDB` that is empty except for the ledger state at the anchor, which has to correspond to the immutable tip, i.e., the block at the tip of the Immutable DB ([\[immutable\]](#immutable){reference-type="ref+label" reference="immutable"}).
+### Initialisation
+During initialisation, the goal is to construct an initial `LedgerDB` that is empty except for the ledger state at the anchor, which has to correspond to the immutable tip, i.e., the block at the tip of the Immutable DB ([\[immutable\]](#immutable)).
 
 Ideally, we can construct the initial `LedgerDB` from a snapshot of the ledger state that we wrote to disk. Remember that updating a ledger state with a block is not invertible: we can apply a block to a ledger state, but we cannot "unapply" a block to a ledger state. This means the snapshot has to be at least as old as the anchor. A snapshot matching the anchor can be used as is. A snapshot older than the anchor can be used after reapplying the necessary blocks. A snapshot newer than the anchor can *not* be used, as we cannot unapply blocks to get the ledger state corresponding to the anchor. This is the reason why we only take snapshots of an immutable ledger state, i.e., of the anchor of the `LedgerDB` (or older).
 
@@ -115,23 +109,22 @@ Constructing the initial `LedgerDB` proceeds as follows:
 
 4.  If the snapshot is newer than the immutable tip, we cannot use it and try the next one. This situation can arise not because we took a snapshot of a ledger state newer than the immutable tip, but because the Immutable DB was truncated.
 
-5.  If the snapshot is older than the immutable tip, we will have to reapply the blocks after the snapshot to obtain the ledger state at the immutable tip. If there is no (more) snapshot to try, we will have to reapply *all blocks* starting from the beginning of the chain to obtain the ledger state at the immutable tip, i.e., the entire immutable chain. The blocks to reapply are streamed from the Immutable DB, using an iterator ([\[immutable:api:iterators\]](#immutable:api:iterators){reference-type="ref+label" reference="immutable:api:iterators"}).
+5.  If the snapshot is older than the immutable tip, we will have to reapply the blocks after the snapshot to obtain the ledger state at the immutable tip. If there is no (more) snapshot to try, we will have to reapply *all blocks* starting from the beginning of the chain to obtain the ledger state at the immutable tip, i.e., the entire immutable chain. The blocks to reapply are streamed from the Immutable DB, using an iterator ([\[immutable:api:iterators\]](#immutable:api:iterators)).
 
-    Note that we can *reapply* these blocks, which is quicker than applying them (see [1.3](#ledgerdb:lgrdb){reference-type="ref+label" reference="ledgerdb:lgrdb"}), as the existence of a snapshot newer than these blocks proves[^3] that they have been successfully applied in the past.
+    Note that we can *reapply* these blocks, which is quicker than applying them (see [1.3](#ledgerdb:lgrdb)), as the existence of a snapshot newer than these blocks proves[^3] that they have been successfully applied in the past.
 
 Reading and applying blocks is costly. Typically, very few blocks need to be reapplied in practice. However, there is one exception: when the serialisation format of the ledger state changes, all snapshots (written using the old serialisation format) will fail to deserialise, and all blocks starting from genesis will have to be reapplied. To mitigate this, the ledger state decoder is typically written in a backwards-compatible way, i.e., it accepts both the old and new serialisation format.
 
-## Maintained by the Chain DB {#ledgerdb:lgrdb}
-
+## Maintained by the Chain DB
 move to Chain DB chapter?
 
-The `LedgerDB` is a pure data structure. The Chain DB (see [\[chaindb\]](#chaindb){reference-type="ref+label" reference="chaindb"}) maintains the current `LedgerDB` in a `StrictTVar`. The most recent element in the `LedgerDB` is the current ledger state. Because it is stored in a `StrictTVar`, the current ledger state can be read and updated in the same `STM` transaction as the current chain, which is also stored in a `StrictTVar`.
+The `LedgerDB` is a pure data structure. The Chain DB (see [\[chaindb\]](#chaindb)) maintains the current `LedgerDB` in a `StrictTVar`. The most recent element in the `LedgerDB` is the current ledger state. Because it is stored in a `StrictTVar`, the current ledger state can be read and updated in the same `STM` transaction as the current chain, which is also stored in a `StrictTVar`.
 
 The `ChainDB.Impl.LgrDB`[^4] is responsible for maintaining the current ledger state. Besides this responsibility, it also integrates the Ledger DB with other parts of the Chain DB.
 
-Moreover, it remembers which blocks have been successfully applied in the past. When such a block needs to be validated again, e.g., because we switch again to the same fork containing the block, we can *reapply* the block instead of *applying* it (see [\[ledger:api:ApplyBlock\]](#ledger:api:ApplyBlock){reference-type="ref+label" reference="ledger:api:ApplyBlock"}). Because the block has been successfully applied in the past, we know the block is valid, which means we can skip some of the more expensive checks, e.g., checking the hashes, speeding up the process of validating the block. Note that a block can only be applied to a single ledger state, i.e., the ledger state corresponding to the predecessor of the block. Consequently, it suffices to remember whether a block was valid or not, there is no need to remember with respect to which ledger state it was valid.
+Moreover, it remembers which blocks have been successfully applied in the past. When such a block needs to be validated again, e.g., because we switch again to the same fork containing the block, we can *reapply* the block instead of *applying* it (see [\[ledger:api:ApplyBlock\]](#ledger:api:ApplyBlock)). Because the block has been successfully applied in the past, we know the block is valid, which means we can skip some of the more expensive checks, e.g., checking the hashes, speeding up the process of validating the block. Note that a block can only be applied to a single ledger state, i.e., the ledger state corresponding to the predecessor of the block. Consequently, it suffices to remember whether a block was valid or not, there is no need to remember with respect to which ledger state it was valid.
 
-To remember which blocks have been successfully applied in the past, we store the points of the respective blocks in a set. Before validating a block, we look up its point in the set, when present, we can reapply the block instead of applying it. To stop this set from growing without bound, we garbage collect it the same way the Volatile DB is garbage collected, see [\[chaindb:gc\]](#chaindb:gc){reference-type="ref+label" reference="chaindb:gc"}. When a block has a slot older than the slot number of the most recent immutable block, either the block is already immutable or it is part of a fork that we will never consider again, as it forks off before the immutable block. The block in question will never have to be validated again, and so it is not necessary to remember whether we have already applied it or not.
+To remember which blocks have been successfully applied in the past, we store the points of the respective blocks in a set. Before validating a block, we look up its point in the set, when present, we can reapply the block instead of applying it. To stop this set from growing without bound, we garbage collect it the same way the Volatile DB is garbage collected, see [\[chaindb:gc\]](#chaindb:gc). When a block has a slot older than the slot number of the most recent immutable block, either the block is already immutable or it is part of a fork that we will never consider again, as it forks off before the immutable block. The block in question will never have to be validated again, and so it is not necessary to remember whether we have already applied it or not.
 
 [^1]: Applying a block to a ledger state is not an invertible operation, so it is not possible to simply "unapply" $C_1$ and $C_2$ to obtain $I$.
 

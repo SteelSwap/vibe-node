@@ -1,5 +1,4 @@
-# Notation {#sec:notation-shelley}
-
+# Notation
 $\mathbb{N}$
 
 :   The (canonical) symbol for the natural numbers

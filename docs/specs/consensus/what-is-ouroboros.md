@@ -13,7 +13,6 @@ issues and contribute on
 [GitHub](https://github.com/input-output-hk/ouroboros-consensus)
 repository should you find missing or inaccurate information.
 
-:::
 
 ## Very High-Level Motivation
 

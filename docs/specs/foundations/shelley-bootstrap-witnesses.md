@@ -1,5 +1,4 @@
-# Bootstrap Witnesses {#sec:bootstrap-witnesses}
-
+# Bootstrap Witnesses
 ## Bootstrap Witnesses CBOR Specification
 
 In the Byron era of Cardano, public keys are transmitted on chain as extended public keys as specified in [@bip32]. The Shelley era of Cardano does not use extended public keys, but does use the same cryptographic signing algorithm, namely Ed25519.

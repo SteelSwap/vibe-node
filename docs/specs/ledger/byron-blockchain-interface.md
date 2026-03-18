@@ -1,8 +1,5 @@
-# Blockchain interface {#sec:blockchain-interface}
-
-## Delegation interface {#sec:delegation-interface}
-
-:::: {#fig:ts-types:delegation-interface .figure latex-placement="htb"}
+# Blockchain interface
+## Delegation interface
 *Delegation interface environments* $$\begin{equation*}
     \type{DIEnv}=
     \left(
@@ -31,14 +28,8 @@
     \powerset (\type{DIEnv}\times \type{DIState}\times \seqof{\DCert} \times \type{DIState})
 \end{equation*}$$
 
-::: caption
-Delegation interface transition-system types
-:::
-::::
-
-### Delegation interface rules {#sec:delegation-interface-rules}
-
-:::: {#fig:rules:delegation-interface .figure latex-placement="htb"}
+**Delegation interface transition-system types**
+### Delegation interface rules
 $$\begin{equation}
     \label{eq:rule:delegation-interface-init}
     \inference
@@ -169,14 +160,9 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Delegation interface rules
-:::
-::::
-
-## Update-proposals interface {#sec:update-proposals-interface}
-
-Figure [4](#fig:ts-types:upi){reference-type="ref" reference="fig:ts-types:upi"} defines the types of the transition systems related with the update-proposals interface. The acronyms in the transition labels have the following meaning:
+**Delegation interface rules**
+## Update-proposals interface
+Figure [4](#fig:ts-types:upi) defines the types of the transition systems related with the update-proposals interface. The acronyms in the transition labels have the following meaning:
 
 UPIREG
 
@@ -194,9 +180,9 @@ UPIEC
 
 :   Update-proposal-interface epoch-change.
 
-In these rules we make use of the abstract constant $\var{ngk}$, defined in [3](#fig:defs:upi){reference-type="ref+label" reference="fig:defs:upi"}, which determines the number of genesis keys:
+In these rules we make use of the abstract constant $\var{ngk}$, defined in [3](#fig:defs:upi), which determines the number of genesis keys:
 
-:::: {#fig:defs:upi .figure latex-placement="ht"}
+
 *Abstract functions* $$\begin{equation*}
     \begin{array}{rlr}
       \var{ngk} & \mathbb{N} & \text{number of genesis keys}\\
@@ -205,12 +191,7 @@ In these rules we make use of the abstract constant $\var{ngk}$, defined in [3](
     \end{array}
 \end{equation*}$$
 
-::: caption
-Update interface types and functions
-:::
-::::
-
-:::: {#fig:ts-types:upi .figure latex-placement="htb"}
+**Update interface types and functions**
 *Update-proposals interface environments* $$\begin{align*}
     & \type{UPIEnv}
       = \left(
@@ -252,12 +233,7 @@ Update interface types and functions
     \end{array}
 \end{equation*}$$
 
-::: caption
-Update-proposals interface transition-system types
-:::
-::::
-
-:::: {#fig:rules:upi-reg-interface .figure latex-placement="htb"}
+**Update-proposals interface transition-system types**
 $$\begin{equation}
     \label{eq:rule:upi-reg-interface}
     \inference
@@ -333,14 +309,10 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Update-proposals registration rules
-:::
-::::
+**Update-proposals registration rules**
+Rule [\[eq:rule:upi-vote\]](#eq:rule:upi-vote) models the effect of voting on an update proposal.
 
-Rule [\[eq:rule:upi-vote\]](#eq:rule:upi-vote){reference-type="ref" reference="eq:rule:upi-vote"} models the effect of voting on an update proposal.
 
-:::: {#fig:rules:upi-vote .figure latex-placement="htb"}
 $$\begin{equation}
     \label{eq:rule:upi-vote}
     \inference
@@ -415,24 +387,16 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Voting on update-proposals rules
-:::
-::::
+**Voting on update-proposals rules**
+Figure [7](#fig:st-diagram-sw-up) shows the different states in which a software proposal update might be: if valid, a software update proposal becomes active whenever it is included in a block. If the update proposal gets enough votes, then the corresponding software update proposal becomes confirmed. After this confirmation becomes stable, the new software version gets adopted. If the voting period ends without an update proposal being confirmed, then the corresponding software update proposal gets rejected. Protocol updates on the other hand, involve a slightly different logic, and the state transition diagram for these kind of updates is shown in Figure [13](#fig:st-diagram-pt-up).
 
-Figure [7](#fig:st-diagram-sw-up){reference-type="ref" reference="fig:st-diagram-sw-up"} shows the different states in which a software proposal update might be: if valid, a software update proposal becomes active whenever it is included in a block. If the update proposal gets enough votes, then the corresponding software update proposal becomes confirmed. After this confirmation becomes stable, the new software version gets adopted. If the voting period ends without an update proposal being confirmed, then the corresponding software update proposal gets rejected. Protocol updates on the other hand, involve a slightly different logic, and the state transition diagram for these kind of updates is shown in Figure [13](#fig:st-diagram-pt-up){reference-type="ref" reference="fig:st-diagram-pt-up"}.
 
-:::: {#fig:st-diagram-sw-up .figure latex-placement="ht"}
-::: caption
-State-transition diagram for software-updates
-:::
-::::
+**State-transition diagram for software-updates**
+A sequence of votes can be applied using $\trans{upivotes}{}$ transitions. The inference rules for them are presented in [8](#fig:rules:apply-votes). After applying a sequence of votes, proposals might get confirmed, which means that they will be added to the set $\var{cps'}$. In such case, the mapping of application names to their latest version known to the ledger will be updated to include the information about the confirmed proposals. Note that, unlike protocol updates, software updates take effect as soon as a proposal is confirmed (we cannot wait for stability since we need to preserve compatibility with the existing chain, where there are software update proposals that were adopted without waiting for $2\cdot k$ slots). In this rule, we also delete the confirmed id's from the set of registered application update proposals ($\var{raus}$), since this information is no longer needed once the application-name to software-version map ($\var{avs}$) is updated.
 
-A sequence of votes can be applied using $\trans{upivotes}{}$ transitions. The inference rules for them are presented in [8](#fig:rules:apply-votes){reference-type="ref+label" reference="fig:rules:apply-votes"}. After applying a sequence of votes, proposals might get confirmed, which means that they will be added to the set $\var{cps'}$. In such case, the mapping of application names to their latest version known to the ledger will be updated to include the information about the confirmed proposals. Note that, unlike protocol updates, software updates take effect as soon as a proposal is confirmed (we cannot wait for stability since we need to preserve compatibility with the existing chain, where there are software update proposals that were adopted without waiting for $2\cdot k$ slots). In this rule, we also delete the confirmed id's from the set of registered application update proposals ($\var{raus}$), since this information is no longer needed once the application-name to software-version map ($\var{avs}$) is updated.
+Also note that, unlike the rules of [11](#fig:rules:upi-ec), we need not remove other update proposals that refer to the software names whose versions were changed in $\var{avs_{new}}$. The reason for this is that the range of $\var{raus}$ can contain only one pair of the form $(\var{an}, \wcard, \wcard)$ for any given application name $\var{an}$ (see Rule [\[eq:rule:up-av-validity\]](#eq:rule:up-av-validity)).
 
-Also note that, unlike the rules of [11](#fig:rules:upi-ec){reference-type="ref+label" reference="fig:rules:upi-ec"}, we need not remove other update proposals that refer to the software names whose versions were changed in $\var{avs_{new}}$. The reason for this is that the range of $\var{raus}$ can contain only one pair of the form $(\var{an}, \wcard, \wcard)$ for any given application name $\var{an}$ (see Rule [\[eq:rule:up-av-validity\]](#eq:rule:up-av-validity){reference-type="ref" reference="eq:rule:up-av-validity"}).
 
-:::: {#fig:rules:apply-votes .figure latex-placement="htb"}
 $$\begin{equation}
     \label{eq:rule:apply-votes-base}
     \inference
@@ -569,11 +533,7 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Applying multiple votes on update-proposals rules
-:::
-::::
-
+**Applying multiple votes on update-proposals rules**
 The interface rule for protocol-version endorsement makes use of the $\trans{upend}{}$ transition, where we set the threshold for proposal adoption to: the number of genesis keys ($\var{ngk}$) times the minimum proportion of genesis keys that need to endorse an update proposal for it to become a candidate for adoption (given by the protocol parameter $\var{upAdptThd}$). In addition, the unconfirmed proposals that are older than $u$ blocks are removed from the parts of the state that hold:
 
 - the registered protocol and software update proposals,
@@ -584,9 +544,9 @@ The interface rule for protocol-version endorsement makes use of the $\trans{upe
 
 - the block number in which proposals where added.
 
-In Rule [\[eq:rule:upi-pend\]](#eq:rule:upi-pend){reference-type="ref" reference="eq:rule:upi-pend"}, the set of proposal id's $\var{pid_{keep}}$ contains only those proposals that haven't expired yet or that are confirmed. Once a proposal $\var{up}$ is confirmed, it is removed from the set of confirmed proposals ($\var{cps}$) when a new a protocol version gets adopted (see Rule [\[eq:rule:upi-ec-pv-change\]](#eq:rule:upi-ec-pv-change){reference-type="ref" reference="eq:rule:upi-ec-pv-change"}). The set of endorsement-key pairs is cleaned here as well as in the epoch change rule (Rule [\[eq:rule:upi-ec-pv-change\]](#eq:rule:upi-ec-pv-change){reference-type="ref" reference="eq:rule:upi-ec-pv-change"}). The reason for this is that this set grows at each block, and it can get considerably large if no proposal gets adopted at the end of an epoch.
+In Rule [\[eq:rule:upi-pend\]](#eq:rule:upi-pend), the set of proposal id's $\var{pid_{keep}}$ contains only those proposals that haven't expired yet or that are confirmed. Once a proposal $\var{up}$ is confirmed, it is removed from the set of confirmed proposals ($\var{cps}$) when a new a protocol version gets adopted (see Rule [\[eq:rule:upi-ec-pv-change\]](#eq:rule:upi-ec-pv-change)). The set of endorsement-key pairs is cleaned here as well as in the epoch change rule (Rule [\[eq:rule:upi-ec-pv-change\]](#eq:rule:upi-ec-pv-change)). The reason for this is that this set grows at each block, and it can get considerably large if no proposal gets adopted at the end of an epoch.
 
-:::: {#fig:rules:upi-pend .figure latex-placement="htb"}
+
 $$\begin{equation}
     \label{eq:rule:upi-pend}
     \inference
@@ -670,21 +630,17 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Proposal endorsement rules
-:::
-::::
+**Proposal endorsement rules**
+Rule [\[eq:rule:upi-ec-pv-change\]](#eq:rule:upi-ec-pv-change) models how the protocol-version and its parameters are changed depending on an epoch change signal. On an epoch change, this rule will pick a candidate that gathered enough endorsements at least $4 \cdot k$ slots ago. If a protocol-version candidate cannot gather enough endorsements $4 \cdot k$ slots before the end of an epoch, the proposal can only be adopted in the next epoch. The reason for the $4 \cdot
+k$ slot delay is to allow a period between knowing when a proposal will be adopted, and the event of its being adopted. Since update proposals can and will make large changes to the way the chain operates, it is useful to be able to guarantee a window in which it is known that no update will take place. Figure [12](#fig:up-confirmed-too-late) shows an example of a proposal being confirmed too late in an epoch, where it is not possible to get enough endorsements in the remaining window. In this Figure we take $k = 2$, and we assume $4$ endorsements are needed to consider a proposal as candidate for adoption. Note that, in the final state, we use union override to define the updated parameters ($\var{pps} \unionoverrideRight \var{pps'}$). This is because candidate proposal might only update some parameters of the protocol.
 
-Rule [\[eq:rule:upi-ec-pv-change\]](#eq:rule:upi-ec-pv-change){reference-type="ref" reference="eq:rule:upi-ec-pv-change"} models how the protocol-version and its parameters are changed depending on an epoch change signal. On an epoch change, this rule will pick a candidate that gathered enough endorsements at least $4 \cdot k$ slots ago. If a protocol-version candidate cannot gather enough endorsements $4 \cdot k$ slots before the end of an epoch, the proposal can only be adopted in the next epoch. The reason for the $4 \cdot
-k$ slot delay is to allow a period between knowing when a proposal will be adopted, and the event of its being adopted. Since update proposals can and will make large changes to the way the chain operates, it is useful to be able to guarantee a window in which it is known that no update will take place. Figure [12](#fig:up-confirmed-too-late){reference-type="ref" reference="fig:up-confirmed-too-late"} shows an example of a proposal being confirmed too late in an epoch, where it is not possible to get enough endorsements in the remaining window. In this Figure we take $k = 2$, and we assume $4$ endorsements are needed to consider a proposal as candidate for adoption. Note that, in the final state, we use union override to define the updated parameters ($\var{pps} \unionoverrideRight \var{pps'}$). This is because candidate proposal might only update some parameters of the protocol.
+In Rule [\[eq:rule:upi-ec-pv-change\]](#eq:rule:upi-ec-pv-change), when a new proposal gets adopted, all the state components that refer to protocol update proposals get emptied. The reason for this is that at the moment of registering a proposal, we evaluated it in a state where the protocol parameters that we used for this are no longer up to date (see for instance [\[eq:func:can-update\]](#eq:func:can-update)). For instance, assume we register a proposal $\var{up}$ which only changes the maximum transaction size to $x$, and the current block size is set to $x + 1$. Then, $\fun{canUpdate}$ holds, since the maximum transaction size is less than the maximum block size. If now a new proposal gets adopted that changes the maximum block size to $x - 1$, then this invalidates $\var{up}$ since $\fun{canUpdate}$ no longer holds.
 
-In Rule [\[eq:rule:upi-ec-pv-change\]](#eq:rule:upi-ec-pv-change){reference-type="ref" reference="eq:rule:upi-ec-pv-change"}, when a new proposal gets adopted, all the state components that refer to protocol update proposals get emptied. The reason for this is that at the moment of registering a proposal, we evaluated it in a state where the protocol parameters that we used for this are no longer up to date (see for instance [\[eq:func:can-update\]](#eq:func:can-update){reference-type="ref+label" reference="eq:func:can-update"}). For instance, assume we register a proposal $\var{up}$ which only changes the maximum transaction size to $x$, and the current block size is set to $x + 1$. Then, $\fun{canUpdate}$ holds, since the maximum transaction size is less than the maximum block size. If now a new proposal gets adopted that changes the maximum block size to $x - 1$, then this invalidates $\var{up}$ since $\fun{canUpdate}$ no longer holds.
-
-If there are no candidates for adoption, then the state variables remain unaltered (Rule [\[eq:rule:upi-ec-pv-unchanged\]](#eq:rule:upi-ec-pv-unchanged){reference-type="ref" reference="eq:rule:upi-ec-pv-unchanged"}).
+If there are no candidates for adoption, then the state variables remain unaltered (Rule [\[eq:rule:upi-ec-pv-unchanged\]](#eq:rule:upi-ec-pv-unchanged)).
 
 Also note that the registered software-update proposals need not be cleaned here, since this is done either when a proposal gets confirmed or when it expires.
 
-:::: {#fig:rules:pvbump .figure latex-placement="htb"}
+
 $$\begin{equation}
     \label{eq:rule:pvbump-change-epoch-only}
     \inference
@@ -743,12 +699,7 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Protocol version bump rules
-:::
-::::
-
-:::: {#fig:rules:upi-ec .figure latex-placement="htb"}
+**Protocol version bump rules**
 $$\begin{equation}
     \label{eq:rule:upi-ec-pv-unchanged}
     \inference
@@ -872,21 +823,9 @@ $$\begin{equation}
     }
 \end{equation}$$
 
-::: caption
-Block version adoption on epoch change rules
-:::
-::::
+**Block version adoption on epoch change rules**
+**An update proposal confirmed too late**
+Figure [13](#fig:st-diagram-pt-up) shows the different states a protocol-update proposal can be in, and what causes the transitions between them.
 
-:::: {#fig:up-confirmed-too-late .figure latex-placement="htb"}
-::: caption
-An update proposal confirmed too late
-:::
-::::
 
-Figure [13](#fig:st-diagram-pt-up){reference-type="ref" reference="fig:st-diagram-pt-up"} shows the different states a protocol-update proposal can be in, and what causes the transitions between them.
-
-:::: {#fig:st-diagram-pt-up .figure latex-placement="ht"}
-::: caption
-State-transition diagram for protocol-updates
-:::
-::::
+**State-transition diagram for protocol-updates**

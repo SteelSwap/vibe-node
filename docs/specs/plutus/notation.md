@@ -1,9 +1,7 @@
-# Some basic notation {#sec:notation}
-
+# Some basic notation
 We begin with some notation which will be used throughout the document.
 
-## Sets {#sec:notation-sets}
-
+## Sets
 - $\N = \{0,1,2,3,\ldots\}$.
 
 - $\Nplus = \{1,2,3,\ldots\}$.
@@ -34,8 +32,7 @@ We begin with some notation which will be used throughout the document.
 
 - We assume that there is a special symbol $\errorX$ which does not appear in any other set we mention. The symbol $\errorX$ is used to indicate that some sort of error condition has occurred, and we will often need to consider situations in which a value is either $\errorX$ or a member of some set $S$. For brevity, if $S$ is a set then we define $$\withError{S} := S \disj \{\errorX\}.$$
 
-## Lists {#sec:notation-lists}
-
+## Lists
 - The symbol $[]$ denotes an empty list.
 
 - The notation $[x_m, \ldots, x_n]$ denotes a list containing the elements $x_m, \ldots, x_n$. If $m>n$ then the list is empty.
@@ -50,8 +47,7 @@ We begin with some notation which will be used throughout the document.
 
 - Given a syntactic category $V$, the symbol $\repetition{V}$ denotes a possibly empty list $[V_1,\ldots, V_n]$ of elements $V_i \in V$.
 
-## Bytestrings and bitstrings {#sec:notation-bytestrings}
-
+## Bytestrings and bitstrings
 We make frequent use of bytestrings and bitstrings and for the sake of conciseness we occasionally use special notation. We also define conversion functions between bytestrings and bitstrings
 
 - We typically index the bytes in bytestrings starting from the *left* end but the bits in bitstrings from the *right* end.

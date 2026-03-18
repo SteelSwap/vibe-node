@@ -1,20 +1,19 @@
-# Transactions {#sec:transactions}
-
-Transactions are defined in Figure [1](#fig:defs:utxo-shelley){reference-type="ref" reference="fig:defs:utxo-shelley"}. A transaction body, $\TxBody$, is made up of eight pieces:
+# Transactions
+Transactions are defined in Figure [1](#fig:defs:utxo-shelley). A transaction body, $\TxBody$, is made up of eight pieces:
 
 - A set of transaction inputs. This derived type identifies an output from a previous transaction. It consists of a transaction id and an index to uniquely identify the output.
 
 - An indexed collection of transaction outputs. The $\TxOut$ type is an address paired with a coin value.
 
-- A list of certificates, which will be explained in detail in Section [\[sec:delegation-shelley\]](#sec:delegation-shelley){reference-type="ref" reference="sec:delegation-shelley"}.
+- A list of certificates, which will be explained in detail in Section [\[sec:delegation-shelley\]](#sec:delegation-shelley).
 
 - A transaction fee. This value will be added to the fee pot and eventually handed out as stake rewards.
 
 - A time to live. A transaction will be deemed invalid if processed after this slot.
 
-- A mapping of reward account withdrawals. The type $\Wdrl$ is a finite map that maps a reward address to the coin value to be withdrawn. The coin value must be equal to the full value contained in the account. Explicitly stating these values ensures that error messages can be precise about why a transaction is invalid. For reward calculation rules, see Section [\[sec:reward-overview\]](#sec:reward-overview){reference-type="ref" reference="sec:reward-overview"}, and for the rule for collecting rewards, see Section [\[sec:utxo-trans\]](#sec:utxo-trans){reference-type="ref" reference="sec:utxo-trans"}.
+- A mapping of reward account withdrawals. The type $\Wdrl$ is a finite map that maps a reward address to the coin value to be withdrawn. The coin value must be equal to the full value contained in the account. Explicitly stating these values ensures that error messages can be precise about why a transaction is invalid. For reward calculation rules, see Section [\[sec:reward-overview\]](#sec:reward-overview), and for the rule for collecting rewards, see Section [\[sec:utxo-trans\]](#sec:utxo-trans).
 
-- An optional update proposals for the protocol parameters. The update system will be explained in Section [\[sec:update\]](#sec:update){reference-type="ref" reference="sec:update"}.
+- An optional update proposals for the protocol parameters. The update system will be explained in Section [\[sec:update\]](#sec:update).
 
 - An optional metadata hash.
 
@@ -34,7 +33,7 @@ Additionally, the $\UTxO$ type will be used by the ledger state to store all the
 
 Finally, $\fun{txid}$ computes the transaction id of a given transaction. This function must produce a unique id for each unique transaction body.
 
-:::: {#fig:defs:utxo-shelley .figure latex-placement="htb"}
+
 *Abstract types* $$\begin{equation*}
     \begin{array}{rlr}
       \var{gkey} & \VKeyGen & \text{genesis public keys}\\
@@ -122,12 +121,7 @@ Finally, $\fun{txid}$ computes the transaction id of a given transaction. This f
     \end{array}
 \end{equation*}$$
 
-::: caption
-Definitions used in the UTxO transition system
-:::
-::::
-
-:::: {#fig:defs:functions-txins .figure latex-placement="htb"}
+**Definitions used in the UTxO transition system**
 *Helper Functions* $$\begin{align*}
     \fun{txinsVKey} & \in \powerset \TxIn \to \UTxO \to \powerset\TxIn & \text{VKey Tx inputs}\\
     \fun{txinsVKey} & ~\var{txins}~\var{utxo} =
@@ -149,9 +143,5 @@ Definitions used in the UTxO transition system
                            vk \in \dom(\fun{txwitsVKey}~\var{tx})\}
 \end{align*}$$
 
-::: caption
-Helper Functions for Transaction Inputs
-:::
-::::
-
-Figure [2](#fig:defs:functions-txins){reference-type="ref" reference="fig:defs:functions-txins"} shows the helper functions $\fun{txinsVKey}$ and $\fun{txinsScript}$ which partition the set of transaction inputs of the transaction into those that are locked with a private key and those that are locked via a script. It also defines $\fun{validateScript}$, which validates the multisignature scripts.
+**Helper Functions for Transaction Inputs**
+Figure [2](#fig:defs:functions-txins) shows the helper functions $\fun{txinsVKey}$ and $\fun{txinsScript}$ which partition the set of transaction inputs of the transaction into those that are locked with a private key and those that are locked via a script. It also defines $\fun{validateScript}$, which validates the multisignature scripts.
