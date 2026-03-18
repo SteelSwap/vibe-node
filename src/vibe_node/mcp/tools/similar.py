@@ -2,7 +2,7 @@
 from __future__ import annotations
 import uuid as _uuid
 
-from vibe_node.mcp.search_server import mcp
+from vibe_node.mcp.app import mcp
 from vibe_node.mcp.db import get_pool
 from vibe_node.mcp.embed import embed_query
 from vibe_node.db.search import build_vector_query

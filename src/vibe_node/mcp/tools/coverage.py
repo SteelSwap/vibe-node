@@ -1,7 +1,7 @@
 """coverage tool — spec coverage dashboard."""
 from __future__ import annotations
 
-from vibe_node.mcp.search_server import mcp
+from vibe_node.mcp.app import mcp
 from vibe_node.mcp.db import get_pool
 
 

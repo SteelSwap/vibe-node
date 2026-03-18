@@ -7,19 +7,12 @@ Run: uv run python -m vibe_node.mcp.search_server
 """
 import logging
 
-from mcp.server.fastmcp import FastMCP
+from vibe_node.mcp.app import mcp  # noqa: F401 — re-export for convenience
 
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP("vibe-search")
-
-
-def register_tools():
-    """Import all tool modules so their @mcp.tool() decorators fire."""
-    from vibe_node.mcp.tools import search, similar, related, coverage, entity, versions  # noqa: F401
-
-
-register_tools()
+# Import tool modules so their @mcp.tool() decorators register
+from vibe_node.mcp.tools import search, similar, related, coverage, entity, versions  # noqa: F401, E402
 
 if __name__ == "__main__":
     mcp.run()
