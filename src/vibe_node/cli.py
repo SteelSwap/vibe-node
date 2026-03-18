@@ -497,17 +497,10 @@ def extract_rules(
     Extracts spec rules, finds implementing code and related discussions,
     detects spec-vs-code gaps, and proposes Hypothesis tests.
 
-    Requires ANTHROPIC_API_KEY environment variable.
+    Requires either AWS credentials (for Bedrock, default) or ANTHROPIC_API_KEY.
+    Override models via EXTRACTION_MODEL and LINKING_MODEL env vars.
     """
     import asyncio
-    import os
-
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        typer.echo(
-            "ANTHROPIC_API_KEY not set. Get one at https://console.anthropic.com/",
-            err=True,
-        )
-        raise typer.Exit(1)
 
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 

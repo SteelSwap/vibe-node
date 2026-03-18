@@ -26,9 +26,12 @@ from vibe_node.research.models import (
 
 logger = logging.getLogger(__name__)
 
-# Extraction uses Opus for quality; linking uses Sonnet for speed/cost
-EXTRACTION_MODEL = os.environ.get("EXTRACTION_MODEL", "anthropic:claude-sonnet-4-20250514")
-LINKING_MODEL = os.environ.get("LINKING_MODEL", "anthropic:claude-sonnet-4-20250514")
+# Model configuration — supports Anthropic API or AWS Bedrock.
+# Bedrock format: "bedrock:anthropic.claude-opus-4-6-v1"
+# Anthropic format: "anthropic:claude-sonnet-4-20250514"
+# Override via environment variables.
+EXTRACTION_MODEL = os.environ.get("EXTRACTION_MODEL", "bedrock:anthropic.claude-opus-4-6-v1")
+LINKING_MODEL = os.environ.get("LINKING_MODEL", "bedrock:anthropic.claude-sonnet-4-6-v1")
 
 
 # === Stage 1: Rule Extraction Agent ===
