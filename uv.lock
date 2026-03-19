@@ -2855,6 +2855,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "typer" },
+    { name = "vibe-core" },
     { name = "vibe-tools" },
 ]
 
@@ -2876,6 +2877,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "typer", specifier = ">=0.15" },
+    { name = "vibe-core", editable = "packages/vibe-core" },
     { name = "vibe-tools", editable = "packages/vibe-tools" },
 ]
 
