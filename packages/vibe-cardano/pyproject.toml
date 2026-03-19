@@ -5,6 +5,8 @@ description = "Cardano-specific node implementation"
 requires-python = ">=3.14"
 dependencies = [
     "vibe-core",
+    "cbor2>=5.6.0",
+    "pycardano>=0.12.0",
 ]
 
 [build-system]
