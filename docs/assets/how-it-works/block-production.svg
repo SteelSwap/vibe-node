@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" font-family="Inter, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="bpGrad" gradientTransform="rotate(110)">
+      <stop offset="0%" style="stop-color:#ED458E"/>
+      <stop offset="100%" style="stop-color:#F48020"/>
+    </linearGradient>
+    <linearGradient id="bpForge">
+      <stop offset="0%" style="stop-color:#F48020"/>
+      <stop offset="100%" style="stop-color:#d06a18"/>
+    </linearGradient>
+    <filter id="bpShadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="720" height="380" rx="16" fill="#1a1b1e"/>
+  <rect width="720" height="4" fill="url(#bpGrad)"/>
+
+  <text x="360" y="34" text-anchor="middle" fill="url(#bpGrad)" font-size="18" font-weight="800">Block Production</text>
+  <text x="360" y="52" text-anchor="middle" fill="#909296" font-size="10">What happens when your stake pool wins the right to forge a block</text>
+
+  <!-- Step 1: VRF check -->
+  <rect x="40" y="80" width="150" height="70" rx="10" fill="#25262b" stroke="#ED458E" stroke-width="1.5" filter="url(#bpShadow)"/>
+  <text x="115" y="103" text-anchor="middle" fill="#ED458E" font-size="12" font-weight="700">1. VRF Check</text>
+  <text x="115" y="121" text-anchor="middle" fill="#909296" font-size="9">Am I the leader</text>
+  <text x="115" y="136" text-anchor="middle" fill="#909296" font-size="9">for this slot?</text>
+
+  <!-- Step 2: Collect txs -->
+  <rect x="220" y="80" width="150" height="70" rx="10" fill="#25262b" stroke="#d94080" stroke-width="1.5" filter="url(#bpShadow)"/>
+  <text x="295" y="103" text-anchor="middle" fill="#d94080" font-size="12" font-weight="700">2. Collect Txs</text>
+  <text x="295" y="121" text-anchor="middle" fill="#909296" font-size="9">Pick transactions</text>
+  <text x="295" y="136" text-anchor="middle" fill="#909296" font-size="9">from the mempool</text>
+
+  <!-- Step 3: Build block -->
+  <rect x="400" y="80" width="150" height="70" rx="10" fill="#25262b" stroke="#E86040" stroke-width="1.5" filter="url(#bpShadow)"/>
+  <text x="475" y="103" text-anchor="middle" fill="#E86040" font-size="12" font-weight="700">3. Build Block</text>
+  <text x="475" y="121" text-anchor="middle" fill="#909296" font-size="9">Assemble header</text>
+  <text x="475" y="136" text-anchor="middle" fill="#909296" font-size="9">+ body + proofs</text>
+
+  <!-- Step 4: Sign & broadcast -->
+  <rect x="580" y="80" width="110" height="70" rx="10" fill="url(#bpForge)" filter="url(#bpShadow)"/>
+  <text x="635" y="103" text-anchor="middle" fill="white" font-size="12" font-weight="700">4. Sign</text>
+  <text x="635" y="121" text-anchor="middle" fill="#ffe0c0" font-size="9">KES signature</text>
+  <text x="635" y="136" text-anchor="middle" fill="#ffe0c0" font-size="9">&amp; broadcast</text>
+
+  <!-- Arrows -->
+  <line x1="190" y1="115" x2="218" y2="115" stroke="#d94080" stroke-width="2"/>
+  <polygon points="216,111 224,115 216,119" fill="#d94080"/>
+  <line x1="370" y1="115" x2="398" y2="115" stroke="#E86040" stroke-width="2"/>
+  <polygon points="396,111 404,115 396,119" fill="#E86040"/>
+  <line x1="550" y1="115" x2="578" y2="115" stroke="#F48020" stroke-width="2"/>
+  <polygon points="576,111 584,115 576,119" fill="#F48020"/>
+
+  <!-- Block anatomy -->
+  <rect x="120" y="185" width="480" height="130" rx="12" fill="#25262b" stroke="#373a40" stroke-width="1"/>
+  <text x="360" y="212" text-anchor="middle" fill="url(#bpGrad)" font-size="14" font-weight="700">Inside a Block</text>
+
+  <rect x="140" y="224" width="130" height="44" rx="6" fill="#25262b" stroke="#ED458E" stroke-width="1"/>
+  <text x="205" y="244" text-anchor="middle" fill="#ED458E" font-size="11" font-weight="600">Header</text>
+  <text x="205" y="260" text-anchor="middle" fill="#909296" font-size="9">Slot, VRF proof, hash</text>
+
+  <rect x="290" y="224" width="130" height="44" rx="6" fill="#25262b" stroke="#d94080" stroke-width="1"/>
+  <text x="355" y="244" text-anchor="middle" fill="#d94080" font-size="11" font-weight="600">Body</text>
+  <text x="355" y="260" text-anchor="middle" fill="#909296" font-size="9">Transactions</text>
+
+  <rect x="440" y="224" width="140" height="44" rx="6" fill="#25262b" stroke="#F48020" stroke-width="1"/>
+  <text x="510" y="244" text-anchor="middle" fill="#F48020" font-size="11" font-weight="600">Signatures</text>
+  <text x="510" y="260" text-anchor="middle" fill="#909296" font-size="9">KES + VRF + opcert</text>
+
+  <text x="360" y="300" text-anchor="middle" fill="#909296" font-size="10">Other nodes verify the VRF proof and KES signature before accepting the block.</text>
+
+  <!-- Reward note -->
+  <rect x="160" y="336" width="400" height="28" rx="8" fill="#25262b" stroke="#F48020" stroke-width="1"/>
+  <text x="360" y="355" text-anchor="middle" fill="#F48020" font-size="11" font-weight="600">Blocks earn rewards for the pool and its delegators</text>
+
+  <rect y="376" width="720" height="4" fill="url(#bpGrad)" rx="2"/>
+</svg>

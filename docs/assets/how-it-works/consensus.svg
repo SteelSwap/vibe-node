@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" font-family="Inter, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="csGrad" gradientTransform="rotate(110)">
+      <stop offset="0%" style="stop-color:#ED458E"/>
+      <stop offset="100%" style="stop-color:#F48020"/>
+    </linearGradient>
+    <linearGradient id="csSlot">
+      <stop offset="0%" style="stop-color:#d94080"/>
+      <stop offset="100%" style="stop-color:#E86040"/>
+    </linearGradient>
+    <filter id="csShadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="720" height="380" rx="16" fill="#1a1b1e"/>
+  <rect width="720" height="4" fill="url(#csGrad)"/>
+
+  <text x="360" y="34" text-anchor="middle" fill="url(#csGrad)" font-size="18" font-weight="800">Consensus &mdash; Ouroboros Praos</text>
+  <text x="360" y="52" text-anchor="middle" fill="#909296" font-size="10">How the network agrees on which blocks are valid without a central authority</text>
+
+  <!-- Timeline -->
+  <text x="50" y="88" fill="#d94080" font-size="12" font-weight="700">Slots &amp; Epochs</text>
+  <line x1="50" y1="106" x2="670" y2="106" stroke="#373a40" stroke-width="2"/>
+
+  <!-- Slot boxes -->
+  <rect x="60" y="96" width="60" height="22" rx="4" fill="url(#csSlot)"/>
+  <text x="90" y="112" text-anchor="middle" fill="white" font-size="9" font-weight="600">Slot 1</text>
+  <rect x="130" y="96" width="60" height="22" rx="4" fill="#25262b" stroke="#373a40" stroke-width="1"/>
+  <text x="160" y="112" text-anchor="middle" fill="#909296" font-size="9">Empty</text>
+  <rect x="200" y="96" width="60" height="22" rx="4" fill="url(#csSlot)"/>
+  <text x="230" y="112" text-anchor="middle" fill="white" font-size="9" font-weight="600">Slot 3</text>
+  <rect x="270" y="96" width="60" height="22" rx="4" fill="url(#csSlot)"/>
+  <text x="300" y="112" text-anchor="middle" fill="white" font-size="9" font-weight="600">Slot 4</text>
+  <rect x="340" y="96" width="60" height="22" rx="4" fill="#25262b" stroke="#373a40" stroke-width="1"/>
+  <text x="370" y="112" text-anchor="middle" fill="#909296" font-size="9">Empty</text>
+  <rect x="410" y="96" width="60" height="22" rx="4" fill="#25262b" stroke="#373a40" stroke-width="1"/>
+  <text x="440" y="112" text-anchor="middle" fill="#909296" font-size="9">Empty</text>
+  <rect x="480" y="96" width="60" height="22" rx="4" fill="url(#csSlot)"/>
+  <text x="510" y="112" text-anchor="middle" fill="white" font-size="9" font-weight="600">Slot 7</text>
+  <rect x="550" y="96" width="60" height="22" rx="4" fill="url(#csSlot)"/>
+  <text x="580" y="112" text-anchor="middle" fill="white" font-size="9" font-weight="600">Slot 8</text>
+  <text x="640" y="112" fill="#909296" font-size="10">...</text>
+
+  <text x="360" y="142" text-anchor="middle" fill="#909296" font-size="10">Every second is a slot. Most slots are empty. Some get a block.</text>
+
+  <!-- VRF lottery -->
+  <rect x="80" y="162" width="260" height="90" rx="10" fill="#25262b" stroke="#ED458E" stroke-width="1.5" filter="url(#csShadow)"/>
+  <text x="210" y="188" text-anchor="middle" fill="#ED458E" font-size="14" font-weight="700">The VRF Lottery</text>
+  <text x="210" y="208" text-anchor="middle" fill="#909296" font-size="10">Each pool secretly rolls a random number.</text>
+  <text x="210" y="224" text-anchor="middle" fill="#909296" font-size="10">If it's below the threshold (based on</text>
+  <text x="210" y="240" text-anchor="middle" fill="#909296" font-size="10">stake), they win the right to make a block.</text>
+
+  <!-- Fork choice -->
+  <rect x="380" y="162" width="260" height="90" rx="10" fill="#25262b" stroke="#F48020" stroke-width="1.5" filter="url(#csShadow)"/>
+  <text x="510" y="188" text-anchor="middle" fill="#F48020" font-size="14" font-weight="700">Fork Choice</text>
+  <text x="510" y="208" text-anchor="middle" fill="#909296" font-size="10">When two pools make a block in the</text>
+  <text x="510" y="224" text-anchor="middle" fill="#909296" font-size="10">same slot, the network picks the longest</text>
+  <text x="510" y="240" text-anchor="middle" fill="#909296" font-size="10">chain. Short forks resolve naturally.</text>
+
+  <!-- Security param -->
+  <rect x="140" y="280" width="440" height="62" rx="10" fill="#25262b" stroke="#373a40" stroke-width="1"/>
+  <text x="360" y="306" text-anchor="middle" fill="url(#csGrad)" font-size="13" font-weight="700">Security Parameter (k = 2160)</text>
+  <text x="360" y="326" text-anchor="middle" fill="#909296" font-size="10">After 2160 blocks, a transaction is considered permanent. No take-backs.</text>
+
+  <rect y="376" width="720" height="4" fill="url(#csGrad)" rx="2"/>
+</svg>
