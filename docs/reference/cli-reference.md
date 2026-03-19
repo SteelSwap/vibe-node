@@ -377,39 +377,68 @@ List planned test specifications from the knowledge base.
 
 Research and analysis commands for the PydanticAI rule extraction pipeline.
 
+### research reset
+
+```
+vibe-node research reset [OPTIONS]
+```
+
+Clear all research pipeline output for a clean re-extraction. Deletes from: `spec_sections`, `cross_references`, `gap_analysis`, `test_specifications`. Also resets `extraction_processed` markers on `spec_documents`.
+
+| Option | Description |
+|--------|-------------|
+| `--yes`, `-y` | Skip first confirmation |
+| `--force`, `-f` | Skip ALL confirmations (for scripts) |
+
 ### research extract-rules
 
 ```
 vibe-node research extract-rules SUBSYSTEM [OPTIONS]
 ```
 
-Run the 4-stage agentic pipeline for a subsystem:
+Run the 4-stage agentic pipeline for a subsystem. Use `all` to run all 10 subsystems sequentially.
 
 1. **Rule Extraction** (Opus 4.6) — LLM reads spec chunks, extracts structured rules
-2. **Semantic Search** (Ollama) — Vector search for candidate code, tests, issues
-3. **Link Evaluation** (Sonnet 4.5) — LLM evaluates each candidate relationship
-4. **Gap Detection + Test Proposals** (Opus 4.6) — Compares spec vs code, proposes Hypothesis tests
+2. **Semantic Search** (Ollama) — Vector search for candidate production code AND test code separately
+3. **Link Evaluation** (Sonnet 4.5) — LLM evaluates each candidate; continuation search if >60% link
+4. **Gap Detection + Test Proposals** (Opus 4.6) — Compares spec vs code, includes existing Haskell tests as context
 
 | Option | Description |
 |--------|-------------|
-| `--limit`, `-n` | Max spec chunks to process |
+| `--limit`, `-n` | Max spec chunks to process per subsystem |
 | `--concurrency`, `-c` | Chunks to process in parallel (default: 3) |
 
-Valid subsystems: `networking`, `miniprotocols-n2n`, `miniprotocols-n2c`, `consensus`, `ledger`, `plutus`, `serialization`, `mempool`, `storage`, `block-production`
+Valid subsystems: `all`, `networking`, `miniprotocols-n2n`, `miniprotocols-n2c`, `consensus`, `ledger`, `plutus`, `serialization`, `mempool`, `storage`, `block-production`
 
 Requires AWS credentials (Bedrock) or `ANTHROPIC_API_KEY`. Override models via `EXTRACTION_MODEL` and `LINKING_MODEL` env vars.
 
 ```bash
-# Run on serialization subsystem
+# Run all subsystems
+vibe-node research extract-rules all -c 5
+
+# Run one subsystem
 vibe-node research extract-rules serialization
 
-# Limit to 5 chunks, 5 concurrent
-vibe-node research extract-rules networking --limit 5 -c 5
-
-# Check results
-vibe-node db xref coverage --subsystem serialization
-vibe-node db test-specs list --subsystem serialization
+# Clean re-extraction
+vibe-node research reset --force
+vibe-node research extract-rules all -c 5
+vibe-node research qa-validate all -c 10
 ```
+
+### research qa-validate
+
+```
+vibe-node research qa-validate SUBSYSTEM [OPTIONS]
+```
+
+QA validation of extracted rules, gaps, and cross-references. Use `all` to validate all subsystems.
+
+| Option | Description |
+|--------|-------------|
+| `--limit`, `-n` | Max entries to validate per subsystem |
+| `--concurrency`, `-c` | Parallel validations (default: 5) |
+| `--gaps-only` | Only validate gaps, skip xref checks |
+| `--xrefs-only` | Only validate cross-references, skip gaps |
 
 ---
 
@@ -420,10 +449,10 @@ vibe-node db test-specs list --subsystem serialization
 | `src/vibe_node/cli.py` | Main CLI app, db, ingest, and research commands |
 | `src/vibe_node/cli_infra.py` | Infra commands, db snapshot/restore/search |
 | `src/vibe_node/cli_xref.py` | Cross-reference and test-specs CLI commands |
-| `src/vibe_node/db/pool.py` | Shared asyncpg connection pool (CLI + MCP) |
-| `src/vibe_node/db/spec_sections.py` | Spec sections CRUD |
-| `src/vibe_node/db/xref.py` | Cross-references CRUD + coverage analysis |
-| `src/vibe_node/db/test_specs.py` | Test specifications CRUD |
-| `src/vibe_node/research/pipeline.py` | PydanticAI 4-stage extraction pipeline |
-| `src/vibe_node/research/models.py` | Pydantic models for pipeline I/O |
-| `src/vibe_node/mcp/search_server.py` | FastMCP search server (6 read-only tools) |
+| `packages/vibe-tools/src/vibe/tools/db/pool.py` | Shared asyncpg connection pool (CLI + MCP) |
+| `packages/vibe-tools/src/vibe/tools/db/spec_sections.py` | Spec sections CRUD |
+| `packages/vibe-tools/src/vibe/tools/db/xref.py` | Cross-references CRUD + coverage analysis |
+| `packages/vibe-tools/src/vibe/tools/db/test_specs.py` | Test specifications CRUD |
+| `packages/vibe-tools/src/vibe/tools/research/pipeline.py` | PydanticAI 4-stage extraction pipeline |
+| `packages/vibe-tools/src/vibe/tools/research/models.py` | Pydantic models for pipeline I/O |
+| `packages/vibe-tools/src/vibe/tools/mcp/search_server.py` | FastMCP search server (6 read-only tools) |
