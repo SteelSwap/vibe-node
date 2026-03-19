@@ -6,6 +6,14 @@ Each entry is organized by phase, with specific module and work item details.
 
 ---
 
+## Phase 2: Serialization & Networking
+
+- **[Phase 2 — Serialization & Networking](phase2.md)** (M2.1–M2.6)
+    - CBOR block decoder (all eras), TCP multiplexer, typed protocol framework
+    - Handshake + chain-sync miniprotocols — first communication with Cardano
+    - 491 tests, 1,000-block gate test passed
+    - Pipeline improvements: is_test tagging, split search, continuation, batch CLI
+
 ## Phase 1: Research & Analysis
 
 - **[Phase 1 — Research & Analysis](phase1.md)** (M1.1–M1.9)
