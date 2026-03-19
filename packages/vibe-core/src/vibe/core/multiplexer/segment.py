@@ -29,6 +29,16 @@ SEGMENT_HEADER_SIZE: int = 8
 # Maximum payload per the wire format (uint16 max).
 MAX_PAYLOAD_SIZE: int = 65535
 
+# Node-to-node SDU maximum size (12 KiB).
+# Haskell reference: Network.Mux.Types.sduSize = 12288
+# The Haskell mux splits any message larger than this into multiple segments.
+N2N_SDU_MAX_SIZE: int = 12288
+
+# Timeout constants for the multiplexer (seconds).
+# Haskell reference: Network.Mux.Types (handshake timeout, SDU timeout).
+HANDSHAKE_TIMEOUT: int = 10
+DEFAULT_TIMEOUT: int = 30
+
 # struct format: big-endian uint32 + uint16 + uint16
 _HEADER_FMT = "!IHH"
 _HEADER_STRUCT = struct.Struct(_HEADER_FMT)
