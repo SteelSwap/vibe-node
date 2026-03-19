@@ -1324,3 +1324,460 @@ class TestBearerClosePropagatesToChannels:
         for ch in channels:
             with pytest.raises(MuxClosedError):
                 await ch.recv()
+
+
+# ---------------------------------------------------------------------------
+# Fault-injection mock bearers
+# ---------------------------------------------------------------------------
+
+
+class TruncatedHeaderBearer:
+    """Bearer that returns only a partial (4-byte) header on read, simulating
+    a truncated SDU.  The Haskell equivalent is prop_demux_sdu which injects
+    malformed SDU headers and verifies the demux handles them.
+    """
+
+    def __init__(self) -> None:
+        self._closed = False
+        self._read_count = 0
+
+    @property
+    def is_closed(self) -> bool:
+        return self._closed
+
+    async def read_segment(self) -> MuxSegment:
+        self._read_count += 1
+        self._closed = True
+        # Simulate an incomplete header by raising IncompleteReadError
+        # as the real Bearer would when only 4 of 8 header bytes arrive.
+        raise asyncio.IncompleteReadError(partial=b"\x00" * 4, expected=8)
+
+    async def write_segment(self, segment: MuxSegment) -> None:
+        if self._closed:
+            raise BearerClosedError("truncated bearer is closed")
+
+    async def close(self) -> None:
+        self._closed = True
+
+
+class FaultyReadBearer:
+    """Bearer whose read_segment raises ConnectionError after delivering
+    some valid segments.  Simulates a mid-stream network fault.
+    """
+
+    def __init__(self, segments: list[MuxSegment], fault_after: int = 0) -> None:
+        self._segments = list(segments)
+        self._fault_after = fault_after
+        self._delivered = 0
+        self._closed = False
+
+    @property
+    def is_closed(self) -> bool:
+        return self._closed
+
+    async def read_segment(self) -> MuxSegment:
+        if self._closed:
+            raise BearerClosedError("faulty bearer is closed")
+        if self._delivered < self._fault_after and self._segments:
+            seg = self._segments.pop(0)
+            self._delivered += 1
+            return seg
+        self._closed = True
+        raise ConnectionError("simulated read fault")
+
+    async def write_segment(self, segment: MuxSegment) -> None:
+        if self._closed:
+            raise BearerClosedError("faulty bearer is closed")
+
+    async def close(self) -> None:
+        self._closed = True
+
+
+class FaultyWriteBearer:
+    """Bearer whose write_segment raises ConnectionError, simulating
+    a broken pipe on the outbound side.  Equivalent to Haskell's
+    prop_mux_close_sim which tests mux behavior when the bearer fails
+    during writes.
+    """
+
+    def __init__(self) -> None:
+        self._closed = False
+        self._read_event = asyncio.Event()
+
+    @property
+    def is_closed(self) -> bool:
+        return self._closed
+
+    async def read_segment(self) -> MuxSegment:
+        # Block until close — we only care about the write fault.
+        await self._read_event.wait()
+        raise BearerClosedError("faulty write bearer closed")
+
+    async def write_segment(self, segment: MuxSegment) -> None:
+        self._closed = True
+        raise ConnectionError("simulated write fault")
+
+    async def close(self) -> None:
+        self._closed = True
+        self._read_event.set()
+
+
+# ---------------------------------------------------------------------------
+# Tests: Fault injection — invalid SDU and bearer faults
+#
+# These tests are the Python equivalents of Haskell's prop_demux_sdu
+# (malformed SDU handling) and prop_mux_close_sim (bearer failure during
+# mux operation).  They verify the multiplexer handles pathological inputs
+# and I/O faults gracefully — no crashes, no resource leaks.
+# ---------------------------------------------------------------------------
+
+
+class TestInvalidSDU:
+    """Test multiplexer behavior with malformed SDU data.
+
+    Haskell reference: Network.Mux.Test (prop_demux_sdu) — verifies that
+    the demux correctly handles truncated headers, zero-length payloads,
+    and length mismatches.
+    """
+
+    @pytest.mark.asyncio
+    async def test_invalid_sdu_truncated_header(self) -> None:
+        """Feed a bearer that returns only 4 bytes (incomplete 8-byte header).
+
+        The mux receiver should handle the IncompleteReadError from the bearer
+        gracefully — close all channels and exit without crashing.
+        """
+        bearer = TruncatedHeaderBearer()
+        mux = Multiplexer(bearer, is_initiator=True)
+        ch = mux.add_protocol(0)
+
+        # run() should exit cleanly when the bearer delivers a truncated header.
+        await asyncio.wait_for(mux.run(), timeout=2.0)
+
+        # Channel should be closed after the receiver exits.
+        assert ch._closed
+        assert not mux.is_running
+
+    @pytest.mark.asyncio
+    async def test_invalid_sdu_zero_length_payload(
+        self, mock_bearer: MockBearer
+    ) -> None:
+        """SDU with payload_length=0 in header.  Empty payload is valid per spec.
+
+        Spec reference: Ouroboros network spec, Section 1.1 — payload_length
+        is a uint16, 0 is a legal value (e.g., keep-alive heartbeats).
+        """
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        ch = mux.add_protocol(0)
+
+        # Inject a segment with empty payload.
+        mock_bearer.inject_segment(make_segment(0, b""))
+
+        # Follow it with a non-empty segment so we can confirm delivery.
+        mock_bearer.inject_segment(make_segment(0, b"after-empty"))
+
+        run_task = asyncio.create_task(mux.run())
+
+        # Empty payload should be delivered as b"".
+        payload_empty = await asyncio.wait_for(ch.recv(), timeout=1.0)
+        assert payload_empty == b""
+
+        # Next segment also arrives.
+        payload_after = await asyncio.wait_for(ch.recv(), timeout=1.0)
+        assert payload_after == b"after-empty"
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+    @pytest.mark.asyncio
+    async def test_invalid_sdu_length_mismatch(self) -> None:
+        """SDU header claims payload_length=100 but only 50 bytes follow.
+
+        The real Bearer raises IncompleteReadError when it can't read the
+        full payload.  We simulate this by having the mock bearer raise
+        the same error the real bearer would.
+        """
+
+        class LengthMismatchBearer:
+            """Bearer that simulates a payload length mismatch by raising
+            IncompleteReadError as the real Bearer.read_segment would."""
+
+            def __init__(self) -> None:
+                self._closed = False
+
+            @property
+            def is_closed(self) -> bool:
+                return self._closed
+
+            async def read_segment(self) -> MuxSegment:
+                self._closed = True
+                # This is what Bearer.read_segment raises when it reads
+                # the header (payload_len=100) but only gets 50 bytes.
+                raise asyncio.IncompleteReadError(
+                    partial=b"\x00" * 50, expected=100
+                )
+
+            async def write_segment(self, segment: MuxSegment) -> None:
+                raise BearerClosedError("length mismatch bearer closed")
+
+            async def close(self) -> None:
+                self._closed = True
+
+        bearer = LengthMismatchBearer()
+        mux = Multiplexer(bearer, is_initiator=True)
+        ch = mux.add_protocol(0)
+
+        # The mux should handle the IncompleteReadError gracefully.
+        await asyncio.wait_for(mux.run(), timeout=2.0)
+
+        assert ch._closed
+        assert not mux.is_running
+
+    @pytest.mark.asyncio
+    async def test_mux_corrupt_sdu_header(
+        self, mock_bearer: MockBearer, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Feed a segment with a very large unknown protocol_id.
+
+        The mux should log a warning and drop it — same as any unknown
+        protocol.  This verifies that corrupt protocol IDs in the valid
+        range (0-32767) don't cause crashes.
+        """
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        ch = mux.add_protocol(0)
+
+        # Inject a segment with protocol_id=32767 (max valid, but unregistered).
+        mock_bearer.inject_segment(make_segment(0x7FFF, b"corrupt-proto"))
+        # Then a valid one so the test can verify the mux continued.
+        mock_bearer.inject_segment(make_segment(0, b"after-corrupt"))
+
+        run_task = asyncio.create_task(mux.run())
+
+        with caplog.at_level(logging.WARNING):
+            payload = await asyncio.wait_for(ch.recv(), timeout=1.0)
+
+        assert payload == b"after-corrupt"
+        assert "unknown protocol_id 32767" in caplog.text
+
+        # Mux is still running — corrupt header didn't crash it.
+        assert mux.is_running
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+
+class TestBearerFaults:
+    """Test multiplexer behavior when the bearer raises I/O errors.
+
+    Haskell reference: Network.Mux.Test (prop_mux_close_sim) — verifies
+    that the mux handles bearer failures during both read and write
+    operations, closing all channels and cleaning up properly.
+    """
+
+    @pytest.mark.asyncio
+    async def test_mux_reader_fault(self) -> None:
+        """MockBearer read_segment raises ConnectionError mid-stream.
+
+        Deliver one valid segment, then raise ConnectionError.  All
+        channels should be closed after the mux exits.
+        """
+        valid_seg = make_segment(0, b"before-fault")
+        bearer = FaultyReadBearer(segments=[valid_seg], fault_after=1)
+
+        mux = Multiplexer(bearer, is_initiator=True)
+        ch_a = mux.add_protocol(0)
+        ch_b = mux.add_protocol(1)
+
+        # run() should exit when the read fault occurs.
+        run_task = asyncio.create_task(mux.run())
+
+        # First segment should arrive before the fault.
+        payload = await asyncio.wait_for(ch_a.recv(), timeout=2.0)
+        assert payload == b"before-fault"
+
+        # run() exits after the fault.
+        await asyncio.wait_for(run_task, timeout=2.0)
+
+        # Both channels closed.
+        assert ch_a._closed
+        assert ch_b._closed
+        assert not mux.is_running
+
+    @pytest.mark.asyncio
+    async def test_mux_writer_fault(self) -> None:
+        """MockBearer write_segment raises ConnectionError.
+
+        The sender loop should catch the error and exit, causing the
+        mux to shut down all channels.
+        """
+        bearer = FaultyWriteBearer()
+        mux = Multiplexer(bearer, is_initiator=True)
+        ch = mux.add_protocol(0)
+
+        # Queue a message so the sender tries to write and hits the fault.
+        await ch.send(b"will-fail")
+
+        # run() should exit after the write fault.
+        await asyncio.wait_for(mux.run(), timeout=2.0)
+
+        # Channel closed, mux stopped.
+        assert ch._closed
+        assert not mux.is_running
+
+    @pytest.mark.asyncio
+    async def test_mux_reader_fault_immediate(self) -> None:
+        """ConnectionError on the very first read — no segments delivered.
+
+        This is the harshest scenario: the bearer breaks immediately.
+        """
+        bearer = FaultyReadBearer(segments=[], fault_after=0)
+        mux = Multiplexer(bearer, is_initiator=True)
+        ch = mux.add_protocol(0)
+
+        await asyncio.wait_for(mux.run(), timeout=2.0)
+
+        assert ch._closed
+        assert not mux.is_running
+
+
+class TestMuxLifecycleAdvanced:
+    """Advanced lifecycle tests: restart after completion, start/stop
+    verification, and simultaneous handshake.
+    """
+
+    @pytest.mark.asyncio
+    async def test_mux_restart_after_completion(self) -> None:
+        """Run a mux to completion, then create a new one on a fresh bearer.
+
+        The Multiplexer is not designed to be restarted (is_closed becomes
+        True after close), so the correct pattern is to create a new instance.
+        This test verifies that pattern works.
+        """
+        # First run: bearer disconnects, mux exits.
+        bearer1 = MockBearer()
+        mux1 = Multiplexer(bearer1, is_initiator=True)
+        ch1 = mux1.add_protocol(0)
+
+        run1 = asyncio.create_task(mux1.run())
+        await asyncio.sleep(0.02)
+        bearer1.disconnect()
+        await asyncio.wait_for(run1, timeout=2.0)
+
+        assert ch1._closed
+        assert not mux1.is_running
+
+        # Second run: fresh bearer and mux instance.
+        bearer2 = MockBearer()
+        mux2 = Multiplexer(bearer2, is_initiator=True)
+        ch2 = mux2.add_protocol(0)
+
+        bearer2.inject_segment(make_segment(0, b"second-life"))
+
+        run2 = asyncio.create_task(mux2.run())
+        payload = await asyncio.wait_for(ch2.recv(), timeout=1.0)
+        assert payload == b"second-life"
+
+        await mux2.close()
+        try:
+            await run2
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+    @pytest.mark.asyncio
+    async def test_mux_start_stop_lifecycle(self) -> None:
+        """Start mux, verify it's running, close it, verify it's stopped.
+        Then verify can't run after close.
+        """
+        bearer = MockBearer()
+        mux = Multiplexer(bearer, is_initiator=True)
+        mux.add_protocol(0)
+
+        # Not yet running.
+        assert not mux.is_running
+        assert not mux.is_closed
+
+        # Start it.
+        run_task = asyncio.create_task(mux.run())
+        await asyncio.sleep(0.02)
+
+        assert mux.is_running
+        assert not mux.is_closed
+
+        # Close it.
+        await mux.close()
+        try:
+            await asyncio.wait_for(run_task, timeout=2.0)
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+        assert not mux.is_running
+        assert mux.is_closed
+
+        # Can't run after close.
+        with pytest.raises(MuxClosedError):
+            await mux.run()
+
+    @pytest.mark.asyncio
+    async def test_simultaneous_open_handshake(self) -> None:
+        """Both initiator and responder send handshake simultaneously.
+
+        This is the most common real-world scenario: both sides start
+        their mux and immediately begin sending.  We mock two bearers
+        connected back-to-back and relay segments between them.
+
+        Haskell reference: Network.Mux.Test — tests mux with both
+        InitiatorResponderMode where both sides are active simultaneously.
+        """
+        bearer_init = MockBearer()
+        bearer_resp = MockBearer()
+
+        mux_init = Multiplexer(bearer_init, is_initiator=True)
+        mux_resp = Multiplexer(bearer_resp, is_initiator=False)
+
+        ch_init = mux_init.add_protocol(0)
+        ch_resp = mux_resp.add_protocol(0)
+
+        run_init = asyncio.create_task(mux_init.run())
+        run_resp = asyncio.create_task(mux_resp.run())
+
+        # Both sides send simultaneously (before either has received anything).
+        await ch_init.send(b"init-handshake")
+        await ch_resp.send(b"resp-handshake")
+
+        # Relay initiator -> responder.
+        seg_from_init = await asyncio.wait_for(
+            bearer_init.outbound.get(), timeout=1.0
+        )
+        bearer_resp.inject_segment(seg_from_init)
+
+        # Relay responder -> initiator.
+        seg_from_resp = await asyncio.wait_for(
+            bearer_resp.outbound.get(), timeout=1.0
+        )
+        bearer_init.inject_segment(seg_from_resp)
+
+        # Both sides receive the other's handshake.
+        init_received = await asyncio.wait_for(ch_init.recv(), timeout=1.0)
+        resp_received = await asyncio.wait_for(ch_resp.recv(), timeout=1.0)
+
+        assert resp_received == b"init-handshake"
+        assert init_received == b"resp-handshake"
+
+        # Verify the direction bits are correct.
+        assert seg_from_init.is_initiator is True
+        assert seg_from_resp.is_initiator is False
+
+        # Clean up.
+        await mux_init.close()
+        await mux_resp.close()
+        for task in (run_init, run_resp):
+            try:
+                await task
+            except (asyncio.CancelledError, MuxClosedError):
+                pass
