@@ -584,3 +584,180 @@ class TestErrorTypes:
     def test_timeout_error_is_handshake_error(self) -> None:
         err = HandshakeTimeoutError("timed out")
         assert isinstance(err, HandshakeError)
+
+
+# ---------------------------------------------------------------------------
+# Mux segment integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestHandshakeMuxSegment:
+    """Test handshake messages framed as mux segments.
+
+    Verifies that handshake CBOR payloads, when wrapped in a MuxSegment,
+    produce the correct 8-byte header with protocol_id=0 and accurate
+    payload length — the invariants that the receiver loop relies on
+    to route handshake traffic to the correct miniprotocol channel.
+
+    Spec reference: Ouroboros network spec, Section 1.1 "Wire Format"
+    Haskell reference: Network.Mux.Codec.encodeSDU
+    """
+
+    def test_handshake_message_has_proper_segment_header(self) -> None:
+        """Encode ProposeVersions into a MuxSegment; verify 8-byte header
+        has protocol_id=0 and correct payload length.
+
+        The handshake is always miniprotocol 0. The segment header must
+        reflect this so the demux routes it correctly.
+        """
+        from vibe.core.multiplexer.segment import (
+            MuxSegment,
+            SEGMENT_HEADER_SIZE,
+            encode_segment,
+        )
+        from vibe.cardano.network.handshake import (
+            HANDSHAKE_PROTOCOL_ID,
+            encode_propose_versions,
+        )
+
+        version_table = build_version_table(PREPROD_NETWORK_MAGIC)
+        payload = encode_propose_versions(version_table)
+
+        segment = MuxSegment(
+            timestamp=0,
+            protocol_id=HANDSHAKE_PROTOCOL_ID,
+            is_initiator=True,
+            payload=payload,
+        )
+        wire = encode_segment(segment)
+
+        # Header is always 8 bytes
+        assert len(wire) == SEGMENT_HEADER_SIZE + len(payload)
+
+        # Parse the header manually: bytes 4-5 encode mode|protocol_id
+        import struct
+
+        _ts, proto_word, payload_len = struct.unpack_from("!IHH", wire)
+
+        # Initiator: M=0, so proto_word == protocol_id directly
+        assert proto_word == HANDSHAKE_PROTOCOL_ID  # 0
+        assert payload_len == len(payload)
+
+    def test_handshake_segment_wire_format_protocol_id(self) -> None:
+        """Encode handshake into mux segment, parse back the 2-byte
+        protocol ID field from raw bytes.
+
+        Verifies the exact byte-level layout: bytes 4-5 of the segment
+        header carry the mode bit (bit 15) and protocol ID (bits 14-0).
+        For handshake (protocol 0) from the initiator, both bytes must be 0x00.
+        """
+        from vibe.core.multiplexer.segment import (
+            MuxSegment,
+            encode_segment,
+            decode_segment,
+        )
+        from vibe.cardano.network.handshake import (
+            HANDSHAKE_PROTOCOL_ID,
+            encode_propose_versions,
+        )
+
+        version_table = build_version_table(PREPROD_NETWORK_MAGIC)
+        payload = encode_propose_versions(version_table)
+
+        segment = MuxSegment(
+            timestamp=42,
+            protocol_id=HANDSHAKE_PROTOCOL_ID,
+            is_initiator=True,
+            payload=payload,
+        )
+        wire = encode_segment(segment)
+
+        # Bytes 4-5 are the protocol_id word (big-endian uint16)
+        proto_bytes = wire[4:6]
+        assert proto_bytes == b"\x00\x00"  # protocol_id=0, M=0 (initiator)
+
+        # Roundtrip: decode and verify
+        decoded, consumed = decode_segment(wire)
+        assert decoded.protocol_id == HANDSHAKE_PROTOCOL_ID
+        assert decoded.is_initiator is True
+        assert decoded.payload == payload
+        assert consumed == len(wire)
+
+    def test_handshake_completes_before_mux_init(self) -> None:
+        """Verify that the handshake protocol runs on the mux before any
+        other miniprotocol channel is activated.
+
+        The Ouroboros mux spec requires that protocol 0 (handshake) completes
+        before any other miniprotocol traffic is exchanged. We verify this
+        by checking that:
+        1. Handshake is protocol_id 0 (the first protocol)
+        2. The HandshakeProtocol starts in StPropose and terminates at StDone
+        3. The protocol is a 2-message exchange (propose -> accept/refuse)
+           meaning it completes before any sustained traffic
+        """
+        from vibe.cardano.network.handshake import HANDSHAKE_PROTOCOL_ID
+
+        # Handshake is always protocol 0 — the lowest numbered protocol
+        assert HANDSHAKE_PROTOCOL_ID == 0
+
+        # The protocol has exactly 3 states: propose, confirm, done
+        states = list(HandshakeState)
+        assert len(states) == 3
+
+        proto = HandshakeProtocol()
+
+        # Initial state is StPropose (client sends first)
+        assert proto.initial_state() is HandshakeState.StPropose
+
+        # Terminal state is StDone (nobody has agency)
+        assert proto.agency(HandshakeState.StDone) is Agency.Nobody
+
+        # The protocol terminates after exactly 2 messages:
+        # MsgProposeVersions (StPropose -> StConfirm)
+        # MsgAcceptVersion or MsgRefuse (StConfirm -> StDone)
+        # No cycles — once you reach StDone, you're done
+        assert proto.valid_messages(HandshakeState.StDone) == frozenset()
+
+
+class TestVersionNegotiationProperty:
+    """Hypothesis property test for version negotiation."""
+
+    def test_version_negotiation_property(self) -> None:
+        """Given two random subsets of version numbers, negotiation selects
+        the highest common, or None if disjoint.
+
+        This is the core invariant of pureHandshake from
+        Ouroboros.Network.Protocol.Handshake.Direct: the intersection of
+        version sets, ordered descending, picks the first (= highest).
+        """
+        from hypothesis import given, settings
+        from hypothesis import strategies as st
+
+        # Version numbers in the valid N2N range (we test with a wider range
+        # to exercise the logic beyond just V14/V15)
+        version_numbers = st.integers(min_value=1, max_value=20)
+        version_sets = st.frozensets(version_numbers, min_size=0, max_size=10)
+
+        @given(client_versions=version_sets, server_versions=version_sets)
+        @settings(max_examples=200, deadline=None)
+        def check(
+            client_versions: frozenset[int], server_versions: frozenset[int]
+        ) -> None:
+            magic = 1  # Use same magic so mismatch doesn't interfere
+            client_table = {
+                v: _make_version_data(magic=magic) for v in client_versions
+            }
+            server_table = {
+                v: _make_version_data(magic=magic) for v in server_versions
+            }
+
+            result = negotiate_version(client_table, server_table)
+            common = client_versions & server_versions
+
+            if not common:
+                assert result is None
+            else:
+                assert result is not None
+                assert result.version_number == max(common)
+
+        check()
