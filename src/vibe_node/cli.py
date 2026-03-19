@@ -21,12 +21,21 @@ ingest_app = typer.Typer(help="Data ingestion commands.", invoke_without_command
 # Import infra commands and extra db commands from cli_infra
 from vibe_node.cli_infra import infra_app, register_db_extras
 
+research_app = typer.Typer(help="Research and analysis commands.", invoke_without_command=True)
+
 app.add_typer(db_app, name="db")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(infra_app, name="infra")
+app.add_typer(research_app, name="research")
 
 # Register snapshot, restore, search on the db app
 register_db_extras(db_app)
+
+# Register cross-referencing and test-specs subcommands
+from vibe_node.cli_xref import xref_app, test_spec_app
+
+db_app.add_typer(xref_app, name="xref")
+db_app.add_typer(test_spec_app, name="test-specs")
 
 
 def version_callback(value: bool) -> None:
@@ -167,6 +176,14 @@ def status() -> None:
             SELECT 'github_pull_requests', count(*) FROM github_pull_requests
             UNION ALL
             SELECT 'github_pr_comments', count(*) FROM github_pr_comments
+            UNION ALL
+            SELECT 'spec_sections', count(*) FROM spec_sections
+            UNION ALL
+            SELECT 'cross_references', count(*) FROM cross_references
+            UNION ALL
+            SELECT 'test_specifications', count(*) FROM test_specifications
+            UNION ALL
+            SELECT 'gap_analysis', count(*) FROM gap_analysis
             ORDER BY table_name;
             """,
         ],
@@ -456,3 +473,182 @@ def create_indexes() -> None:
         raise typer.Exit(1)
     typer.echo("Indexes created successfully.")
     typer.echo(result.stdout)
+
+
+# ===========================================================================
+# Research commands
+# ===========================================================================
+
+
+@research_app.callback(invoke_without_command=True)
+def research_callback(ctx: typer.Context):
+    """Research and analysis commands."""
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+
+
+VALID_SUBSYSTEMS = [
+    "networking", "miniprotocols-n2n", "miniprotocols-n2c", "consensus",
+    "ledger", "plutus", "serialization", "mempool", "storage", "block-production",
+]
+
+
+@research_app.command(name="extract-rules")
+def extract_rules(
+    subsystem: str = typer.Argument(
+        help="Subsystem to extract rules for. Valid values: "
+        "networking, miniprotocols-n2n, miniprotocols-n2c, consensus, "
+        "ledger, plutus, serialization, mempool, storage, block-production",
+    ),
+    limit: int | None = typer.Option(None, "--limit", "-n", help="Max spec chunks to process"),
+    concurrency: int = typer.Option(3, "--concurrency", "-c", help="Number of chunks to process in parallel"),
+) -> None:
+    """Run the PydanticAI rule extraction and linking pipeline for a subsystem.
+
+    Extracts spec rules, finds implementing code and related discussions,
+    detects spec-vs-code gaps, and proposes Hypothesis tests.
+
+    Valid subsystems: networking, miniprotocols-n2n, miniprotocols-n2c,
+    consensus, ledger, plutus, serialization, mempool, storage, block-production
+
+    Requires either AWS credentials (for Bedrock, default) or ANTHROPIC_API_KEY.
+    Override models via EXTRACTION_MODEL and LINKING_MODEL env vars.
+    """
+    import asyncio
+
+    if subsystem not in VALID_SUBSYSTEMS:
+        typer.echo(
+            f"Invalid subsystem: '{subsystem}'\n"
+            f"Valid options: {', '.join(VALID_SUBSYSTEMS)}",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+
+    async def _run():
+        from vibe_node.db.pool import get_pool, close_pool
+        from vibe_node.research.pipeline import run_pipeline
+
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            typer.echo(f"Discovering spec chunks for subsystem={subsystem}...")
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("{task.completed}/{task.total}"),
+                TimeElapsedColumn(),
+            ) as progress:
+                task = progress.add_task(f"[green]{subsystem}", total=0)
+                stats = await run_pipeline(conn, subsystem, limit=limit, progress=progress, concurrency=concurrency)
+
+        # Query actual totals from the DB (more reliable than in-memory counters)
+        pool2 = await get_pool()
+        async with pool2.acquire() as conn2:
+            db_stats = await conn2.fetchrow("""
+                SELECT
+                    (SELECT COUNT(*) FROM spec_sections WHERE subsystem = $1) AS rules,
+                    (SELECT COUNT(*) FROM cross_references cr
+                     JOIN spec_sections ss ON cr.source_id = ss.id AND cr.source_type = 'spec_section'
+                     WHERE ss.subsystem = $1) AS links,
+                    (SELECT COUNT(*) FROM gap_analysis WHERE subsystem = $1) AS gaps,
+                    (SELECT COUNT(*) FROM test_specifications WHERE subsystem = $1) AS tests
+            """, subsystem)
+
+        await close_pool()
+
+        typer.echo(f"\n=== Pipeline Complete (this run) ===")
+        typer.echo(f"  Chunks processed:  {stats['chunks_processed']}")
+        typer.echo(f"  Rules extracted:   {stats['rules_extracted']}")
+        typer.echo(f"  Links created:     {stats['links_created']}")
+        typer.echo(f"  Gaps found:        {stats['gaps_found']}")
+        typer.echo(f"  Tests proposed:    {stats['tests_proposed']}")
+        typer.echo(f"\n=== Database Totals for {subsystem} ===")
+        typer.echo(f"  Spec sections:     {db_stats['rules']}")
+        typer.echo(f"  Cross-references:  {db_stats['links']}")
+        typer.echo(f"  Gap analysis:      {db_stats['gaps']}")
+        typer.echo(f"  Test specs:        {db_stats['tests']}")
+
+    asyncio.run(_run())
+
+
+@research_app.command(name="qa-validate")
+def qa_validate(
+    subsystem: str = typer.Argument(
+        help="Subsystem to validate. Valid values: "
+        "networking, miniprotocols-n2n, miniprotocols-n2c, consensus, "
+        "ledger, plutus, serialization, mempool, storage, block-production",
+    ),
+    limit: int | None = typer.Option(None, "--limit", "-n", help="Max entries to validate"),
+    concurrency: int = typer.Option(5, "--concurrency", "-c", help="Parallel validations"),
+    gaps_only: bool = typer.Option(False, "--gaps-only", help="Only validate gaps, skip xref checks"),
+    xrefs_only: bool = typer.Option(False, "--xrefs-only", help="Only validate cross-references, skip gaps"),
+) -> None:
+    """QA validation of extracted rules, gaps, and cross-references.
+
+    Validates pipeline output by:
+    - Searching vendor repos (git grep) to verify "missing implementation" gaps
+    - Categorizing gaps (perf optimization, post-spec addition, genuine violation, etc.)
+    - Assessing severity (critical, important, informational, false positive)
+    - Spot-checking cross-reference accuracy
+
+    Valid subsystems: networking, miniprotocols-n2n, miniprotocols-n2c,
+    consensus, ledger, plutus, serialization, mempool, storage, block-production
+
+    Requires AWS credentials (Bedrock) or ANTHROPIC_API_KEY.
+    Override model via QA_MODEL env var.
+    """
+    import asyncio
+
+    if subsystem not in VALID_SUBSYSTEMS:
+        typer.echo(
+            f"Invalid subsystem: '{subsystem}'\n"
+            f"Valid options: {', '.join(VALID_SUBSYSTEMS)}",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+
+    async def _run():
+        from vibe_node.db.pool import get_pool, close_pool
+        from vibe_node.research.qa_validate import validate_gaps, validate_xrefs
+
+        pool = await get_pool()
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+        ) as progress:
+            if not xrefs_only:
+                gap_task = progress.add_task(f"[green]{subsystem} gaps", total=0)
+                gap_stats = await validate_gaps(
+                    pool, subsystem, limit=limit,
+                    concurrency=concurrency, progress=progress, task_id=gap_task,
+                )
+                typer.echo(f"\n=== Gap Validation ===")
+                typer.echo(f"  Validated:          {gap_stats['gaps_validated']}")
+                typer.echo(f"  Search failures:    {gap_stats['search_failures_resolved']}")
+                typer.echo(f"  False positives:    {gap_stats['false_positives']}")
+                typer.echo(f"  Critical:           {gap_stats['critical']}")
+                typer.echo(f"  Important:          {gap_stats['important']}")
+                typer.echo(f"  Informational:      {gap_stats['informational']}")
+
+            if not gaps_only:
+                xref_task = progress.add_task(f"[blue]{subsystem} xrefs", total=0)
+                xref_stats = await validate_xrefs(
+                    pool, subsystem, limit=limit,
+                    concurrency=concurrency, progress=progress, task_id=xref_task,
+                )
+                typer.echo(f"\n=== Cross-Reference Validation ===")
+                typer.echo(f"  Checked:            {xref_stats['checked']}")
+                typer.echo(f"  Accurate:           {xref_stats['accurate']}")
+                typer.echo(f"  Inaccurate:         {xref_stats['inaccurate']}")
+
+        await close_pool()
+
+    asyncio.run(_run())

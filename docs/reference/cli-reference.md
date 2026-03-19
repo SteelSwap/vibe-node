@@ -313,13 +313,117 @@ Create BM25 (pg_search) and HNSW (pgvector) indexes on all 6 knowledge base tabl
 vibe-node db create-indexes
 ```
 
+### db xref add
+
+```
+vibe-node db xref add SOURCE_TYPE SOURCE_ID TARGET_TYPE TARGET_ID RELATIONSHIP [OPTIONS]
+```
+
+Add a cross-reference between two entities in the knowledge base.
+
+| Option | Description |
+|--------|-------------|
+| `--confidence`, `-c` | Confidence score 0.0-1.0 (default: 1.0) |
+| `--notes` | Optional notes about the relationship |
+| `--by` | Who created the reference (default: "manual") |
+
+Relationship types: `implements`, `tests`, `discusses`, `references`, `contradicts`, `extends`, `derivedFrom`, `supersedes`, `requires`, `trackedBy`
+
+### db xref query
+
+```
+vibe-node db xref query ENTITY_TYPE ENTITY_ID [OPTIONS]
+```
+
+Query all cross-references involving an entity (as source or target). Shows both outgoing relationships and incoming (inverse) relationships.
+
+| Option | Description |
+|--------|-------------|
+| `--rel`, `-r` | Filter by relationship type |
+| `--target`, `-t` | Filter by target entity type |
+
+### db xref coverage
+
+```
+vibe-node db xref coverage [OPTIONS]
+```
+
+Show spec coverage report — which spec rules have implementations, tests, gaps documented, and which are uncovered.
+
+| Option | Description |
+|--------|-------------|
+| `--subsystem`, `-s` | Filter by subsystem |
+| `--era`, `-e` | Filter by era |
+
+### db test-specs list
+
+```
+vibe-node db test-specs list [OPTIONS]
+```
+
+List planned test specifications from the knowledge base.
+
+| Option | Description |
+|--------|-------------|
+| `--subsystem`, `-s` | Filter by subsystem |
+| `--phase`, `-p` | Filter by implementation phase |
+| `--type`, `-t` | Filter by test type (unit, property, replay, conformance, integration) |
+| `--priority` | Filter by priority (critical, high, medium, low) |
+| `--limit`, `-n` | Max results (default: 50) |
+
+---
+
+## vibe-node research
+
+Research and analysis commands for the PydanticAI rule extraction pipeline.
+
+### research extract-rules
+
+```
+vibe-node research extract-rules SUBSYSTEM [OPTIONS]
+```
+
+Run the 4-stage agentic pipeline for a subsystem:
+
+1. **Rule Extraction** (Opus 4.6) — LLM reads spec chunks, extracts structured rules
+2. **Semantic Search** (Ollama) — Vector search for candidate code, tests, issues
+3. **Link Evaluation** (Sonnet 4.5) — LLM evaluates each candidate relationship
+4. **Gap Detection + Test Proposals** (Opus 4.6) — Compares spec vs code, proposes Hypothesis tests
+
+| Option | Description |
+|--------|-------------|
+| `--limit`, `-n` | Max spec chunks to process |
+| `--concurrency`, `-c` | Chunks to process in parallel (default: 3) |
+
+Valid subsystems: `networking`, `miniprotocols-n2n`, `miniprotocols-n2c`, `consensus`, `ledger`, `plutus`, `serialization`, `mempool`, `storage`, `block-production`
+
+Requires AWS credentials (Bedrock) or `ANTHROPIC_API_KEY`. Override models via `EXTRACTION_MODEL` and `LINKING_MODEL` env vars.
+
+```bash
+# Run on serialization subsystem
+vibe-node research extract-rules serialization
+
+# Limit to 5 chunks, 5 concurrent
+vibe-node research extract-rules networking --limit 5 -c 5
+
+# Check results
+vibe-node db xref coverage --subsystem serialization
+vibe-node db test-specs list --subsystem serialization
+```
+
 ---
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `src/vibe_node/cli.py` | Main CLI app, db and ingest commands |
+| `src/vibe_node/cli.py` | Main CLI app, db, ingest, and research commands |
 | `src/vibe_node/cli_infra.py` | Infra commands, db snapshot/restore/search |
+| `src/vibe_node/cli_xref.py` | Cross-reference and test-specs CLI commands |
 | `src/vibe_node/db/pool.py` | Shared asyncpg connection pool (CLI + MCP) |
+| `src/vibe_node/db/spec_sections.py` | Spec sections CRUD |
+| `src/vibe_node/db/xref.py` | Cross-references CRUD + coverage analysis |
+| `src/vibe_node/db/test_specs.py` | Test specifications CRUD |
+| `src/vibe_node/research/pipeline.py` | PydanticAI 4-stage extraction pipeline |
+| `src/vibe_node/research/models.py` | Pydantic models for pipeline I/O |
 | `src/vibe_node/mcp/search_server.py` | FastMCP search server (6 read-only tools) |

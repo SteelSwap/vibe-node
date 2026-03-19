@@ -153,3 +153,79 @@ class GitHubPRComment(SQLModel, table=True):
     created_at: datetime
     updated_at: datetime | None = Field(default=None)
     metadata_: dict | None = Field(default=None, sa_column=Column("metadata", JSON))
+
+
+# ===========================================================================
+# Phase 1: Cross-referencing infrastructure
+# ===========================================================================
+
+
+class SpecSection(SQLModel, table=True):
+    """Atomic unit of spec traceability — one rule, definition, or equation."""
+
+    __tablename__ = "spec_sections"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    spec_chunk_id: uuid.UUID | None = Field(default=None, foreign_key="spec_documents.id")
+    section_id: str = Field(description="Stable ID like 'shelley-ledger:rule-7.3'")
+    title: str
+    section_type: str = Field(description="rule, definition, equation, type, figure, algorithm")
+    era: str
+    subsystem: str
+    verbatim: str = Field(sa_column=Column(Text), description="Exact spec text")
+    extracted_rule: str = Field(sa_column=Column(Text), description="Context-enriched semantic extraction")
+    metadata_: dict | None = Field(default=None, sa_column=Column("metadata", JSON))
+
+
+class CrossReference(SQLModel, table=True):
+    """Links any two entities in the knowledge base."""
+
+    __tablename__ = "cross_references"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    source_type: str = Field(description="spec_section, code_chunk, github_issue, github_pr, gap_analysis")
+    source_id: uuid.UUID
+    target_type: str
+    target_id: uuid.UUID
+    relationship: str = Field(
+        description="implements, tests, discusses, references, contradicts, extends, "
+        "derivedFrom, supersedes, requires, trackedBy"
+    )
+    confidence: float = Field(default=1.0)
+    notes: str | None = None
+    created_by: str = Field(default="manual", description="manual, agent, pipeline")
+
+
+class TestSpecification(SQLModel, table=True):
+    """Test knowledge base — what should be tested and how."""
+
+    __tablename__ = "test_specifications"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    spec_section_id: uuid.UUID | None = Field(default=None, foreign_key="spec_sections.id")
+    subsystem: str
+    test_type: str = Field(description="unit, property, replay, conformance, integration")
+    test_name: str
+    description: str = Field(sa_column=Column(Text))
+    hypothesis_strategy: str | None = Field(default=None, sa_column=Column(Text))
+    priority: str = Field(description="critical, high, medium, low")
+    phase: str
+    metadata_: dict | None = Field(default=None, sa_column=Column("metadata", JSON))
+
+
+class GapAnalysis(SQLModel, table=True):
+    """Structured spec-vs-implementation divergence."""
+
+    __tablename__ = "gap_analysis"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    spec_section_id: uuid.UUID | None = Field(default=None, foreign_key="spec_sections.id")
+    subsystem: str
+    era: str
+    spec_says: str = Field(sa_column=Column(Text))
+    haskell_does: str = Field(sa_column=Column(Text))
+    delta: str = Field(sa_column=Column(Text))
+    implications: str = Field(sa_column=Column(Text))
+    discovered_during: str
+    code_chunk_id: uuid.UUID | None = Field(default=None, foreign_key="code_chunks.id")
+    metadata_: dict | None = Field(default=None, sa_column=Column("metadata", JSON))
