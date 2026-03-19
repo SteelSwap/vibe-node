@@ -2,11 +2,11 @@
 from __future__ import annotations
 import uuid as _uuid
 
-from vibe_node.mcp.app import mcp
-from vibe_node.mcp.db import get_pool
-from vibe_node.mcp.embed import embed_query
-from vibe_node.db.search import build_vector_query
-from vibe_node.db.search_config import get_available_configs
+from vibe.tools.mcp.app import mcp
+from vibe.tools.mcp.db import get_pool
+from vibe.tools.mcp.embed import embed_query
+from vibe.tools.db.search import build_vector_query
+from vibe.tools.db.search_config import get_available_configs
 
 
 @mcp.tool()

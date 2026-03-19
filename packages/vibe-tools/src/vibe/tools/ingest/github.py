@@ -13,8 +13,8 @@ import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from vibe_node.embed.client import EmbeddingClient
-from vibe_node.ingest.config import GITHUB_REPOS, GITHUB_TOKEN
+from vibe.tools.embed.client import EmbeddingClient
+from vibe.tools.ingest.config import GITHUB_REPOS, GITHUB_TOKEN
 
 logger = logging.getLogger(__name__)
 

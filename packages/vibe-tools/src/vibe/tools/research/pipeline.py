@@ -17,7 +17,7 @@ import uuid
 
 from pydantic_ai import Agent
 
-from vibe_node.research.models import (
+from vibe.tools.research.models import (
     AnalysisResult,
     ExtractionResult,
     LinkDecision,
@@ -208,9 +208,9 @@ async def stage2_search(
     conn, extracted_rule: str, subsystem: str,
 ) -> list[SearchCandidate]:
     """Stage 2: Semantic search for candidate links."""
-    from vibe_node.db.search import build_vector_query
-    from vibe_node.db.search_config import get_available_configs
-    from vibe_node.embed.client import EmbeddingClient
+    from vibe.tools.db.search import build_vector_query
+    from vibe.tools.db.search_config import get_available_configs
+    from vibe.tools.embed.client import EmbeddingClient
 
     client = EmbeddingClient()
     embedding = await client.embed(extracted_rule[:8000])
@@ -342,10 +342,10 @@ async def _process_chunk(
     Returns per-chunk stats.
     """
     import asyncio as _asyncio
-    from vibe_node.db.spec_sections import add_spec_section
-    from vibe_node.db.test_specs import add_test_spec
-    from vibe_node.db.xref import add_xref
-    from vibe_node.embed.client import EmbeddingClient
+    from vibe.tools.db.spec_sections import add_spec_section
+    from vibe.tools.db.test_specs import add_test_spec
+    from vibe.tools.db.xref import add_xref
+    from vibe.tools.embed.client import EmbeddingClient
 
     chunk_stats = {
         "rules_extracted": 0, "links_created": 0,
@@ -514,7 +514,7 @@ async def run_pipeline(
     Returns summary stats.
     """
     import asyncio as _asyncio
-    from vibe_node.db.pool import get_pool
+    from vibe.tools.db.pool import get_pool
 
     # Track in-progress chunks to prevent concurrent processing of the same chunk
     _in_progress: set[uuid.UUID] = set()

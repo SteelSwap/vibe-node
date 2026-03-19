@@ -12,3 +12,4 @@ data/
 snapshots/
 .worktrees/
 .private/
+.claude/worktrees/

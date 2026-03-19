@@ -34,7 +34,7 @@ ERA_LABELS = {
 def _cache_path(source_repo: str, rel_path: str, commit_hash: str) -> str:
     """Reproduce the cache filename used by the ingestion pipeline.
 
-    Must match src/vibe_node/ingest/specs/pipeline.py::_cache_path exactly.
+    Must match packages/vibe-tools/src/vibe/tools/ingest/specs/pipeline.py::_cache_path exactly.
     """
     key = f"{source_repo}/{rel_path}@{commit_hash}"
     safe_name = hashlib.md5(key.encode()).hexdigest()

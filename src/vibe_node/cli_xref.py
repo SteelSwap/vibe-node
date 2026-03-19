@@ -25,8 +25,8 @@ def xref_add(
 ):
     """Add a cross-reference between two entities."""
     async def _run():
-        from vibe_node.db.pool import get_pool, close_pool
-        from vibe_node.db.xref import add_xref
+        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.db.xref import add_xref
 
         pool = await get_pool()
         async with pool.acquire() as conn:
@@ -50,8 +50,8 @@ def xref_query(
 ):
     """Query cross-references for an entity."""
     async def _run():
-        from vibe_node.db.pool import get_pool, close_pool
-        from vibe_node.db.xref import query_xrefs
+        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.db.xref import query_xrefs
 
         pool = await get_pool()
         async with pool.acquire() as conn:
@@ -85,8 +85,8 @@ def coverage(
 ):
     """Show spec coverage report — which rules have tests and implementations."""
     async def _run():
-        from vibe_node.db.pool import get_pool, close_pool
-        from vibe_node.db.xref import coverage_report, uncovered_sections
+        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.db.xref import coverage_report, uncovered_sections
 
         pool = await get_pool()
         async with pool.acquire() as conn:
@@ -127,8 +127,8 @@ def test_specs_list(
 ):
     """List planned test specifications."""
     async def _run():
-        from vibe_node.db.pool import get_pool, close_pool
-        from vibe_node.db.test_specs import list_test_specs
+        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.db.test_specs import list_test_specs
 
         pool = await get_pool()
         async with pool.acquire() as conn:

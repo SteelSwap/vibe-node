@@ -21,11 +21,11 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from vibe_node.embed.client import EmbeddingClient
-from vibe_node.ingest.agda_parser import AgdaParser
-from vibe_node.ingest.config import CODE_REPOS, TAG_PATTERNS
-from vibe_node.ingest.era_inference import infer_era
-from vibe_node.ingest.haskell_parser import HaskellParser
+from vibe.tools.embed.client import EmbeddingClient
+from vibe.tools.ingest.agda_parser import AgdaParser
+from vibe.tools.ingest.config import CODE_REPOS, TAG_PATTERNS
+from vibe.tools.ingest.era_inference import infer_era
+from vibe.tools.ingest.haskell_parser import HaskellParser
 
 logger = logging.getLogger(__name__)
 
@@ -465,7 +465,7 @@ class CodeIngestor:
 
         Returns the total number of tags marked complete.
         """
-        from vibe_node.ingest.config import CODE_REPOS
+        from vibe.tools.ingest.config import CODE_REPOS
 
         # Get all tags with data, grouped by repo
         result = await session.execute(

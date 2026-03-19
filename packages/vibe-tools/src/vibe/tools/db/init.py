@@ -4,7 +4,7 @@ Creates all tables and enables required PostgreSQL extensions (pgvector, pg_sear
 Idempotent — safe to run multiple times.
 
 Usage:
-    uv run python -m vibe_node.db.init
+    uv run python -m vibe.tools.db.init
     # or via CLI (future):
     vibe-node db init
 """
@@ -14,10 +14,10 @@ import asyncio
 from sqlalchemy import text
 from sqlmodel import SQLModel
 
-from vibe_node.db.engine import get_engine
+from vibe.tools.db.engine import get_engine
 
 # Import models so SQLModel registers them
-from vibe_node.db.models import CodeChunk, GitHubIssue, SpecDocument  # noqa: F401
+from vibe.tools.db.models import CodeChunk, GitHubIssue, SpecDocument  # noqa: F401
 
 # SQL for extensions and columns that SQLModel/SQLAlchemy can't express
 POST_CREATE_SQL = [

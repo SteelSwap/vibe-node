@@ -306,7 +306,7 @@ async def search_all(
     Returns (results, total_count). Each result includes 'entity_type' field.
     Skips tables that don't exist (Phase 1 tables).
     """
-    from vibe_node.db.search_config import get_available_configs
+    from vibe.tools.db.search_config import get_available_configs
 
     available = await get_available_configs(conn)
 

@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from vibe_node.db.engine import get_engine
+from vibe.tools.db.engine import get_engine
 
 
 @asynccontextmanager

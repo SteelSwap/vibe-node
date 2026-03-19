@@ -1,10 +1,10 @@
 """search tool — RRF fusion across all knowledge base tables."""
 from __future__ import annotations
 
-from vibe_node.mcp.app import mcp
-from vibe_node.mcp.db import get_pool
-from vibe_node.mcp.embed import embed_query
-from vibe_node.db.search import search_all
+from vibe.tools.mcp.app import mcp
+from vibe.tools.mcp.db import get_pool
+from vibe.tools.mcp.embed import embed_query
+from vibe.tools.db.search import search_all
 
 
 @mcp.tool()

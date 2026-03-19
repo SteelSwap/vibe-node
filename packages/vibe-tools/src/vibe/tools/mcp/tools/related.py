@@ -1,8 +1,8 @@
 """get_related tool — navigate cross-references."""
 from __future__ import annotations
 
-from vibe_node.mcp.app import mcp
-from vibe_node.mcp.db import get_pool
+from vibe.tools.mcp.app import mcp
+from vibe.tools.mcp.db import get_pool
 
 # Forward relationship → human-readable inverse label
 INVERSE_MAP = {

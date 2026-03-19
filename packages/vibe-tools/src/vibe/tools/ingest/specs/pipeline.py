@@ -17,15 +17,15 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from vibe_node.embed.client import EmbeddingClient
-from vibe_node.ingest.specs.chunker import chunk_cddl, chunk_markdown
-from vibe_node.ingest.specs.git_history import discover_spec_commits, get_file_at_commit
-from vibe_node.ingest.specs.converters.agda import convert_agda
-from vibe_node.ingest.specs.converters.cddl import convert_cddl
-from vibe_node.ingest.specs.converters.latex import convert_latex
-from vibe_node.ingest.specs.converters.markdown import convert_markdown
-from vibe_node.ingest.specs.converters.pdf import convert_pdf
-from vibe_node.ingest.specs.sources import SPEC_SOURCES, SpecSource
+from vibe.tools.embed.client import EmbeddingClient
+from vibe.tools.ingest.specs.chunker import chunk_cddl, chunk_markdown
+from vibe.tools.ingest.specs.git_history import discover_spec_commits, get_file_at_commit
+from vibe.tools.ingest.specs.converters.agda import convert_agda
+from vibe.tools.ingest.specs.converters.cddl import convert_cddl
+from vibe.tools.ingest.specs.converters.latex import convert_latex
+from vibe.tools.ingest.specs.converters.markdown import convert_markdown
+from vibe.tools.ingest.specs.converters.pdf import convert_pdf
+from vibe.tools.ingest.specs.sources import SPEC_SOURCES, SpecSource
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ def _ensure_papers_downloaded() -> None:
 
     try:
         import httpx
-        from vibe_node.ingest.papers import PAPERS
+        from vibe.tools.ingest.papers import PAPERS
 
         for paper in PAPERS:
             dest = pdf_dir / paper.filename
@@ -413,7 +413,7 @@ class SpecIngestor:
 
                     # Convert
                     if source.format == "latex":
-                        from vibe_node.ingest.specs.converters.latex import convert_latex
+                        from vibe.tools.ingest.specs.converters.latex import convert_latex
                         converted = convert_latex(content)
                     elif source.format in CONVERTERS:
                         converted = CONVERTERS[source.format](content)
