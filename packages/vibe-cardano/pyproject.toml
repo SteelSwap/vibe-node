@@ -1,0 +1,12 @@
+[project]
+name = "vibe-cardano"
+version = "0.1.0"
+description = "Cardano-specific node implementation"
+requires-python = ">=3.14"
+dependencies = [
+    "vibe-core",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
