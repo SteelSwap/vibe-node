@@ -24,11 +24,11 @@ See the full **[Data Architecture Evaluation](../data-architecture.md)** for ben
 
 | Component | Engine | Python Package |
 |-----------|--------|---------------|
-| UTxO set (LedgerDB) | LMDB | `lmdb` (py-lmdb) |
-| Volatile blocks (VolatileDB) | LMDB | `lmdb` (py-lmdb) |
+| UTxO set (LedgerDB) | Arrow table + Python dict | `pyarrow` |
+| Volatile blocks (VolatileDB) | Arrow table + Python dict | `pyarrow` |
 | Immutable blocks (ImmutableDB) | Chunked flat files | stdlib `io` / `mmap` |
-| Ledger snapshots | CBOR files | `cbor2` |
-| Offline analysis (optional) | DuckDB + Arrow | `duckdb`, `pyarrow` |
+| Ledger snapshots | Arrow IPC files (LZ4) | `pyarrow` |
+| Analytics (optional) | DuckDB zero-copy over Arrow | `duckdb`, `pyarrow` |
 
 ## Test Strategy
 *To be populated during Phase 1 analysis (M1.8)*

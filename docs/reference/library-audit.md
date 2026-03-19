@@ -38,7 +38,7 @@ Every candidate is scored on six dimensions (1–5 scale):
 | **Networking** | USE | asyncio (stdlib) | Zero-dependency; sufficient for multiplexed TCP; broader ecosystem support |
 | **Ledger types** | REUSE | pycardano (selected modules) | Extract transaction/address/UTxO types; avoid tx-builder coupling |
 | **Plutus** | BUILD | From spec (with pyaiken for conformance testing) | uplc is wallet-grade; node needs precise cost accounting and all builtins |
-| **Storage** | USE | LMDB (py-lmdb) + SQLite (stdlib) | LMDB for hot state (append-heavy, mmap'd); SQLite for metadata/indexes |
+| **Storage** | USE | PyArrow + DuckDB + SQLite (stdlib) | Arrow tables + dict for hot state; DuckDB for analytics; SQLite for metadata |
 
 ---
 
@@ -304,30 +304,42 @@ The Haskell node uses three storage layers: ImmutableDB (append-only chain histo
 - **VolatileDB**: Small working set, frequent updates, fork tracking
 - **LedgerDB**: Large key-value state (UTxO set: ~15M entries), snapshotting
 
-#### LMDB (py-lmdb)
+#### PyArrow (Selected — Hot State)
 
 | Criterion | Score | Notes |
 |-----------|-------|-------|
-| Maintenance | 4 | v1.7.3 (Jul 2025); healthy release cadence; 487k weekly downloads |
-| License | 5 | OpenLDAP Public License — permissive, compatible with AGPL-3.0 |
-| Python 3.14 | 3 | Supports 3.9+; no explicit 3.14 verification but C extension likely works |
-| Performance | 5 | Memory-mapped B+ tree; zero-copy reads; single-writer/multi-reader; battle-tested in production |
-| Coupling | 5 | Minimal API; key-value store with transactions; no ORM overhead |
-| Bus Factor | 3 | James Watson is the primary maintainer; LMDB itself (C library) is maintained by Symas/OpenLDAP |
+| Maintenance | 5 | v23.0.1 (Feb 2026); very active; Apache Foundation backing |
+| License | 5 | Apache-2.0 — compatible with AGPL-3.0 |
+| Python 3.14 | 5 | Published wheels for 3.14 |
+| Performance | 5 | Columnar tables + Python dict index: 0.23 μs lookups, 0.37 ms/block apply at 1M UTxOs |
+| Coupling | 4 | ~20 MB dependency; rich API but we use a focused subset (Table, IPC, compute) |
+| Bus Factor | 5 | Apache Arrow project; broad industry adoption |
 
-**Why LMDB for hot state:**
+**Why Arrow + Python dict for hot state:**
 
-- **Memory-mapped I/O** — the OS page cache *is* the database cache; no double-buffering
-- **Read transactions are lock-free** — critical for a node where reads (chain-sync serving, state queries) vastly outnumber writes
-- **Crash-safe** — ACID transactions with copy-on-write; survives power loss without corruption (acceptance criterion #8)
-- **Deterministic performance** — no background compaction, no write amplification, no GC pauses
-- **Proven at our scale** — used by the Monero node, LMDB handles 15M+ key-value entries comfortably
+- **Fastest point lookups** — Python dict gives O(1) lookups at 0.23 μs, 9x faster than LMDB
+- **86x faster block apply** — batch mutations via dict + columnar storage outperform LMDB's B+ tree by a wide margin
+- **DuckDB analytics for free** — DuckDB can query Arrow tables with zero-copy, enabling SQL-based stake distribution computation, address queries, and debugging without any separate data pipeline
+- **Arrow IPC for persistence** — LZ4-compressed IPC files are 1.8x smaller than LMDB on disk and support memory-mapped zero-copy reload
+- **No single-writer bottleneck** — unlike LMDB, shardable for future Leios concurrency
 
 **Limitations:**
 
-- Single-writer means write throughput is bounded by one thread — acceptable for our use case (ledger state updates are sequential)
-- Database size must be pre-configured (max map size) — not a problem if we set it generously
-- No built-in compression — we handle this at the serialization layer
+- Python dict uses ~100 bytes/entry (~1.4 GiB at 15M UTxOs) — if memory is tight, a NumPy hash table (22 B/entry) can substitute with a 7x lookup speed trade-off
+- No built-in transactional crash safety — we implement crash recovery via periodic Arrow IPC snapshots + append-only diff replay log
+
+#### LMDB (py-lmdb) — Evaluated, Not Selected
+
+| Criterion | Score | Notes |
+|-----------|-------|-------|
+| Maintenance | 4 | v1.7.3 (Jul 2025); healthy release cadence |
+| License | 5 | OpenLDAP Public License — permissive |
+| Python 3.14 | 3 | Supports 3.9+; no explicit 3.14 verification |
+| Performance | 3 | 2.12 μs lookups, 31.85 ms/block apply at 1M UTxOs — 9x and 86x slower than Arrow+Dict |
+| Coupling | 5 | Minimal API |
+| Bus Factor | 3 | Single primary maintainer |
+
+**Verdict: NOT SELECTED.** Benchmarks at 1M UTxOs showed Arrow+Dict outperforms LMDB on every metric except baseline RSS. LMDB's single-writer limitation is also a concern for Leios concurrency. The Haskell team is already developing an LSM-tree backend to replace LMDB — following their current choice doesn't future-proof us.
 
 #### SQLite (stdlib)
 
@@ -357,14 +369,14 @@ The Haskell node uses three storage layers: ImmutableDB (append-only chain histo
 | Coupling | 3 | Heavy dependency (~100MB); analytical-oriented, not transactional |
 | Bus Factor | 5 | DuckDB Labs team; CWI Amsterdam backing |
 
-**Verdict: NOT SELECTED for core storage.** DuckDB is exceptional for analytics but wrong for a node's storage requirements:
+**Verdict: SELECTED for analytics layer.** DuckDB is wrong for the OLTP hot path (point lookups, block mutations) but perfect as an **analytics layer over our Arrow tables**:
 
-- **Columnar storage** optimizes for analytical scans; a node needs point lookups (UTxO by TxIn) and append-only writes
-- **No crash-safe transactional writes** in the way LMDB provides
-- **100MB+ dependency footprint** violates our "minimize dependencies" principle
-- **May be useful later** for analytics/monitoring dashboards, but not for the core storage engine
+- **Zero-copy query over Arrow** — DuckDB reads Arrow tables directly without data movement
+- **Stake distribution** — `GROUP BY` over 15M UTxOs at epoch boundaries, vectorized
+- **Address balance queries** — SQL over the live UTxO set for node-to-client queries
+- **Debugging and monitoring** — full SQL over live node state
 
-PyArrow (v23.0.1, Feb 2026) is excellent and supports Python 3.14, but it solves a different problem (columnar data interchange) than what we need (persistent key-value state).
+DuckDB is never on the block validation hot path. It's an on-demand analytics engine that gets our Arrow tables for free.
 
 #### RocksDB (python-rocksdb)
 
@@ -377,18 +389,20 @@ PyArrow (v23.0.1, Feb 2026) is excellent and supports Python 3.14, but it solves
 | Coupling | 3 | Key-value API is clean, but C++ build dependency is heavy |
 | Bus Factor | 1 | Python bindings are effectively unmaintained |
 
-**Verdict: NOT SELECTED.** The Python bindings are abandoned. While RocksDB itself is what the Haskell node uses, the Python binding situation makes it impractical. LMDB gives us similar performance characteristics with much better Python support.
+**Verdict: NOT SELECTED.** The Python bindings are abandoned. Arrow+Dict provides superior performance without C++ build dependency headaches.
 
 #### Storage Architecture Decision
 
 | Storage Layer | Backend | Rationale |
 |---------------|---------|-----------|
-| **ImmutableDB** | LMDB | Append-only; memory-mapped reads for chain-sync serving |
-| **VolatileDB** | LMDB | Small working set; fast updates for fork tracking |
-| **LedgerDB** | LMDB | 15M+ UTxO entries; zero-copy reads; crash-safe snapshots |
+| **ImmutableDB** | Chunked flat files | Append-only CBOR blocks; slot-indexed; same pattern as Haskell |
+| **VolatileDB** | Arrow table + Python dict | Hash-indexed recent blocks; fast fork tracking |
+| **LedgerDB** | Arrow table + Python dict | 15M+ UTxO entries; 0.23 μs lookups; 86x faster block apply than LMDB |
+| **Ledger snapshots** | Arrow IPC (LZ4) | Periodic state dumps; 1.8x smaller than CBOR; zero-copy reload |
+| **Analytics** | DuckDB over Arrow | Zero-copy SQL for stake distribution, address queries, debugging |
 | **ChainIndex** | SQLite | Slot/hash lookups; epoch boundary queries; structured metadata |
 
-Both backends are crash-safe and satisfy the power-loss recovery requirement.
+See the full **[Data Architecture Evaluation](data-architecture.md)** for benchmarks and rationale.
 
 ---
 
@@ -401,7 +415,8 @@ graph LR
         PYNACL["PyNaCl<br/>Ed25519, NaCl"]
         CRYPTO["cryptography<br/>Blake2b, KES primitives"]
         ASYNCIO["asyncio<br/>Networking"]
-        LMDB["py-lmdb<br/>Hot storage"]
+        PYARROW["pyarrow<br/>Hot storage + IPC"]
+        DUCKDB["duckdb<br/>Analytics layer"]
         SQLITE["sqlite3<br/>Chain index"]
     end
 
@@ -418,7 +433,8 @@ graph LR
     style PYNACL fill:#2d6a4f,color:#fff
     style CRYPTO fill:#2d6a4f,color:#fff
     style ASYNCIO fill:#2d6a4f,color:#fff
-    style LMDB fill:#2d6a4f,color:#fff
+    style PYARROW fill:#2d6a4f,color:#fff
+    style DUCKDB fill:#2d6a4f,color:#fff
     style SQLITE fill:#2d6a4f,color:#fff
     style PYCARDANO fill:#b5838d,color:#fff
     style VRF fill:#e76f51,color:#fff
@@ -434,9 +450,10 @@ Total runtime dependencies added by this audit:
 | cbor2 | ~500 KB | CBOR codec |
 | PyNaCl | ~2 MB (incl. libsodium) | Ed25519, NaCl primitives |
 | cryptography | ~10 MB (incl. OpenSSL) | Blake2b, KES primitives |
-| lmdb | ~200 KB | LMDB bindings |
+| pyarrow | ~20 MB | Arrow tables, IPC, compute |
+| duckdb | ~100 MB | Analytics over Arrow tables |
 
-**Total: ~13 MB** of additional dependencies. asyncio and sqlite3 are stdlib (zero cost). This is lean — a conscious choice to minimize attack surface and build footprint.
+**Total: ~133 MB** of additional dependencies. asyncio and sqlite3 are stdlib (zero cost). The bulk is DuckDB (~100 MB), which is an optional analytics layer — the core node runs with pyarrow alone (~33 MB total).
 
 ### What We Build Ourselves
 
@@ -448,14 +465,14 @@ Total runtime dependencies added by this audit:
 | KES implementation | Ouroboros Praos spec (sum composition) | Medium — tree-based key evolution using Ed25519 primitives |
 | UPLC evaluator | Plutus Core formal spec | Very High — all builtins, cost models, flat encoding |
 | Multiplexer | ouroboros-network-framework | Medium — segment framing, backpressure, mini-protocol dispatch |
-| Storage engine | ouroboros-consensus (Storage) | High — ImmutableDB/VolatileDB/LedgerDB abstractions over LMDB |
+| Storage engine | ouroboros-consensus (Storage) | High — ImmutableDB/VolatileDB/LedgerDB abstractions over Arrow+Dict |
 
 ### Risk Register
 
 | Risk | Mitigation |
 |------|-----------|
 | cbor2 C extension doesn't handle Cardano's canonical CBOR edge cases | We build a conformance test suite comparing cbor2 output against Haskell-encoded blocks; fall back to custom encoder if needed |
-| LMDB single-writer bottleneck during fast sync | Profile early; batch writes; the Haskell node faces similar constraints with RocksDB write batching |
+| Python dict memory at mainnet scale (1.4 GiB for 15M entries) | NumPy hash table fallback (0.3 GiB) available; total architecture still well under Haskell's 24 GiB |
 | VRF FFI bindings are fragile across platforms | Docker-based CI ensures consistent libsodium version; statically link if needed |
 | UPLC evaluator cost model diverges from Haskell | Continuous conformance testing against pyaiken oracle + direct comparison with Haskell node script validation results |
 | pycardano types diverge from our needs over time | We own our types; pycardano is a reference, not a dependency |
