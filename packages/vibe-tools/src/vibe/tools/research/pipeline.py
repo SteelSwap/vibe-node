@@ -107,6 +107,7 @@ to detect divergences and propose tests.
 You will be given:
 1. A spec rule (verbatim + extracted description)
 2. The Haskell code that implements it (if any)
+3. Existing Haskell test code for this rule (if any)
 
 Your tasks:
 A) GAP DETECTION: Compare the spec and code. If the code behaves differently
@@ -120,6 +121,11 @@ B) TEST PROPOSALS: Propose concrete tests for this rule:
    - Unit tests (pytest): concrete input/output cases
    - Property tests (Hypothesis): invariants with value ranges and generators
    - Include hypothesis_strategy for property tests describing the generators
+
+   If existing Haskell tests are provided, propose equivalent Python tests
+   that cover the same scenarios. If the Haskell test uses golden test vectors,
+   include the expected values. If it's a QuickCheck property test, translate
+   to an equivalent Hypothesis property test with appropriate strategies.
 
 Focus on the most important tests — don't propose trivial tests.
 For property tests, be specific about value ranges (e.g., "lovelace values 0 to 45e15").
@@ -207,7 +213,12 @@ async def stage1_extract(
 async def stage2_search(
     conn, extracted_rule: str, subsystem: str,
 ) -> list[SearchCandidate]:
-    """Stage 2: Semantic search for candidate links."""
+    """Stage 2: Semantic search for candidate links.
+
+    Searches production code and test code separately so the LLM can
+    distinguish 'implements' from 'tests' relationships more accurately.
+    Also searches GitHub issues/PRs for discussion links.
+    """
     from vibe.tools.db.search import build_vector_query
     from vibe.tools.db.search_config import get_available_configs
     from vibe.tools.embed.client import EmbeddingClient
@@ -219,27 +230,27 @@ async def stage2_search(
     available = await get_available_configs(conn)
     candidates = []
 
-    # Search code (including tests) — only latest tag per repo
-    # First, get the latest release tag for each repo
+    # Get latest release tag for each repo
     latest_tags = await conn.fetch(
         "SELECT repo, MAX(release_tag) as latest_tag FROM code_tag_completion GROUP BY repo"
     )
     latest_tag_set = {(row["repo"], row["latest_tag"]) for row in latest_tags}
 
     if latest_tag_set:
-        # Build a filter for latest tags only
         tag_conditions = " OR ".join(
             f"(repo = '{repo}' AND release_tag = '{tag}')"
             for repo, tag in latest_tag_set
         )
+        embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+
+        # --- Stage 2a: Search PRODUCTION code (is_test = FALSE) ---
         try:
-            # Vector search with tag filter — use raw SQL for the complex WHERE
-            embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
             rows = await conn.fetch(
                 f"""SELECT id, function_name, content,
                        1 - (embedding <=> $1::vector) AS similarity
                 FROM code_chunks
                 WHERE ({tag_conditions})
+                AND is_test = FALSE
                 AND embedding IS NOT NULL
                 ORDER BY embedding <=> $1::vector
                 LIMIT 10""",
@@ -254,7 +265,31 @@ async def stage2_search(
                     similarity=float(row.get("similarity", 0)),
                 ))
         except Exception as e:
-            logger.warning("Code search failed: %s", e)
+            logger.warning("Production code search failed: %s", e)
+
+        # --- Stage 2b: Search TEST code (is_test = TRUE) ---
+        try:
+            rows = await conn.fetch(
+                f"""SELECT id, function_name, content, file_path,
+                       1 - (embedding <=> $1::vector) AS similarity
+                FROM code_chunks
+                WHERE ({tag_conditions})
+                AND is_test = TRUE
+                AND embedding IS NOT NULL
+                ORDER BY embedding <=> $1::vector
+                LIMIT 5""",
+                embedding_str,
+            )
+            for row in rows:
+                candidates.append(SearchCandidate(
+                    entity_type="code_chunk_test",
+                    entity_id=str(row["id"]),
+                    title=f"[TEST] {row.get('function_name', '')}",
+                    content_preview=(row.get("content", "") or "")[:500],
+                    similarity=float(row.get("similarity", 0)),
+                ))
+        except Exception as e:
+            logger.warning("Test code search failed: %s", e)
 
     # Search issues
     if "issue" in available:
@@ -317,8 +352,13 @@ async def stage3_evaluate_link(
 async def stage4_analyze(
     rule_verbatim: str, rule_extracted: str,
     implementing_code: str | None = None,
+    existing_test_code: str | None = None,
 ) -> AnalysisResult:
-    """Stage 4: Gap detection + test proposal."""
+    """Stage 4: Gap detection + test proposal.
+
+    If existing_test_code is provided, the LLM is instructed to propose
+    Python tests that cover the same scenarios as the Haskell tests.
+    """
     prompt = (
         f"SPEC RULE:\n"
         f"Verbatim: {rule_verbatim[:1000]}\n"
@@ -328,6 +368,15 @@ async def stage4_analyze(
         prompt += f"\nIMPLEMENTING HASKELL CODE:\n{implementing_code[:3000]}"
     else:
         prompt += "\nNo implementing code found — propose tests based on the spec rule alone."
+
+    if existing_test_code:
+        prompt += (
+            f"\n\nEXISTING HASKELL TEST:\n{existing_test_code[:2000]}\n\n"
+            f"The Haskell codebase already has the above test for this rule. "
+            f"Propose equivalent Python (pytest/Hypothesis) tests that cover "
+            f"the same scenarios. Include golden test vectors if the Haskell "
+            f"test uses them."
+        )
 
     result = await get_analysis_agent().run(prompt)
     return result.output
@@ -419,15 +468,18 @@ async def _process_chunk(
             eval_results = await _asyncio.gather(*[_eval_candidate(c) for c in candidates])
 
             implementing_code = None
+            existing_test_code = None
             for candidate, decision in eval_results:
                 if decision is None:
                     continue
                 if decision.is_linked and decision.relationship:
+                    # Map code_chunk_test back to code_chunk for DB storage
+                    target_type = "code_chunk" if candidate.entity_type == "code_chunk_test" else candidate.entity_type
                     await add_xref(
                         conn,
                         source_type="spec_section",
                         source_id=section_uuid,
-                        target_type=candidate.entity_type,
+                        target_type=target_type,
                         target_id=uuid.UUID(candidate.entity_id),
                         relationship=decision.relationship.value,
                         confidence=decision.confidence,
@@ -436,6 +488,7 @@ async def _process_chunk(
                     )
                     chunk_stats["links_created"] += 1
 
+                    # Collect implementing code (production)
                     if (
                         decision.relationship.value == "implements"
                         and candidate.entity_type == "code_chunk"
@@ -448,10 +501,24 @@ async def _process_chunk(
                         if code_row:
                             implementing_code = code_row["content"]
 
+                    # Collect existing Haskell test code
+                    if (
+                        decision.relationship.value == "tests"
+                        and candidate.entity_type == "code_chunk_test"
+                        and existing_test_code is None
+                    ):
+                        test_row = await conn.fetchrow(
+                            "SELECT content, function_name FROM code_chunks WHERE id = $1",
+                            uuid.UUID(candidate.entity_id),
+                        )
+                        if test_row:
+                            existing_test_code = f"-- Haskell test: {test_row['function_name']}\n{test_row['content']}"
+
             # Stage 4: Gap detection + test proposals
             try:
                 analysis = await stage4_analyze(
-                    rule.verbatim, rule.extracted_rule, implementing_code,
+                    rule.verbatim, rule.extracted_rule,
+                    implementing_code, existing_test_code,
                 )
             except Exception as e:
                 logger.warning("Analysis failed for %s: %s", rule.section_id, e)
