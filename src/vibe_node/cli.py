@@ -22,11 +22,13 @@ ingest_app = typer.Typer(help="Data ingestion commands.", invoke_without_command
 from vibe_node.cli_infra import infra_app, register_db_extras
 
 research_app = typer.Typer(help="Research and analysis commands.", invoke_without_command=True)
+eval_app = typer.Typer(help="Evaluation and benchmarking commands.", invoke_without_command=True)
 
 app.add_typer(db_app, name="db")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(infra_app, name="infra")
 app.add_typer(research_app, name="research")
+app.add_typer(eval_app, name="eval")
 
 # Register snapshot, restore, search on the db app
 register_db_extras(db_app)
@@ -652,3 +654,43 @@ def qa_validate(
         await close_pool()
 
     asyncio.run(_run())
+
+
+# ===========================================================================
+# Eval commands
+# ===========================================================================
+
+
+@eval_app.callback(invoke_without_command=True)
+def eval_callback(ctx: typer.Context):
+    """Evaluation and benchmarking commands."""
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+
+
+@eval_app.command(name="pycardano")
+def eval_pycardano(
+    ogmios_url: str = typer.Option(
+        "ws://localhost:1337",
+        "--ogmios-url", "-u",
+        help="Ogmios WebSocket URL.",
+    ),
+) -> None:
+    """Evaluate pycardano block deserialization coverage per era.
+
+    Connects to the Docker Compose Ogmios instance, fetches one block
+    from each Cardano era (Byron through Conway), attempts to deserialize
+    with pycardano, and reports field-level coverage.
+
+    Requires: docker compose up cardano-node ogmios
+    """
+    import asyncio
+
+    from vibe.cardano.serialization.eval_pycardano import run_evaluation, print_results
+
+    typer.echo("pycardano Deserialization Coverage Evaluation")
+    typer.echo(f"Ogmios: {ogmios_url}")
+    typer.echo("")
+
+    results = asyncio.run(run_evaluation(ogmios_url))
+    print_results(results)
