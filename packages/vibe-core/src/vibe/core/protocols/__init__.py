@@ -11,16 +11,26 @@ Agency, PeerRole, Message, Protocol, ProtocolError
     Core abstractions from :mod:`~vibe.core.protocols.agency`.
 Peer
     Runtime protocol executor from :mod:`~vibe.core.protocols.peer`.
+Codec, CodecError
+    Message serialization abstraction from :mod:`~vibe.core.protocols.codec`.
+ProtocolRunner
+    Drives a protocol state machine over a mux channel,
+    from :mod:`~vibe.core.protocols.runner`.
 """
 
 from .agency import Agency, Message, PeerRole, Protocol, ProtocolError
+from .codec import Codec, CodecError
 from .peer import Peer
+from .runner import ProtocolRunner
 
 __all__ = [
     "Agency",
+    "Codec",
+    "CodecError",
     "Message",
     "Peer",
     "PeerRole",
     "Protocol",
     "ProtocolError",
+    "ProtocolRunner",
 ]
