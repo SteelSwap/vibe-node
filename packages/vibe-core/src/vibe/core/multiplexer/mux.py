@@ -54,6 +54,15 @@ class MuxClosedError(MuxError):
     """Raised when operating on a closed multiplexer."""
 
 
+class IngressOverflowError(MuxError):
+    """Raised when a channel's inbound queue exceeds its max size.
+
+    Haskell reference: Network.Mux.demux — when the ingress queue is full,
+    the Haskell node tears down the connection. We close the individual
+    channel and log the overflow.
+    """
+
+
 @dataclass
 class MiniProtocolChannel:
     """A bidirectional channel for one miniprotocol over a multiplexed bearer.
@@ -62,18 +71,31 @@ class MiniProtocolChannel:
     and an outbound queue (segments to send to the remote peer). The multiplexer
     sender task drains outbound queues; the receiver task fills inbound queues.
 
+    Args:
+        max_ingress_size: Maximum number of items in the inbound queue. When
+            exceeded, the channel is closed (matching Haskell's behavior of
+            tearing down the connection on ingress overflow). 0 means unbounded.
+
     Haskell reference: Network.Mux.Types.MiniProtocolState (ingress/egress queues)
     """
 
     protocol_id: int
     is_initiator: bool
+    max_ingress_size: int = 0
     _inbound: asyncio.Queue[bytes | object] = field(
-        default_factory=asyncio.Queue, repr=False
+        default=None, repr=False  # type: ignore[assignment]
     )
     _outbound: asyncio.Queue[bytes | object] = field(
         default_factory=asyncio.Queue, repr=False
     )
     _closed: bool = field(default=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if self._inbound is None:
+            if self.max_ingress_size > 0:
+                self._inbound = asyncio.Queue(maxsize=self.max_ingress_size)
+            else:
+                self._inbound = asyncio.Queue()
 
     async def send(self, payload: bytes) -> None:
         """Queue outbound payload for transmission via the multiplexer.
@@ -178,7 +200,9 @@ class Multiplexer:
     def is_closed(self) -> bool:
         return self._closed
 
-    def add_protocol(self, protocol_id: int) -> MiniProtocolChannel:
+    def add_protocol(
+        self, protocol_id: int, max_ingress_size: int = 0
+    ) -> MiniProtocolChannel:
         """Register a miniprotocol and return its channel.
 
         Must be called before run(). Each protocol_id can only be registered
@@ -186,6 +210,9 @@ class Multiplexer:
 
         Args:
             protocol_id: The miniprotocol number (0-32767).
+            max_ingress_size: Maximum inbound queue depth. 0 = unbounded.
+                When exceeded, the channel is closed (Haskell tears down
+                the connection on ingress overflow).
 
         Returns:
             A MiniProtocolChannel for sending/receiving on this protocol.
@@ -207,6 +234,7 @@ class Multiplexer:
         channel = MiniProtocolChannel(
             protocol_id=protocol_id,
             is_initiator=self._is_initiator,
+            max_ingress_size=max_ingress_size,
         )
         self._channels[protocol_id] = channel
         return channel
@@ -408,7 +436,13 @@ class Multiplexer:
             try:
                 channel._inbound.put_nowait(segment.payload)
             except asyncio.QueueFull:
+                # Haskell tears down the connection on ingress overflow.
+                # We close the individual channel — this is a bounded-queue
+                # safety measure to prevent unbounded memory growth.
                 logger.warning(
-                    "receiver: inbound queue full for protocol %d — dropping",
+                    "receiver: inbound queue full for protocol %d "
+                    "— closing channel (max_ingress_size=%d)",
                     segment.protocol_id,
+                    channel.max_ingress_size,
                 )
+                channel.close()

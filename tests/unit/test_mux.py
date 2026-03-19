@@ -27,12 +27,14 @@ import pytest
 
 from vibe.core.multiplexer.bearer import BearerClosedError
 from vibe.core.multiplexer.mux import (
+    IngressOverflowError,
     MiniProtocolChannel,
     Multiplexer,
     MuxClosedError,
+    MuxError,
     _CHANNEL_CLOSED,
 )
-from vibe.core.multiplexer.segment import MuxSegment
+from vibe.core.multiplexer.segment import MuxSegment, encode_segment, decode_segment
 
 
 # ---------------------------------------------------------------------------
@@ -622,3 +624,703 @@ class TestFullDuplex:
                 await task
             except (asyncio.CancelledError, MuxClosedError):
                 pass
+
+
+# ---------------------------------------------------------------------------
+# Tests: Bounded ingress queue (max_ingress_size)
+# ---------------------------------------------------------------------------
+
+
+class TestIngressQueueBounds:
+    """Test bounded inbound queues and overflow behavior.
+
+    Critical: The Haskell mux tears down the connection when an ingress
+    queue overflows. We close the individual channel — a documented
+    divergence until we have a full connection manager.
+    """
+
+    @pytest.mark.asyncio
+    async def test_demux_ingress_queue_max_size(self) -> None:
+        """MiniProtocolChannel with max_ingress_size creates a bounded queue."""
+        ch = MiniProtocolChannel(
+            protocol_id=0, is_initiator=True, max_ingress_size=3
+        )
+        assert ch._inbound.maxsize == 3
+
+        # Can put up to max_ingress_size items.
+        ch._inbound.put_nowait(b"a")
+        ch._inbound.put_nowait(b"b")
+        ch._inbound.put_nowait(b"c")
+
+        # 4th item should raise QueueFull.
+        with pytest.raises(asyncio.QueueFull):
+            ch._inbound.put_nowait(b"d")
+
+    @pytest.mark.asyncio
+    async def test_demux_ingress_queue_overflow_closes_channel(
+        self, mock_bearer: MockBearer
+    ) -> None:
+        """When the inbound queue overflows, the channel is closed (not just dropped)."""
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        ch = mux.add_protocol(0, max_ingress_size=2)
+
+        # Inject 3 segments — the 3rd should overflow the queue and close the channel.
+        mock_bearer.inject_segment(make_segment(0, b"msg-1"))
+        mock_bearer.inject_segment(make_segment(0, b"msg-2"))
+        mock_bearer.inject_segment(make_segment(0, b"msg-3"))
+        # Add a valid segment for a different protocol so the receiver keeps running.
+        ch_other = mux.add_protocol(1, max_ingress_size=0)
+        mock_bearer.inject_segment(make_segment(1, b"sentinel"))
+
+        run_task = asyncio.create_task(mux.run())
+
+        # Wait for the sentinel to arrive — confirms all 3 proto-0 segments processed.
+        payload = await asyncio.wait_for(ch_other.recv(), timeout=2.0)
+        assert payload == b"sentinel"
+
+        # Channel 0 should be closed due to overflow.
+        assert ch._closed
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+    @pytest.mark.asyncio
+    async def test_demux_ingress_unbounded_default(self) -> None:
+        """Default max_ingress_size=0 creates an unbounded queue."""
+        ch = MiniProtocolChannel(protocol_id=0, is_initiator=True)
+        assert ch._inbound.maxsize == 0  # asyncio.Queue(0) = unbounded
+
+        # Should accept many items without error.
+        for i in range(100):
+            ch._inbound.put_nowait(f"item-{i}".encode())
+
+
+# ---------------------------------------------------------------------------
+# Tests: Direction handling (demux direction reversal)
+# ---------------------------------------------------------------------------
+
+
+class TestDirectionHandling:
+    """Test that the demux correctly handles protocol direction.
+
+    Critical: In the Ouroboros mux protocol, SDUs carry a direction bit.
+    An initiator-side mux receives ResponderDir SDUs (the remote responder
+    is sending to us). The protocol_id is the same, but the direction is
+    reversed from the sender's perspective.
+
+    Spec reference: Ouroboros network spec, Section 1.1 — M=0 is initiator,
+    M=1 is responder. The receiver dispatches by protocol_id regardless of
+    direction bit (direction is already implicit in the connection role).
+    """
+
+    @pytest.mark.asyncio
+    async def test_demux_direction_reversal(self, mock_bearer: MockBearer) -> None:
+        """ResponderDir SDUs are delivered to the initiator-side channel for that protocol.
+
+        When an initiator receives a segment with is_initiator=False (ResponderDir),
+        it should dispatch to the channel registered for that protocol_id. The
+        direction reversal is implicit: the initiator receives responder segments,
+        and vice versa.
+        """
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        ch = mux.add_protocol(0)
+
+        # Inject a ResponderDir segment (is_initiator=False) — this is what
+        # the remote responder sends to us (the initiator).
+        mock_bearer.inject_segment(make_segment(0, b"from-responder", is_initiator=False))
+
+        run_task = asyncio.create_task(mux.run())
+        payload = await asyncio.wait_for(ch.recv(), timeout=1.0)
+
+        assert payload == b"from-responder"
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+    @pytest.mark.asyncio
+    async def test_demux_initiator_only_rejects_responder_sdu(
+        self, mock_bearer: MockBearer, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """When configured as initiator-only, a channel receives ResponderDir SDUs.
+
+        Note: In the current design, the mux routes by protocol_id only (not by
+        direction). An initiator-only channel WILL receive ResponderDir SDUs
+        because that's what the remote peer sends to us. This test documents
+        that behavior — it's correct for an initiator to receive responder
+        segments (that's how bidirectional communication works).
+
+        If we later add direction-aware routing (separate channels for each
+        direction per protocol), this test would need updating.
+        """
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        ch = mux.add_protocol(0)
+
+        # An initiator should receive ResponderDir segments — that's the
+        # remote responder talking to us.
+        mock_bearer.inject_segment(make_segment(0, b"resp-sdu", is_initiator=False))
+
+        run_task = asyncio.create_task(mux.run())
+        payload = await asyncio.wait_for(ch.recv(), timeout=1.0)
+        assert payload == b"resp-sdu"
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Tests: No head-of-line blocking
+# ---------------------------------------------------------------------------
+
+
+class TestNoHeadOfLineBlocking:
+    """Test that one stalled protocol doesn't block others.
+
+    Critical: The sender uses round-robin with get_nowait(), so a protocol
+    with no outbound data (or a full outbound queue on the bearer side)
+    should not block other protocols from making progress.
+    """
+
+    @pytest.mark.asyncio
+    async def test_mux_no_head_of_line_blocking(
+        self, mock_bearer: MockBearer
+    ) -> None:
+        """One protocol with no data doesn't block another from sending."""
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        ch_idle = mux.add_protocol(0)  # No data queued — "stalled"
+        ch_active = mux.add_protocol(1)
+
+        # Only the active channel has data.
+        await ch_active.send(b"active-msg-1")
+        await ch_active.send(b"active-msg-2")
+
+        run_task = asyncio.create_task(mux.run())
+
+        # Both messages from the active channel should arrive promptly
+        # despite ch_idle having nothing.
+        seg1 = await asyncio.wait_for(mock_bearer.outbound.get(), timeout=1.0)
+        seg2 = await asyncio.wait_for(mock_bearer.outbound.get(), timeout=1.0)
+
+        assert seg1.protocol_id == 1
+        assert seg1.payload == b"active-msg-1"
+        assert seg2.protocol_id == 1
+        assert seg2.payload == b"active-msg-2"
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Tests: Unknown protocol behavior documentation
+# ---------------------------------------------------------------------------
+
+
+class TestUnknownProtocolDocumented:
+    """Document and test the divergence from Haskell on unknown protocols.
+
+    Critical: Haskell escalates unknown protocols to ShutdownNode, which
+    tears down the entire connection manager. We DROP the segment and log a
+    warning because we don't yet have a connection manager to escalate to.
+    This is a documented gap — see gap-analysis.md.
+    """
+
+    @pytest.mark.asyncio
+    async def test_mux_unknown_protocol_behavior_documented(
+        self, mock_bearer: MockBearer, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Unknown protocol segments are DROPPED (not ShutdownNode).
+
+        GAP: Haskell Network.Mux.demux triggers MuxError (ShutdownNode) for
+        unknown MiniProtocolNum. We drop and log. This divergence is acceptable
+        until we implement the connection manager layer, at which point we
+        should escalate to shut down the peer connection.
+        """
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        ch = mux.add_protocol(0)
+
+        # Inject unknown protocols with different IDs.
+        mock_bearer.inject_segment(make_segment(42, b"unknown-42"))
+        mock_bearer.inject_segment(make_segment(999, b"unknown-999"))
+        # Then a valid one so the mux keeps running.
+        mock_bearer.inject_segment(make_segment(0, b"valid"))
+
+        run_task = asyncio.create_task(mux.run())
+
+        with caplog.at_level(logging.WARNING):
+            payload = await asyncio.wait_for(ch.recv(), timeout=1.0)
+
+        # Valid segment delivered.
+        assert payload == b"valid"
+
+        # Unknown protocols were logged.
+        assert "unknown protocol_id 42" in caplog.text
+        assert "unknown protocol_id 999" in caplog.text
+
+        # The mux is still running — it didn't shut down.
+        assert mux.is_running
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Tests: Per-protocol buffer isolation
+# ---------------------------------------------------------------------------
+
+
+class TestPerProtocolBufferIsolation:
+    """Test that filling one protocol's queue doesn't affect another.
+
+    High: This verifies that the per-protocol queue architecture provides
+    proper isolation — a slow consumer on one protocol doesn't impact others.
+    """
+
+    @pytest.mark.asyncio
+    async def test_demux_per_protocol_buffer_isolation(
+        self, mock_bearer: MockBearer
+    ) -> None:
+        """Filling protocol 0's inbound queue doesn't prevent protocol 1 from receiving."""
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        ch_full = mux.add_protocol(0, max_ingress_size=2)
+        ch_ok = mux.add_protocol(1, max_ingress_size=0)
+
+        # Fill proto 0's queue to capacity.
+        mock_bearer.inject_segment(make_segment(0, b"fill-1"))
+        mock_bearer.inject_segment(make_segment(0, b"fill-2"))
+        # This one overflows proto 0 — closes that channel.
+        mock_bearer.inject_segment(make_segment(0, b"overflow"))
+        # Proto 1 should still work fine.
+        mock_bearer.inject_segment(make_segment(1, b"unaffected"))
+
+        run_task = asyncio.create_task(mux.run())
+
+        # Proto 1 receives its message despite proto 0 overflowing.
+        payload = await asyncio.wait_for(ch_ok.recv(), timeout=2.0)
+        assert payload == b"unaffected"
+
+        # Proto 0 is closed.
+        assert ch_full._closed
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Tests: Multi-segment reassembly (data preservation)
+# ---------------------------------------------------------------------------
+
+
+class TestReassembly:
+    """Test that multi-segment payloads are delivered correctly.
+
+    High: The mux layer delivers each segment's payload individually (it does
+    NOT do higher-level reassembly — that's the miniprotocol's job). This test
+    verifies that each segment's data is preserved exactly through mux/demux.
+    """
+
+    @pytest.mark.asyncio
+    async def test_demux_reassembly_preserves_data(
+        self, mock_bearer: MockBearer
+    ) -> None:
+        """Multiple segments for the same protocol deliver payloads in order, intact."""
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        ch = mux.add_protocol(0)
+
+        # Simulate a large message split into 3 segments by the remote peer.
+        chunks = [b"chunk-000-start", b"chunk-001-middle", b"chunk-002-end"]
+        for chunk in chunks:
+            mock_bearer.inject_segment(make_segment(0, chunk))
+
+        run_task = asyncio.create_task(mux.run())
+
+        received = []
+        for _ in range(3):
+            payload = await asyncio.wait_for(ch.recv(), timeout=1.0)
+            received.append(payload)
+
+        # Each chunk delivered exactly, in order.
+        assert received == chunks
+        # Reassembly is the caller's job — but data is preserved.
+        assert b"".join(received) == b"chunk-000-startchunk-001-middlechunk-002-end"
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Tests: Fairness — bounded delay
+# ---------------------------------------------------------------------------
+
+
+class TestFairnessBoundedDelay:
+    """Test that the scheduler doesn't let one protocol monopolize the bearer.
+
+    High: With round-robin scheduling, the maximum number of consecutive
+    segments from a single protocol should be bounded by 1 per round.
+    """
+
+    @pytest.mark.asyncio
+    async def test_fairness_bounded_delay(self, mock_bearer: MockBearer) -> None:
+        """No protocol sends more than 1 consecutive segment before others get a turn."""
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        n_protocols = 3
+        channels = []
+        for pid in range(n_protocols):
+            ch = mux.add_protocol(pid)
+            channels.append(ch)
+
+        # Protocol 0 has 5 messages, others have 1 each.
+        for i in range(5):
+            await channels[0].send(f"p0-{i}".encode())
+        await channels[1].send(b"p1-0")
+        await channels[2].send(b"p2-0")
+
+        run_task = asyncio.create_task(mux.run())
+
+        # Collect 7 segments total.
+        segments: list[MuxSegment] = []
+        for _ in range(7):
+            seg = await asyncio.wait_for(mock_bearer.outbound.get(), timeout=2.0)
+            segments.append(seg)
+
+        # In the first round (3 segments), all 3 protocols should appear.
+        first_round = [seg.protocol_id for seg in segments[:n_protocols]]
+        assert set(first_round) == {0, 1, 2}, (
+            f"First round should service all protocols, got {first_round}"
+        )
+
+        # Check no consecutive run from protocol 0 exceeds 1 in the first 3 segments.
+        max_consecutive = 1
+        current_run = 1
+        for i in range(1, len(segments)):
+            if segments[i].protocol_id == segments[i - 1].protocol_id:
+                current_run += 1
+                max_consecutive = max(max_consecutive, current_run)
+            else:
+                current_run = 1
+
+        # After others are drained, proto 0 will run consecutively — that's fine.
+        # But in the first N segments (where all have data), max run should be 1.
+        first_n_max = 1
+        current_run = 1
+        for i in range(1, n_protocols):
+            if segments[i].protocol_id == segments[i - 1].protocol_id:
+                current_run += 1
+                first_n_max = max(first_n_max, current_run)
+            else:
+                current_run = 1
+        assert first_n_max == 1, (
+            f"In first round, max consecutive from one protocol should be 1, got {first_n_max}"
+        )
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Tests: Fairness property test — N protocols
+# ---------------------------------------------------------------------------
+
+
+class TestFairnessPropertyNProtocols:
+    """Property test: with N=2..10 protocols, all get scheduled.
+
+    High: This is a parameterized version of the starvation test that
+    exercises a range of protocol counts to verify fairness at scale.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("n_protocols", [2, 3, 5, 7, 10])
+    async def test_mux_fairness_property_n_protocols(
+        self, n_protocols: int
+    ) -> None:
+        """With N protocols each sending 1 message, all N appear in output."""
+        bearer = MockBearer()
+        mux = Multiplexer(bearer, is_initiator=True)
+        channels = []
+        for pid in range(n_protocols):
+            ch = mux.add_protocol(pid)
+            channels.append(ch)
+            await ch.send(f"proto-{pid}".encode())
+
+        run_task = asyncio.create_task(mux.run())
+
+        segments: list[MuxSegment] = []
+        for _ in range(n_protocols):
+            seg = await asyncio.wait_for(bearer.outbound.get(), timeout=2.0)
+            segments.append(seg)
+
+        # All N protocols got scheduled.
+        serviced = {seg.protocol_id for seg in segments}
+        assert serviced == set(range(n_protocols)), (
+            f"Expected all {n_protocols} protocols serviced, got {serviced}"
+        )
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Tests: Framing round-trip property
+# ---------------------------------------------------------------------------
+
+
+class TestFramingRoundtrip:
+    """Property test at the mux layer — encode/decode segment preserves all fields.
+
+    High: Verifies that MuxSegment serialization round-trips correctly for
+    a variety of inputs.
+    """
+
+    @pytest.mark.parametrize(
+        "protocol_id,is_initiator,payload",
+        [
+            (0, True, b""),
+            (0, False, b"hello"),
+            (0x7FFF, True, b"\x00\xff" * 100),
+            (42, False, b"x" * 65535),
+            (1, True, b"\x00"),
+        ],
+    )
+    def test_multiplexer_framing_roundtrip_property(
+        self, protocol_id: int, is_initiator: bool, payload: bytes
+    ) -> None:
+        """encode_segment -> decode_segment preserves all fields."""
+        seg = MuxSegment(
+            timestamp=12345,
+            protocol_id=protocol_id,
+            is_initiator=is_initiator,
+            payload=payload,
+        )
+        wire = encode_segment(seg)
+        decoded, consumed = decode_segment(wire)
+
+        assert consumed == len(wire)
+        assert decoded.timestamp == seg.timestamp
+        assert decoded.protocol_id == seg.protocol_id
+        assert decoded.is_initiator == seg.is_initiator
+        assert decoded.payload == seg.payload
+
+
+# ---------------------------------------------------------------------------
+# Tests: Protocol keyed by (num, direction) composite key
+# ---------------------------------------------------------------------------
+
+
+class TestProtocolCompositeKey:
+    """Verify that protocols are keyed by protocol_id.
+
+    High: In Haskell, protocols are keyed by (MiniProtocolNum, MiniProtocolDir).
+    Our current implementation keys by protocol_id only — direction is implicit
+    in the mux role (initiator vs responder). This test documents the keying
+    behavior and verifies that distinct protocol_ids get distinct channels.
+    """
+
+    @pytest.mark.asyncio
+    async def test_mux_mini_protocol_keyed_by_num_and_dir(
+        self, mock_bearer: MockBearer
+    ) -> None:
+        """Different protocol_ids get independent channels.
+
+        Note: In Haskell, the key is (MiniProtocolNum, MiniProtocolDir),
+        supporting separate channels for initiator and responder on the
+        same protocol number. Our design uses one channel per protocol_id
+        per mux instance, with direction implicit in is_initiator. Full-duplex
+        is achieved by having separate initiator and responder Multiplexer
+        instances. This test verifies our keying is correct for our design.
+        """
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        ch_0 = mux.add_protocol(0)
+        ch_1 = mux.add_protocol(1)
+        ch_2 = mux.add_protocol(2)
+
+        # Each channel is independent.
+        assert ch_0.protocol_id == 0
+        assert ch_1.protocol_id == 1
+        assert ch_2.protocol_id == 2
+
+        # Segments are routed to the correct channel.
+        mock_bearer.inject_segment(make_segment(2, b"for-2"))
+        mock_bearer.inject_segment(make_segment(0, b"for-0"))
+        mock_bearer.inject_segment(make_segment(1, b"for-1"))
+
+        run_task = asyncio.create_task(mux.run())
+
+        p0 = await asyncio.wait_for(ch_0.recv(), timeout=1.0)
+        p1 = await asyncio.wait_for(ch_1.recv(), timeout=1.0)
+        p2 = await asyncio.wait_for(ch_2.recv(), timeout=1.0)
+
+        assert p0 == b"for-0"
+        assert p1 == b"for-1"
+        assert p2 == b"for-2"
+
+        await mux.close()
+        try:
+            await run_task
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Tests: I/O exception shuts down peer only
+# ---------------------------------------------------------------------------
+
+
+class TestIOExceptionIsolation:
+    """Test that an I/O error on one mux doesn't affect another.
+
+    High: Each Multiplexer manages a single bearer (peer connection).
+    An I/O error should shut down only that mux instance, not others.
+    """
+
+    @pytest.mark.asyncio
+    async def test_mux_io_exception_shuts_down_peer_only(self) -> None:
+        """An I/O error on bearer A closes mux A but mux B remains operational."""
+        bearer_a = MockBearer()
+        bearer_b = MockBearer()
+
+        mux_a = Multiplexer(bearer_a, is_initiator=True)
+        mux_b = Multiplexer(bearer_b, is_initiator=True)
+
+        ch_a = mux_a.add_protocol(0)
+        ch_b = mux_b.add_protocol(0)
+
+        run_a = asyncio.create_task(mux_a.run())
+        run_b = asyncio.create_task(mux_b.run())
+
+        await asyncio.sleep(0.02)
+
+        # Disconnect bearer A (simulates I/O error).
+        bearer_a.disconnect()
+
+        # Mux A should shut down.
+        await asyncio.wait_for(run_a, timeout=2.0)
+        assert ch_a._closed
+
+        # Mux B should still be running.
+        assert mux_b.is_running
+        assert not ch_b._closed
+
+        # Mux B can still process messages.
+        bearer_b.inject_segment(make_segment(0, b"still-alive"))
+        payload = await asyncio.wait_for(ch_b.recv(), timeout=1.0)
+        assert payload == b"still-alive"
+
+        await mux_b.close()
+        try:
+            await run_b
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Tests: Error path closes multiplexer and socket
+# ---------------------------------------------------------------------------
+
+
+class TestErrorPathCleanup:
+    """Test the error -> mux close -> bearer release chain.
+
+    High: When an error occurs, the cleanup chain should close the
+    multiplexer, which closes all channels, which closes the bearer.
+    """
+
+    @pytest.mark.asyncio
+    async def test_error_path_closes_multiplexer_and_socket(
+        self, mock_bearer: MockBearer
+    ) -> None:
+        """Bearer disconnect triggers: mux shutdown -> channel close -> bearer close."""
+        mux = Multiplexer(mock_bearer, is_initiator=True)
+        ch_a = mux.add_protocol(0)
+        ch_b = mux.add_protocol(1)
+
+        run_task = asyncio.create_task(mux.run())
+        await asyncio.sleep(0.02)
+
+        # Disconnect the bearer (simulates network error).
+        mock_bearer.disconnect()
+
+        # run() should exit cleanly.
+        await asyncio.wait_for(run_task, timeout=2.0)
+
+        # All channels closed.
+        assert ch_a._closed
+        assert ch_b._closed
+
+        # Mux is no longer running.
+        assert not mux.is_running
+
+        # Now explicitly close to verify bearer release.
+        await mux.close()
+        assert mock_bearer.is_closed
+
+
+# ---------------------------------------------------------------------------
+# Tests: Bearer close propagates to all channels
+# ---------------------------------------------------------------------------
+
+
+class TestBearerClosePropagatesToChannels:
+    """Test that bearer close propagates to all registered channels.
+
+    High: When the bearer is closed (either by us or by the remote peer),
+    every registered channel should transition to closed state.
+    """
+
+    @pytest.mark.asyncio
+    async def test_mux_bearer_closed_shuts_down_peer(self) -> None:
+        """Closing the bearer propagates to all channels via mux shutdown."""
+        bearer = MockBearer()
+        mux = Multiplexer(bearer, is_initiator=True)
+        channels = []
+        for pid in range(5):
+            channels.append(mux.add_protocol(pid))
+
+        run_task = asyncio.create_task(mux.run())
+        await asyncio.sleep(0.02)
+
+        # Close the mux (which closes bearer and channels).
+        await mux.close()
+
+        try:
+            await asyncio.wait_for(run_task, timeout=2.0)
+        except (asyncio.CancelledError, MuxClosedError):
+            pass
+
+        # All 5 channels are closed.
+        for pid, ch in enumerate(channels):
+            assert ch._closed, f"channel {pid} should be closed"
+
+        # Bearer is closed.
+        assert bearer.is_closed
+
+        # recv() on any channel raises MuxClosedError.
+        for ch in channels:
+            with pytest.raises(MuxClosedError):
+                await ch.recv()

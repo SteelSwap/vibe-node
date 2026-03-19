@@ -17,6 +17,7 @@ from vibe.core.multiplexer.bearer import (
     connect,
 )
 from vibe.core.multiplexer.mux import (
+    IngressOverflowError,
     MiniProtocolChannel,
     Multiplexer,
     MuxClosedError,
@@ -37,6 +38,7 @@ __all__ = [
     "MAX_PAYLOAD_SIZE",
     "MiniProtocolChannel",
     "Multiplexer",
+    "IngressOverflowError",
     "MuxClosedError",
     "MuxError",
     "MuxSegment",
