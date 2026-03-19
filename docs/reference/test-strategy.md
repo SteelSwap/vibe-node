@@ -130,41 +130,50 @@ The spec ingestion pipeline has extracted rules from 6 of the 10 subsystems and 
 
 ## Per-Phase Test Plan
 
-Each implementation phase has specific test gates that must pass before advancing. The diagram below shows which test types are active at each phase.
+Each implementation phase has specific test gates that must pass before advancing. Three tracks run in parallel, converging at integration points.
 
 ```mermaid
 gantt
-    title Test Gates by Phase
-    dateFormat YYYY-MM-DD
-    axisFormat %b %Y
+    title Test Gates — Parallel Tracks
+    dateFormat X
+    axisFormat
 
-    section Phase 2 — Serialization
-    Unit tests (CBOR round-trip)         :p2u, 2026-04-01, 30d
-    Property tests (Hypothesis)          :p2p, 2026-04-01, 30d
-    Conformance (decode mainnet blocks)  :p2c, 2026-04-15, 16d
+    section Track A — Networking
+    Serialization unit + property       :a1, 0, 3s
+    Multiplexer unit + property         :a2, after a1, 3s
+    N2N miniprotocol FSM tests          :a3, after a2, 3s
+    Chain-sync integration              :a4, after a3, 2s
+    Block-fetch integration             :a5, after a4, 2s
 
-    section Phase 3 — Ledger
-    Unit tests (validation rules)        :p3u, 2026-05-01, 45d
-    Property tests (invariants)          :p3p, 2026-05-01, 45d
-    Conformance (tx validation)          :p3c, 2026-05-15, 31d
-    Integration (validation pipeline)    :p3i, 2026-06-01, 15d
+    section Track B — Ledger
+    Serialization (shared with A)       :b1, 0, 3s
+    Byron–Mary ledger unit + property   :b2, after b1, 4s
+    Alonzo–Conway ledger + Plutus       :b3, after b2, 4s
+    Tx validation conformance           :b4, after b3, 2s
 
-    section Phase 4 — Networking
-    Unit tests (multiplexer, codecs)     :p4u, 2026-06-15, 30d
-    Property tests (protocol FSMs)       :p4p, 2026-06-15, 30d
-    Integration (multi-node sync)        :p4i, 2026-07-01, 15d
+    section Track C — Storage
+    Arrow+Dict unit + property          :c1, 0, 3s
+    ImmutableDB + VolatileDB tests      :c2, after c1, 3s
+    Mithril import integration          :c3, after c2, 2s
 
-    section Phase 5 — Consensus
-    Unit tests (VRF, KES, chain sel)     :p5u, 2026-07-15, 30d
-    Property tests (fork choice)         :p5p, 2026-07-15, 30d
-    Conformance (tip agreement)          :p5c, 2026-08-01, 15d
-    Integration (3-node devnet)          :p5i, 2026-08-01, 15d
+    section Integration
+    Sync pipeline (A + B + C)           :crit, i1, after a5, 3s
+    Consensus + tip agreement           :crit, i2, after i1, 3s
+    Mempool + block production          :i3, after i2, 3s
+    N2C miniprotocols                   :i4, after i2, 2s
 
-    section Phase 6 — Production
-    Replay tests (Mithril mainnet)       :p6r, 2026-08-15, 30d
-    Integration (block production)       :p6i, 2026-08-15, 30d
-    Conformance (full protocol suite)    :p6c, 2026-09-01, 15d
+    section Hardening
+    Replay tests (Mithril mainnet)      :h1, after i3, 3s
+    10-day soak test                    :crit, h2, after h1, 4s
+    Memory + crash recovery             :h3, after h1, 3s
 ```
+
+**Key parallel opportunities:**
+
+- **Tracks A, B, C start simultaneously** — serialization is the shared foundation, then networking, ledger, and storage diverge into independent work streams
+- **Track B (Ledger)** is the longest path — Byron through Conway ledger rules plus Plutus evaluation
+- **Integration** is where tracks converge — sync pipeline requires networking (A) + storage (C) + ledger validation (B)
+- **Hardening** gates on full integration — replay and soak tests need the complete system
 
 ### Phase 2 — Serialization & CBOR
 
