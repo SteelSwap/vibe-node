@@ -32,11 +32,12 @@ Every candidate is scored on six dimensions (1–5 scale):
 
 | Subsystem | Verdict | Library/Approach | Rationale |
 |-----------|---------|-----------------|-----------|
-| **Serialization** | USE | cbor2 | MIT, 3.14 wheels, C extension, active maintainer |
-| **Crypto (general)** | USE | PyNaCl + cryptography | Ed25519/X25519 via PyNaCl; KES/hashing via cryptography |
-| **Crypto (VRF)** | BUILD | Custom libsodium FFI | No Python VRF library implements Cardano's ECVRF-ED25519-SHA512-Elligator2 |
+| **Serialization & Ledger Types** | USE | pycardano (uses cbor2 internally) | Cardano CBOR serialization, transaction types, address handling — all eras |
+| **Crypto (general)** | USE | pycardano (uses PyNaCl internally) | Ed25519 signing/verification, address derivation |
+| **Crypto (hashing)** | USE | cryptography | Blake2b hashing, KES primitives (not covered by pycardano) |
+| **Crypto (VRF)** | BUILD | Custom libsodium FFI | No Python library implements Cardano's ECVRF-ED25519-SHA512-Elligator2 |
+| **Crypto (KES)** | BUILD | Sum-composition over Ed25519 | Key-evolving signatures require custom tree-based implementation |
 | **Networking** | USE | asyncio (stdlib) | Zero-dependency; sufficient for multiplexed TCP; broader ecosystem support |
-| **Ledger types** | REUSE | pycardano (selected modules) | Extract transaction/address/UTxO types; avoid tx-builder coupling |
 | **Plutus** | BUILD | From spec (with pyaiken for conformance testing) | uplc is wallet-grade; node needs precise cost accounting and all builtins |
 | **Storage** | USE | PyArrow + DuckDB + SQLite (stdlib) | Arrow tables + dict for hot state; DuckDB for analytics; SQLite for metadata |
 
@@ -44,52 +45,85 @@ Every candidate is scored on six dimensions (1–5 scale):
 
 ## Detailed Evaluations
 
-### 1. Serialization
+### 1. Serialization, Ledger Types & Cryptography — pycardano
 
-Cardano is CBOR-native — every block, transaction, and protocol message is CBOR-encoded per CDDL schemas. The serialization library is the most performance-critical dependency in the entire node.
+pycardano is the most mature Python library for the Cardano ecosystem. It provides CBOR serialization (via cbor2), Ed25519 cryptography (via PyNaCl), transaction types for all eras, and address handling. Rather than building our own layers on top of the same underlying libraries, **we use pycardano directly** and contribute back improvements as we find gaps.
 
-#### cbor2
-
-| Criterion | Score | Notes |
-|-----------|-------|-------|
-| Maintenance | 5 | v5.8.0 (Dec 2025); active releases; Alex Gronholm is a prolific OSS maintainer |
-| License | 5 | MIT — fully compatible with AGPL-3.0 |
-| Python 3.14 | 5 | Published wheels for 3.12, 3.13, 3.14 |
-| Performance | 4 | C extension with readahead buffering (20–140% decode improvement); pure-Python fallback available |
-| Coupling | 5 | Standalone CBOR codec; zero Cardano-specific opinions |
-| Bus Factor | 3 | Primarily single-maintainer (agronholm), but 220+ GitHub stars and Debian-packaged |
-
-**Verdict: USE.** cbor2 is the clear choice. It implements RFC 8949, supports deterministic encoding (critical for Cardano canonical CBOR), and has a C extension path for performance. We will need to build our own CDDL-schema-aware encoding layer on top, but the low-level codec is exactly what we need.
-
-**Gaps to address:**
-
-- Cardano's "canonical CBOR" requires deterministic map key ordering and minimal-length integer encoding — cbor2 supports `canonical=True` but we must verify round-trip fidelity against real mainnet blocks
-- Tag handling for Cardano-specific tags (e.g., tag 24 for embedded CBOR, tag 258 for sets) needs wrapper code
-
-#### pycardano (CBOR layer)
-
-pycardano uses cbor2 internally via its `CBORSerializable` base class. This is a higher-level abstraction — useful for type definitions but not a replacement for a raw CBOR codec. We evaluate pycardano's type layer separately under "Ledger Types" below.
-
----
-
-### 2. Cryptography
-
-Cardano consensus requires Ed25519 signatures, VRF (ECVRF-ED25519-SHA512-Elligator2), KES (key-evolving signatures via sum-composition), and Blake2b hashing.
-
-#### PyNaCl
+#### pycardano
 
 | Criterion | Score | Notes |
 |-----------|-------|-------|
-| Maintenance | 5 | v1.6.2 (Jan 2026); libsodium updated to 1.0.20-stable; CVE-2025-69277 patched |
-| License | 5 | Apache-2.0 — compatible with AGPL-3.0 |
-| Python 3.14 | 5 | Explicit free-threaded 3.14 support added |
-| Performance | 5 | Thin FFI over libsodium — native C performance |
-| Coupling | 5 | Standalone; provides Ed25519, X25519, AEAD, hashing |
-| Bus Factor | 5 | Maintained by pyca (Python Cryptographic Authority); same team as `cryptography` |
+| Maintenance | 4 | v0.19.2 (Mar 2026); active development; Conway/Chang support added |
+| License | 4 | MIT — compatible with AGPL-3.0; contribution flows are one-way (we can use MIT in AGPL) |
+| Python 3.14 | 3 | No explicit 3.14 wheels published; likely works but untested |
+| Performance | 3 | Designed for wallet-level throughput, but adequate for our initial sync targets |
+| Coupling | 3 | Types are separable from the transaction builder; we use the type/serialization/crypto layers only |
+| Bus Factor | 3 | ~27 contributors; Jerry (cffls) is the primary maintainer; Catalyst-funded |
 
-**Verdict: USE** for Ed25519 signing/verification and general NaCl primitives. PyNaCl gives us libsodium's Ed25519 at C speed with a clean Python API.
+**Verdict: USE.** pycardano provides the Cardano-specific serialization, type definitions, and Ed25519 crypto we need. Using it directly avoids reimplementing cbor2 wrappers, CBOR tag handling, address encoding, and Ed25519 signing that pycardano already does correctly and has been tested against mainnet.
 
-#### cryptography
+#### What pycardano gives us
+
+| Capability | pycardano Module | What We Avoid Building |
+|-----------|-----------------|----------------------|
+| **CBOR serialization** | `serialization.py` (uses cbor2) | CDDL tag handling, canonical encoding, `CBORSerializable` base class |
+| **Transaction types** | `transaction.py` | `Transaction`, `TransactionBody`, `TransactionOutput`, `Value`, multi-asset maps |
+| **Address handling** | `address.py` | Bech32 encoding, network discrimination, stake address derivation |
+| **Hash types** | `hash.py` | `TransactionHash`, `ScriptHash`, `DatumHash`, `BlockHash` |
+| **Native scripts** | `nativescript.py` | Timelock, multi-sig, and other native script types |
+| **Plutus types** | `plutus.py` | `PlutusData`, `PlutusV1Script`, `PlutusV2Script`, `PlutusV3Script` |
+| **Ed25519 signing** | `crypto.py` (uses PyNaCl) | Key generation, signing, verification |
+
+#### What we build on top of pycardano
+
+pycardano was designed for wallet use (construct and submit transactions). A node needs additional structures that pycardano doesn't cover:
+
+| Component | Why pycardano Doesn't Cover It | Our Approach |
+|-----------|-------------------------------|-------------|
+| **Block headers** | Wallets don't parse block headers | Build in `vibe.cardano.consensus` using pycardano's CBOR primitives |
+| **Protocol state** | Epoch boundaries, stake snapshots, protocol parameters | Build in `vibe.cardano.ledger` |
+| **Per-era block types** | pycardano uses one `Transaction` class for all eras | Extend with era-specific block wrappers |
+| **Streaming deserialization** | pycardano materializes full objects | Build lazy/streaming decoder for sync performance if profiling shows need |
+| **VRF crypto** | Cardano's ECVRF not implemented in any Python library | Custom libsodium FFI (see below) |
+| **KES key evolution** | Sum-composition over Ed25519; consensus-only | Build from spec using `cryptography` primitives |
+| **UPLC evaluation** | Script evaluation with cost accounting | Build from Plutus Core spec (see Plutus section) |
+
+#### Contributing back to pycardano
+
+We will **contribute upstream** whenever we find and fix issues. Specifically:
+
+- **CBOR round-trip fidelity** — if we find cases where pycardano doesn't round-trip canonical CBOR correctly for node-level use, we fix it upstream
+- **Python 3.14 support** — if we hit compatibility issues, we contribute fixes
+- **Conway-era gaps** — if governance structures or new certificate types are missing, we add them
+- **Performance improvements** — if profiling reveals hot spots in pycardano's serialization path, we optimize upstream rather than forking
+- **cbor2 pure Python mode** — pycardano already uses `cbor2pure` to avoid C extension bugs with Cardano's CBOR; any fixes go upstream to both projects
+
+This follows our project principle: **contribute upstream, don't fork**.
+
+#### Era Coverage
+
+| Era | pycardano Coverage | Node Gaps |
+|-----|-------------------|-----------|
+| Byron | Minimal (bootstrap addresses) | Byron block headers, epoch boundary blocks |
+| Shelley | Good | Block headers, protocol state transitions |
+| Allegra–Mary | Good | Timelock scripts, multi-asset mint/burn rules |
+| Alonzo | Good | Phase-2 validation context, cost model application |
+| Babbage | Good | Reference inputs, inline datums at block level |
+| Conway | Partial (maturing) | DRep voting, governance actions, treasury withdrawals |
+
+#### Serialization Considerations
+
+pycardano uses cbor2 internally. Key points for node use:
+
+- **cbor2 pure Python mode** — pycardano uses `cbor2pure` (a pure Python fork) to avoid C extension deserialization bugs with Cardano's CBOR. This is already handled.
+- **Canonical encoding** — pycardano supports `canonical=True` via cbor2; we must verify round-trip fidelity against real mainnet blocks and fix upstream if needed
+- **Tag handling** — Cardano-specific tags (tag 24 for embedded CBOR, tag 258 for sets) are handled by pycardano's `CBORSerializable`
+
+### 2. Cryptography — What We Build Separately
+
+pycardano covers Ed25519 signing/verification via PyNaCl. The following cryptographic components are **not covered by any Python library** and must be built:
+
+#### cryptography (Blake2b, KES primitives)
 
 | Criterion | Score | Notes |
 |-----------|-------|-------|
@@ -100,22 +134,12 @@ Cardano consensus requires Ed25519 signatures, VRF (ECVRF-ED25519-SHA512-Elligat
 | Coupling | 4 | Large library, but well-organized; we only need specific primitives |
 | Bus Factor | 5 | pyca team; most-downloaded crypto package in Python |
 
-**Verdict: USE** as a complement to PyNaCl. We need `cryptography` for:
+**Verdict: USE** for primitives pycardano doesn't cover:
 
-- **Blake2b hashing** (available via `cryptography.hazmat.primitives.hashes`)
-- **KES implementation** — KES uses a sum-composition scheme over Ed25519; we'll build the composition logic but use `cryptography` for the underlying primitives
-- Any additional primitives not covered by PyNaCl
+- **Blake2b hashing** — used throughout Cardano for block hashes, transaction hashes, VRF inputs
+- **KES implementation** — KES uses a sum-composition scheme over Ed25519; we build the composition logic using `cryptography` for underlying Ed25519 operations
 
 #### VRF (Cardano-specific)
-
-| Criterion | Score | Notes |
-|-----------|-------|-------|
-| Maintenance | N/A | No suitable Python library exists |
-| License | N/A | — |
-| Python 3.14 | N/A | — |
-| Performance | — | Must match Haskell FFI speed |
-| Coupling | — | — |
-| Bus Factor | — | — |
 
 **Verdict: BUILD.** Cardano uses ECVRF-ED25519-SHA512-Elligator2 (IETF draft-irtf-cfrg-vrf-03) via a custom fork of libsodium (`cardano-crypto-praos`). No Python library implements this. Our approach:
 
@@ -123,7 +147,13 @@ Cardano consensus requires Ed25519 signatures, VRF (ECVRF-ED25519-SHA512-Elligat
 2. Use IOG's [libsodium VRF fork](https://github.com/input-output-hk/libsodium) which adds the VRF API
 3. Test VRF outputs against known Haskell-node-produced VRF proofs from mainnet blocks
 
-The `rbcl` library (Python bindings for libsodium's Ristretto group) may be useful as a reference for the FFI pattern, but it doesn't cover VRF itself.
+#### KES (Key-Evolving Signatures)
+
+**Verdict: BUILD.** KES is a consensus-only primitive — pycardano doesn't need it because wallets never evolve operational keys. We implement:
+
+1. Sum-composition KES using Ed25519 primitives from `cryptography`
+2. Key evolution tree (binary tree of Ed25519 key pairs)
+3. Test against Haskell node's KES outputs from mainnet block headers
 
 ---
 
@@ -164,89 +194,9 @@ trio's structured concurrency model is genuinely better designed, but the ecosys
 
 ---
 
-### 4. Ledger Types (pycardano Deep Evaluation)
+### 4. Ledger Types
 
-This is the most consequential evaluation. pycardano is the only mature Python library with Cardano transaction types, address handling, and UTxO models. The question is: how much can we use, and at what cost?
-
-#### Overview
-
-| Criterion | Score | Notes |
-|-----------|-------|-------|
-| Maintenance | 4 | v0.19.2 (Mar 2026); active development; Conway/Chang support added |
-| License | 4 | MIT — compatible with AGPL-3.0, but contribution flows are one-way (we can use MIT code in AGPL, not vice versa) |
-| Python 3.14 | 3 | No explicit 3.14 wheels published; likely works but untested |
-| Performance | 2 | Designed for wallet-level throughput (single tx at a time), not node-level (thousands of txs/second) |
-| Coupling | 2 | Types are tightly coupled to the transaction builder; hard to use addresses without pulling in chain context |
-| Bus Factor | 3 | ~27 contributors; Jerry (cffls) is the primary maintainer; Catalyst-funded |
-
-#### Era Coverage
-
-| Era | Coverage | Notes |
-|-----|----------|-------|
-| Byron | Minimal | Bootstrap addresses supported; no Byron-era transaction types |
-| Shelley | Good | Basic transaction structure, certificates, pool registration |
-| Allegra–Mary | Good | Timelocks, multi-asset values |
-| Alonzo | Good | Plutus V1 script support, redeemers, datums |
-| Babbage | Good | Plutus V2, inline datums, reference inputs |
-| Conway | Partial | DRep voting, governance actions added in 0.19.x; still maturing |
-
-#### Serialization Round-Trip Fidelity
-
-pycardano's `CBORSerializable` base class delegates to cbor2 internally. Key concerns for node-level use:
-
-- **Canonical encoding**: pycardano does not guarantee bit-for-bit round-trip fidelity for all block structures — it was designed to *construct* transactions, not *decode and re-encode* arbitrary blocks from the chain
-- **Indefinite-length arrays**: Real mainnet blocks use indefinite-length CBOR arrays in some positions; pycardano may normalize these to definite-length on re-encoding
-- **Unknown fields**: Future hard forks may add fields that pycardano's fixed type definitions silently drop
-
-#### Coupling Analysis
-
-pycardano's module structure:
-
-```
-pycardano/
-├── transaction.py      # Transaction, TransactionBody, TransactionOutput, etc.
-├── hash.py             # TransactionHash, ScriptHash, DatumHash, etc.
-├── address.py          # Address encoding/decoding, network discrimination
-├── nativescript.py     # Native script types
-├── plutus.py           # PlutusData, PlutusV1Script, PlutusV2Script, etc.
-├── serialization.py    # CBORSerializable base class (uses cbor2)
-├── txbuilder.py        # Transaction builder (heavy dependencies)
-├── backend/            # Chain backends (Blockfrost, Ogmios, etc.)
-└── crypto.py           # Signing, verification (uses PyNaCl)
-```
-
-The good news: `transaction.py`, `hash.py`, `address.py`, and `serialization.py` are relatively self-contained. The bad news: `txbuilder.py` and `backend/` pull in chain context, fee calculation, and external API clients.
-
-For a node, we need the *types* (transaction structures, address formats, hash types) but not the *builder* (fee estimation, coin selection, UTxO querying). The types are usable without the builder, but they carry assumptions:
-
-- Types assume wallet-level usage (e.g., single-era at a time)
-- No per-era polymorphism — the same `Transaction` class is used for all eras
-- Missing node-level concepts: block headers, protocol state, epoch boundaries, stake snapshots
-
-#### Performance Assessment
-
-pycardano creates Python objects for every field of every transaction. For wallet use (build 1 tx, submit it), this is fine. For node use (validate 50,000+ transactions per block during sync), the per-object allocation overhead becomes significant:
-
-- A single `TransactionOutput` with a multi-asset value creates dozens of Python objects (Value, MultiAsset, dict entries, AssetName instances)
-- No support for lazy/streaming deserialization — the entire structure is materialized in memory
-- No integration with zero-copy patterns (memoryview, Arrow buffers)
-
-#### Verdict: REUSE
-
-**REUSE** pycardano's type definitions as a *reference implementation* and starting point for our own types. Specifically:
-
-1. **Study and adapt** the type hierarchy (`Transaction`, `TransactionBody`, `TransactionOutput`, `Value`, `Address`, hash types) — these are well-tested against mainnet
-2. **Do not depend on pycardano at runtime** — the coupling to transaction building and the performance characteristics make it unsuitable for a node
-3. **Build our own types** in `vibe.cardano.ledger` that are:
-    - Per-era (separate `ShelleyTx`, `AlonzoTx`, `BabbageTx`, `ConwayTx` types)
-    - Backed by cbor2 directly (not via `CBORSerializable`)
-    - Designed for streaming/lazy deserialization where possible
-    - Enriched with node-level concepts (block headers, epoch state, stake snapshots)
-4. **Contribute upstream** when we find bugs in pycardano's CBOR handling — MIT license allows us to read, learn from, and contribute to their code even though our code is AGPL
-
-**Why not USE?** The per-object allocation cost at node-level throughput, the lack of per-era types, and the tight coupling to transaction building make it a poor fit as a runtime dependency. We'd spend more time working around its assumptions than we'd save by using it.
-
-**Why not FORK?** pycardano is actively maintained and MIT-licensed. Forking would create a maintenance burden with no clear benefit. Better to build our own types informed by pycardano's well-tested implementations.
+pycardano's ledger type coverage is evaluated in **Section 1** above (Serialization, Ledger Types & Cryptography). Summary: **USE pycardano** for transaction types, address handling, hash types, native scripts, and Plutus data types. Build node-specific structures (block headers, protocol state, epoch boundaries) on top.
 
 ---
 
@@ -411,8 +361,7 @@ See the full **[Data Architecture Evaluation](data-architecture.md)** for benchm
 ```mermaid
 graph LR
     subgraph "USE — Adopt as dependency"
-        CBOR2["cbor2<br/>Serialization"]
-        PYNACL["PyNaCl<br/>Ed25519, NaCl"]
+        PYCARDANO["pycardano<br/>Serialization, types, Ed25519"]
         CRYPTO["cryptography<br/>Blake2b, KES primitives"]
         ASYNCIO["asyncio<br/>Networking"]
         PYARROW["pyarrow<br/>Hot storage + IPC"]
@@ -420,25 +369,28 @@ graph LR
         SQLITE["sqlite3<br/>Chain index"]
     end
 
-    subgraph "REUSE — Study and adapt"
-        PYCARDANO["pycardano<br/>Type definitions"]
-    end
-
     subgraph "BUILD — From spec"
         VRF["VRF<br/>libsodium FFI"]
+        KES["KES<br/>Sum-composition"]
         PLUTUS["Plutus evaluator<br/>UPLC interpreter"]
+        BLOCKS["Block headers<br/>Protocol state"]
     end
 
-    style CBOR2 fill:#2d6a4f,color:#fff
-    style PYNACL fill:#2d6a4f,color:#fff
+    PYCARDANO -.-> |"uses internally"| CBOR2["cbor2"]
+    PYCARDANO -.-> |"uses internally"| PYNACL["PyNaCl"]
+
+    style PYCARDANO fill:#2d6a4f,color:#fff
     style CRYPTO fill:#2d6a4f,color:#fff
     style ASYNCIO fill:#2d6a4f,color:#fff
     style PYARROW fill:#2d6a4f,color:#fff
     style DUCKDB fill:#2d6a4f,color:#fff
     style SQLITE fill:#2d6a4f,color:#fff
-    style PYCARDANO fill:#b5838d,color:#fff
+    style CBOR2 fill:#6c757d,color:#fff
+    style PYNACL fill:#6c757d,color:#fff
     style VRF fill:#e76f51,color:#fff
+    style KES fill:#e76f51,color:#fff
     style PLUTUS fill:#e76f51,color:#fff
+    style BLOCKS fill:#e76f51,color:#fff
 ```
 
 ### Dependency Footprint
@@ -447,20 +399,18 @@ Total runtime dependencies added by this audit:
 
 | Package | Size | Purpose |
 |---------|------|---------|
-| cbor2 | ~500 KB | CBOR codec |
-| PyNaCl | ~2 MB (incl. libsodium) | Ed25519, NaCl primitives |
+| pycardano | ~5 MB (incl. cbor2, PyNaCl) | Serialization, ledger types, Ed25519 |
 | cryptography | ~10 MB (incl. OpenSSL) | Blake2b, KES primitives |
 | pyarrow | ~20 MB | Arrow tables, IPC, compute |
 | duckdb | ~100 MB | Analytics over Arrow tables |
 
-**Total: ~133 MB** of additional dependencies. asyncio and sqlite3 are stdlib (zero cost). The bulk is DuckDB (~100 MB), which is an optional analytics layer — the core node runs with pyarrow alone (~33 MB total).
+**Total: ~135 MB** of additional dependencies. asyncio and sqlite3 are stdlib (zero cost). The bulk is DuckDB (~100 MB), which is an optional analytics layer — the core node runs with pycardano + cryptography + pyarrow (~35 MB total).
 
 ### What We Build Ourselves
 
 | Component | Spec Source | Estimated Complexity |
 |-----------|-----------|---------------------|
-| CDDL-aware CBOR layer | cardano-ledger-binary | Medium — schema-driven encode/decode on top of cbor2 |
-| Per-era transaction types | Cardano ledger formal specs | High — one type hierarchy per era, all CBOR round-trippable |
+| Block headers & protocol state | Cardano ledger formal specs | Medium — era-specific block wrappers on top of pycardano types |
 | VRF bindings | IETF draft-irtf-cfrg-vrf-03 + IOG libsodium fork | Medium — FFI wrapper + test against Haskell VRF outputs |
 | KES implementation | Ouroboros Praos spec (sum composition) | Medium — tree-based key evolution using Ed25519 primitives |
 | UPLC evaluator | Plutus Core formal spec | Very High — all builtins, cost models, flat encoding |
@@ -471,8 +421,9 @@ Total runtime dependencies added by this audit:
 
 | Risk | Mitigation |
 |------|-----------|
-| cbor2 C extension doesn't handle Cardano's canonical CBOR edge cases | We build a conformance test suite comparing cbor2 output against Haskell-encoded blocks; fall back to custom encoder if needed |
+| pycardano CBOR round-trip fidelity on edge cases | Conformance test suite comparing round-trip output against Haskell-encoded blocks; contribute fixes upstream |
+| pycardano performance at node-level throughput | Profile early; build streaming deserializer if pycardano's per-object allocation is a bottleneck during sync |
+| pycardano doesn't support Python 3.14 | Contribute 3.14 compatibility upstream; pycardano's dependencies (cbor2, PyNaCl) already support 3.14 |
 | Python dict memory at mainnet scale (1.4 GiB for 15M entries) | NumPy hash table fallback (0.3 GiB) available; total architecture still well under Haskell's 24 GiB |
 | VRF FFI bindings are fragile across platforms | Docker-based CI ensures consistent libsodium version; statically link if needed |
 | UPLC evaluator cost model diverges from Haskell | Continuous conformance testing against pyaiken oracle + direct comparison with Haskell node script validation results |
-| pycardano types diverge from our needs over time | We own our types; pycardano is a reference, not a dependency |
