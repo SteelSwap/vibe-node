@@ -2871,6 +2871,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "typer" },
+    { name = "vibe-core" },
     { name = "vibe-tools" },
 ]
 
@@ -2888,11 +2889,13 @@ dev = [
     { name = "pytest-sugar" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
+    { name = "websockets" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "typer", specifier = ">=0.15" },
+    { name = "vibe-core", editable = "packages/vibe-core" },
     { name = "vibe-tools", editable = "packages/vibe-tools" },
 ]
 
@@ -2910,6 +2913,7 @@ dev = [
     { name = "pytest-sugar", specifier = ">=1.0.0" },
     { name = "pytest-timeout", specifier = ">=2.4.0" },
     { name = "pytest-xdist", specifier = ">=3.5.0" },
+    { name = "websockets", specifier = ">=15.0" },
 ]
 
 [[package]]
