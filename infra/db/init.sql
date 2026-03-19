@@ -72,11 +72,15 @@ CREATE TABLE IF NOT EXISTS code_chunks (
     embed_text      TEXT          NOT NULL,
     embedding       vector(1536),
     era             VARCHAR(32)   NOT NULL,
+    is_test         BOOLEAN       NOT NULL DEFAULT FALSE,
     metadata        JSONB,
 
     CONSTRAINT uq_code_chunks_identity
         UNIQUE (repo, release_tag, file_path, function_name, content_hash)
 );
+
+CREATE INDEX IF NOT EXISTS idx_code_chunks_is_test
+    ON code_chunks (is_test);
 
 CREATE INDEX IF NOT EXISTS idx_code_chunks_repo
     ON code_chunks (repo);
