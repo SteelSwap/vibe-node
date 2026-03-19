@@ -6,6 +6,14 @@ Each entry is organized by phase, with specific module and work item details.
 
 ---
 
+## Phase 1: Research & Analysis
+
+- **[Phase 1 — Research & Analysis](phase1.md)** (M1.1–M1.9)
+    - 2,046 spec rules extracted, 1,567 QA-validated gaps, 7,152 cross-references
+    - Architecture: Arrow+Dict storage, pycardano, uplc, 3-track parallel roadmap
+    - Monorepo restructure: vibe-core / vibe-cardano / vibe-tools workspace
+    - Test strategy: 5-type taxonomy, 17,453 auto-generated test specs
+
 ## Phase 0: Development Architecture
 
 - **[Phase 0 — Development Architecture](phase0.md)** (M0.1–M0.9)
