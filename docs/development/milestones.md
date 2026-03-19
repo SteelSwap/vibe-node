@@ -8,7 +8,7 @@ This page summarizes the project milestones tracked in [Plane](https://plane.so)
 |-------|--------|-------------|
 | **Phase 0 — Development Architecture** | :material-check-circle: Complete | Knowledge base, search infrastructure, MCP integrations, CLI, docs |
 | **Phase 1 — Research & Analysis** | :material-check-circle: Complete | 2,046 rules, 1,567 gaps, architecture blueprint, test strategy |
-| **Phase 2 — Serialization & Networking** | :material-check-circle: Complete | CBOR decoders, multiplexer, handshake, chain-sync — 491 tests, 1,000-block gate passed |
+| **Phase 2 — Serialization & Networking** | :material-check-circle: Complete | CBOR decoders, multiplexer, handshake, chain-sync — 643 tests, Haskell test parity |
 | **Phase 3 — Chain Sync & Storage** | :material-clock-outline: Planned | Chain-sync client, block fetch, CBOR deserialization, persistent storage |
 | **Phase 4 — Ledger & Consensus** | :material-clock-outline: Planned | UTxO ledger rules, Plutus evaluation, Ouroboros Praos, VRF/KES |
 | **Phase 5 — Block Production & N2C** | :material-clock-outline: Planned | Block forging, mempool, all node-to-client miniprotocols |
@@ -76,7 +76,7 @@ Phase 1 used the Phase 0 knowledge base to perform deep research into the Cardan
 
 ## Phase 2 — Serialization & Networking :material-check-circle:{ .green }
 
-**Status: COMPLETE** — vibe-node talks to Cardano. 491 tests, 1,000-block gate passed.
+**Status: COMPLETE** — vibe-node talks to Cardano. 643 tests, 1,000-block gate passed, full Haskell test parity.
 
 Phase 2 built the serialization and networking foundation: CBOR block decoders, the Ouroboros multiplexer, typed protocol framework, and the handshake + chain-sync miniprotocols. The gate test proved end-to-end: connect to a real Haskell cardano-node, negotiate version 15, and sync 1,000 block headers.
 
@@ -97,7 +97,9 @@ Phase 2 built the serialization and networking foundation: CBOR block decoders, 
 | Property tests (Hypothesis) | 59 |
 | Conformance tests (Ogmios) | 8 |
 | Integration tests (live cardano-node) | 8 |
-| **Total** | **491** (was 12 before Phase 2) |
+| Haskell test parity | 70 |
+| Test gap fills | 87 |
+| **Total** | **643** (was 12 before Phase 2) |
 
 ### Pipeline Improvements
 
