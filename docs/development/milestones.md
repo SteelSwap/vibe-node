@@ -8,7 +8,7 @@ This page summarizes the project milestones tracked in [Plane](https://plane.so)
 |-------|--------|-------------|
 | **Phase 0 — Development Architecture** | :material-check-circle: Complete | Knowledge base, search infrastructure, MCP integrations, CLI, docs |
 | **Phase 1 — Research & Analysis** | :material-check-circle: Complete | 2,046 rules, 1,567 gaps, architecture blueprint, test strategy |
-| **Phase 2 — Networking** | :material-clock-outline: Planned | Ouroboros multiplexer, miniprotocol state machines |
+| **Phase 2 — Serialization & Networking** | :material-check-circle: Complete | CBOR decoders, multiplexer, handshake, chain-sync — 491 tests, 1,000-block gate passed |
 | **Phase 3 — Chain Sync & Storage** | :material-clock-outline: Planned | Chain-sync client, block fetch, CBOR deserialization, persistent storage |
 | **Phase 4 — Ledger & Consensus** | :material-clock-outline: Planned | UTxO ledger rules, Plutus evaluation, Ouroboros Praos, VRF/KES |
 | **Phase 5 — Block Production & N2C** | :material-clock-outline: Planned | Block forging, mempool, all node-to-client miniprotocols |
@@ -60,27 +60,62 @@ Phase 1 used the Phase 0 knowledge base to perform deep research into the Cardan
 
 | Metric | Count |
 |--------|-------|
-| Spec rules extracted | 2,046 |
-| Cross-references (spec ↔ code) | 7,152 |
-| Gap analysis entries (QA-validated) | 1,567 |
-| Critical gaps | 425 |
-| Important gaps | 427 |
-| Auto-generated test specifications | 17,453 |
+| Spec rules extracted | 2,032 |
+| Cross-references (spec ↔ code) | 12,012 |
+| — Implementation links | 6,156 |
+| — Test links | 5,075 |
+| Gap analysis entries (QA-validated) | 1,491 |
+| Critical gaps | 419 |
+| Important gaps | 539 |
+| Proposed Python test specifications | 16,646 |
+| Haskell test functions indexed | 11,611 |
+| Haskell test functions linked to specs | 1,453 |
 | Subsystems fully analyzed | 10 of 10 |
 
 ---
 
-## Phase 2–6 Overview
+## Phase 2 — Serialization & Networking :material-check-circle:{ .green }
 
-Phases 2 through 6 implement the actual Cardano node, progressing from networking through hardening:
+**Status: COMPLETE** — vibe-node talks to Cardano. 491 tests, 1,000-block gate passed.
 
-- **Phase 2 — Networking:** Ouroboros multiplexer, typed protocol state machines, connection management
-- **Phase 3 — Chain Sync & Storage:** Chain-sync and block-fetch clients, CBOR deserialization, block storage
+Phase 2 built the serialization and networking foundation: CBOR block decoders, the Ouroboros multiplexer, typed protocol framework, and the handshake + chain-sync miniprotocols. The gate test proved end-to-end: connect to a real Haskell cardano-node, negotiate version 15, and sync 1,000 block headers.
+
+| Module | Description | Status |
+|--------|-------------|--------|
+| M2.1 — CBOR Block Decoder | Block header/body decoder (all eras), pycardano evaluation, CBOR property tests | :material-check-circle: Complete |
+| M2.2 — TCP Multiplexer | Segment framing, async TCP bearer, mux/demux with fair scheduling and qMax | :material-check-circle: Complete |
+| M2.3 — Typed Protocol Framework | Agency model, PeerRole, typed state transitions, protocol runner with codec | :material-check-circle: Complete |
+| M2.4 — Handshake Protocol | CBOR messages, FSM, version negotiation (pureHandshake), N2N v14/v15 | :material-check-circle: Complete |
+| M2.5 — Chain-Sync Client | CBOR messages, FSM, client with find_intersection/request_next, sync loop | :material-check-circle: Complete |
+| M2.6 — Conformance Test Harness | Ogmios fixtures, block metadata conformance, integration tests | :material-check-circle: Complete |
+
+### Phase 2 Test Output
+
+| Category | Tests |
+|----------|-------|
+| Unit tests | 399 |
+| Property tests (Hypothesis) | 59 |
+| Conformance tests (Ogmios) | 8 |
+| Integration tests (live cardano-node) | 8 |
+| **Total** | **491** (was 12 before Phase 2) |
+
+### Pipeline Improvements
+
+Phase 2 also improved the research pipeline:
+- Split code search into production vs test code (`is_test` column)
+- Keyword search for Haskell test functions (golden*, prop_*, roundTrip*, ts_*)
+- Continuation search — automatically fetches deeper when >60% of candidates link
+- `vibe-node research extract-rules all` and `qa-validate all` for batch processing
+- `vibe-node research reset` for clean re-extraction
+
+---
+
+## Phase 3–6 Overview
+
+- **Phase 3 — Chain Sync & Storage:** Block-fetch client, Arrow+Dict storage engine, Mithril import, crash recovery
 - **Phase 4 — Ledger & Consensus:** UTxO ledger validation, Plutus script evaluation, Ouroboros Praos consensus, tip selection
 - **Phase 5 — Block Production & N2C:** Block forging, mempool, leader schedule, all node-to-client miniprotocols
 - **Phase 6 — Hardening:** Power-loss recovery, memory optimization, 10-day soak test against Haskell nodes
-
-Detailed task breakdowns for Phases 2–6 will be published as each phase begins.
 
 ---
 
