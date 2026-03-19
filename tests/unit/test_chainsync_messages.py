@@ -612,3 +612,199 @@ class TestMessageSize:
         assert len(raw) < 2000
         # But it must include the full header
         assert len(raw) > 1400
+
+
+# ---------------------------------------------------------------------------
+# Serialised codec variant tests
+# ---------------------------------------------------------------------------
+# In Haskell, ChainSyncSerialised wraps block headers as pre-serialised CBOR
+# bytes (the Serialised newtype). This is how chain-sync actually works on the
+# wire — headers arrive as opaque CBOR blobs, not decoded types.
+#
+# Our Python codec already follows this pattern: MsgRollForward.header is
+# bytes (raw CBOR). These tests verify the Serialised invariants explicitly,
+# matching the Haskell test suite:
+#   - prop_codec_ChainSyncSerialised (roundtrip with raw bytes)
+#   - prop_codec_binary_compat_ChainSync_ChainSyncSerialised (wire compat)
+#
+# Haskell reference: ouroboros-network-protocols/testlib/
+#   Ouroboros/Network/Protocol/ChainSync/Test.hs
+
+
+class TestSerialisedCodecVariant:
+    """Tests for the Serialised codec variant (ChainSyncSerialised).
+
+    In Haskell, ChainSync can be instantiated with either decoded block
+    headers (ChainSync BlockHeader ...) or pre-serialised CBOR bytes
+    (ChainSync (Serialised BlockHeader) ...). The wire format is identical
+    in both cases — the difference is whether the codec decodes the header
+    or passes it through as opaque bytes.
+
+    Our Python implementation always uses raw bytes for headers, matching
+    the Serialised variant. These tests verify the key invariants.
+    """
+
+    def test_roll_forward_with_raw_cbor_header(self) -> None:
+        """MsgRollForward with raw CBOR header bytes roundtrips correctly.
+
+        This is the common case on the wire: headers arrive as opaque CBOR
+        blobs. Encode a MsgRollForward with raw CBOR bytes as the header,
+        decode it, and verify the raw bytes are preserved exactly.
+
+        Haskell: prop_codec_ChainSyncSerialised for MsgRollForward
+        """
+        # Simulate a CBOR-encoded block header (a CBOR map with fields)
+        fake_header_data = {"slot": 12345, "hash": b"\xaa" * 32, "vrf": b"\xbb" * 64}
+        raw_cbor_header = cbor2.dumps(fake_header_data)
+
+        tip = Tip(point=SAMPLE_POINT, block_number=500)
+
+        # Encode with raw CBOR bytes as header
+        encoded = encode_roll_forward(raw_cbor_header, tip)
+
+        # Decode back
+        msg = decode_server_message(encoded)
+        assert isinstance(msg, MsgRollForward)
+
+        # The raw bytes must be preserved exactly — no decoding occurred
+        assert msg.header == raw_cbor_header
+
+        # Verify we can decode the header bytes later if we want
+        decoded_header = cbor2.loads(msg.header)
+        assert decoded_header["slot"] == 12345
+
+    def test_roll_forward_header_decode_lazy(self) -> None:
+        """Header in RollForward can be left as raw bytes and decoded later.
+
+        This tests that our decoder doesn't force-decode the header — it
+        stays as opaque bytes until the consumer explicitly decodes it.
+        The Serialised pattern exists precisely for this: avoid decoding
+        headers you may not need (e.g., during block-fetch pipelining).
+
+        Haskell: The Serialised newtype wraps a lazy ByteString that is
+        only forced when pattern-matched. Our bytes type is similar —
+        it's just bytes until you call cbor2.loads on it.
+        """
+        # Encode an intentionally complex nested CBOR structure as header
+        nested_header = cbor2.dumps([1, [2, [3, [4, b"\xff" * 100]]]])
+        tip = Tip(point=SAMPLE_POINT, block_number=42)
+
+        encoded = encode_roll_forward(nested_header, tip)
+        msg = decode_server_message(encoded)
+        assert isinstance(msg, MsgRollForward)
+
+        # Header is bytes — not auto-decoded into Python objects
+        assert isinstance(msg.header, bytes)
+
+        # The header bytes are the CBOR encoding, not the decoded value
+        assert msg.header == nested_header
+
+        # Only NOW do we decode — proving lazy decode works
+        decoded = cbor2.loads(msg.header)
+        assert decoded[0] == 1
+        assert decoded[1][0] == 2
+
+    def test_codec_binary_compat_serialised_vs_regular(self) -> None:
+        """Wire bytes are identical whether header is 'decoded' or 'raw CBOR'.
+
+        In Haskell, prop_codec_binary_compat_ChainSync_ChainSyncSerialised
+        verifies that encoding with the regular codec (which serialises a
+        decoded BlockHeader) produces the same bytes as the Serialised
+        codec (which passes through pre-serialised bytes).
+
+        In our Python implementation, encode_roll_forward always takes
+        bytes for the header. To test binary compatibility, we verify that
+        the same header bytes produce identical wire output regardless of
+        how those bytes were produced.
+
+        The key insight: CBOR(header_bytes) should be the same whether
+        header_bytes came from encoding a structured type or were received
+        as raw bytes from the wire.
+        """
+        # "Decoded" path: start with a structured type, serialise it
+        structured_header = {"version": 1, "body_hash": b"\xcc" * 32}
+        header_bytes = cbor2.dumps(structured_header)
+
+        tip = Tip(point=SAMPLE_POINT, block_number=200)
+
+        # Path 1: encode with "freshly serialised" header (simulating regular codec)
+        wire_from_regular = encode_roll_forward(header_bytes, tip)
+
+        # Path 2: encode with the same bytes as "pre-serialised" (Serialised codec)
+        wire_from_serialised = encode_roll_forward(header_bytes, tip)
+
+        # Wire bytes must be identical
+        assert wire_from_regular == wire_from_serialised
+
+        # Decode both and verify headers match
+        msg1 = decode_server_message(wire_from_regular)
+        msg2 = decode_server_message(wire_from_serialised)
+        assert isinstance(msg1, MsgRollForward)
+        assert isinstance(msg2, MsgRollForward)
+        assert msg1.header == msg2.header
+
+        # Verify the CBOR structure is [2, header_bytes, tip]
+        parsed = cbor2.loads(wire_from_regular)
+        assert parsed[0] == MSG_ROLL_FORWARD
+        assert parsed[1] == header_bytes
+
+    def test_serialised_codec_roundtrip(self) -> None:
+        """Every chain-sync message roundtrips through encode/decode/re-encode.
+
+        For the Serialised variant, this means raw CBOR header bytes survive
+        the full encode -> decode -> re-encode cycle with byte-identical output.
+
+        Haskell: prop_codec_ChainSyncSerialised — encodes an AnyMessage with
+        Serialised headers, decodes it, and checks equality.
+        """
+        tip = Tip(point=SAMPLE_POINT, block_number=300)
+        origin_tip = Tip(point=ORIGIN, block_number=0)
+
+        # All message types with their encode/decode functions
+        messages_and_encoders: list[tuple[bytes, object]] = [
+            (encode_request_next(), "client"),
+            (encode_done(), "client"),
+            (encode_find_intersect([SAMPLE_POINT, ORIGIN]), "client"),
+            (encode_find_intersect([]), "client"),
+            (encode_await_reply(), "server"),
+            (encode_roll_forward(b"\xde\xad\xbe\xef", tip), "server"),
+            (encode_roll_forward(cbor2.dumps({"era": 7}), tip), "server"),
+            (encode_roll_backward(SAMPLE_POINT, tip), "server"),
+            (encode_roll_backward(ORIGIN, origin_tip), "server"),
+            (encode_intersect_found(SAMPLE_POINT, tip), "server"),
+            (encode_intersect_found(ORIGIN, origin_tip), "server"),
+            (encode_intersect_not_found(tip), "server"),
+            (encode_intersect_not_found(origin_tip), "server"),
+        ]
+
+        for original_bytes, side in messages_and_encoders:
+            # Decode
+            if side == "server":
+                msg = decode_server_message(original_bytes)
+            else:
+                msg = decode_client_message(original_bytes)
+
+            # Re-encode based on message type
+            if isinstance(msg, MsgRequestNext):
+                re_encoded = encode_request_next()
+            elif isinstance(msg, MsgDone):
+                re_encoded = encode_done()
+            elif isinstance(msg, MsgFindIntersect):
+                re_encoded = encode_find_intersect(msg.points)
+            elif isinstance(msg, MsgAwaitReply):
+                re_encoded = encode_await_reply()
+            elif isinstance(msg, MsgRollForward):
+                re_encoded = encode_roll_forward(msg.header, msg.tip)
+            elif isinstance(msg, MsgRollBackward):
+                re_encoded = encode_roll_backward(msg.point, msg.tip)
+            elif isinstance(msg, MsgIntersectFound):
+                re_encoded = encode_intersect_found(msg.point, msg.tip)
+            elif isinstance(msg, MsgIntersectNotFound):
+                re_encoded = encode_intersect_not_found(msg.tip)
+            else:
+                raise AssertionError(f"Unknown message type: {type(msg)}")
+
+            assert re_encoded == original_bytes, (
+                f"Roundtrip failed for {type(msg).__name__}: "
+                f"original={original_bytes.hex()} re_encoded={re_encoded.hex()}"
+            )
