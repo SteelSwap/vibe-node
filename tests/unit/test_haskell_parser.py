@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from vibe_node.ingest.haskell_parser import CodeChunkData, HaskellParser
+from vibe.tools.ingest.haskell_parser import CodeChunkData, HaskellParser
 
 VENDOR_ROOT = Path(__file__).resolve().parents[1] / "vendor"
 
