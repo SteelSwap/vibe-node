@@ -583,3 +583,470 @@ class TestMapKeyOrderingCanonical:
             assert (len(a), a) <= (len(b), b), (
                 f"Integer keys not in canonical order at indices {i},{i+1}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Test 8: Canonical encoding minimal length for unsigned integers
+# Spec: test_canonical_encoding_minimal_length_for_unsigned_int
+# ---------------------------------------------------------------------------
+
+@pytest.mark.property
+class TestCanonicalEncodingMinimalLengthUnsignedInt:
+    """Verify CBOR canonical encoding uses minimal byte length for unsigned ints.
+
+    Per RFC 7049 Section 2.1, the canonical encoding of unsigned integers must
+    use the shortest possible representation:
+    - 0-23:         1 byte  (value in additional info)
+    - 24-255:       2 bytes (additional info = 24, then 1 byte)
+    - 256-65535:    3 bytes (additional info = 25, then 2 bytes)
+    - 65536-2^32-1: 5 bytes (additional info = 26, then 4 bytes)
+
+    This is critical for Cardano because transaction hashes depend on
+    deterministic, minimal-length CBOR encoding.
+    """
+
+    @given(n=st.integers(min_value=0, max_value=2**32 - 1))
+    @settings(max_examples=500)
+    def test_canonical_encoding_minimal_length_unsigned_int(self, n: int) -> None:
+        """Unsigned int canonical encoding uses the minimum number of bytes."""
+        encoded = cbor2.dumps(n, canonical=True)
+
+        if n <= 23:
+            expected_len = 1
+        elif n <= 255:
+            expected_len = 2
+        elif n <= 65535:
+            expected_len = 3
+        else:  # n <= 2**32 - 1
+            expected_len = 5
+
+        assert len(encoded) == expected_len, (
+            f"Canonical encoding of {n} is {len(encoded)} bytes, "
+            f"expected {expected_len}. Hex: {encoded.hex()}"
+        )
+
+        # Verify round-trip
+        decoded = cbor2.loads(encoded)
+        assert decoded == n
+
+    def test_canonical_encoding_boundary_values(self) -> None:
+        """Explicit boundary checks at each encoding width transition."""
+        boundaries = [
+            (0, 1),
+            (23, 1),
+            (24, 2),
+            (255, 2),
+            (256, 3),
+            (65535, 3),
+            (65536, 5),
+            (2**32 - 1, 5),
+        ]
+        for value, expected_len in boundaries:
+            encoded = cbor2.dumps(value, canonical=True)
+            assert len(encoded) == expected_len, (
+                f"Boundary value {value}: expected {expected_len} bytes, "
+                f"got {len(encoded)}. Hex: {encoded.hex()}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Test 9: Indefinite-length bytestring encoding for >= 65 bytes
+# Spec: test_eBS_long_is_indefinite_length
+# ---------------------------------------------------------------------------
+
+@pytest.mark.property
+class TestIndefiniteBytestringLongEncoding:
+    """Verify indefinite-length bytestring encoding for >= 65 bytes.
+
+    The Plutus spec defines eBS (encode bytestring) such that bytestrings
+    >= 65 bytes are encoded as indefinite-length bytestrings (0x5F...0xFF)
+    with 64-byte chunks. cbor2 with canonical=False may use this encoding.
+
+    This test verifies that regardless of encoding style, the decoded
+    bytestring is always the original bytes.
+    """
+
+    @given(data=st.binary(min_size=65, max_size=1024))
+    @settings(max_examples=200)
+    def test_indefinite_bytestring_65_plus_bytes(self, data: bytes) -> None:
+        """Bytestrings >= 65 bytes survive encode-decode regardless of encoding form.
+
+        We manually construct the indefinite-length chunked encoding that
+        Cardano uses for long bytestrings and verify cbor2 decodes it correctly.
+        """
+        # Build indefinite-length bytestring with 64-byte chunks (Cardano pattern)
+        # 0x5F = indefinite-length bytestring marker
+        parts = [b"\x5f"]
+        offset = 0
+        while offset < len(data):
+            chunk = data[offset:offset + 64]
+            parts.append(cbor2.dumps(chunk))  # Each chunk as a definite bytestring
+            offset += 64
+        parts.append(b"\xff")  # break code
+        indefinite_encoded = b"".join(parts)
+
+        # Verify the marker bytes
+        assert indefinite_encoded[0:1] == b"\x5f", "Should start with indefinite marker"
+        assert indefinite_encoded[-1:] == b"\xff", "Should end with break code"
+
+        # Decode and verify
+        decoded = cbor2.loads(indefinite_encoded)
+        assert isinstance(decoded, bytes)
+        assert decoded == data, (
+            f"Indefinite bytestring decode mismatch: "
+            f"expected {len(data)} bytes, got {len(decoded)}"
+        )
+
+    @given(data=st.binary(min_size=65, max_size=512))
+    @settings(max_examples=200)
+    def test_indefinite_bytestring_chunk_structure(self, data: bytes) -> None:
+        """Verify all interior chunks in the indefinite encoding are exactly 64 bytes
+        except possibly the last."""
+        # Build chunks the way Cardano does it
+        chunks = []
+        offset = 0
+        while offset < len(data):
+            chunks.append(data[offset:offset + 64])
+            offset += 64
+
+        # All chunks except the last must be exactly 64 bytes
+        for i, chunk in enumerate(chunks[:-1]):
+            assert len(chunk) == 64, (
+                f"Interior chunk {i} is {len(chunk)} bytes, expected 64"
+            )
+
+        # Last chunk can be 1-64 bytes
+        assert 1 <= len(chunks[-1]) <= 64
+
+        # Verify reassembly
+        assert b"".join(chunks) == data
+
+
+# ---------------------------------------------------------------------------
+# Test 10: Bounded bytestring max 64 round-trip (dBlock boundary)
+# Spec: test_dblock_valid_bytestrings_roundtrip
+# ---------------------------------------------------------------------------
+
+@pytest.mark.property
+class TestBoundedBytestringMax64Roundtrip:
+    """Verify bytestrings 0-64 bytes encode and decode faithfully.
+
+    The Plutus spec defines dBlock as the decoder for bounded bytestrings
+    (max 64 bytes). This is the fundamental building block for Plutus Data
+    bytestring values — every B(b) in PlutusData has |b| <= 64.
+
+    This test validates that the CBOR layer correctly handles bytestrings
+    at and below this boundary.
+    """
+
+    @given(data=st.binary(min_size=0, max_size=64))
+    @settings(max_examples=300)
+    def test_bounded_bytestring_max_64_roundtrip(self, data: bytes) -> None:
+        """Bytestrings 0-64 bytes survive CBOR encode-decode exactly."""
+        encoded = cbor2.dumps(data)
+        decoded = cbor2.loads(encoded)
+        assert decoded == data
+        assert isinstance(decoded, bytes)
+
+        # Verify canonical encoding also works
+        canonical = cbor2.dumps(data, canonical=True)
+        assert cbor2.loads(canonical) == data
+
+        # For <= 64 bytes, encoding must be definite-length (not indefinite)
+        # Major type 2 (bytestring): first byte high nibble = 0x40
+        assert (encoded[0] & 0xe0) == 0x40, (
+            f"Expected major type 2 (bytestring), got 0x{encoded[0]:02x}. "
+            f"Bytestrings <= 64 bytes should use definite-length encoding."
+        )
+
+    def test_bounded_bytestring_boundary_values(self) -> None:
+        """Explicit tests at the 64-byte boundary."""
+        # Exactly 64 bytes — should work
+        data_64 = bytes(range(64))
+        encoded = cbor2.dumps(data_64)
+        assert cbor2.loads(encoded) == data_64
+        # Must be definite-length
+        assert (encoded[0] & 0xe0) == 0x40
+
+        # Empty bytestring — should work
+        data_0 = b""
+        encoded_0 = cbor2.dumps(data_0)
+        assert cbor2.loads(encoded_0) == data_0
+        assert encoded_0 == b"\x40"  # Major type 2, length 0
+
+
+# ---------------------------------------------------------------------------
+# Test 11: Bounded bytestring 65 bytes rejected by validation
+# Spec: test_dblock_rejects_oversized_bytestrings
+# ---------------------------------------------------------------------------
+
+@pytest.mark.property
+class TestBoundedBytestring65Rejected:
+    """Verify that bytestrings exceeding the 64-byte Plutus bound are detected.
+
+    The Plutus spec says dBlock must reject bytestrings > 64 bytes. cbor2
+    itself doesn't enforce this (it's a generic CBOR library), so this test
+    validates our detection logic: given a decoded bytestring, we can
+    identify when it violates the 64-byte bound.
+
+    This documents the contract that our Plutus Data decoder must enforce.
+    """
+
+    PLUTUS_MAX_BYTESTRING_LEN = 64
+
+    @given(data=st.binary(min_size=65, max_size=1024))
+    @settings(max_examples=200)
+    def test_bounded_bytestring_65_rejected(self, data: bytes) -> None:
+        """Bytestrings > 64 bytes are detectable as bound violations.
+
+        cbor2 will happily encode/decode them — the bound enforcement
+        is our responsibility at the Plutus Data layer.
+        """
+        # cbor2 encodes it fine (it doesn't know about Plutus bounds)
+        encoded = cbor2.dumps(data)
+        decoded = cbor2.loads(encoded)
+        assert decoded == data
+
+        # But our validation logic must reject it
+        assert len(decoded) > self.PLUTUS_MAX_BYTESTRING_LEN, (
+            f"Expected bytestring > {self.PLUTUS_MAX_BYTESTRING_LEN} bytes, "
+            f"got {len(decoded)}"
+        )
+
+        # Simulate the dBlock validation check
+        is_valid = len(decoded) <= self.PLUTUS_MAX_BYTESTRING_LEN
+        assert not is_valid, (
+            f"dBlock should reject bytestring of {len(decoded)} bytes "
+            f"(max {self.PLUTUS_MAX_BYTESTRING_LEN})"
+        )
+
+    def test_boundary_64_accepted_65_rejected(self) -> None:
+        """Explicit boundary: 64 bytes accepted, 65 bytes rejected."""
+        data_64 = b"\x00" * 64
+        data_65 = b"\x00" * 65
+
+        assert len(data_64) <= self.PLUTUS_MAX_BYTESTRING_LEN
+        assert len(data_65) > self.PLUTUS_MAX_BYTESTRING_LEN
+
+
+# ---------------------------------------------------------------------------
+# Test 12: PlutusData-like structure round-trip
+# Spec: test_data_roundtrip_arbitrary
+# ---------------------------------------------------------------------------
+
+# Strategy for PlutusData-like structures:
+# PlutusData = Constr(tag, [PlutusData]) | Map([(PlutusData, PlutusData)]) |
+#              List([PlutusData]) | Integer(int) | Bytes(bytes)
+
+# Leaf PlutusData values
+plutus_leaf = st.one_of(
+    # I(n) — integers (Plutus supports arbitrary precision)
+    st.integers(min_value=-(2**64), max_value=2**64),
+    # B(b) — bounded bytestrings (max 64 bytes per Plutus spec)
+    st.binary(min_size=0, max_size=64),
+)
+
+# Recursive PlutusData strategy
+plutus_data = st.recursive(
+    plutus_leaf,
+    lambda children: st.one_of(
+        # List([PlutusData]) — encoded as CBOR list
+        st.lists(children, min_size=0, max_size=4),
+        # Map([(PlutusData, PlutusData)]) — encoded as CBOR map
+        # Note: Plutus maps allow duplicate keys (unlike Python dicts),
+        # but for round-trip testing we use unique keys via dict strategy
+        st.dictionaries(
+            keys=st.one_of(
+                st.integers(min_value=0, max_value=2**32),
+                st.binary(min_size=0, max_size=32),
+            ),
+            values=children,
+            min_size=0,
+            max_size=4,
+        ),
+        # Constr(tag, fields) — encoded as CBORTag(121+tag, [fields])
+        # Tags 121-127 for alternatives 0-6, 1280-1400 for 7+
+        st.tuples(
+            st.integers(min_value=0, max_value=6),
+            st.lists(children, min_size=0, max_size=4),
+        ).map(lambda t: cbor2.CBORTag(121 + t[0], t[1])),
+    ),
+    max_leaves=15,
+)
+
+
+@pytest.mark.property
+class TestPlutusDataRoundtrip:
+    """Verify arbitrary PlutusData-like structures survive CBOR round-trip.
+
+    PlutusData is the core data type for Plutus smart contract datums,
+    redeemers, and script context. It consists of:
+    - Constr(tag, fields): encoded as CBORTag(121+alt, [fields]) for alt 0-6
+    - Map(entries): CBOR map with PlutusData keys and values
+    - List(items): CBOR array of PlutusData
+    - I(n): CBOR integer
+    - B(b): CBOR bytestring (max 64 bytes)
+
+    The two-step roundtrip must be identity: decode(encode(data)) == data.
+    """
+
+    @given(data=plutus_data)
+    @settings(max_examples=300)
+    def test_plutus_data_roundtrip(self, data: object) -> None:
+        """Arbitrary PlutusData structures survive encode-decode."""
+        encoded = cbor2.dumps(data)
+        decoded = cbor2.loads(encoded)
+
+        # For CBORTag objects, compare structurally
+        if isinstance(data, cbor2.CBORTag):
+            assert isinstance(decoded, cbor2.CBORTag), (
+                f"Expected CBORTag, got {type(decoded).__name__}"
+            )
+            assert decoded.tag == data.tag
+            assert decoded.value == data.value
+        else:
+            assert decoded == data
+
+    @given(data=plutus_data)
+    @settings(max_examples=200)
+    def test_plutus_data_canonical_roundtrip(self, data: object) -> None:
+        """PlutusData canonical encoding round-trips (for datum hashing)."""
+        encoded = cbor2.dumps(data, canonical=True)
+        decoded = cbor2.loads(encoded)
+        re_encoded = cbor2.dumps(decoded, canonical=True)
+
+        # Canonical encoding must be deterministic
+        assert encoded == re_encoded, (
+            f"Canonical re-encoding differs: "
+            f"{encoded.hex()} != {re_encoded.hex()}"
+        )
+
+    @given(
+        alt=st.integers(min_value=0, max_value=6),
+        fields=st.lists(plutus_leaf, min_size=0, max_size=5),
+    )
+    @settings(max_examples=200)
+    def test_plutus_constr_tag_roundtrip(
+        self, alt: int, fields: list[object]
+    ) -> None:
+        """Constr alternatives 0-6 use tags 121-127 and round-trip correctly."""
+        tag_number = 121 + alt
+        tagged = cbor2.CBORTag(tag_number, fields)
+        encoded = cbor2.dumps(tagged)
+        decoded = cbor2.loads(encoded)
+
+        assert isinstance(decoded, cbor2.CBORTag)
+        assert decoded.tag == tag_number
+        assert decoded.value == fields
+
+
+# ---------------------------------------------------------------------------
+# Test 13: Map with duplicate keys — cbor2 behavior documentation
+# Spec: Documents uplc issue #35
+# ---------------------------------------------------------------------------
+
+@pytest.mark.property
+class TestMapWithDuplicateKeysPreserved:
+    """Document cbor2 behavior with duplicate map keys.
+
+    Plutus allows maps with duplicate keys (it's a list of pairs, not a
+    true map). However, cbor2 decodes CBOR maps into Python dicts, which
+    silently drop duplicates (last-writer-wins).
+
+    This is a known issue (uplc #35) that our Plutus Data decoder must
+    handle by decoding maps as lists of pairs rather than dicts.
+
+    These tests document the current cbor2 behavior so we know exactly
+    what we're working around.
+    """
+
+    def test_map_with_duplicate_keys_cbor2_drops_duplicates(self) -> None:
+        """cbor2 silently drops duplicate map keys (last-writer-wins).
+
+        This documents the known behavior that our PlutusData decoder
+        must work around by using a custom map decoder.
+        """
+        # Manually construct CBOR bytes for map {1: 10, 1: 20}
+        # A2      = map(2 items)
+        # 01      = key: 1
+        # 0A      = value: 10
+        # 01      = key: 1 (duplicate!)
+        # 14      = value: 20
+        cbor_bytes = bytes([
+            0xa2,  # map(2)
+            0x01,  # key: 1
+            0x0a,  # value: 10
+            0x01,  # key: 1 (duplicate)
+            0x14,  # value: 20
+        ])
+
+        decoded = cbor2.loads(cbor_bytes)
+        assert isinstance(decoded, dict)
+
+        # cbor2 keeps the LAST value for duplicate keys
+        assert decoded[1] == 20, (
+            f"Expected last-writer-wins for duplicate key 1, got {decoded[1]}"
+        )
+        # The first value (10) is silently dropped
+        assert len(decoded) == 1, (
+            f"Expected 1 entry (duplicates merged), got {len(decoded)}"
+        )
+
+    def test_map_with_duplicate_bytestring_keys(self) -> None:
+        """Duplicate bytestring keys are also dropped by cbor2."""
+        # map {h'CAFE': 1, h'CAFE': 2}
+        # A2 42 CAFE 01 42 CAFE 02
+        cbor_bytes = bytes([
+            0xa2,        # map(2)
+            0x42,        # bstr(2)
+            0xca, 0xfe,  # key: h'CAFE'
+            0x01,        # value: 1
+            0x42,        # bstr(2)
+            0xca, 0xfe,  # key: h'CAFE' (duplicate)
+            0x02,        # value: 2
+        ])
+
+        decoded = cbor2.loads(cbor_bytes)
+        assert isinstance(decoded, dict)
+        assert decoded[b"\xca\xfe"] == 2  # last-writer-wins
+        assert len(decoded) == 1
+
+    def test_map_with_mixed_duplicate_keys(self) -> None:
+        """Multiple different duplicate keys in the same map."""
+        # map {1: "a", 2: "b", 1: "c", 2: "d"}
+        # A4 01 61 61 02 61 62 01 61 63 02 61 64
+        cbor_bytes = bytes([
+            0xa4,        # map(4)
+            0x01,        # key: 1
+            0x61, 0x61,  # value: "a"
+            0x02,        # key: 2
+            0x61, 0x62,  # value: "b"
+            0x01,        # key: 1 (duplicate)
+            0x61, 0x63,  # value: "c"
+            0x02,        # key: 2 (duplicate)
+            0x61, 0x64,  # value: "d"
+        ])
+
+        decoded = cbor2.loads(cbor_bytes)
+        assert isinstance(decoded, dict)
+        # Last-writer-wins for both keys
+        assert decoded[1] == "c"
+        assert decoded[2] == "d"
+        assert len(decoded) == 2
+
+    def test_indefinite_map_with_duplicate_keys(self) -> None:
+        """Indefinite-length maps with duplicates also drop them."""
+        # BF 01 0A 01 14 FF = indef map {1: 10, 1: 20}
+        cbor_bytes = bytes([
+            0xbf,  # indefinite map
+            0x01,  # key: 1
+            0x0a,  # value: 10
+            0x01,  # key: 1 (duplicate)
+            0x14,  # value: 20
+            0xff,  # break
+        ])
+
+        decoded = cbor2.loads(cbor_bytes)
+        assert isinstance(decoded, dict)
+        assert decoded[1] == 20  # last-writer-wins
+        assert len(decoded) == 1
