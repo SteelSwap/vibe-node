@@ -2871,6 +2871,7 @@ dev = [
     { name = "pytest-sugar" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -2892,6 +2893,7 @@ dev = [
     { name = "pytest-sugar", specifier = ">=1.0.0" },
     { name = "pytest-timeout", specifier = ">=2.4.0" },
     { name = "pytest-xdist", specifier = ">=3.5.0" },
+    { name = "websockets", specifier = ">=15.0" },
 ]
 
 [[package]]
