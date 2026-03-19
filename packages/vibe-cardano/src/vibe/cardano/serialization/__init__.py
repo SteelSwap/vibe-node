@@ -1,1 +1,1 @@
-"""vibe.cardano.serialization — CBOR serialization for Cardano block structures."""
+"""vibe.cardano.serialization — CBOR serialization and deserialization for Cardano blocks."""
