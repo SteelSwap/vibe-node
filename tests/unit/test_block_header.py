@@ -434,3 +434,137 @@ class TestErrorHandling:
         cbor_bytes = _wrap_block(Era.BABBAGE, short_body)
         with pytest.raises(ValueError, match="expected >= 14 items"):
             decode_block_header(cbor_bytes)
+
+
+# ---------------------------------------------------------------------------
+# Blake2b hash known vectors — RFC 7693 / spec compliance
+# ---------------------------------------------------------------------------
+
+
+class TestBlake2b256KnownVectors:
+    """Test Blake2b-256 against known test vectors.
+
+    Spec reference: RFC 7693, BLAKE2 cryptographic hash.
+    The block_hash function uses hashlib.blake2b with digest_size=32,
+    which must produce correct results for chain integrity.
+    """
+
+    def test_blake2b_256_known_vectors(self):
+        """Test blake2b-256 against 3+ known vectors.
+
+        Vector sources:
+          - Empty string: well-known BLAKE2b-256 digest
+          - "abc": standard test input from BLAKE2 reference
+          - Single zero byte: edge case for minimal input
+        """
+        vectors = [
+            # (input, expected blake2b-256 hex digest)
+            (
+                b"",
+                "0e5751c026e543b2e8ab2eb06099daa1d1"
+                "e5df47778f7787faab45cdf12fe3a8",
+            ),
+            (
+                b"abc",
+                "bddd813c634239723171ef3fee98579b94"
+                "964e3bb1cb3e427262c8c068d52319",
+            ),
+            (
+                b"\x00",
+                "03170a2e7597b7b7e3d84c05391d139a62"
+                "b157e78786d8c082f29dcf4c111314",
+            ),
+        ]
+        for input_bytes, expected_hex in vectors:
+            digest = hashlib.blake2b(input_bytes, digest_size=32).digest()
+            assert digest.hex() == expected_hex, (
+                f"blake2b-256({input_bytes!r}) = {digest.hex()}, "
+                f"expected {expected_hex}"
+            )
+            # Also verify block_hash produces the same result
+            assert block_hash(input_bytes).hex() == expected_hex
+
+    def test_blake2b_256_output_always_32_bytes(self):
+        """Hash of various inputs always produces exactly 32 bytes.
+
+        This is a critical invariant: block hashes are used as fixed-size
+        identifiers throughout the protocol (prev_hash, chain points, etc.).
+        """
+        inputs = [
+            b"",
+            b"\x00",
+            b"short",
+            b"a" * 64,
+            b"\xff" * 256,
+            b"\x00" * 1024,
+            bytes(range(256)),
+        ]
+        for data in inputs:
+            digest = block_hash(data)
+            assert len(digest) == 32, (
+                f"block_hash({data[:20]!r}...) produced {len(digest)} bytes, "
+                f"expected 32"
+            )
+            assert isinstance(digest, bytes)
+
+
+class TestBlake2b224KnownVector:
+    """Test Blake2b-224 known vector.
+
+    Blake2b-224 is used for address hashing in Cardano (credential hashes).
+    While block_hash uses blake2b-256, we verify blake2b-224 correctness
+    here since it's used elsewhere in the serialization subsystem.
+    """
+
+    def test_blake2b_224_known_vector(self):
+        """Blake2b-224 of empty bytes produces correct 28-byte digest.
+
+        Spec reference: CDDL $hash28 = bytes .size 28
+        """
+        digest = hashlib.blake2b(b"", digest_size=28).digest()
+        assert len(digest) == 28
+        # Known blake2b-224 of empty input
+        expected_hex = (
+            "836cc68931c2e4e3e838602eca1902591d216837bafddfe6f0c8cb07"
+        )
+        assert digest.hex() == expected_hex, (
+            f"blake2b-224(b'') = {digest.hex()}, expected {expected_hex}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Byron block era detection — tag 0 and tag 1
+# ---------------------------------------------------------------------------
+
+
+class TestByronEraDetection:
+    """Test that minimal CBOR with Byron-era tags are detected correctly.
+
+    The hard-fork combinator uses CBOR tag 0 for Byron main blocks and
+    tag 1 for Byron epoch boundary blocks (EBBs). These tests verify
+    detect_era correctly identifies each variant from the tag alone.
+    """
+
+    def test_byron_block_ebb_tag_zero(self):
+        """Construct minimal CBOR with tag 0, verify detect_era returns BYRON_MAIN.
+
+        Tag 0 = Byron main block in the HFC encoding.
+        CBOR encoding: 0xC0 (tag 0) + payload.
+        """
+        # Minimal tagged CBOR: tag 0 wrapping an empty array
+        tagged_cbor = _encode_tagged_block(0, [])
+        era = detect_era(tagged_cbor)
+        assert era == Era.BYRON_MAIN
+        assert era.value == 0
+
+    def test_byron_block_main_tag_one(self):
+        """Construct minimal CBOR with tag 1, verify detect_era returns BYRON_EBB.
+
+        Tag 1 = Byron epoch boundary block (EBB) in the HFC encoding.
+        CBOR encoding: 0xC1 (tag 1) + payload.
+        """
+        # Minimal tagged CBOR: tag 1 wrapping an empty array
+        tagged_cbor = _encode_tagged_block(1, [])
+        era = detect_era(tagged_cbor)
+        assert era == Era.BYRON_EBB
+        assert era.value == 1
