@@ -99,6 +99,7 @@ nav:
     - Architecture: reference/architecture.md
     - Data Architecture: reference/data-architecture.md
     - Package Structure: reference/package-structure.md
+    - Library Audit: reference/library-audit.md
     - Development Workflow: reference/workflow.md
     - Node Subsystems:
       - Overview: reference/subsystems/index.md
