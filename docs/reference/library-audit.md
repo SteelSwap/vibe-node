@@ -38,7 +38,7 @@ Every candidate is scored on six dimensions (1–5 scale):
 | **Crypto (VRF)** | BUILD | Custom libsodium FFI | No Python library implements Cardano's ECVRF-ED25519-SHA512-Elligator2 |
 | **Crypto (KES)** | BUILD | Sum-composition over Ed25519 | Key-evolving signatures require custom tree-based implementation |
 | **Networking** | USE | asyncio (stdlib) | Zero-dependency; sufficient for multiplexed TCP; broader ecosystem support |
-| **Plutus** | BUILD | From spec (with pyaiken for conformance testing) | uplc is wallet-grade; node needs precise cost accounting and all builtins |
+| **Plutus** | USE | uplc (OpShin) + pyaiken for conformance testing | All 87 builtins, full cost model, 811 conformance tests; contribute fixes upstream |
 | **Storage** | USE | PyArrow + DuckDB + SQLite (stdlib) | Arrow tables + dict for hot state; DuckDB for analytics; SQLite for metadata |
 
 ---
@@ -208,21 +208,68 @@ A Cardano node must evaluate Plutus Core scripts (UPLC) with exact cost accounti
 
 | Criterion | Score | Notes |
 |-----------|-------|-------|
-| Maintenance | 3 | Maintained as part of OpShin toolchain; releases tied to OpShin development |
-| License | 4 | MIT — compatible with AGPL-3.0 |
-| Python 3.14 | 2 | Requires 3.9+; no 3.14 wheels verified |
-| Performance | 2 | Pure Python evaluator; wallet-grade speed, not node-grade |
-| Coupling | 3 | Usable standalone, but missing node-level cost model precision |
-| Bus Factor | 2 | Primarily maintained by nielstron (OpShin creator) |
+| Maintenance | 4 | v1.3.2 (Oct 2025); active development; last push Mar 2026 |
+| License | 5 | MIT — fully compatible with AGPL-3.0 |
+| Python 3.14 | 5 | CI tests 3.9 through 3.14 |
+| Performance | 2 | Pure Python CEK machine; adequate for wallet use, likely bottleneck for node sync |
+| Coupling | 3 | Depends on pycardano, pyblst, pycryptodome, secp256k1; heavy but we already use pycardano |
+| Bus Factor | 2 | Primarily nielstron (OpShin creator); small community |
 
-**Gaps for node use:**
+**Verdict: USE** and contribute back. The `uplc` package is far more complete than initially assessed:
 
-- Cost model implementation may not match Haskell precisely (critical for determining tx validity)
-- Missing builtins from Plutus V3 (Conway-era additions)
-- No support for budget enforcement at the granularity required by the ledger rules
-- No flat encoding/decoding of scripts (needed for on-chain storage)
+- **All 87 builtins** implemented through Conway/PlutusV3, including BLS12-381 and bitwise ops
+- **Full cost model system** with budget tracking, slippage, and per-Plutus-version cost parameters
+- **Complete flat encoding/decoding** of UPLC scripts
+- **Stack-based CEK machine** (not recursive) with proper partial application and polymorphic builtin handling
+- **811 acceptance tests** from the official Haskell `plutus-conformance` test suite, with 247 cost budget tests
+- **PlutusV1, V2, V3** all supported (V3 adds Constr/Case terms)
 
-#### pyaiken
+This covers the full UPLC evaluation pipeline. Building our own would duplicate ~3,000 lines of well-tested code that already passes the Haskell conformance suite.
+
+#### What uplc gives us
+
+| Capability | Implementation | Quality |
+|-----------|---------------|---------|
+| CEK machine | Stack-based iterative, budget-tracked | 811 conformance tests |
+| All builtins (87) | Integer, ByteString, Crypto, BLS12-381, Bitwise | Complete through Conway |
+| Cost model | Full costing function hierarchy, network config overlay | 247 cost tests (via Aiken) |
+| Flat encoding | Serialize/deserialize UPLC to binary | Hypothesis roundtrip tests |
+| PlutusV1/V2/V3 | Version-aware term validation | Conformance tested |
+| Optimizer | 5 passes (dedup, inline, pre-eval, etc.) | Semantic preservation tested |
+
+#### Consensus-Critical Issues to Fix
+
+!!! danger "Issue #35: PlutusMap Duplicate Keys"
+    **This is a consensus-critical bug.** The Haskell node preserves duplicate keys in CBOR-encoded PlutusData maps. The `uplc` package deduplicates them because `cbor2` drops duplicates during decoding. A script that checks for duplicate keys will produce **different results** than the Haskell node.
+
+    **Status:** Open issue ([OpShin/uplc#35](https://github.com/OpShin/uplc/issues/35)). A fix branch exists but is incomplete.
+
+    **Our plan:** Fix this and contribute upstream. This must be resolved before we can trust script evaluation results for consensus. We will create a specific unit test that exercises duplicate-key PlutusData to verify the fix.
+
+Other issues to verify and contribute back:
+
+| Issue | Severity | Plan |
+|-------|----------|------|
+| **Cost model verified against Aiken, not Haskell** | High | Run uplc against `cardano-cli evaluate-script` for independent verification |
+| **`SerialiseData` CBOR fidelity** | High | Compare byte-for-byte against Haskell's `serialiseData` on real mainnet scripts |
+| **Integer division edge cases** | Medium | Verify truncation-toward-zero behavior against Haskell for MIN_INT, division by zero |
+| **Per-era base cost model TODO** | Medium | Code has a TODO about version-specific base models; audit impact |
+| **`ConsByteString` byte truncation** | Low | Verify values outside 0-255 truncate to low 8 bits (matching Haskell) |
+
+#### Performance Acceleration Plan
+
+Pure Python CEK machine will be **10-100x slower than Haskell** for compute-heavy scripts. For a syncing node processing thousands of scripts per block, this is a likely bottleneck. Our acceleration roadmap:
+
+| Phase | Approach | Expected Speedup | Effort |
+|-------|----------|------------------|--------|
+| **1. Profile first** | Identify actual bottlenecks during sync | Baseline | Low |
+| **2. Cython** | Compile CEK step loop + builtin dispatch | 5-20x | Low — drop-in, same code |
+| **3. Rust/PyO3** | Rewrite CEK inner loop if Cython isn't enough | 50-100x | High |
+| **4. pyaiken fallback** | Use Aiken's Rust evaluator as alternative backend | ~100x | Low — but may diverge from Haskell |
+
+**Phase 1 is mandatory before any optimization.** We don't know yet whether UPLC evaluation is actually the bottleneck vs. CBOR deserialization, storage I/O, or network latency. Profile against real mainnet blocks first.
+
+#### pyaiken (Conformance Testing Oracle)
 
 | Criterion | Score | Notes |
 |-----------|-------|-------|
@@ -230,19 +277,8 @@ A Cardano node must evaluate Plutus Core scripts (UPLC) with exact cost accounti
 | License | 4 | Apache-2.0 — compatible with AGPL-3.0 |
 | Python 3.14 | 2 | Rust extension; may need rebuild for 3.14 |
 | Performance | 4 | Rust-backed evaluation; much faster than pure Python |
-| Coupling | 3 | Provides `eval`, `flat`, `unflat` functions; limited API surface |
-| Bus Factor | 2 | Same OpShin team |
 
-**Verdict: BUILD** (with pyaiken as a conformance testing oracle).
-
-We must build our own UPLC evaluator because:
-
-1. **Cost model precision** — The evaluator must produce *identical* execution budgets to the Haskell node. Any divergence means disagreeing on which transactions are valid. This requires implementing the cost model from the formal Plutus spec.
-2. **All builtins across all Plutus versions** — V1, V2, V3 each add builtins. The evaluator must support all of them with exact semantics.
-3. **Flat encoding** — Scripts are stored in flat encoding on-chain; we need encode/decode support.
-4. **Integration with ledger rules** — The evaluator must integrate tightly with our ledger validation pipeline for budget checking, script context construction, and phase-2 validation.
-
-**Testing strategy:** Use pyaiken's `eval` function as a conformance oracle during development — evaluate the same scripts with our evaluator and pyaiken, comparing execution budgets and results.
+**Verdict: USE as conformance testing oracle.** We run the same scripts through both `uplc` and `pyaiken` and compare results + budgets. Any divergence flags a potential consensus issue. We also compare against the Haskell node directly via `cardano-cli` for ground truth.
 
 ---
 
@@ -369,11 +405,15 @@ graph LR
         SQLITE["sqlite3<br/>Chain index"]
     end
 
+    subgraph "USE — Adopt as dependency (cont.)"
+        UPLC["uplc<br/>UPLC evaluator + cost model"]
+    end
+
     subgraph "BUILD — From spec"
         VRF["VRF<br/>libsodium FFI"]
         KES["KES<br/>Sum-composition"]
-        PLUTUS["Plutus evaluator<br/>UPLC interpreter"]
         BLOCKS["Block headers<br/>Protocol state"]
+        CEKACCEL["CEK accelerator<br/>Cython/Rust if needed"]
     end
 
     PYCARDANO -.-> |"uses internally"| CBOR2["cbor2"]
@@ -387,10 +427,11 @@ graph LR
     style SQLITE fill:#2d6a4f,color:#fff
     style CBOR2 fill:#6c757d,color:#fff
     style PYNACL fill:#6c757d,color:#fff
+    style UPLC fill:#2d6a4f,color:#fff
     style VRF fill:#e76f51,color:#fff
     style KES fill:#e76f51,color:#fff
-    style PLUTUS fill:#e76f51,color:#fff
     style BLOCKS fill:#e76f51,color:#fff
+    style CEKACCEL fill:#e76f51,color:#fff
 ```
 
 ### Dependency Footprint
@@ -400,11 +441,12 @@ Total runtime dependencies added by this audit:
 | Package | Size | Purpose |
 |---------|------|---------|
 | pycardano | ~5 MB (incl. cbor2, PyNaCl) | Serialization, ledger types, Ed25519 |
+| uplc | ~2 MB (incl. pyblst, secp256k1) | UPLC evaluator, cost model, flat encoding |
 | cryptography | ~10 MB (incl. OpenSSL) | Blake2b, KES primitives |
 | pyarrow | ~20 MB | Arrow tables, IPC, compute |
 | duckdb | ~100 MB | Analytics over Arrow tables |
 
-**Total: ~135 MB** of additional dependencies. asyncio and sqlite3 are stdlib (zero cost). The bulk is DuckDB (~100 MB), which is an optional analytics layer — the core node runs with pycardano + cryptography + pyarrow (~35 MB total).
+**Total: ~137 MB** of additional dependencies. asyncio and sqlite3 are stdlib (zero cost). The bulk is DuckDB (~100 MB), which is an optional analytics layer — the core node runs with pycardano + uplc + cryptography + pyarrow (~37 MB total).
 
 ### What We Build Ourselves
 
@@ -413,7 +455,7 @@ Total runtime dependencies added by this audit:
 | Block headers & protocol state | Cardano ledger formal specs | Medium — era-specific block wrappers on top of pycardano types |
 | VRF bindings | IETF draft-irtf-cfrg-vrf-03 + IOG libsodium fork | Medium — FFI wrapper + test against Haskell VRF outputs |
 | KES implementation | Ouroboros Praos spec (sum composition) | Medium — tree-based key evolution using Ed25519 primitives |
-| UPLC evaluator | Plutus Core formal spec | Very High — all builtins, cost models, flat encoding |
+| UPLC performance layer | uplc package + Cython/Rust acceleration | Medium — CEK machine hot path compilation if profiling shows need |
 | Multiplexer | ouroboros-network-framework | Medium — segment framing, backpressure, mini-protocol dispatch |
 | Storage engine | ouroboros-consensus (Storage) | High — ImmutableDB/VolatileDB/LedgerDB abstractions over Arrow+Dict |
 
@@ -426,4 +468,6 @@ Total runtime dependencies added by this audit:
 | pycardano doesn't support Python 3.14 | Contribute 3.14 compatibility upstream; pycardano's dependencies (cbor2, PyNaCl) already support 3.14 |
 | Python dict memory at mainnet scale (1.4 GiB for 15M entries) | NumPy hash table fallback (0.3 GiB) available; total architecture still well under Haskell's 24 GiB |
 | VRF FFI bindings are fragile across platforms | Docker-based CI ensures consistent libsodium version; statically link if needed |
-| UPLC evaluator cost model diverges from Haskell | Continuous conformance testing against pyaiken oracle + direct comparison with Haskell node script validation results |
+| uplc PlutusMap duplicate key bug (issue #35) causes consensus divergence | Fix upstream and add unit test exercising duplicate-key PlutusData; block on this before trusting script evaluation |
+| uplc cost model verified against Aiken, not Haskell | Run independent verification against `cardano-cli evaluate-script`; compare budgets on real mainnet scripts |
+| uplc pure Python CEK machine too slow for sync | Profile first; Cython compilation of hot path as Phase 2; Rust/PyO3 rewrite as Phase 3 if needed |
