@@ -617,38 +617,37 @@ def qa_validate(
         from vibe_node.research.qa_validate import validate_gaps, validate_xrefs
 
         pool = await get_pool()
-        async with pool.acquire() as conn:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TextColumn("{task.completed}/{task.total}"),
-                TimeElapsedColumn(),
-            ) as progress:
-                if not xrefs_only:
-                    task = progress.add_task(f"[green]{subsystem} gaps", total=0)
-                    gap_stats = await validate_gaps(
-                        conn, subsystem, limit=limit,
-                        concurrency=concurrency, progress=progress,
-                    )
-                    typer.echo(f"\n=== Gap Validation ===")
-                    typer.echo(f"  Validated:          {gap_stats['gaps_validated']}")
-                    typer.echo(f"  Search failures:    {gap_stats['search_failures_resolved']}")
-                    typer.echo(f"  False positives:    {gap_stats['false_positives']}")
-                    typer.echo(f"  Critical:           {gap_stats['critical']}")
-                    typer.echo(f"  Important:          {gap_stats['important']}")
-                    typer.echo(f"  Informational:      {gap_stats['informational']}")
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+        ) as progress:
+            if not xrefs_only:
+                gap_task = progress.add_task(f"[green]{subsystem} gaps", total=0)
+                gap_stats = await validate_gaps(
+                    pool, subsystem, limit=limit,
+                    concurrency=concurrency, progress=progress, task_id=gap_task,
+                )
+                typer.echo(f"\n=== Gap Validation ===")
+                typer.echo(f"  Validated:          {gap_stats['gaps_validated']}")
+                typer.echo(f"  Search failures:    {gap_stats['search_failures_resolved']}")
+                typer.echo(f"  False positives:    {gap_stats['false_positives']}")
+                typer.echo(f"  Critical:           {gap_stats['critical']}")
+                typer.echo(f"  Important:          {gap_stats['important']}")
+                typer.echo(f"  Informational:      {gap_stats['informational']}")
 
-                if not gaps_only:
-                    task = progress.add_task(f"[blue]{subsystem} xrefs", total=0)
-                    xref_stats = await validate_xrefs(
-                        conn, subsystem, limit=limit,
-                        concurrency=concurrency, progress=progress,
-                    )
-                    typer.echo(f"\n=== Cross-Reference Validation ===")
-                    typer.echo(f"  Checked:            {xref_stats['checked']}")
-                    typer.echo(f"  Accurate:           {xref_stats['accurate']}")
-                    typer.echo(f"  Inaccurate:         {xref_stats['inaccurate']}")
+            if not gaps_only:
+                xref_task = progress.add_task(f"[blue]{subsystem} xrefs", total=0)
+                xref_stats = await validate_xrefs(
+                    pool, subsystem, limit=limit,
+                    concurrency=concurrency, progress=progress, task_id=xref_task,
+                )
+                typer.echo(f"\n=== Cross-Reference Validation ===")
+                typer.echo(f"  Checked:            {xref_stats['checked']}")
+                typer.echo(f"  Accurate:           {xref_stats['accurate']}")
+                typer.echo(f"  Inaccurate:         {xref_stats['inaccurate']}")
 
         await close_pool()
 

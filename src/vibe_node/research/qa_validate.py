@@ -12,6 +12,7 @@ Usage:
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -147,10 +148,11 @@ def _git_grep(term: str, repo_path: Path, max_results: int = 5) -> list[str]:
         result = subprocess.run(
             ["git", "grep", "-n", "-i", "--max-count", str(max_results), term],
             cwd=repo_path,
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, timeout=10,
         )
         if result.returncode == 0:
-            for line in result.stdout.strip().splitlines()[:max_results]:
+            stdout = result.stdout.decode("utf-8", errors="replace")
+            for line in stdout.strip().splitlines()[:max_results]:
                 results.append(line[:500])  # Truncate long lines
     except (subprocess.TimeoutExpired, OSError):
         pass
@@ -181,8 +183,8 @@ def _search_vendor_repos(search_terms: list[str]) -> dict[str, list[str]]:
 
 
 async def validate_gaps(
-    conn, subsystem: str, limit: int | None = None,
-    concurrency: int = 5, progress=None,
+    pool, subsystem: str, limit: int | None = None,
+    concurrency: int = 5, progress=None, task_id=None,
 ) -> dict:
     """Validate and categorize gap_analysis entries for a subsystem."""
     import asyncio
@@ -196,7 +198,7 @@ async def validate_gaps(
         "informational": 0,
     }
 
-    # Fetch gaps with their spec section context
+    # Fetch gaps with their spec section context (single query, own connection)
     query = """
         SELECT ga.id, ga.spec_section_id, ga.delta, ga.spec_says, ga.haskell_does,
                ga.implications, ss.section_id, ss.title, ss.verbatim, ss.extracted_rule
@@ -211,10 +213,11 @@ async def validate_gaps(
         query += f" LIMIT ${len(params) + 1}"
         params.append(limit)
 
-    rows = await conn.fetch(query, *params)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(query, *params)
 
-    if progress:
-        progress.update(progress.task_ids[0], total=len(rows))
+    if progress and task_id is not None:
+        progress.update(task_id, total=len(rows))
 
     semaphore = asyncio.Semaphore(concurrency)
 
@@ -280,12 +283,14 @@ async def validate_gaps(
                     "implementation_note": validation.implementation_note,
                 }
 
-                await conn.execute(
-                    """UPDATE gap_analysis
-                    SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
-                    WHERE id = $2""",
-                    qa_metadata, gap_id,
-                )
+                # Each task gets its own connection from the pool
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        """UPDATE gap_analysis
+                        SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
+                        WHERE id = $2""",
+                        json.dumps(qa_metadata), gap_id,
+                    )
 
                 stats["gaps_validated"] += 1
                 if validation.category == GapCategory.search_failure:
@@ -303,7 +308,7 @@ async def validate_gaps(
                 logger.warning("Gap validation failed for %s: %s", gap_id, e)
 
             if progress:
-                progress.update(progress.task_ids[0], advance=1)
+                progress.update(task_id, advance=1)
 
     tasks = [_validate_gap(row) for row in rows]
     await asyncio.gather(*tasks)
@@ -312,8 +317,8 @@ async def validate_gaps(
 
 
 async def validate_xrefs(
-    conn, subsystem: str, limit: int | None = None,
-    concurrency: int = 5, progress=None,
+    pool, subsystem: str, limit: int | None = None,
+    concurrency: int = 5, progress=None, task_id=None,
 ) -> dict:
     """Spot-check cross-references for accuracy."""
     import asyncio
@@ -338,10 +343,11 @@ async def validate_xrefs(
         query += f" LIMIT ${len(params) + 1}"
         params.append(limit)
 
-    rows = await conn.fetch(query, *params)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(query, *params)
 
-    if progress:
-        progress.update(progress.task_ids[0], total=len(rows))
+    if progress and task_id is not None:
+        progress.update(task_id, total=len(rows))
 
     semaphore = asyncio.Semaphore(concurrency)
 
@@ -365,14 +371,15 @@ async def validate_xrefs(
                 result = await get_xref_qa_agent().run(prompt)
                 validation = result.output
 
-                # Update confidence and add QA note
-                await conn.execute(
-                    """UPDATE cross_references
-                    SET confidence = $1,
-                        notes = COALESCE(notes, '') || ' [qa_validated]'
-                    WHERE id = $2""",
-                    validation.confidence_adjustment, xref_id,
-                )
+                # Each task gets its own connection from the pool
+                async with pool.acquire() as conn:
+                    await conn.execute(
+                        """UPDATE cross_references
+                        SET confidence = $1,
+                            notes = COALESCE(notes, '') || ' [qa_validated]'
+                        WHERE id = $2""",
+                        validation.confidence_adjustment, xref_id,
+                    )
 
                 stats["checked"] += 1
                 if validation.is_accurate:
@@ -384,7 +391,7 @@ async def validate_xrefs(
                 logger.warning("Xref validation failed for %s: %s", xref_id, e)
 
             if progress:
-                progress.update(progress.task_ids[0], advance=1)
+                progress.update(task_id, advance=1)
 
     tasks = [_validate_xref(row) for row in rows]
     await asyncio.gather(*tasks)
