@@ -268,6 +268,8 @@ async def stage2_search(
             logger.warning("Production code search failed: %s", e)
 
         # --- Stage 2b: Search TEST code (is_test = TRUE) ---
+        # Vector search: semantic similarity to the rule
+        test_ids_seen: set[str] = set()
         try:
             rows = await conn.fetch(
                 f"""SELECT id, function_name, content, file_path,
@@ -277,19 +279,58 @@ async def stage2_search(
                 AND is_test = TRUE
                 AND embedding IS NOT NULL
                 ORDER BY embedding <=> $1::vector
-                LIMIT 5""",
+                LIMIT 10""",
                 embedding_str,
             )
             for row in rows:
+                rid = str(row["id"])
+                test_ids_seen.add(rid)
                 candidates.append(SearchCandidate(
                     entity_type="code_chunk_test",
-                    entity_id=str(row["id"]),
+                    entity_id=rid,
                     title=f"[TEST] {row.get('function_name', '')}",
                     content_preview=(row.get("content", "") or "")[:500],
                     similarity=float(row.get("similarity", 0)),
                 ))
         except Exception as e:
-            logger.warning("Test code search failed: %s", e)
+            logger.warning("Test vector search failed: %s", e)
+
+        # --- Stage 2c: Keyword search for test functions by name pattern ---
+        # Catches golden tests, roundtrip tests, and property tests that
+        # vector search might miss because their embeddings don't match
+        # the spec rule's language closely enough.
+        try:
+            # Extract key terms from the rule for keyword matching
+            # Use the rule title/first line as search terms
+            rule_terms = extracted_rule.split('\n')[0][:200].lower()
+            # Search for test functions whose names contain relevant keywords
+            keyword_rows = await conn.fetch(
+                f"""SELECT id, function_name, content, file_path
+                FROM code_chunks
+                WHERE ({tag_conditions})
+                AND is_test = TRUE
+                AND (
+                    function_name ILIKE '%' || $1 || '%'
+                    OR function_name ILIKE 'golden%'
+                    OR function_name ILIKE 'prop_%'
+                    OR function_name ILIKE 'roundTrip%'
+                )
+                LIMIT 10""",
+                subsystem.replace('-', '_'),
+            )
+            for row in keyword_rows:
+                rid = str(row["id"])
+                if rid not in test_ids_seen:
+                    test_ids_seen.add(rid)
+                    candidates.append(SearchCandidate(
+                        entity_type="code_chunk_test",
+                        entity_id=rid,
+                        title=f"[TEST] {row.get('function_name', '')}",
+                        content_preview=(row.get("content", "") or "")[:500],
+                        similarity=0.5,  # keyword match, not vector
+                    ))
+        except Exception as e:
+            logger.warning("Test keyword search failed: %s", e)
 
     # Search issues
     if "issue" in available:
