@@ -7,7 +7,7 @@ This page summarizes the project milestones tracked in [Plane](https://plane.so)
 | Phase | Status | Description |
 |-------|--------|-------------|
 | **Phase 0 — Development Architecture** | :material-check-circle: Complete | Knowledge base, search infrastructure, MCP integrations, CLI, docs |
-| **Phase 1 — Research & Analysis** | :material-progress-wrench: In Progress | Spec deep-dives, Haskell code analysis, architecture design |
+| **Phase 1 — Research & Analysis** | :material-check-circle: Complete | 2,046 rules, 1,567 gaps, architecture blueprint, test strategy |
 | **Phase 2 — Networking** | :material-clock-outline: Planned | Ouroboros multiplexer, miniprotocol state machines |
 | **Phase 3 — Chain Sync & Storage** | :material-clock-outline: Planned | Chain-sync client, block fetch, CBOR deserialization, persistent storage |
 | **Phase 4 — Ledger & Consensus** | :material-clock-outline: Planned | UTxO ledger rules, Plutus evaluation, Ouroboros Praos, VRF/KES |
@@ -38,23 +38,35 @@ See [Phase 0 Tasks](tasks.md) for the full breakdown of 56 tasks across these mo
 
 ---
 
-## Phase 1 — Research & Analysis :material-progress-wrench:
+## Phase 1 — Research & Analysis :material-check-circle:{ .green }
 
-**Status: IN PROGRESS** — Design specs and implementation plans ready.
+**Status: COMPLETE** — 2,046 spec rules extracted, 1,567 gaps QA-validated, architecture blueprint finalized.
 
-Phase 1 uses the Phase 0 knowledge base to perform deep research into the Cardano specs and Haskell codebase. The output is a complete architectural design for the Python node, informed by spec analysis and gap documentation.
+Phase 1 used the Phase 0 knowledge base to perform deep research into the Cardano specs and Haskell codebase. The output is a complete architectural design for the Python node, informed by spec analysis and gap documentation.
 
 | Module | Wave | Description | Status |
 |--------|------|-------------|--------|
-| M1.1 — Subsystem Decomposition | 1 | 10 subsystems, boundaries, specs, dependency graph, phase sequencing | :material-progress-wrench: In Progress |
-| M1.2 — Public-Facing Documentation | 2 | "How It Works" pages with SVG infographics for non-technical users | :material-clock-outline: Planned |
-| M1.3 — Cross-Referencing Infrastructure | 2 | DB tables (spec_sections, cross_references, gap_analysis), CLI commands | :material-clock-outline: Planned |
-| M1.4 — Spec Rule Extraction | 3 | Extract rules from specs into spec_sections (~500-2000 rules) | :material-clock-outline: Planned |
-| M1.5 — Haskell Code & Discussion Mapping | 4 | Cross-reference specs ↔ code ↔ issues, gap analysis entries | :material-clock-outline: Planned |
-| M1.6 — Library Audit | 3 | Python library evaluation per subsystem, pycardano deep eval | :material-clock-outline: Planned |
-| M1.7 — Data Architecture | 3 | Arrow/DuckDB/Feather evaluation, benchmarks, decision | :material-clock-outline: Planned |
-| M1.8 — Test Strategy & Specifications | 4 | 5-type test taxonomy, planned tests per spec rule | :material-clock-outline: Planned |
-| M1.9 — Architecture Blueprint | 5 | Package structure, synthesis, phase 2-6 with testable deliverables | :material-clock-outline: Planned |
+| M1.1 — Subsystem Decomposition | 1 | 10 subsystems, boundaries, specs, dependency graph, phase sequencing | :material-check-circle: Complete |
+| M1.2 — Public-Facing Documentation | 2 | 11 "How It Works" pages with SVG infographics | :material-check-circle: Complete |
+| M1.3 — Cross-Referencing Infrastructure | 2 | DB tables, PydanticAI pipeline, QA validation pipeline, CLI | :material-check-circle: Complete |
+| M1.4 — Spec Rule Extraction | 3 | 2,046 rules extracted across all 10 subsystems | :material-check-circle: Complete |
+| M1.5 — Haskell Code & Discussion Mapping | 3 | 7,152 cross-references, 1,567 gaps (425 critical, 427 important) | :material-check-circle: Complete |
+| M1.6 — Library Audit | 3 | pycardano (USE), uplc (USE), PyArrow+DuckDB, per-subsystem evaluation | :material-check-circle: Complete |
+| M1.7 — Data Architecture | 3 | Arrow+Dict (86x faster than LMDB), benchmarks at 1M UTxOs, crash recovery design | :material-check-circle: Complete |
+| M1.8 — Test Strategy & Specifications | 4 | 5-type taxonomy, 17,453 auto-generated test specs, per-phase test gates | :material-check-circle: Complete |
+| M1.9 — Architecture Blueprint | 5 | Phase 2-6 roadmap with parallel tracks, risk register, Mithril/recovery design | :material-check-circle: Complete |
+
+### Phase 1 Research Output
+
+| Metric | Count |
+|--------|-------|
+| Spec rules extracted | 2,046 |
+| Cross-references (spec ↔ code) | 7,152 |
+| Gap analysis entries (QA-validated) | 1,567 |
+| Critical gaps | 425 |
+| Important gaps | 427 |
+| Auto-generated test specifications | 17,453 |
+| Subsystems fully analyzed | 10 of 10 |
 
 ---
 
