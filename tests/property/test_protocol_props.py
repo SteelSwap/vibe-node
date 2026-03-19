@@ -19,6 +19,14 @@ from hypothesis import strategies as st
 
 from vibe.core.protocols.agency import Agency, Message
 from vibe.cardano.network.chainsync import (
+    MSG_AWAIT_REPLY,
+    MSG_DONE,
+    MSG_FIND_INTERSECT,
+    MSG_INTERSECT_FOUND,
+    MSG_INTERSECT_NOT_FOUND,
+    MSG_REQUEST_NEXT,
+    MSG_ROLL_BACKWARD,
+    MSG_ROLL_FORWARD,
     Point,
     Origin,
     ORIGIN,
@@ -274,4 +282,80 @@ def test_chainsync_all_traces_valid(choices: list[str]) -> None:
         ChainSyncState.StNext,
         ChainSyncState.StIntersect,
         ChainSyncState.StDone,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Message ID exhaustiveness
+# ---------------------------------------------------------------------------
+
+
+def test_chainsync_message_id_exhaustive() -> None:
+    """Verify message ID constants (0-7) cover all valid chain-sync messages
+    with no gaps.
+
+    The chain-sync miniprotocol defines exactly 8 message types with IDs 0-7.
+    This test ensures:
+    1. All IDs form a contiguous range [0, 7]
+    2. No gaps exist in the ID space
+    3. Each ID maps to exactly one message type
+    4. The set of IDs is complete (no missing messages)
+
+    Haskell reference: The ChainSync protocol type has exactly these
+    constructors: MsgRequestNext (0), MsgAwaitReply (1), MsgRollForward (2),
+    MsgRollBackward (3), MsgFindIntersect (4), MsgIntersectFound (5),
+    MsgIntersectNotFound (6), MsgDone (7).
+    """
+    all_ids = {
+        MSG_REQUEST_NEXT,
+        MSG_AWAIT_REPLY,
+        MSG_ROLL_FORWARD,
+        MSG_ROLL_BACKWARD,
+        MSG_FIND_INTERSECT,
+        MSG_INTERSECT_FOUND,
+        MSG_INTERSECT_NOT_FOUND,
+        MSG_DONE,
+    }
+
+    # Exactly 8 message types
+    assert len(all_ids) == 8, f"Expected 8 unique message IDs, got {len(all_ids)}"
+
+    # Contiguous range [0, 7]
+    assert all_ids == set(range(8)), (
+        f"Message IDs should be {{0..7}}, got {sorted(all_ids)}"
+    )
+
+    # Verify each constant has the expected value (defense against renaming)
+    expected = {
+        "MSG_REQUEST_NEXT": 0,
+        "MSG_AWAIT_REPLY": 1,
+        "MSG_ROLL_FORWARD": 2,
+        "MSG_ROLL_BACKWARD": 3,
+        "MSG_FIND_INTERSECT": 4,
+        "MSG_INTERSECT_FOUND": 5,
+        "MSG_INTERSECT_NOT_FOUND": 6,
+        "MSG_DONE": 7,
+    }
+    actual = {
+        "MSG_REQUEST_NEXT": MSG_REQUEST_NEXT,
+        "MSG_AWAIT_REPLY": MSG_AWAIT_REPLY,
+        "MSG_ROLL_FORWARD": MSG_ROLL_FORWARD,
+        "MSG_ROLL_BACKWARD": MSG_ROLL_BACKWARD,
+        "MSG_FIND_INTERSECT": MSG_FIND_INTERSECT,
+        "MSG_INTERSECT_FOUND": MSG_INTERSECT_FOUND,
+        "MSG_INTERSECT_NOT_FOUND": MSG_INTERSECT_NOT_FOUND,
+        "MSG_DONE": MSG_DONE,
+    }
+    assert actual == expected, f"Message ID values mismatch: {actual}"
+
+    # Verify no ID appears in both client and server message sets
+    client_ids = {MSG_REQUEST_NEXT, MSG_FIND_INTERSECT, MSG_DONE}
+    server_ids = {MSG_AWAIT_REPLY, MSG_ROLL_FORWARD, MSG_ROLL_BACKWARD,
+                  MSG_INTERSECT_FOUND, MSG_INTERSECT_NOT_FOUND}
+
+    assert client_ids & server_ids == set(), (
+        f"Client/server ID overlap: {client_ids & server_ids}"
+    )
+    assert client_ids | server_ids == all_ids, (
+        "Client + server IDs don't cover all message types"
     )
