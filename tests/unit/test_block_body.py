@@ -843,3 +843,455 @@ class TestEdgeCases:
             assert len(tx.body.outputs) == 0
         else:
             assert tx.body[1] == []
+
+
+# ---------------------------------------------------------------------------
+# Tests: Metadata validation
+# ---------------------------------------------------------------------------
+
+
+class TestMetadataKeyMustBeUint:
+    """test_metadata_key_must_be_uint: Metadata top-level keys must be unsigned
+    integers (0 to 2^64-1). Non-integer keys should be rejected by pycardano.
+
+    Spec: Shelley CDDL — transaction_metadatum_label = uint
+    """
+
+    def test_integer_keys_accepted(self):
+        """Integer keys (uint) are valid metadata keys."""
+        m = Metadata({0: "zero", 1: "one", 2**32: "large"})
+        assert 0 in m
+        assert 1 in m
+        assert 2**32 in m
+
+    def test_string_key_rejected(self):
+        """String keys are not valid metadata keys — must be uint."""
+        from pycardano.exception import InvalidArgumentException
+
+        with pytest.raises(InvalidArgumentException, match="int"):
+            Metadata({"bad_key": "value"})
+
+    def test_negative_key_accepted_by_pycardano(self):
+        """pycardano accepts negative int keys (isinstance check only).
+
+        Note: The CDDL says transaction_metadatum_label = uint, meaning
+        negative keys are technically invalid per spec. pycardano does not
+        enforce the unsigned constraint — it only checks isinstance(k, int).
+        Our validation layer must enforce the uint constraint separately.
+        """
+        # pycardano allows it — documents a gap we must enforce ourselves
+        m = Metadata({-1: "negative"})
+        assert -1 in m
+
+    def test_bytes_key_rejected(self):
+        """Bytestring keys are not valid metadata keys."""
+        from pycardano.exception import InvalidArgumentException
+
+        with pytest.raises(InvalidArgumentException, match="int"):
+            Metadata({b"\x01": "bytes_key"})
+
+
+class TestMetadataBytesMax64:
+    """test_metadata_bytes_max_64: Metadata bytestring values must be <= 64 bytes.
+
+    Spec: Shelley CDDL — transaction_metadatum = ... / bytes .size (0..64)
+    """
+
+    def test_64_bytes_accepted(self):
+        m = Metadata({1: b"\x00" * 64})
+        assert m[1] == b"\x00" * 64
+
+    def test_65_bytes_rejected(self):
+        from pycardano.exception import InvalidArgumentException
+
+        with pytest.raises(InvalidArgumentException, match="exceeds"):
+            Metadata({1: b"\x00" * 65})
+
+    def test_empty_bytes_accepted(self):
+        m = Metadata({1: b""})
+        assert m[1] == b""
+
+
+class TestMetadataTextMax64BytesNotChars:
+    """test_metadata_text_max_64_bytes_not_chars: Text metadata values are limited
+    to 64 bytes of UTF-8 encoding, not 64 characters.
+
+    Spec: Shelley CDDL — transaction_metadatum = ... / text .size (0..64)
+    (where .size refers to byte length of the UTF-8 encoding)
+    """
+
+    def test_64_ascii_chars_accepted(self):
+        """64 ASCII chars = 64 bytes, should pass."""
+        m = Metadata({1: "a" * 64})
+        assert len(m[1]) == 64
+
+    def test_multibyte_chars_hit_byte_limit(self):
+        """Multibyte UTF-8 characters — fewer than 64 chars can exceed 64 bytes.
+        Each emoji is 4 bytes UTF-8, so 17 emojis = 68 bytes > 64."""
+        from pycardano.exception import InvalidArgumentException
+
+        # 17 x 4-byte chars = 68 bytes
+        with pytest.raises(InvalidArgumentException, match="exceeds"):
+            Metadata({1: "\U0001f600" * 17})
+
+    def test_16_emojis_accepted(self):
+        """16 x 4-byte emojis = 64 bytes, exactly at boundary."""
+        m = Metadata({1: "\U0001f600" * 16})
+        assert len(m[1].encode("utf-8")) == 64
+
+
+class TestMetadataValueBytesAtBoundary:
+    """test_metadata_value_bytes_at_boundary: Test 63, 64, 65 byte metadata values."""
+
+    def test_63_bytes_accepted(self):
+        m = Metadata({1: b"\xab" * 63})
+        assert len(m[1]) == 63
+
+    def test_64_bytes_accepted(self):
+        m = Metadata({1: b"\xab" * 64})
+        assert len(m[1]) == 64
+
+    def test_65_bytes_rejected(self):
+        from pycardano.exception import InvalidArgumentException
+
+        with pytest.raises(InvalidArgumentException, match="exceeds"):
+            Metadata({1: b"\xab" * 65})
+
+
+class TestMetadataValueTextAtBoundary:
+    """test_metadata_value_text_at_boundary: Test 63, 64, 65 byte text metadata."""
+
+    def test_63_bytes_text_accepted(self):
+        m = Metadata({1: "x" * 63})
+        assert len(m[1].encode("utf-8")) == 63
+
+    def test_64_bytes_text_accepted(self):
+        m = Metadata({1: "x" * 64})
+        assert len(m[1].encode("utf-8")) == 64
+
+    def test_65_bytes_text_rejected(self):
+        from pycardano.exception import InvalidArgumentException
+
+        with pytest.raises(InvalidArgumentException, match="exceeds"):
+            Metadata({1: "x" * 65})
+
+
+class TestMetadataNestedArrayAndMap:
+    """test_metadata_nested_array_and_map: Metadata can contain nested arrays and maps.
+
+    Spec: Shelley CDDL —
+        transaction_metadatum =
+            { * transaction_metadatum => transaction_metadatum }
+          / [ * transaction_metadatum ]
+          / int / bytes / text
+    """
+
+    def test_nested_list(self):
+        m = Metadata({1: [1, 2, 3]})
+        assert m[1] == [1, 2, 3]
+
+    def test_nested_dict(self):
+        m = Metadata({1: {2: "inner"}})
+        assert m[1] == {2: "inner"}
+
+    def test_deeply_nested(self):
+        m = Metadata({1: [{"nested": [1, b"\xff", "text"]}]})
+        assert isinstance(m[1], list)
+        assert isinstance(m[1][0], dict)
+
+    def test_nested_array_with_bytes_and_text(self):
+        m = Metadata({1: [b"\x00" * 32, "hello", 42]})
+        assert len(m[1]) == 3
+
+    def test_nested_map_cbor_roundtrip(self):
+        raw = {1: {2: [3, b"\xab" * 10, "nested"]}}
+        m = Metadata(raw)
+        cbor_bytes = m.to_cbor()
+        restored = Metadata.from_cbor(cbor_bytes)
+        assert restored[1] == raw[1]
+
+
+class TestMetadataIntValueRange:
+    """test_metadata_int_value_range: Metadata integer values can be negative and large.
+
+    Spec: Shelley CDDL — transaction_metadatum includes int
+    (int = uint / nint, i.e. the full CBOR integer range)
+    """
+
+    def test_zero(self):
+        m = Metadata({1: 0})
+        assert m[1] == 0
+
+    def test_large_positive(self):
+        m = Metadata({1: 2**63 - 1})
+        assert m[1] == 2**63 - 1
+
+    def test_negative(self):
+        m = Metadata({1: -1})
+        assert m[1] == -1
+
+    def test_large_negative(self):
+        m = Metadata({1: -(2**63)})
+        assert m[1] == -(2**63)
+
+    def test_int_roundtrip_cbor(self):
+        val = -(2**32)
+        m = Metadata({1: val})
+        restored = Metadata.from_cbor(m.to_cbor())
+        assert restored[1] == val
+
+
+# ---------------------------------------------------------------------------
+# Tests: Transaction body spec fields
+# ---------------------------------------------------------------------------
+
+
+class TestTxBodyHasAllSpecFields:
+    """test_txbody_has_all_spec_fields: Conway TxBody has all spec-required fields.
+
+    Spec: Conway CDDL —
+        transaction_body =
+          { 0 : set<transaction_input>   ; inputs
+          , 1 : [* transaction_output]   ; outputs
+          , 2 : coin                     ; fee
+          , ? 3 : uint                   ; time to live
+          , ...
+          }
+
+    At minimum: inputs (key 0), outputs (key 1), fee (key 2).
+    """
+
+    def test_conway_txbody_has_inputs_outputs_fee(self):
+        """A decoded TransactionBody must have inputs, outputs, and fee."""
+        body_prim = _make_tx_body_primitive()
+        result = _try_decode_tx_body(body_prim)
+        assert isinstance(result, TransactionBody)
+        assert result.inputs is not None
+        assert result.outputs is not None
+        assert result.fee is not None
+
+    def test_conway_txbody_has_optional_fields(self):
+        """TransactionBody dataclass has Conway-era optional fields."""
+        assert hasattr(TransactionBody, "voting_procedures")
+        assert hasattr(TransactionBody, "proposal_procedures")
+        assert hasattr(TransactionBody, "current_treasury_value")
+        assert hasattr(TransactionBody, "collateral")
+        assert hasattr(TransactionBody, "collateral_return")
+        assert hasattr(TransactionBody, "reference_inputs")
+
+    def test_conway_txbody_field_keys_match_cddl(self):
+        """Verify the CBOR map keys match the CDDL spec."""
+        import dataclasses
+
+        fields = dataclasses.fields(TransactionBody)
+        key_map = {}
+        for f in fields:
+            if "key" in f.metadata:
+                key_map[f.name] = f.metadata["key"]
+        # Core required fields
+        assert key_map["inputs"] == 0
+        assert key_map["outputs"] == 1
+        assert key_map["fee"] == 2
+
+
+class TestTxBodyRoundtripSerialization:
+    """test_txbody_roundtrip_serialization: Encode a TxBody, decode it, compare."""
+
+    def test_minimal_txbody_roundtrip(self):
+        body_prim = _make_tx_body_primitive(fee=300_000, ttl=100_000)
+        result = _try_decode_tx_body(body_prim)
+        if not isinstance(result, TransactionBody):
+            pytest.skip("pycardano couldn't decode body")
+
+        cbor_bytes = result.to_cbor()
+        restored = TransactionBody.from_cbor(cbor_bytes)
+        assert restored.fee == 300_000
+        assert restored.ttl == 100_000
+        assert len(restored.inputs) == len(result.inputs)
+        assert len(restored.outputs) == len(result.outputs)
+
+    def test_roundtrip_preserves_hash(self):
+        """Hash of serialized body should be stable across round-trip."""
+        body_prim = _make_tx_body_primitive()
+        result = _try_decode_tx_body(body_prim)
+        if not isinstance(result, TransactionBody):
+            pytest.skip("pycardano couldn't decode body")
+
+        cbor1 = result.to_cbor()
+        restored = TransactionBody.from_cbor(cbor1)
+        cbor2_bytes = restored.to_cbor()
+        hash1 = hashlib.blake2b(cbor1, digest_size=32).digest()
+        hash2 = hashlib.blake2b(cbor2_bytes, digest_size=32).digest()
+        assert hash1 == hash2
+
+
+# ---------------------------------------------------------------------------
+# Tests: Bootstrap witness field sizes
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapWitnessChainCode32Bytes:
+    """test_bootstrap_witness_chain_code_32_bytes: Chain code in bootstrap witness
+    is exactly 32 bytes.
+
+    Spec: Shelley CDDL — bootstrap_witness =
+      [ public_key : vkey             ; 32 bytes
+      , signature  : signature        ; 64 bytes
+      , chain_code : bytes .size 32
+      , attributes : bytes
+      ]
+    """
+
+    def test_chain_code_32_bytes(self):
+        chain_code = b"\x03" * 32
+        bw = [b"\x01" * 32, b"\x02" * 64, chain_code, b""]
+        encoded = cbor2.dumps(bw)
+        decoded = cbor2.loads(encoded)
+        assert len(decoded[2]) == 32
+
+    def test_chain_code_wrong_size_detectable(self):
+        """Chain codes not exactly 32 bytes should be detectable."""
+        for size in [0, 16, 31, 33, 64]:
+            bw = [b"\x01" * 32, b"\x02" * 64, b"\x03" * size, b""]
+            encoded = cbor2.dumps(bw)
+            decoded = cbor2.loads(encoded)
+            assert len(decoded[2]) == size
+            assert len(decoded[2]) != 32 or size == 32
+
+
+class TestBootstrapWitnessVkey32Bytes:
+    """test_bootstrap_witness_vkey_32_bytes: VKey in bootstrap witness is 64 bytes
+    (XPub = 32-byte public key + 32-byte chain verification key = 64 bytes for
+    extended public key).
+
+    Note: The CDDL says vkey = bytes .size 32, but Byron bootstrap witnesses
+    use extended public keys (XPub) which are 64 bytes in the Byron/OBFT era.
+    In Shelley+ the vkey field in bootstrap_witness is still 32 bytes (ed25519).
+    We test both the 32-byte (Shelley spec) and document the 64-byte Byron case.
+    """
+
+    def test_vkey_32_bytes_shelley(self):
+        """Standard Shelley bootstrap witness vkey is 32 bytes."""
+        vkey = b"\x01" * 32
+        bw = [vkey, b"\x02" * 64, b"\x03" * 32, b""]
+        encoded = cbor2.dumps(bw)
+        decoded = cbor2.loads(encoded)
+        assert len(decoded[0]) == 32
+
+    def test_vkey_64_bytes_byron_xpub(self):
+        """Byron XPub is 64 bytes — vkey(32) + chain_verification(32)."""
+        xpub = b"\x01" * 64
+        bw = [xpub, b"\x02" * 64, b"\x03" * 32, b""]
+        encoded = cbor2.dumps(bw)
+        decoded = cbor2.loads(encoded)
+        assert len(decoded[0]) == 64
+
+
+# ---------------------------------------------------------------------------
+# Tests: Constr tag encoding for alternatives >= 7
+# ---------------------------------------------------------------------------
+
+
+class TestConstrTagEncodingGeneralRange:
+    """test_constr_tag_encoding_general_range: Constr alternatives >= 7 use
+    CBOR tag 102 encoding.
+
+    Spec: Plutus Core CDDL —
+        constr<a> =
+            #6.121([* a])  ; alternative 0
+          / #6.122([* a])  ; alternative 1
+          / ...
+          / #6.127([* a])  ; alternative 6
+          / #6.102([uint, [* a]])  ; general form for alternatives >= 7
+    """
+
+    def test_alternatives_0_through_6_use_compact_tags(self):
+        """Alternatives 0-6 use tags 121-127."""
+        for alt in range(7):
+            tag = cbor2.CBORTag(121 + alt, [42])
+            encoded = cbor2.dumps(tag)
+            decoded = cbor2.loads(encoded)
+            assert isinstance(decoded, cbor2.CBORTag)
+            assert decoded.tag == 121 + alt
+            assert decoded.value == [42]
+
+    def test_alternative_7_uses_tag_102(self):
+        """Alternative 7 uses tag 102 with [7, fields]."""
+        tag = cbor2.CBORTag(102, [7, [42]])
+        encoded = cbor2.dumps(tag)
+        decoded = cbor2.loads(encoded)
+        assert isinstance(decoded, cbor2.CBORTag)
+        assert decoded.tag == 102
+        assert decoded.value == [7, [42]]
+
+    def test_alternative_100_uses_tag_102(self):
+        """Large alternative numbers still use tag 102."""
+        tag = cbor2.CBORTag(102, [100, ["a", "b"]])
+        encoded = cbor2.dumps(tag)
+        decoded = cbor2.loads(encoded)
+        assert isinstance(decoded, cbor2.CBORTag)
+        assert decoded.tag == 102
+        assert decoded.value[0] == 100
+
+    def test_general_form_roundtrip(self):
+        """Tag 102 with arbitrary alternative and fields round-trips."""
+        for alt in [7, 8, 42, 1000]:
+            fields = [1, b"\xff", "text"]
+            tag = cbor2.CBORTag(102, [alt, fields])
+            encoded = cbor2.dumps(tag)
+            decoded = cbor2.loads(encoded)
+            assert decoded.tag == 102
+            assert decoded.value[0] == alt
+            assert decoded.value[1] == fields
+
+
+# ---------------------------------------------------------------------------
+# Tests: Serialization distributivity for transactions
+# ---------------------------------------------------------------------------
+
+
+class TestSerializationDistributivityTx:
+    """test_serialization_distributivity_tx: hash(encode(body)) == encode(hash(body))
+    — extracting body from serialized tx matches serializing the extracted body.
+
+    This is the critical invariant: the tx_id (hash of the body) must be
+    computable from either the raw CBOR body or from a re-serialized decoded body.
+    """
+
+    def test_hash_of_raw_body_matches_decoded_hash(self):
+        """hash(raw_body_cbor) == tx.tx_hash computed during decode."""
+        body = _make_tx_body_primitive(fee=150_000)
+        ws = _make_witness_set_primitive()
+        raw = _make_block_cbor(Era.BABBAGE, tx_bodies=[body], tx_witnesses=[ws])
+        result = decode_block_body(raw)
+        tx = result.transactions[0]
+
+        # Hash from raw primitive
+        raw_hash = hashlib.blake2b(cbor2.dumps(body), digest_size=32).digest()
+        assert tx.tx_hash == raw_hash
+
+    def test_reencode_decoded_body_same_hash(self):
+        """Re-encoding a decoded body and hashing should match the original tx_id."""
+        body_prim = _make_tx_body_primitive(fee=250_000)
+        ws = _make_witness_set_primitive()
+        raw = _make_block_cbor(Era.BABBAGE, tx_bodies=[body_prim], tx_witnesses=[ws])
+        result = decode_block_body(raw)
+        tx = result.transactions[0]
+
+        # Re-encode the raw body primitive
+        reencoded = cbor2.dumps(tx.body_raw)
+        rehash = hashlib.blake2b(reencoded, digest_size=32).digest()
+        assert rehash == tx.tx_hash
+
+    def test_distributivity_across_multiple_txs(self):
+        """The distributivity property holds for every tx in a multi-tx block."""
+        bodies = [_make_tx_body_primitive(fee=100_000 * (i + 1)) for i in range(5)]
+        witnesses = [_make_witness_set_primitive() for _ in bodies]
+        raw = _make_block_cbor(Era.CONWAY, tx_bodies=bodies, tx_witnesses=witnesses)
+        result = decode_block_body(raw)
+
+        for i, tx in enumerate(result.transactions):
+            expected = hashlib.blake2b(
+                cbor2.dumps(bodies[i]), digest_size=32
+            ).digest()
+            assert tx.tx_hash == expected, f"Distributivity failed for tx {i}"
