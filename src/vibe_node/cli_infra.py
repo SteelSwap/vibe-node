@@ -172,9 +172,9 @@ def register_db_extras(db_app: typer.Typer) -> None:
         import asyncio
 
         async def _run():
-            from vibe_node.db.pool import get_pool, close_pool
-            from vibe_node.db.search import search_all
-            from vibe_node.embed.client import EmbeddingClient
+            from vibe.tools.db.pool import get_pool, close_pool
+            from vibe.tools.db.search import search_all
+            from vibe.tools.embed.client import EmbeddingClient
 
             embed_client = EmbeddingClient()
             embedding = await embed_client.embed(query)

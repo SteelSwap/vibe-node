@@ -237,10 +237,10 @@ def issues(
     )
 
     async def run():
-        from vibe_node.db.session import get_session
-        from vibe_node.embed.client import EmbeddingClient
-        from vibe_node.ingest.config import GITHUB_REPOS
-        from vibe_node.ingest.github import GitHubIngestor
+        from vibe.tools.db.session import get_session
+        from vibe.tools.embed.client import EmbeddingClient
+        from vibe.tools.ingest.config import GITHUB_REPOS
+        from vibe.tools.ingest.github import GitHubIngestor
 
         repos = [repo] if repo else GITHUB_REPOS
         suffix = f" (limit {limit} per repo)" if limit else ""
@@ -314,9 +314,9 @@ def specs(
     )
 
     async def run():
-        from vibe_node.db.session import get_session
-        from vibe_node.embed.client import EmbeddingClient
-        from vibe_node.ingest.specs.pipeline import SpecIngestor
+        from vibe.tools.db.session import get_session
+        from vibe.tools.embed.client import EmbeddingClient
+        from vibe.tools.ingest.specs.pipeline import SpecIngestor
 
         suffix = ""
         if format:
@@ -395,10 +395,10 @@ def code(
     )
 
     async def run():
-        from vibe_node.db.session import get_session
-        from vibe_node.embed.client import EmbeddingClient
-        from vibe_node.ingest.code import CodeIngestor
-        from vibe_node.ingest.config import CODE_REPOS
+        from vibe.tools.db.session import get_session
+        from vibe.tools.embed.client import EmbeddingClient
+        from vibe.tools.ingest.code import CodeIngestor
+        from vibe.tools.ingest.config import CODE_REPOS
 
         repos = {repo: CODE_REPOS[repo]} if repo and repo in CODE_REPOS else CODE_REPOS
         suffix = f" (limit {limit} tags per repo)" if limit else ""
@@ -442,7 +442,7 @@ def export_specs_cmd() -> None:
     Reads era metadata from the database, then copies pre-converted markdown
     from data/specs/ to docs/specs/{era}/ with clean filenames and index pages.
     """
-    from vibe_node.export_specs import export_specs
+    from vibe.tools.export_specs import export_specs
 
     typer.echo("Exporting spec documents to docs/specs/...")
     stats = export_specs()
@@ -527,8 +527,8 @@ def extract_rules(
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 
     async def _run():
-        from vibe_node.db.pool import get_pool, close_pool
-        from vibe_node.research.pipeline import run_pipeline
+        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.research.pipeline import run_pipeline
 
         pool = await get_pool()
         async with pool.acquire() as conn:
@@ -613,8 +613,8 @@ def qa_validate(
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 
     async def _run():
-        from vibe_node.db.pool import get_pool, close_pool
-        from vibe_node.research.qa_validate import validate_gaps, validate_xrefs
+        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.research.qa_validate import validate_gaps, validate_xrefs
 
         pool = await get_pool()
         with Progress(
