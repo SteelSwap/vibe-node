@@ -212,12 +212,20 @@ async def stage1_extract(
 
 async def stage2_search(
     conn, extracted_rule: str, subsystem: str,
+    exclude_ids: set[str] | None = None, batch_size: int = 10,
 ) -> list[SearchCandidate]:
     """Stage 2: Semantic search for candidate links.
 
-    Searches production code and test code separately so the LLM can
-    distinguish 'implements' from 'tests' relationships more accurately.
-    Also searches GitHub issues/PRs for discussion links.
+    Searches production code, test code, issues, and PRs with unified
+    deduplication. Supports continuation via exclude_ids to fetch deeper
+    results when all initial candidates link.
+
+    Args:
+        conn: asyncpg connection.
+        extracted_rule: The spec rule text to search for.
+        subsystem: Subsystem name for keyword filtering.
+        exclude_ids: Entity IDs to skip (for continuation searches).
+        batch_size: Number of results per category.
     """
     from vibe.tools.db.search import build_vector_query
     from vibe.tools.db.search_config import get_available_configs
@@ -229,6 +237,19 @@ async def stage2_search(
 
     available = await get_available_configs(conn)
     candidates = []
+    seen_ids: set[str] = set(exclude_ids or set())
+
+    def _add_candidate(entity_type: str, entity_id: str, title: str,
+                       content_preview: str, similarity: float):
+        if entity_id not in seen_ids:
+            seen_ids.add(entity_id)
+            candidates.append(SearchCandidate(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                title=title,
+                content_preview=content_preview[:500],
+                similarity=similarity,
+            ))
 
     # Get latest release tag for each repo
     latest_tags = await conn.fetch(
@@ -243,7 +264,13 @@ async def stage2_search(
         )
         embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
 
-        # --- Stage 2a: Search PRODUCTION code (is_test = FALSE) ---
+        # Build exclusion clause if continuing
+        exclude_clause = ""
+        if exclude_ids:
+            escaped = ", ".join(f"'{eid}'" for eid in exclude_ids)
+            exclude_clause = f"AND id::text NOT IN ({escaped})"
+
+        # --- Stage 2a: Production code (is_test = FALSE) ---
         try:
             rows = await conn.fetch(
                 f"""SELECT id, function_name, content,
@@ -252,24 +279,22 @@ async def stage2_search(
                 WHERE ({tag_conditions})
                 AND is_test = FALSE
                 AND embedding IS NOT NULL
+                {exclude_clause}
                 ORDER BY embedding <=> $1::vector
-                LIMIT 10""",
+                LIMIT {batch_size}""",
                 embedding_str,
             )
             for row in rows:
-                candidates.append(SearchCandidate(
-                    entity_type="code_chunk",
-                    entity_id=str(row["id"]),
-                    title=row.get("function_name", ""),
-                    content_preview=(row.get("content", "") or "")[:500],
-                    similarity=float(row.get("similarity", 0)),
-                ))
+                _add_candidate(
+                    "code_chunk", str(row["id"]),
+                    row.get("function_name", ""),
+                    row.get("content", "") or "",
+                    float(row.get("similarity", 0)),
+                )
         except Exception as e:
             logger.warning("Production code search failed: %s", e)
 
-        # --- Stage 2b: Search TEST code (is_test = TRUE) ---
-        # Vector search: semantic similarity to the rule
-        test_ids_seen: set[str] = set()
+        # --- Stage 2b: Test code — vector search (is_test = TRUE) ---
         try:
             rows = await conn.fetch(
                 f"""SELECT id, function_name, content, file_path,
@@ -278,32 +303,23 @@ async def stage2_search(
                 WHERE ({tag_conditions})
                 AND is_test = TRUE
                 AND embedding IS NOT NULL
+                {exclude_clause}
                 ORDER BY embedding <=> $1::vector
-                LIMIT 10""",
+                LIMIT {batch_size}""",
                 embedding_str,
             )
             for row in rows:
-                rid = str(row["id"])
-                test_ids_seen.add(rid)
-                candidates.append(SearchCandidate(
-                    entity_type="code_chunk_test",
-                    entity_id=rid,
-                    title=f"[TEST] {row.get('function_name', '')}",
-                    content_preview=(row.get("content", "") or "")[:500],
-                    similarity=float(row.get("similarity", 0)),
-                ))
+                _add_candidate(
+                    "code_chunk_test", str(row["id"]),
+                    f"[TEST] {row.get('function_name', '')}",
+                    row.get("content", "") or "",
+                    float(row.get("similarity", 0)),
+                )
         except Exception as e:
             logger.warning("Test vector search failed: %s", e)
 
-        # --- Stage 2c: Keyword search for test functions by name pattern ---
-        # Catches golden tests, roundtrip tests, and property tests that
-        # vector search might miss because their embeddings don't match
-        # the spec rule's language closely enough.
+        # --- Stage 2c: Test code — keyword search (is_test = TRUE) ---
         try:
-            # Extract key terms from the rule for keyword matching
-            # Use the rule title/first line as search terms
-            rule_terms = extracted_rule.split('\n')[0][:200].lower()
-            # Search for test functions whose names contain relevant keywords
             keyword_rows = await conn.fetch(
                 f"""SELECT id, function_name, content, file_path
                 FROM code_chunks
@@ -314,59 +330,55 @@ async def stage2_search(
                     OR function_name ILIKE 'golden%'
                     OR function_name ILIKE 'prop_%'
                     OR function_name ILIKE 'roundTrip%'
+                    OR function_name ILIKE 'ts_%'
                 )
-                LIMIT 10""",
+                {exclude_clause}
+                LIMIT {batch_size}""",
                 subsystem.replace('-', '_'),
             )
             for row in keyword_rows:
-                rid = str(row["id"])
-                if rid not in test_ids_seen:
-                    test_ids_seen.add(rid)
-                    candidates.append(SearchCandidate(
-                        entity_type="code_chunk_test",
-                        entity_id=rid,
-                        title=f"[TEST] {row.get('function_name', '')}",
-                        content_preview=(row.get("content", "") or "")[:500],
-                        similarity=0.5,  # keyword match, not vector
-                    ))
+                _add_candidate(
+                    "code_chunk_test", str(row["id"]),
+                    f"[TEST] {row.get('function_name', '')}",
+                    row.get("content", "") or "",
+                    0.5,
+                )
         except Exception as e:
             logger.warning("Test keyword search failed: %s", e)
 
-    # Search issues
+    # --- Issues ---
     if "issue" in available:
         cfg = available["issue"]
         sql, params = build_vector_query(
-            cfg["table"], embedding, {}, cfg.get("filter_columns", {}), 5, 0,
+            cfg["table"], embedding, {}, cfg.get("filter_columns", {}), batch_size, 0,
         )
         try:
             rows = await conn.fetch(sql, *params)
             for row in rows:
-                candidates.append(SearchCandidate(
-                    entity_type="github_issue",
-                    entity_id=str(row["id"]),
-                    title=row.get("title", ""),
-                    content_preview=(row.get("content_combined", "") or "")[:500],
-                    similarity=1.0 - float(row.get("vector_distance", 1.0)),
-                ))
+                _add_candidate(
+                    "github_issue", str(row["id"]),
+                    row.get("title", ""),
+                    row.get("content_combined", "") or "",
+                    1.0 - float(row.get("vector_distance", 1.0)),
+                )
         except Exception as e:
             logger.warning("Issue search failed: %s", e)
 
-    # Search PRs
+    # --- PRs ---
     if "pr" in available:
         cfg = available["pr"]
         sql, params = build_vector_query(
-            cfg["table"], embedding, {}, cfg.get("filter_columns", {}), 5, 0,
+            cfg["table"], embedding, {}, cfg.get("filter_columns", {}), batch_size, 0,
         )
         try:
             rows = await conn.fetch(sql, *params)
             for row in rows:
-                candidates.append(SearchCandidate(
-                    entity_type="github_pr",
-                    entity_id=str(row["id"]),
-                    title=row.get("title", ""),
-                    content_preview=(row.get("content_combined", "") or "")[:500],
-                    similarity=1.0 - float(row.get("vector_distance", 1.0)),
-                ))
+                _add_candidate(
+                    "github_pr", str(row["id"]),
+                    row.get("title", ""),
+                    row.get("content_combined", "") or "",
+                    1.0 - float(row.get("vector_distance", 1.0)),
+                )
         except Exception as e:
             logger.warning("PR search failed: %s", e)
 
@@ -492,25 +504,56 @@ async def _process_chunk(
             )
             chunk_stats["rules_extracted"] += 1
 
-            # Stage 2: Semantic search for candidates
-            candidates = await stage2_search(conn, rule.extracted_rule, subsystem)
+            # Stage 2+3: Search and evaluate with continuation
+            # If most candidates in a batch link, there are probably more —
+            # search deeper by excluding already-seen IDs.
+            MAX_CONTINUATION_ROUNDS = 3
+            all_linked_ids: set[str] = set()
+            all_eval_results: list[tuple] = []
 
-            # Stage 3: Evaluate all candidates concurrently
-            async def _eval_candidate(cand):
-                try:
-                    decision = await stage3_evaluate_link(
-                        rule.verbatim, rule.extracted_rule, cand,
+            for search_round in range(MAX_CONTINUATION_ROUNDS + 1):
+                candidates = await stage2_search(
+                    conn, rule.extracted_rule, subsystem,
+                    exclude_ids=all_linked_ids if search_round > 0 else None,
+                )
+                if not candidates:
+                    break
+
+                async def _eval_candidate(cand):
+                    try:
+                        decision = await stage3_evaluate_link(
+                            rule.verbatim, rule.extracted_rule, cand,
+                        )
+                        return cand, decision
+                    except Exception as e:
+                        logger.warning("Link eval failed: %s", e)
+                        return cand, None
+
+                eval_results = await _asyncio.gather(*[_eval_candidate(c) for c in candidates])
+                all_eval_results.extend(eval_results)
+
+                # Track all candidate IDs (linked or not) so continuation skips them
+                for cand, _ in eval_results:
+                    all_linked_ids.add(cand.entity_id)
+
+                # Count how many linked in this batch
+                linked_count = sum(
+                    1 for _, d in eval_results
+                    if d is not None and d.is_linked
+                )
+                # If less than 60% linked, stop searching deeper
+                if linked_count < len(candidates) * 0.6:
+                    break
+
+                if search_round < MAX_CONTINUATION_ROUNDS:
+                    logger.debug(
+                        "Round %d: %d/%d linked, continuing search for %s",
+                        search_round, linked_count, len(candidates), rule.section_id,
                     )
-                    return cand, decision
-                except Exception as e:
-                    logger.warning("Link eval failed: %s", e)
-                    return cand, None
-
-            eval_results = await _asyncio.gather(*[_eval_candidate(c) for c in candidates])
 
             implementing_code = None
             existing_test_code = None
-            for candidate, decision in eval_results:
+            for candidate, decision in all_eval_results:
                 if decision is None:
                     continue
                 if decision.is_linked and decision.relationship:
