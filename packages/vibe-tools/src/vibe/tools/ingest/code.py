@@ -353,18 +353,21 @@ class CodeIngestor:
 
                 chunk_id = uuid.uuid4()
 
+                # Detect test files by path convention
+                is_test = "/test/" in chunk.file_path or "/Test/" in chunk.file_path or "/testlib/" in chunk.file_path
+
                 await session.execute(
                     text("""
                         INSERT INTO code_chunks (
                             id, repo, release_tag, commit_hash, commit_date,
                             file_path, module_name, function_name,
                             line_start, line_end, content, signature,
-                            content_hash, embed_text, embedding, era, metadata
+                            content_hash, embed_text, embedding, era, is_test, metadata
                         ) VALUES (
                             :id, :repo, :release_tag, :commit_hash, :commit_date,
                             :file_path, :module_name, :function_name,
                             :line_start, :line_end, :content, :signature,
-                            :content_hash, :embed_text, :embedding, :era, NULL
+                            :content_hash, :embed_text, :embedding, :era, :is_test, NULL
                         )
                         ON CONFLICT (repo, release_tag, file_path, function_name, content_hash)
                         DO NOTHING
@@ -386,6 +389,7 @@ class CodeIngestor:
                         "embed_text": embed_text,
                         "embedding": embedding_str,
                         "era": era,
+                        "is_test": is_test,
                     },
                 )
                 # Record in tag manifest for versioned queries
