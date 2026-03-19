@@ -1,1 +1,1 @@
-"""vibe.cardano.network — Cardano miniprotocol message codecs."""
+"""vibe.cardano.network — Cardano node networking (Ouroboros miniprotocols)."""
