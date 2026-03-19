@@ -47,7 +47,11 @@ not_in_nav: |
   /specs/governance/*.md
   /specs/papers/*.md
   /superpowers/**
+  /development/devlog/phase0-wave1.md
+  /development/devlog/phase0-wave2.md
   /development/devlog/phase0-wave3.md
+  /development/tasks.md
+  /reference/architecture.md
 
 nav:
   - Home: index.md
@@ -86,36 +90,32 @@ nav:
   - Development:
     - Overview: development/index.md
     - Milestones: development/milestones.md
-    - Phase 0 Tasks: development/tasks.md
+    - Architecture Blueprint: development/architecture-blueprint.md
+    - Data Architecture: development/data-architecture.md
+    - Library Audit: development/library-audit.md
+    - Package Structure: development/package-structure.md
+    - Test Strategy: development/test-strategy.md
+    - Test Matrix: development/test-matrix.md
+    - Node Subsystems:
+      - Overview: development/subsystems/index.md
+      - Networking: development/subsystems/networking.md
+      - "Miniprotocols (N2N)": development/subsystems/miniprotocols-n2n.md
+      - "Miniprotocols (N2C)": development/subsystems/miniprotocols-n2c.md
+      - Consensus: development/subsystems/consensus.md
+      - Ledger Rules: development/subsystems/ledger.md
+      - Plutus: development/subsystems/plutus.md
+      - Serialization: development/subsystems/serialization.md
+      - Mempool: development/subsystems/mempool.md
+      - Storage: development/subsystems/storage.md
+      - Block Production: development/subsystems/block-production.md
     - Development Log:
       - Journal: development/devlog/index.md
-      - "Phase 0, Wave 1 — Foundation": development/devlog/phase0-wave1.md
-      - "Phase 0, Wave 2 — Ingestion & CLI": development/devlog/phase0-wave2.md
-      - "Phase 0, Wave 3 — Search & MCP": development/devlog/phase0-wave3.md
+      - "Phase 0 — Development Architecture": development/devlog/phase0.md
   - Reference:
     - Overview: reference/index.md
     - CLI Reference: reference/cli-reference.md
     - Database Schema: reference/schema.md
-    - Architecture: reference/architecture.md
-    - Architecture Blueprint: reference/architecture-blueprint.md
-    - Data Architecture: reference/data-architecture.md
-    - Package Structure: reference/package-structure.md
-    - Library Audit: reference/library-audit.md
-    - Test Strategy: reference/test-strategy.md
-    - Test Matrix: reference/test-matrix.md
     - Development Workflow: reference/workflow.md
-    - Node Subsystems:
-      - Overview: reference/subsystems/index.md
-      - Networking: reference/subsystems/networking.md
-      - "Miniprotocols (N2N)": reference/subsystems/miniprotocols-n2n.md
-      - "Miniprotocols (N2C)": reference/subsystems/miniprotocols-n2c.md
-      - Consensus: reference/subsystems/consensus.md
-      - Ledger Rules: reference/subsystems/ledger.md
-      - Plutus: reference/subsystems/plutus.md
-      - Serialization: reference/subsystems/serialization.md
-      - Mempool: reference/subsystems/mempool.md
-      - Storage: reference/subsystems/storage.md
-      - Block Production: reference/subsystems/block-production.md
     - Pipelines:
       - Spec Ingestion: reference/pipelines/spec-ingestion.md
       - Code Indexing: reference/pipelines/code-indexing.md
