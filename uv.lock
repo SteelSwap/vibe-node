@@ -2,6 +2,14 @@ version = 1
 revision = 3
 requires-python = ">=3.14"
 
+[manifest]
+members = [
+    "vibe-cardano",
+    "vibe-core",
+    "vibe-node",
+    "vibe-tools",
+]
+
 [[package]]
 name = "ag-ui-protocol"
 version = "0.1.14"
@@ -2674,9 +2682,58 @@ wheels = [
 ]
 
 [[package]]
+name = "vibe-cardano"
+version = "0.1.0"
+source = { editable = "packages/vibe-cardano" }
+dependencies = [
+    { name = "vibe-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "vibe-core", editable = "packages/vibe-core" }]
+
+[[package]]
+name = "vibe-core"
+version = "0.1.0"
+source = { editable = "packages/vibe-core" }
+
+[[package]]
 name = "vibe-node"
 version = "0.1.0"
 source = { editable = "." }
+dependencies = [
+    { name = "typer" },
+    { name = "vibe-tools" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "bump-my-version" },
+    { name = "lancedb" },
+    { name = "mkdocs-material" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "typer", specifier = ">=0.15" },
+    { name = "vibe-tools", editable = "packages/vibe-tools" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "bump-my-version", specifier = ">=1.2.7" },
+    { name = "lancedb", specifier = ">=0.30.0" },
+    { name = "mkdocs-material", specifier = ">=9.7.5" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-asyncio", specifier = ">=1.3.0" },
+]
+
+[[package]]
+name = "vibe-tools"
+version = "0.1.0"
+source = { editable = "packages/vibe-tools" }
 dependencies = [
     { name = "anthropic" },
     { name = "asyncpg" },
@@ -2688,16 +2745,6 @@ dependencies = [
     { name = "sqlmodel" },
     { name = "tree-sitter" },
     { name = "tree-sitter-haskell" },
-    { name = "typer" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "bump-my-version" },
-    { name = "lancedb" },
-    { name = "mkdocs-material" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
 ]
 
 [package.metadata]
@@ -2712,16 +2759,6 @@ requires-dist = [
     { name = "sqlmodel", specifier = ">=0.0.37" },
     { name = "tree-sitter", specifier = ">=0.25.2" },
     { name = "tree-sitter-haskell", specifier = ">=0.23.1" },
-    { name = "typer", specifier = ">=0.15" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "bump-my-version", specifier = ">=1.2.7" },
-    { name = "lancedb", specifier = ">=0.30.0" },
-    { name = "mkdocs-material", specifier = ">=9.7.5" },
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "pytest-asyncio", specifier = ">=1.3.0" },
 ]
 
 [[package]]
