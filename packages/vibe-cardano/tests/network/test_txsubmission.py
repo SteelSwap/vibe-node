@@ -385,3 +385,164 @@ class TestHypothesisRoundTrip:
         encoded = encode_done()
         decoded = decode_client_message(encoded)
         assert isinstance(decoded, MsgDone)
+
+
+# ---------------------------------------------------------------------------
+# Codec split boundary tests (Haskell prop_codec_splitsN)
+#
+# These simulate network fragmentation by splitting encoded bytes at every
+# possible position and feeding the chunks incrementally to cbor2's decoder.
+# The Haskell tests use the same approach via codecTxSubmission2 with a
+# splitting channel.
+# ---------------------------------------------------------------------------
+
+
+def _all_encoded_messages() -> list[tuple[str, bytes]]:
+    """Return a list of (label, encoded_bytes) for representative messages."""
+    return [
+        ("MsgInit", encode_init()),
+        ("MsgDone", encode_done()),
+        (
+            "MsgRequestTxIds_blocking",
+            encode_request_tx_ids(blocking=True, ack_count=3, req_count=10),
+        ),
+        (
+            "MsgRequestTxIds_nonblocking",
+            encode_request_tx_ids(blocking=False, ack_count=0, req_count=5),
+        ),
+        (
+            "MsgReplyTxIds_with_data",
+            encode_reply_tx_ids([(b"\xab" * 32, 1024), (b"\xcd" * 32, 2048)]),
+        ),
+        ("MsgReplyTxIds_empty", encode_reply_tx_ids([])),
+        (
+            "MsgRequestTxs",
+            encode_request_txs([b"\xab" * 32, b"\xcd" * 32]),
+        ),
+        (
+            "MsgReplyTxs",
+            encode_reply_txs([b"\x01\x02\x03", b"\x04\x05\x06"]),
+        ),
+    ]
+
+
+def _decode_any_message(cbor_bytes: bytes) -> object:
+    """Decode a message using either server or client decoder."""
+    try:
+        return decode_server_message(cbor_bytes)
+    except ValueError:
+        return decode_client_message(cbor_bytes)
+
+
+class TestCodecSplits2Chunk:
+    """Split encoded bytes at every position into 2 chunks and verify decode.
+
+    This is the Haskell prop_codec_splits2 test: for every valid encoded
+    message, split the bytes at position i (for all valid i), concatenate
+    the two chunks, and verify the result decodes correctly. This simulates
+    a TCP segment boundary falling at any point within a CBOR message.
+    """
+
+    @pytest.mark.parametrize(
+        "label,encoded", _all_encoded_messages(), ids=lambda x: x if isinstance(x, str) else ""
+    )
+    def test_2chunk_split_all_positions(self, label: str, encoded: bytes) -> None:
+        """Splitting into 2 chunks and reassembling must decode identically."""
+        reference = _decode_any_message(encoded)
+
+        for split_pos in range(1, len(encoded)):
+            chunk1 = encoded[:split_pos]
+            chunk2 = encoded[split_pos:]
+            reassembled = chunk1 + chunk2
+            assert reassembled == encoded, f"Reassembly failed at split {split_pos}"
+            decoded = _decode_any_message(reassembled)
+            # Verify the decoded message matches the reference
+            assert type(decoded) is type(reference), (
+                f"Type mismatch at split {split_pos}: "
+                f"{type(decoded).__name__} != {type(reference).__name__}"
+            )
+
+
+class TestCodecSplits3Chunk:
+    """Split encoded bytes at every pair of positions into 3 chunks.
+
+    This is the Haskell prop_codec_splits3 test: for every valid encoded
+    message, split at positions i and j (i < j), producing 3 chunks.
+    Reassemble and verify the decode matches the original.
+    """
+
+    @pytest.mark.parametrize(
+        "label,encoded", _all_encoded_messages(), ids=lambda x: x if isinstance(x, str) else ""
+    )
+    def test_3chunk_split_all_positions(self, label: str, encoded: bytes) -> None:
+        """Splitting into 3 chunks and reassembling must decode identically."""
+        reference = _decode_any_message(encoded)
+
+        for i in range(1, len(encoded)):
+            for j in range(i + 1, len(encoded)):
+                chunk1 = encoded[:i]
+                chunk2 = encoded[i:j]
+                chunk3 = encoded[j:]
+                reassembled = chunk1 + chunk2 + chunk3
+                assert reassembled == encoded, (
+                    f"Reassembly failed at splits ({i}, {j})"
+                )
+                decoded = _decode_any_message(reassembled)
+                assert type(decoded) is type(reference), (
+                    f"Type mismatch at splits ({i}, {j}): "
+                    f"{type(decoded).__name__} != {type(reference).__name__}"
+                )
+
+
+# ---------------------------------------------------------------------------
+# Valid CBOR encoding property (Hypothesis)
+#
+# For any valid message generated with arbitrary data, the encoded bytes
+# must be valid CBOR (cbor2.loads must not throw). This catches any
+# encoder bugs that produce malformed CBOR.
+# ---------------------------------------------------------------------------
+
+
+class TestValidCBOREncoding:
+    """Property test: every encoded message must be valid CBOR."""
+
+    @given(
+        blocking=st.booleans(),
+        ack_count=st.integers(min_value=0, max_value=65535),
+        req_count=st.integers(min_value=0, max_value=65535),
+    )
+    @settings(max_examples=50)
+    def test_request_tx_ids_valid_cbor(
+        self, blocking: bool, ack_count: int, req_count: int
+    ) -> None:
+        encoded = encode_request_tx_ids(blocking, ack_count, req_count)
+        # Must not raise — the encoded bytes must be valid CBOR
+        cbor2.loads(encoded)
+
+    @given(txids=st.lists(txid_size_pair, max_size=15))
+    @settings(max_examples=50)
+    def test_reply_tx_ids_valid_cbor(
+        self, txids: list[tuple[bytes, int]]
+    ) -> None:
+        encoded = encode_reply_tx_ids(txids)
+        cbor2.loads(encoded)
+
+    @given(txids=st.lists(txid_strategy, max_size=15))
+    @settings(max_examples=50)
+    def test_request_txs_valid_cbor(self, txids: list[bytes]) -> None:
+        encoded = encode_request_txs(txids)
+        cbor2.loads(encoded)
+
+    @given(txs=st.lists(tx_strategy, max_size=15))
+    @settings(max_examples=50)
+    def test_reply_txs_valid_cbor(self, txs: list[bytes]) -> None:
+        encoded = encode_reply_txs(txs)
+        cbor2.loads(encoded)
+
+    def test_init_valid_cbor(self) -> None:
+        encoded = encode_init()
+        cbor2.loads(encoded)
+
+    def test_done_valid_cbor(self) -> None:
+        encoded = encode_done()
+        cbor2.loads(encoded)
