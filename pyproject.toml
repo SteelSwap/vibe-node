@@ -69,6 +69,7 @@ markers = [
     "property: Property tests — invariant verification via Hypothesis",
     "conformance: Conformance tests — bit-for-bit match with Haskell node",
     "integration: Integration tests — multi-component with Docker Compose",
+    "devnet: Devnet integration tests — 3-node private cluster validation",
 ]
 
 [dependency-groups]

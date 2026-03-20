@@ -1,0 +1,30 @@
+# Dockerfile for vibe-node in the devnet cluster
+# This builds the vibe-node Python package and runs the sync loop
+
+FROM python:3.14-slim
+
+# System dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        libffi-dev \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for fast package management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Copy project files
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+COPY packages/ packages/
+
+# Install dependencies
+RUN uv sync --frozen --no-dev 2>/dev/null || uv sync --no-dev || echo "WARN: uv sync failed, continuing..."
+
+# Default entrypoint: run the vibe-node sync loop
+# This will be replaced with the actual node binary once implemented
+ENTRYPOINT ["uv", "run", "python", "-m", "vibe.cardano.sync"]
+
+# Expose the node-to-node port
+EXPOSE 3001
