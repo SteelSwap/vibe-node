@@ -40,6 +40,34 @@ from vibe.cardano.consensus.slot_arithmetic import (
 
 
 # ---------------------------------------------------------------------------
+# PastHorizonError — safe zone boundary exception
+# ---------------------------------------------------------------------------
+
+
+class PastHorizonError(Exception):
+    """Raised when a slot/epoch conversion is beyond the known safe zone.
+
+    The Haskell HFC defines a "safe zone" for each era: conversions within
+    the safe zone of the last known era succeed, but beyond that boundary
+    the result is unreliable because a hard fork could change epoch/slot
+    parameters.
+
+    Spec ref: ``Ouroboros.Consensus.HardFork.History.Qry`` — ``PastHorizonException``
+    Haskell ref: ``PastHorizonException`` in ``Ouroboros.Consensus.HardFork.History.Qry``
+
+    Attributes:
+        slot_or_epoch: The requested slot or epoch that exceeded the horizon.
+        horizon_slot: The last slot within the safe zone.
+        message: Human-readable description.
+    """
+
+    def __init__(self, slot_or_epoch: int, horizon_slot: int, message: str) -> None:
+        self.slot_or_epoch = slot_or_epoch
+        self.horizon_slot = horizon_slot
+        super().__init__(message)
+
+
+# ---------------------------------------------------------------------------
 # Era enumeration
 # ---------------------------------------------------------------------------
 
@@ -154,10 +182,16 @@ class HardForkConfig:
         era_transitions: Maps each era to the epoch at which it starts.
             Must include Era.BYRON -> 0 at minimum.
         era_params: Per-era parameters (epoch length, slot length).
+        safe_zone: Number of slots beyond the last known era boundary
+            within which slot/epoch conversions are still considered safe.
+            For mainnet Cardano: 3k/f = 3*2160/0.05 = 129,600 slots
+            (the stability window). None means no safe zone enforcement
+            (conversions always succeed — backwards compatible default).
     """
 
     era_transitions: dict[Era, int] = field(default_factory=lambda: {Era.BYRON: 0})
     era_params: dict[Era, EraParams] = field(default_factory=lambda: dict(DEFAULT_ERA_PARAMS))
+    safe_zone: int | None = None
 
     def __post_init__(self) -> None:
         if Era.BYRON not in self.era_transitions:
@@ -274,6 +308,45 @@ def _era_start_slots(config: HardForkConfig) -> list[tuple[Era, int]]:
     return result
 
 
+def _horizon_slot(config: HardForkConfig) -> int | None:
+    """Compute the maximum slot for which conversions are safe.
+
+    The horizon is the last slot of the last known era's safe zone.
+    If safe_zone is None, returns None (no enforcement).
+
+    Spec ref: ``Ouroboros.Consensus.HardFork.History.Summary`` — horizon calculation
+    Haskell ref: ``summaryEnd`` in ``Summary``
+
+    Returns:
+        The last safe slot, or None if no safe zone is configured.
+    """
+    if config.safe_zone is None:
+        return None
+
+    era_start_slots = _era_start_slots(config)
+    if not era_start_slots:
+        return None
+
+    # The last known era's start slot + safe_zone defines the horizon
+    _last_era, last_start_slot = era_start_slots[-1]
+    return last_start_slot + config.safe_zone
+
+
+def _check_slot_horizon(slot: int, config: HardForkConfig) -> None:
+    """Raise PastHorizonError if slot is beyond the safe zone."""
+    horizon = _horizon_slot(config)
+    if horizon is not None and slot > horizon:
+        raise PastHorizonError(
+            slot_or_epoch=slot,
+            horizon_slot=horizon,
+            message=(
+                f"Slot {slot} is beyond the safe zone horizon at slot {horizon}. "
+                f"The last known era starts at slot {_era_start_slots(config)[-1][1]} "
+                f"with safe_zone={config.safe_zone}."
+            ),
+        )
+
+
 def slot_to_epoch_hfc(slot: int, config: HardForkConfig) -> int:
     """Convert an absolute slot to an epoch number, accounting for era transitions.
 
@@ -288,9 +361,15 @@ def slot_to_epoch_hfc(slot: int, config: HardForkConfig) -> int:
 
     Returns:
         Epoch number.
+
+    Raises:
+        PastHorizonError: If the slot is beyond the safe zone of the
+            last known era (when safe_zone is configured).
     """
     if slot < 0:
         raise ValueError(f"Slot must be non-negative, got {slot}")
+
+    _check_slot_horizon(slot, config)
 
     era_start_slots = _era_start_slots(config)
 
@@ -328,6 +407,10 @@ def epoch_to_first_slot_hfc(epoch: int, config: HardForkConfig) -> int:
 
     Returns:
         Absolute slot number of the first slot in the epoch.
+
+    Raises:
+        PastHorizonError: If the resulting slot is beyond the safe zone of the
+            last known era (when safe_zone is configured).
     """
     if epoch < 0:
         raise ValueError(f"Epoch must be non-negative, got {epoch}")
@@ -360,7 +443,9 @@ def epoch_to_first_slot_hfc(epoch: int, config: HardForkConfig) -> int:
     epoch_offset = epoch - target_era_start_epoch
     params = config.era_params.get(target_era, DEFAULT_ERA_PARAMS[target_era])
 
-    return era_start_slot + epoch_offset * params.epoch_length
+    result_slot = era_start_slot + epoch_offset * params.epoch_length
+    _check_slot_horizon(result_slot, config)
+    return result_slot
 
 
 # ---------------------------------------------------------------------------
@@ -855,6 +940,107 @@ def _translate_babbage_to_conway(
         protocol_params=protocol_params,
         metadata={"transition": "babbage_to_conway"},
     )
+
+
+# ---------------------------------------------------------------------------
+# Summary invariant checking
+# ---------------------------------------------------------------------------
+
+
+def invariant_check(config: HardForkConfig) -> list[str]:
+    """Check structural invariants of the HFC configuration.
+
+    Returns a list of human-readable violation strings. An empty list
+    means the configuration is structurally valid.
+
+    Invariants checked:
+        1. Era transitions are strictly increasing in epoch number
+        2. Each era's start slot is >= previous era's end slot (contiguous)
+        3. No gaps between eras (eras are contiguous — no missing eras in sequence)
+        4. Era parameters (slot_length, epoch_length) are positive
+        5. The first era starts at slot 0 / epoch 0
+
+    Spec ref: ``Summary`` invariant checking in
+        ``Ouroboros.Consensus.HardFork.History.Summary``
+
+    Args:
+        config: Hard fork configuration to validate.
+
+    Returns:
+        List of violation strings (empty = valid).
+    """
+    violations: list[str] = []
+
+    # Sort eras by their integer value (chronological order)
+    sorted_eras = sorted(
+        config.era_transitions.items(),
+        key=lambda x: (x[1], x[0]),
+    )
+
+    if not sorted_eras:
+        violations.append("No era transitions defined")
+        return violations
+
+    # Invariant 5: First era starts at epoch 0
+    first_era, first_epoch = sorted_eras[0]
+    if first_epoch != 0:
+        violations.append(
+            f"First era ({first_era.name}) must start at epoch 0, got {first_epoch}"
+        )
+
+    # Invariant 1: Era transition epochs are strictly increasing
+    # Check in era enum order (chronological), not sorted-by-epoch order,
+    # so we can detect when epochs are assigned out of order.
+    eras_by_enum = sorted(config.era_transitions.items(), key=lambda x: x[0].value)
+    for i in range(len(eras_by_enum) - 1):
+        era_a, epoch_a = eras_by_enum[i]
+        era_b, epoch_b = eras_by_enum[i + 1]
+        if epoch_b <= epoch_a:
+            violations.append(
+                f"Era transition epochs not strictly increasing: "
+                f"{era_a.name} (epoch {epoch_a}) >= {era_b.name} (epoch {epoch_b})"
+            )
+
+    # Invariant 3: Eras are contiguous (no gaps in the Era enum sequence)
+    era_values = sorted(e.value for e in config.era_transitions.keys())
+    for i in range(len(era_values) - 1):
+        if era_values[i + 1] != era_values[i] + 1:
+            gap_start = Era(era_values[i])
+            gap_end = Era(era_values[i + 1])
+            violations.append(
+                f"Gap in era sequence: {gap_start.name} (value {era_values[i]}) "
+                f"to {gap_end.name} (value {era_values[i + 1]}) — missing intermediate eras"
+            )
+
+    # Invariant 4: Era parameters are positive
+    for era in config.era_transitions:
+        params = config.era_params.get(era, DEFAULT_ERA_PARAMS.get(era))
+        if params is None:
+            violations.append(f"No era params defined for {era.name}")
+            continue
+        if params.epoch_length <= 0:
+            violations.append(
+                f"{era.name} epoch_length must be positive, got {params.epoch_length}"
+            )
+        if params.slot_length <= 0:
+            violations.append(
+                f"{era.name} slot_length must be positive, got {params.slot_length}"
+            )
+
+    # Invariant 2: Era start slots are contiguous (no overlap, no gap)
+    # This is implied by the epoch-based transitions + epoch_length but
+    # we verify the computed slots are strictly increasing.
+    era_start_slots_list = _era_start_slots(config)
+    for i in range(len(era_start_slots_list) - 1):
+        era_a, slot_a = era_start_slots_list[i]
+        era_b, slot_b = era_start_slots_list[i + 1]
+        if slot_b <= slot_a:
+            violations.append(
+                f"Era start slots not strictly increasing: "
+                f"{era_a.name} (slot {slot_a}) >= {era_b.name} (slot {slot_b})"
+            )
+
+    return violations
 
 
 # ---------------------------------------------------------------------------
