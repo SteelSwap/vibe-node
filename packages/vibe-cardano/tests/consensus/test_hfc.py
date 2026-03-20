@@ -28,11 +28,13 @@ from vibe.cardano.consensus.hfc import (
     EraValidationError,
     HardForkConfig,
     HFCState,
+    PastHorizonError,
     TranslatedState,
     _era_start_slots,
     current_era,
     detect_era_transition,
     epoch_to_first_slot_hfc,
+    invariant_check,
     slot_to_epoch_hfc,
     translate_ledger_state,
     translate_through_eras,
@@ -641,4 +643,424 @@ class TestHypothesisProperties:
         assert era_from_slot == era_from_epoch, (
             f"Slot {slot} (epoch {epoch}): era_from_slot={era_from_slot.name}, "
             f"era_from_epoch={era_from_epoch.name}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test 1: PastHorizonError for out-of-range conversions
+# ---------------------------------------------------------------------------
+
+
+class TestPastHorizonError:
+    """Test that slot/epoch conversions beyond the known era boundary raise PastHorizonError.
+
+    The Haskell HFC raises PastHorizonException when a query falls outside
+    the Summary's safe zone. Our implementation mirrors this with PastHorizonError.
+
+    Spec ref: ``PastHorizonException`` in ``Ouroboros.Consensus.HardFork.History.Qry``
+    """
+
+    def _alonzo_only_config(self) -> HardForkConfig:
+        """Config that only knows about eras up to Alonzo, with safe_zone."""
+        return HardForkConfig(
+            era_transitions={
+                Era.BYRON: 0,
+                Era.SHELLEY: 208,
+                Era.ALLEGRA: 236,
+                Era.MARY: 251,
+                Era.ALONZO: 290,
+            },
+            safe_zone=129_600,  # 3k/f = 3*2160/0.05
+        )
+
+    def test_slot_within_safe_zone_succeeds(self) -> None:
+        """Conversion at the boundary of the safe zone should succeed."""
+        config = self._alonzo_only_config()
+        era_slots = dict(_era_start_slots(config))
+        alonzo_start = era_slots[Era.ALONZO]
+        # Exactly at the horizon (alonzo_start + safe_zone) should succeed
+        horizon_slot = alonzo_start + 129_600
+        epoch = slot_to_epoch_hfc(horizon_slot, config)
+        assert epoch >= 290  # Should be in the Alonzo range
+
+    def test_slot_one_beyond_safe_zone_raises(self) -> None:
+        """Conversion one slot beyond the safe zone should raise PastHorizonError."""
+        config = self._alonzo_only_config()
+        era_slots = dict(_era_start_slots(config))
+        alonzo_start = era_slots[Era.ALONZO]
+        beyond_horizon = alonzo_start + 129_600 + 1
+        with pytest.raises(PastHorizonError) as exc_info:
+            slot_to_epoch_hfc(beyond_horizon, config)
+        assert exc_info.value.slot_or_epoch == beyond_horizon
+        assert exc_info.value.horizon_slot == alonzo_start + 129_600
+
+    def test_conway_slot_with_alonzo_config_raises(self) -> None:
+        """A Conway-era slot with a config that only knows up to Alonzo raises PastHorizonError.
+
+        This simulates what happens during chain sync when the node doesn't
+        yet know about future hard forks.
+        """
+        config = self._alonzo_only_config()
+        # Conway would start around slot ~140M on mainnet, well beyond Alonzo safe zone
+        conway_era_slot = 200_000_000
+        with pytest.raises(PastHorizonError):
+            slot_to_epoch_hfc(conway_era_slot, config)
+
+    def test_epoch_beyond_safe_zone_raises(self) -> None:
+        """epoch_to_first_slot_hfc also raises PastHorizonError beyond the safe zone."""
+        config = self._alonzo_only_config()
+        # Epoch 10000 is way beyond what Alonzo-only config can handle
+        with pytest.raises(PastHorizonError):
+            epoch_to_first_slot_hfc(10000, config)
+
+    def test_no_safe_zone_never_raises(self) -> None:
+        """When safe_zone is None (default), conversions never raise PastHorizonError."""
+        # MAINNET_HFC_CONFIG has safe_zone=None by default
+        assert MAINNET_HFC_CONFIG.safe_zone is None
+        # Even absurdly large slots should work
+        epoch = slot_to_epoch_hfc(999_999_999, MAINNET_HFC_CONFIG)
+        assert epoch > 0
+
+    def test_past_horizon_error_attributes(self) -> None:
+        """PastHorizonError carries the right attributes."""
+        err = PastHorizonError(slot_or_epoch=500, horizon_slot=400, message="test")
+        assert err.slot_or_epoch == 500
+        assert err.horizon_slot == 400
+        assert "test" in str(err)
+
+    def test_epoch_at_safe_zone_boundary_succeeds(self) -> None:
+        """Epoch whose first slot is exactly at the horizon should succeed."""
+        config = self._alonzo_only_config()
+        era_slots = dict(_era_start_slots(config))
+        alonzo_start = era_slots[Era.ALONZO]
+        horizon_slot = alonzo_start + 129_600
+        # Find the epoch that starts at or just before the horizon
+        epoch = slot_to_epoch_hfc(horizon_slot, config)
+        # Converting that epoch back should succeed
+        first_slot = epoch_to_first_slot_hfc(epoch, config)
+        assert first_slot <= horizon_slot
+
+
+# ---------------------------------------------------------------------------
+# Test 2: Safe zone boundary handling
+# ---------------------------------------------------------------------------
+
+
+class TestSafeZoneBoundary:
+    """Test the safe zone concept more thoroughly.
+
+    Safe zone = stability_window = 3k/f slots. For Cardano mainnet:
+    k=2160, f=0.05 => 3*2160/0.05 = 129,600 slots.
+
+    Spec ref: ``SafeZone`` in ``Ouroboros.Consensus.HardFork.History.EraParams``
+    """
+
+    def test_safe_zone_stored_in_config(self) -> None:
+        """safe_zone is a proper field on HardForkConfig."""
+        config = HardForkConfig(
+            era_transitions={Era.BYRON: 0},
+            safe_zone=129_600,
+        )
+        assert config.safe_zone == 129_600
+
+    def test_safe_zone_default_is_none(self) -> None:
+        """Default config has no safe zone enforcement."""
+        config = HardForkConfig()
+        assert config.safe_zone is None
+
+    def test_safe_zone_cardano_value(self) -> None:
+        """Verify the Cardano mainnet safe zone calculation: 3k/f."""
+        k = 2160
+        f = 0.05
+        safe_zone = int(3 * k / f)
+        assert safe_zone == 129_600
+
+    def test_within_safe_zone_last_era(self) -> None:
+        """Conversions within safe_zone slots of the last era start succeed."""
+        config = HardForkConfig(
+            era_transitions={
+                Era.BYRON: 0,
+                Era.SHELLEY: 10,
+            },
+            safe_zone=50_000,
+        )
+        # Shelley starts at slot 10 * 21600 = 216000
+        shelley_start = dict(_era_start_slots(config))[Era.SHELLEY]
+        # Within safe zone: should work
+        slot_to_epoch_hfc(shelley_start + 49_999, config)
+        slot_to_epoch_hfc(shelley_start + 50_000, config)
+
+    def test_beyond_safe_zone_last_era(self) -> None:
+        """Conversions beyond safe_zone of the last era fail."""
+        config = HardForkConfig(
+            era_transitions={
+                Era.BYRON: 0,
+                Era.SHELLEY: 10,
+            },
+            safe_zone=50_000,
+        )
+        shelley_start = dict(_era_start_slots(config))[Era.SHELLEY]
+        with pytest.raises(PastHorizonError):
+            slot_to_epoch_hfc(shelley_start + 50_001, config)
+
+    def test_safe_zone_with_full_config_no_raises(self) -> None:
+        """Full mainnet config with safe_zone still works for known-era slots.
+
+        When all eras are configured, the safe zone extends from the last
+        (Conway) era start. Reasonable slots in Conway should be fine.
+        """
+        config = HardForkConfig(
+            era_transitions=dict(MAINNET_TRANSITIONS),
+            era_params=dict(DEFAULT_ERA_PARAMS),
+            safe_zone=129_600,
+        )
+        conway_start = dict(_era_start_slots(config))[Era.CONWAY]
+        # Just inside safe zone
+        epoch = slot_to_epoch_hfc(conway_start + 100_000, config)
+        assert epoch >= 519
+
+    def test_safe_zone_with_full_config_beyond_raises(self) -> None:
+        """Even with all eras, slots way beyond the last era + safe zone fail."""
+        config = HardForkConfig(
+            era_transitions=dict(MAINNET_TRANSITIONS),
+            era_params=dict(DEFAULT_ERA_PARAMS),
+            safe_zone=129_600,
+        )
+        conway_start = dict(_era_start_slots(config))[Era.CONWAY]
+        with pytest.raises(PastHorizonError):
+            slot_to_epoch_hfc(conway_start + 200_000, config)
+
+    def test_safe_zone_zero(self) -> None:
+        """A safe_zone of 0 means only the era start slot itself is safe."""
+        config = HardForkConfig(
+            era_transitions={Era.BYRON: 0},
+            safe_zone=0,
+        )
+        # Slot 0 is the Byron start, which equals the horizon
+        slot_to_epoch_hfc(0, config)
+        # Slot 1 is beyond
+        with pytest.raises(PastHorizonError):
+            slot_to_epoch_hfc(1, config)
+
+
+# ---------------------------------------------------------------------------
+# Test 3: Summary invariant checking
+# ---------------------------------------------------------------------------
+
+
+class TestInvariantCheck:
+    """Test structural invariants of the HFC configuration.
+
+    Spec ref: ``Summary`` invariants in ``Ouroboros.Consensus.HardFork.History.Summary``
+    """
+
+    def test_mainnet_config_valid(self) -> None:
+        """Mainnet config passes all invariant checks."""
+        violations = invariant_check(MAINNET_HFC_CONFIG)
+        assert violations == [], f"Mainnet config has violations: {violations}"
+
+    def test_default_config_valid(self) -> None:
+        """Default (Byron-only) config passes all invariant checks."""
+        config = HardForkConfig()
+        violations = invariant_check(config)
+        assert violations == []
+
+    def test_non_monotonic_epochs_detected(self) -> None:
+        """Detect when era transition epochs aren't strictly increasing."""
+        # Manually construct an invalid config (bypass __post_init__ by using
+        # a config where the epoch ordering is violated but Byron is still 0)
+        config = HardForkConfig.__new__(HardForkConfig)
+        object.__setattr__(config, "era_transitions", {
+            Era.BYRON: 0,
+            Era.SHELLEY: 100,
+            Era.ALLEGRA: 50,  # violation: 50 < 100
+        })
+        object.__setattr__(config, "era_params", dict(DEFAULT_ERA_PARAMS))
+        object.__setattr__(config, "safe_zone", None)
+        violations = invariant_check(config)
+        assert any("not strictly increasing" in v for v in violations)
+
+    def test_gap_in_era_sequence_detected(self) -> None:
+        """Detect when there's a gap in the era sequence (e.g., Byron -> Mary, skipping Shelley)."""
+        config = HardForkConfig(
+            era_transitions={
+                Era.BYRON: 0,
+                Era.MARY: 100,  # Skips Shelley and Allegra
+            },
+        )
+        violations = invariant_check(config)
+        assert any("Gap in era sequence" in v for v in violations)
+
+    def test_negative_epoch_length_detected(self) -> None:
+        """Detect when epoch_length is non-positive."""
+        config = HardForkConfig(
+            era_transitions={Era.BYRON: 0},
+            era_params={Era.BYRON: EraParams(epoch_length=-100, slot_length=20.0)},
+        )
+        violations = invariant_check(config)
+        assert any("epoch_length must be positive" in v for v in violations)
+
+    def test_zero_slot_length_detected(self) -> None:
+        """Detect when slot_length is zero."""
+        config = HardForkConfig(
+            era_transitions={Era.BYRON: 0},
+            era_params={Era.BYRON: EraParams(epoch_length=21600, slot_length=0.0)},
+        )
+        violations = invariant_check(config)
+        assert any("slot_length must be positive" in v for v in violations)
+
+    def test_first_era_not_epoch_zero_detected(self) -> None:
+        """Detect when the first era doesn't start at epoch 0.
+
+        Note: HardForkConfig.__post_init__ catches this for Byron specifically,
+        but invariant_check should also flag it.
+        """
+        config = HardForkConfig.__new__(HardForkConfig)
+        object.__setattr__(config, "era_transitions", {Era.BYRON: 5})
+        object.__setattr__(config, "era_params", dict(DEFAULT_ERA_PARAMS))
+        object.__setattr__(config, "safe_zone", None)
+        violations = invariant_check(config)
+        assert any("must start at epoch 0" in v for v in violations)
+
+    def test_valid_devnet_config(self) -> None:
+        """A well-formed devnet config with fast transitions passes."""
+        config = HardForkConfig(
+            era_transitions={
+                Era.BYRON: 0,
+                Era.SHELLEY: 1,
+                Era.ALLEGRA: 2,
+                Era.MARY: 3,
+                Era.ALONZO: 4,
+                Era.BABBAGE: 5,
+                Era.CONWAY: 6,
+            },
+        )
+        violations = invariant_check(config)
+        assert violations == []
+
+    def test_contiguous_eras_pass(self) -> None:
+        """A config with contiguous eras (no gaps) passes the gap check."""
+        config = HardForkConfig(
+            era_transitions={
+                Era.BYRON: 0,
+                Era.SHELLEY: 10,
+                Era.ALLEGRA: 20,
+            },
+        )
+        violations = invariant_check(config)
+        assert not any("Gap" in v for v in violations)
+
+    def test_multiple_violations_reported(self) -> None:
+        """invariant_check reports ALL violations, not just the first."""
+        config = HardForkConfig.__new__(HardForkConfig)
+        object.__setattr__(config, "era_transitions", {
+            Era.BYRON: 5,       # violation: not epoch 0
+            Era.ALONZO: 3,      # violation: gap (missing Shelley/Allegra/Mary)
+        })
+        object.__setattr__(config, "era_params", {
+            Era.BYRON: EraParams(epoch_length=0, slot_length=-1.0),  # two violations
+            Era.ALONZO: EraParams(epoch_length=432000, slot_length=1.0),
+        })
+        object.__setattr__(config, "safe_zone", None)
+        violations = invariant_check(config)
+        # Should have at least: epoch 0 violation, gap violation, epoch_length, slot_length
+        assert len(violations) >= 4, f"Expected >= 4 violations, got {len(violations)}: {violations}"
+
+
+# ---------------------------------------------------------------------------
+# Test 4: EpochInfo adapter correctness
+# ---------------------------------------------------------------------------
+
+
+class TestEpochInfoAdapter:
+    """Test that slot/epoch conversion functions are consistent with each other.
+
+    These properties mirror the EpochInfo adapter in the Haskell HFC,
+    which provides slot<->epoch conversions to the ledger layer.
+
+    Spec ref: ``EpochInfo`` in ``Ouroboros.Consensus.HardFork.History.EpochInfo``
+    """
+
+    def test_slot_to_epoch_to_first_slot_leq(self) -> None:
+        """For any slot S: epoch_to_first_slot(slot_to_epoch(S)) <= S.
+
+        The first slot of an epoch is always <= any slot in that epoch.
+        """
+        test_slots = [0, 1, 21599, 21600, 100_000, 4_492_799, 4_492_800, 50_000_000]
+        for slot in test_slots:
+            epoch = slot_to_epoch_hfc(slot, MAINNET_HFC_CONFIG)
+            first_slot = epoch_to_first_slot_hfc(epoch, MAINNET_HFC_CONFIG)
+            assert first_slot <= slot, (
+                f"Slot {slot}: epoch={epoch}, first_slot_of_epoch={first_slot} > slot"
+            )
+
+    def test_epoch_to_first_slot_to_epoch_identity(self) -> None:
+        """For any epoch E: slot_to_epoch(epoch_to_first_slot(E)) == E.
+
+        The first slot of epoch E must map back to epoch E.
+        """
+        test_epochs = [0, 1, 100, 207, 208, 235, 236, 250, 251, 289, 290, 364, 365, 518, 519, 600]
+        for epoch in test_epochs:
+            first_slot = epoch_to_first_slot_hfc(epoch, MAINNET_HFC_CONFIG)
+            recovered_epoch = slot_to_epoch_hfc(first_slot, MAINNET_HFC_CONFIG)
+            assert recovered_epoch == epoch, (
+                f"Epoch {epoch}: first_slot={first_slot}, recovered={recovered_epoch}"
+            )
+
+    def test_roundtrip_slot_epoch_first_slot(self) -> None:
+        """Round-trip: slot -> epoch -> first_slot_of_epoch -> verify <= original.
+
+        Checks both directions of the conversion contract across era boundaries.
+        """
+        # Test slots at every era boundary and mid-era
+        era_slots = dict(_era_start_slots(MAINNET_HFC_CONFIG))
+        for era, start_slot in era_slots.items():
+            for offset in [0, 1, 1000, 100_000]:
+                slot = start_slot + offset
+                epoch = slot_to_epoch_hfc(slot, MAINNET_HFC_CONFIG)
+                first_slot = epoch_to_first_slot_hfc(epoch, MAINNET_HFC_CONFIG)
+                assert first_slot <= slot
+                assert slot_to_epoch_hfc(first_slot, MAINNET_HFC_CONFIG) == epoch
+
+    @given(slot=st.integers(min_value=0, max_value=500_000_000))
+    @settings(max_examples=500)
+    def test_hypothesis_first_slot_leq_original(self, slot: int) -> None:
+        """Hypothesis: epoch_to_first_slot(slot_to_epoch(S)) <= S for all S.
+
+        This is the fundamental EpochInfo contract — the first slot of the
+        epoch containing S is never after S.
+        """
+        epoch = slot_to_epoch_hfc(slot, MAINNET_HFC_CONFIG)
+        first_slot = epoch_to_first_slot_hfc(epoch, MAINNET_HFC_CONFIG)
+        assert first_slot <= slot, (
+            f"EpochInfo contract violated: slot={slot}, epoch={epoch}, "
+            f"first_slot_of_epoch={first_slot}"
+        )
+
+    @given(epoch=st.integers(min_value=0, max_value=10_000))
+    @settings(max_examples=500)
+    def test_hypothesis_epoch_roundtrip_identity(self, epoch: int) -> None:
+        """Hypothesis: slot_to_epoch(epoch_to_first_slot(E)) == E for all E.
+
+        The first slot of any epoch must map back to that exact epoch.
+        """
+        first_slot = epoch_to_first_slot_hfc(epoch, MAINNET_HFC_CONFIG)
+        recovered = slot_to_epoch_hfc(first_slot, MAINNET_HFC_CONFIG)
+        assert recovered == epoch, (
+            f"Epoch roundtrip failed: epoch={epoch}, first_slot={first_slot}, "
+            f"recovered={recovered}"
+        )
+
+    @given(slot=st.integers(min_value=0, max_value=500_000_000))
+    @settings(max_examples=300)
+    def test_hypothesis_next_epoch_boundary(self, slot: int) -> None:
+        """For any slot S in epoch E, the first slot of epoch E+1 is > S.
+
+        This ensures epochs don't overlap.
+        """
+        epoch = slot_to_epoch_hfc(slot, MAINNET_HFC_CONFIG)
+        next_epoch_first_slot = epoch_to_first_slot_hfc(epoch + 1, MAINNET_HFC_CONFIG)
+        assert next_epoch_first_slot > slot, (
+            f"Epoch overlap: slot={slot}, epoch={epoch}, "
+            f"next_epoch_first_slot={next_epoch_first_slot}"
         )
