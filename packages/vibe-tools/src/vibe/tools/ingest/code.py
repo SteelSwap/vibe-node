@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from vibe.tools.embed.client import EmbeddingClient
 from vibe.tools.ingest.agda_parser import AgdaParser
-from vibe.tools.ingest.config import CODE_REPOS, TAG_PATTERNS
+from vibe.tools.ingest.config import CODE_REPOS, EXCLUDE_PATTERNS, MAX_TAGS_PER_REPO, TAG_PATTERNS
 from vibe.tools.ingest.era_inference import infer_era
 from vibe.tools.ingest.haskell_parser import HaskellParser
 
@@ -42,7 +42,12 @@ def _run_git(args: list[str], cwd: str | Path) -> subprocess.CompletedProcess[st
 
 
 def _get_release_tags(repo_path: Path, repo_name: str) -> list[str]:
-    """List release tags for a repo, filtered by the repo's tag pattern."""
+    """List release tags for a repo, filtered and sorted by commit date.
+
+    Tags are filtered by TAG_PATTERNS (include) and EXCLUDE_PATTERNS
+    (exclude pre-release/test), then sorted by git commit date (oldest
+    first) and capped to MAX_TAGS_PER_REPO most recent.
+    """
     result = _run_git(["tag", "--list"], cwd=repo_path)
     if result.returncode != 0:
         logger.warning("Failed to list tags in %s: %s", repo_path, result.stderr)
@@ -50,12 +55,36 @@ def _get_release_tags(repo_path: Path, repo_name: str) -> list[str]:
 
     tags = [t.strip() for t in result.stdout.splitlines() if t.strip()]
 
+    # Include filter
     pattern = TAG_PATTERNS.get(repo_name)
     if pattern is not None:
         tags = [t for t in tags if pattern.search(t)]
 
-    # Sort by version-like ordering (most recent last)
-    tags.sort()
+    # Exclude pre-release, test, and RC tags
+    tags = [t for t in tags if not EXCLUDE_PATTERNS.search(t)]
+
+    # Sort by git commit date (oldest first) instead of string sort
+    # This handles repos with inconsistent tag naming (e.g., cardano-ledger)
+    date_result = _run_git(
+        ["tag", "--list", "--sort=creatordate", "--format=%(refname:short)"],
+        cwd=repo_path,
+    )
+    if date_result.returncode == 0:
+        date_ordered = [t.strip() for t in date_result.stdout.splitlines() if t.strip()]
+        tag_set = set(tags)
+        tags = [t for t in date_ordered if t in tag_set]
+    else:
+        tags.sort()
+
+    # Cap to most recent N tags per repo
+    max_tags = MAX_TAGS_PER_REPO.get(repo_name)
+    if max_tags is not None and len(tags) > max_tags:
+        logger.info(
+            "Capping %s from %d to %d most recent tags",
+            repo_name, len(tags), max_tags,
+        )
+        tags = tags[-max_tags:]
+
     return tags
 
 
@@ -161,10 +190,9 @@ class CodeIngestor:
             logger.info("No matching release tags in %s", repo_name)
             return 0
 
-        # Check which tags are fully ingested via completion markers.
-        # A tag is only "done" if _process_tag ran to completion and wrote
-        # a marker to code_tag_completion. Partial data from crashes (chunks
-        # committed every 100 rows) won't have a marker.
+        # Check which of the SELECTED tags are already ingested.
+        # Only count tags that are in our current tag list (not old tags
+        # from previous ingestion runs with different patterns).
         result = await session.execute(
             text("""
                 SELECT release_tag FROM code_tag_completion
@@ -172,7 +200,9 @@ class CodeIngestor:
             """),
             {"repo": repo_name},
         )
-        ingested_tags = {row[0] for row in result.fetchall()}
+        all_ingested = {row[0] for row in result.fetchall()}
+        tag_set = set(tags)
+        ingested_tags = all_ingested & tag_set  # only count tags in current selection
 
         # Log any partially-ingested tags (have chunks but no completion marker)
         partial_result = await session.execute(
@@ -184,7 +214,7 @@ class CodeIngestor:
             """),
             {"repo": repo_name},
         )
-        partial_tags = {row[0] for row in partial_result.fetchall()}
+        partial_tags = {row[0] for row in partial_result.fetchall()} & tag_set
         for partial_tag in partial_tags:
             logger.info(
                 "Tag %s for %s has partial data but no completion marker — will re-process",
@@ -196,30 +226,34 @@ class CodeIngestor:
         if limit is not None:
             pending_tags = pending_tags[:limit]
 
+        # The latest tag in our selection (last = most recent by commit date)
+        latest_tag = tags[-1] if tags else None
+
         if not pending_tags:
-            logger.info("All tags already ingested for %s", repo_name)
-            # Show a completed progress bar so the user sees this repo was processed
+            logger.info("All %d tags already ingested for %s", len(tags), repo_name)
             if progress:
-                task = progress.add_task(
+                progress.add_task(
                     f"[green]{repo_name} tags", total=len(tags), completed=len(tags),
                 )
+            # Still restore submodule to latest tag
+            if latest_tag:
+                _checkout(repo_path, latest_tag)
             return 0
 
-        # Set up progress tracking — show already-ingested tags as pre-completed
+        # Progress bar: total = all selected tags, pre-completed = already ingested
         task = None
         if progress:
-            total_tags = len(ingested_tags) + len(pending_tags)
             task = progress.add_task(
-                f"[green]{repo_name} tags", total=total_tags, completed=len(ingested_tags),
+                f"[green]{repo_name} tags",
+                total=len(tags),
+                completed=len(ingested_tags),
             )
 
         logger.info(
-            "Processing %d tags for %s (%d already ingested)",
-            len(pending_tags), repo_name, len(ingested_tags),
+            "Processing %d tags for %s (%d already ingested, %d total selected)",
+            len(pending_tags), repo_name, len(ingested_tags), len(tags),
         )
 
-        # Remember original HEAD so we can restore it
-        original_head = _get_current_head(repo_path)
         total_chunks = 0
 
         try:
@@ -250,11 +284,13 @@ class CodeIngestor:
                     "  %s @ %s — %d chunks", repo_name, tag, tag_chunks,
                 )
         finally:
-            # Always restore the submodule to its original commit
-            _checkout(repo_path, original_head)
+            # Always restore submodule to the latest selected tag
+            # (not the original HEAD, which may be an outdated checkout)
+            if latest_tag:
+                _checkout(repo_path, latest_tag)
 
         if progress and task is not None:
-            progress.update(task, completed=len(pending_tags))
+            progress.update(task, completed=len(tags))
 
         logger.info(
             "Completed %s: %d chunks across %d tags",
@@ -497,7 +533,7 @@ class CodeIngestor:
             (row[0], row[1]): row[2] for row in manifest_result.fetchall()
         }
 
-        project_root = Path(__file__).resolve().parents[3]
+        project_root = Path(__file__).resolve().parents[6]
         marked = 0
         skipped = 0
 
@@ -628,8 +664,10 @@ class CodeIngestor:
             # Resolve relative paths against the project root
             repo_path = Path(rel_path)
             if not repo_path.is_absolute():
-                # Assume relative to the project root (parent of src/)
-                project_root = Path(__file__).resolve().parents[3]
+                # Resolve to repo root: code.py is at
+                # packages/vibe-tools/src/vibe/tools/ingest/code.py
+                # so parents[6] is the repo root
+                project_root = Path(__file__).resolve().parents[6]
                 repo_path = project_root / rel_path
 
             results[repo_name] = await self.ingest_repo(

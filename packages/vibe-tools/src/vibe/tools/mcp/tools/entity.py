@@ -47,7 +47,7 @@ async def get_entity(
             if repo:
                 q += " AND repo = $2"
                 p.append(repo)
-            q += " ORDER BY release_tag DESC LIMIT 1"
+            q += " ORDER BY commit_date DESC LIMIT 1"
             row = await conn.fetchrow(q, *p)
 
         if not row:

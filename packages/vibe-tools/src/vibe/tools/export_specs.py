@@ -78,7 +78,7 @@ def export_specs(
     """
     import subprocess
 
-    project_root = Path(__file__).resolve().parents[2]
+    project_root = Path(__file__).resolve().parents[5]
     if data_dir is None:
         data_dir = str(project_root / "data" / "specs")
     if docs_dir is None:

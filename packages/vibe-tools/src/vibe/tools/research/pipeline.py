@@ -251,9 +251,11 @@ async def stage2_search(
                 similarity=similarity,
             ))
 
-    # Get latest release tag for each repo
+    # Get latest release tag for each repo (by commit date, not string sort)
     latest_tags = await conn.fetch(
-        "SELECT repo, MAX(release_tag) as latest_tag FROM code_tag_completion GROUP BY repo"
+        """SELECT DISTINCT ON (repo) repo, release_tag as latest_tag
+           FROM code_chunks
+           ORDER BY repo, commit_date DESC"""
     )
     latest_tag_set = {(row["repo"], row["latest_tag"]) for row in latest_tags}
 
