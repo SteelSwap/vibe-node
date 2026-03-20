@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from vibe.cardano.storage.volatile import BlockInfo, VolatileDB
+from vibe.cardano.storage.volatile import BlockInfo, ClosedVolatileDBError, VolatileDB
 from vibe.core.storage.interfaces import KeyValueStore
 
 
@@ -538,3 +538,102 @@ class TestPersistence:
         assert new_dir.exists()
         await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
         assert (new_dir / f"{_hash(1).hex()}.block").exists()
+
+
+# ---------------------------------------------------------------------------
+# Close then operate
+# ---------------------------------------------------------------------------
+
+
+class TestCloseThenOperate:
+    """test_close_then_operate_raises
+
+    Operations on a closed VolatileDB raise ClosedVolatileDBError.
+
+    Haskell reference:
+        Ouroboros.Consensus.Storage.VolatileDB.API.ClosedDBError
+    """
+
+    async def test_close_then_get_raises(self) -> None:
+        """get() on a closed DB raises."""
+        db = VolatileDB()
+        await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+        db.close()
+
+        with pytest.raises(ClosedVolatileDBError):
+            await db.get(_hash(1))
+
+    async def test_close_then_add_block_raises(self) -> None:
+        """add_block() on a closed DB raises."""
+        db = VolatileDB()
+        db.close()
+
+        with pytest.raises(ClosedVolatileDBError):
+            await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+
+    async def test_close_is_idempotent(self) -> None:
+        """Closing twice doesn't raise."""
+        db = VolatileDB()
+        db.close()
+        db.close()
+        assert db.is_closed
+
+    async def test_is_closed_property(self) -> None:
+        """is_closed reflects the state correctly."""
+        db = VolatileDB()
+        assert not db.is_closed
+        db.close()
+        assert db.is_closed
+
+
+# ---------------------------------------------------------------------------
+# Duplicate block — idempotent add
+# ---------------------------------------------------------------------------
+
+
+class TestDuplicateBlock:
+    """test_duplicate_block_same_hash_ignored
+
+    Adding the same block twice is idempotent — no error, no duplicate.
+
+    Haskell reference:
+        Ouroboros.Consensus.Storage.VolatileDB.Impl.putBlock
+        "If the block is already stored, this is a no-op"
+    """
+
+    async def test_duplicate_block_same_hash_ignored(self) -> None:
+        """Adding the same block twice results in only one stored block."""
+        db = VolatileDB()
+        h = _hash(1)
+        pred = _genesis_hash()
+        cbor = _cbor(1)
+
+        await db.add_block(h, 1, pred, 1, cbor)
+        assert db.block_count == 1
+
+        # Add the exact same block again
+        await db.add_block(h, 1, pred, 1, cbor)
+        assert db.block_count == 1  # Still 1, not 2
+
+        # The block should still be retrievable
+        assert await db.get_block(h) == cbor
+
+        # Successor map should not have duplicates
+        succs = await db.get_successors(pred)
+        assert succs == [h]  # Only one entry
+
+    async def test_duplicate_block_different_cbor_overwrites(self) -> None:
+        """If the same hash is added with different CBOR, the latest wins.
+
+        This matches Python dict behavior. In practice, blocks with the
+        same hash should have the same content.
+        """
+        db = VolatileDB()
+        h = _hash(1)
+        pred = _genesis_hash()
+
+        await db.add_block(h, 1, pred, 1, b"original")
+        await db.add_block(h, 1, pred, 1, b"updated")
+
+        assert db.block_count == 1
+        assert await db.get_block(h) == b"updated"
