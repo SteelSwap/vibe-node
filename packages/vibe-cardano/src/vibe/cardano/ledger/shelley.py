@@ -102,6 +102,9 @@ class ShelleyProtocolParams:
     pool_deposit: int = 500000000
     """Deposit for pool registration in lovelace. Shelley mainnet: 500000000."""
 
+    min_pool_cost: int = 340_000_000
+    """Minimum pool cost in lovelace. Shelley mainnet: 340000000 (340 ADA)."""
+
 
 # Shelley mainnet protocol parameters (genesis values)
 SHELLEY_MAINNET_PARAMS = ShelleyProtocolParams()
@@ -200,6 +203,12 @@ def validate_shelley_utxo(
         List of validation error strings (empty = valid).
     """
     errors: list[str] = []
+
+    # --- Rule 0: Input set must not be empty ---
+    # Spec: txins txb ≠ ∅
+    # Haskell: InputSetEmptyUTxO
+    if not tx_body.inputs:
+        errors.append("InputSetEmptyUTxO: transaction has no inputs")
 
     # --- Rule 1: All inputs must exist in the UTxO set ---
     # Spec: txins txb ⊆ dom utxo
@@ -412,11 +421,26 @@ def validate_shelley_witnesses(
                     required_key_hashes.add(payment_hash)
 
     # (b) Withdrawal key hashes
+    # Withdrawals map: reward_address_bytes -> amount
+    # Reward address format: header_byte + 28-byte staking credential hash
+    # Header 0xe0/0xe1 = VKey credential, 0xf0/0xf1 = Script credential
+    # For VKey credentials, the credential hash must be witnessed.
+    # Spec: witsVKeyNeeded includes credential hashes from withdrawal keys
+    # Haskell: ``getRWDCred`` extracts the staking credential from reward addr
     if tx_body.withdraws:
         for reward_addr in tx_body.withdraws:
-            # reward_addr is bytes — the staking credential hash
-            # In pycardano, the keys are bytes of the reward address
-            if hasattr(reward_addr, 'payment_part') and reward_addr.payment_part:
+            if isinstance(reward_addr, bytes) and len(reward_addr) == 29:
+                header = reward_addr[0]
+                cred_hash = reward_addr[1:]
+                # Header bits [7:4] = 0xe (1110) for reward addresses
+                # Bit 4 (0x10) distinguishes VKey (0) from Script (1)
+                # 0xe0/0xe1 = VKey staking credential (testnet/mainnet)
+                # 0xf0/0xf1 = Script staking credential
+                if (header & 0x10) == 0:
+                    # VKey credential — needs a witness
+                    required_key_hashes.add(cred_hash)
+            elif hasattr(reward_addr, 'payment_part') and reward_addr.payment_part:
+                # pycardano Address object (fallback)
                 required_key_hashes.add(bytes(reward_addr.payment_part))
 
     # (d) required_signers field (Alonzo+)

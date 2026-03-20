@@ -32,10 +32,19 @@ from pathlib import Path
 
 __all__ = [
     "BlockInfo",
+    "ClosedVolatileDBError",
     "VolatileDB",
 ]
 
 logger = logging.getLogger(__name__)
+
+
+class ClosedVolatileDBError(Exception):
+    """Raised when operating on a closed VolatileDB.
+
+    Haskell reference:
+        Ouroboros.Consensus.Storage.VolatileDB.API.ClosedDBError
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +94,31 @@ class VolatileDB:
         if db_dir is not None:
             db_dir.mkdir(parents=True, exist_ok=True)
 
+        # Closed flag
+        self._closed: bool = False
+
+    # -------------------------------------------------------------------
+    # Lifecycle
+    # -------------------------------------------------------------------
+
+    def _check_closed(self) -> None:
+        """Raise if the DB has been closed."""
+        if self._closed:
+            raise ClosedVolatileDBError("VolatileDB has been closed")
+
+    def close(self) -> None:
+        """Close the VolatileDB, preventing further operations.
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.VolatileDB.API.closeDB
+        """
+        self._closed = True
+
+    @property
+    def is_closed(self) -> bool:
+        """Whether the DB has been closed."""
+        return self._closed
+
     # -------------------------------------------------------------------
     # KeyValueStore protocol methods
     # -------------------------------------------------------------------
@@ -98,6 +132,7 @@ class VolatileDB:
         Returns:
             CBOR-encoded block bytes, or ``None`` if not present.
         """
+        self._check_closed()
         return self._blocks.get(key)
 
     async def put(self, key: bytes, value: bytes) -> None:
@@ -166,6 +201,8 @@ class VolatileDB:
             block_number: Block number (height).
             cbor_bytes: CBOR-encoded block bytes.
         """
+        self._check_closed()
+
         info = BlockInfo(
             block_hash=block_hash,
             slot=slot,

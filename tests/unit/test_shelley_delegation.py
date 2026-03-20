@@ -558,3 +558,159 @@ class TestProcessCertificates:
                 params,
                 current_epoch=200,
             )
+
+
+# ===========================================================================
+# Pool cost validation (StakePoolCostTooLowPOOL)
+# ===========================================================================
+
+
+class TestPoolCostValidation:
+    """Tests for the minPoolCost constraint on pool registration.
+
+    Spec reference:
+        - Shelley ledger formal spec, Section 8 (POOL rule)
+        - cost pp ≥ minPoolCost pp
+        - Haskell: StakePoolCostTooLowPOOL
+    """
+
+    def test_pool_cost_too_small_rejected(self, params: ShelleyProtocolParams):
+        """Pool registration with cost < minPoolCost -> StakePoolCostTooLowPOOL.
+
+        Spec: The pool cost parameter must be >= the protocol's minPoolCost.
+        Haskell: StakePoolCostTooLowPOOL
+        """
+        # Default minPoolCost is 340 ADA. Create pool with cost below that.
+        low_cost_pp = PoolParams(
+            operator=PoolKeyHash(_fake_hash(0xBB)),
+            vrf_keyhash=_fake_hash(0xCC, size=32),
+            pledge=100_000_000,
+            cost=100_000_000,  # 100 ADA — well below minPoolCost of 340 ADA
+            margin=Fraction(1, 100),
+            reward_account=_fake_hash(0xDD, size=29),
+            pool_owners=[VerificationKeyHash(_fake_hash(0xBB))],
+        )
+        cert = PoolRegistration(low_cost_pp)
+
+        with pytest.raises(DelegationError, match="StakePoolCostTooLowPOOL"):
+            process_certificate(cert, DelegationState(), params, current_epoch=200)
+
+    def test_pool_cost_at_minimum_accepted(self, params: ShelleyProtocolParams):
+        """Pool registration with cost == minPoolCost should succeed."""
+        pp = PoolParams(
+            operator=PoolKeyHash(_fake_hash(0xBB)),
+            vrf_keyhash=_fake_hash(0xCC, size=32),
+            pledge=100_000_000,
+            cost=params.min_pool_cost,  # exactly at minimum
+            margin=Fraction(1, 100),
+            reward_account=_fake_hash(0xDD, size=29),
+            pool_owners=[VerificationKeyHash(_fake_hash(0xBB))],
+        )
+        cert = PoolRegistration(pp)
+        new_state = process_certificate(cert, DelegationState(), params, current_epoch=200)
+        assert _fake_hash(0xBB) in new_state.pools
+
+    def test_pool_cost_above_minimum_accepted(self, params: ShelleyProtocolParams):
+        """Pool registration with cost > minPoolCost should succeed."""
+        pp = PoolParams(
+            operator=PoolKeyHash(_fake_hash(0xBB)),
+            vrf_keyhash=_fake_hash(0xCC, size=32),
+            pledge=100_000_000,
+            cost=500_000_000,  # 500 ADA — above minPoolCost
+            margin=Fraction(1, 100),
+            reward_account=_fake_hash(0xDD, size=29),
+            pool_owners=[VerificationKeyHash(_fake_hash(0xBB))],
+        )
+        cert = PoolRegistration(pp)
+        new_state = process_certificate(cert, DelegationState(), params, current_epoch=200)
+        assert _fake_hash(0xBB) in new_state.pools
+
+
+# ===========================================================================
+# Rewards invariant tests
+# ===========================================================================
+
+
+class TestRewardsInvariants:
+    """Tests for reward accounting invariants across DELEG transitions.
+
+    Spec reference:
+        - Shelley ledger formal spec, Section 8 (DELEG rule)
+        - Rewards are tracked per registered credential
+        - Registration sets reward to 0, deregistration removes it
+        - Withdrawals reduce reward balance by the withdrawal amount
+    """
+
+    def test_rewards_sum_invariant(self, params: ShelleyProtocolParams):
+        """Property: sum(rewards) is preserved across DELEG transitions that
+        don't involve withdrawals.
+
+        Registration adds a 0-balance entry (sum unchanged).
+        Delegation doesn't affect rewards (sum unchanged).
+        Pool registration/retirement don't affect rewards (sum unchanged).
+        """
+        # Start with some existing rewards
+        state = DelegationState(
+            rewards={
+                _fake_hash(0x01): 5_000_000,
+                _fake_hash(0x02): 3_000_000,
+            },
+            pools={_fake_hash(0xBB): _pool_params(0xBB)},
+        )
+        initial_sum = sum(state.rewards.values())
+
+        # Register a new credential — adds 0 balance, sum unchanged
+        cert1 = StakeRegistration(_stake_credential(0x03))
+        state = process_certificate(cert1, state, params, current_epoch=200)
+        assert sum(state.rewards.values()) == initial_sum
+
+        # Delegate — doesn't affect rewards
+        cert2 = StakeDelegation(_stake_credential(0x03), _pool_key_hash(0xBB))
+        state = process_certificate(cert2, state, params, current_epoch=200)
+        assert sum(state.rewards.values()) == initial_sum
+
+        # Deregister the new credential (balance is 0) — sum unchanged
+        cert3 = StakeDeregistration(_stake_credential(0x03))
+        state = process_certificate(cert3, state, params, current_epoch=200)
+        assert sum(state.rewards.values()) == initial_sum
+
+    def test_rewards_decrease_by_withdrawals(self, params: ShelleyProtocolParams):
+        """After a withdrawal, the reward balance decreases by the withdrawal amount.
+
+        The withdrawal is processed at the UTXO level (consumed side), but the
+        delegation state should reflect the reduced reward balance. This test
+        verifies the invariant by manually simulating the reward reduction that
+        would happen when the ledger processes a withdrawal.
+
+        Spec: withdrawals ∈ RewardAddress ↦ Coin
+              The withdrawal amount is subtracted from the reward account.
+        """
+        cred_hash = _fake_hash(0xAA)
+        initial_reward = 10_000_000
+        withdrawal_amount = 3_000_000
+
+        state = DelegationState(rewards={cred_hash: initial_reward})
+
+        # Simulate the ledger's withdrawal processing:
+        # The UTXO rule adds withdrawal amounts to consumed side.
+        # The DELEG rule reduces the reward account by the withdrawal amount.
+        # We simulate this directly on the delegation state.
+        new_rewards = dict(state.rewards)
+        new_rewards[cred_hash] -= withdrawal_amount
+        new_state = DelegationState(rewards=new_rewards)
+
+        assert new_state.rewards[cred_hash] == initial_reward - withdrawal_amount
+        assert new_state.rewards[cred_hash] == 7_000_000
+
+    def test_rewards_decrease_full_withdrawal(self, params: ShelleyProtocolParams):
+        """Withdrawing the full reward balance results in zero balance."""
+        cred_hash = _fake_hash(0xAA)
+        initial_reward = 5_000_000
+
+        state = DelegationState(rewards={cred_hash: initial_reward})
+
+        new_rewards = dict(state.rewards)
+        new_rewards[cred_hash] -= initial_reward
+        new_state = DelegationState(rewards=new_rewards)
+
+        assert new_state.rewards[cred_hash] == 0

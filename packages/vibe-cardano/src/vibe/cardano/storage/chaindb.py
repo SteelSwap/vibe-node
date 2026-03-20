@@ -342,6 +342,61 @@ class ChainDB:
 
         await self.advance_immutable(target_block.slot)
 
+    async def get_max_slot(self) -> int | None:
+        """Return the maximum slot across both volatile and immutable stores.
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.ChainDB.API.getMaxSlotNo
+        """
+        if self._tip is None:
+            return None
+        return self._tip.slot
+
+    def close(self) -> None:
+        """Close the ChainDB and its sub-stores.
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.ChainDB.API.closeDB
+        """
+        self._closed = True
+        if hasattr(self.volatile_db, "close"):
+            self.volatile_db.close()
+        if hasattr(self.immutable_db, "close"):
+            self.immutable_db.close()
+
+    @property
+    def is_closed(self) -> bool:
+        """Whether the DB has been closed."""
+        return getattr(self, "_closed", False)
+
+    async def wipe_volatile(self) -> None:
+        """Wipe the volatile DB, reverting the chain to the immutable tip.
+
+        After wiping, only blocks in the immutable DB remain.  The tip
+        reverts to the immutable tip.
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.ChainDB.Impl.reopen
+            (which effectively wipes volatile state on corruption recovery)
+        """
+        # Clear all volatile blocks
+        all_info = await self.volatile_db.get_all_block_info()
+        for bh in list(all_info.keys()):
+            await self.volatile_db.remove_block(bh)
+
+        # Revert tip to immutable tip
+        imm_tip_slot = self.immutable_db.get_tip_slot()
+        imm_tip_hash = self.immutable_db.get_tip_hash()
+        if imm_tip_slot is not None and imm_tip_hash is not None:
+            # Reconstruct tip from immutable
+            self._tip = _ChainTip(
+                slot=imm_tip_slot,
+                block_hash=imm_tip_hash,
+                block_number=self._immutable_tip_block_number or 0,
+            )
+        else:
+            self._tip = None
+
     def __repr__(self) -> str:
         tip_str = (
             f"slot={self._tip.slot}, blockNo={self._tip.block_number}"

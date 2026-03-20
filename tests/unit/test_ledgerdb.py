@@ -595,3 +595,176 @@ class TestBlockDiff:
         """BlockDiff defaults to slot 0."""
         diff = BlockDiff(consumed=[], created=[])
         assert diff.block_slot == 0
+
+
+# ---------------------------------------------------------------------------
+# Fork switch — rollback and reapply
+# ---------------------------------------------------------------------------
+
+
+class TestForkSwitch:
+    """Test fork switching: rollback N blocks, apply different blocks.
+
+    Haskell reference:
+        Ouroboros.Consensus.Storage.LedgerDB.API.switchFork
+    """
+
+    def test_fork_switch_rollback_and_reapply(self):
+        """Rollback N blocks, apply different blocks, verify UTxO state
+        is correct for the new fork.
+
+        Simulates a chain fork: blocks A1, A2 produce UTxOs X, Y.
+        After rollback, blocks B1, B2 produce UTxOs P, Q instead.
+        """
+        db = LedgerDB(k=10)
+
+        # Initial state: block 0 creates base UTxOs
+        base_entries = [make_utxo_entry(100 + i, 0, value=(100 + i) * 1_000_000) for i in range(3)]
+        db.apply_block(consumed=[], created=base_entries, block_slot=1)
+
+        # Fork A: blocks 2, 3 — consume base[0], create new UTxOs
+        fork_a_entries = [make_utxo_entry(200 + i, 0, value=200_000_000) for i in range(2)]
+        db.apply_block(consumed=[base_entries[0][0]], created=fork_a_entries, block_slot=2)
+
+        fork_a_entries_2 = [make_utxo_entry(300, 0, value=300_000_000)]
+        db.apply_block(consumed=[base_entries[1][0]], created=fork_a_entries_2, block_slot=3)
+
+        # Verify fork A state
+        assert db.get_utxo(fork_a_entries[0][0]) is not None
+        assert db.get_utxo(fork_a_entries_2[0][0]) is not None
+        assert db.get_utxo(base_entries[0][0]) is None  # consumed
+        assert db.get_utxo(base_entries[1][0]) is None  # consumed
+
+        # Switch to fork B: rollback 2 blocks
+        db.rollback(2)
+
+        # After rollback: base UTxOs 0,1 should be restored, fork A UTxOs gone
+        assert db.get_utxo(base_entries[0][0]) is not None
+        assert db.get_utxo(base_entries[1][0]) is not None
+        assert db.get_utxo(fork_a_entries[0][0]) is None
+        assert db.get_utxo(fork_a_entries_2[0][0]) is None
+
+        # Apply fork B: consume base[2], create totally new UTxOs
+        fork_b_entries = [make_utxo_entry(400 + i, 0, value=400_000_000) for i in range(2)]
+        db.apply_block(consumed=[base_entries[2][0]], created=fork_b_entries, block_slot=2)
+
+        # Verify fork B state
+        assert db.get_utxo(base_entries[0][0]) is not None  # untouched
+        assert db.get_utxo(base_entries[1][0]) is not None  # untouched
+        assert db.get_utxo(base_entries[2][0]) is None       # consumed in fork B
+        assert db.get_utxo(fork_b_entries[0][0]) is not None
+        assert db.get_utxo(fork_b_entries[1][0]) is not None
+        # Fork A UTxOs should definitely still be gone
+        assert db.get_utxo(fork_a_entries[0][0]) is None
+
+    def test_switch_same_chain_is_identity(self):
+        """Rollback N then reapply same blocks = no change.
+
+        This is an important invariant: applying and rolling back the
+        same mutations should be a no-op.
+        """
+        db = LedgerDB(k=10)
+
+        # Block 1: create UTxOs
+        entries_1 = [make_utxo_entry(i, 0, value=i * 1_000_000) for i in range(5)]
+        db.apply_block(consumed=[], created=entries_1, block_slot=1)
+
+        # Block 2: consume 2, create 2
+        consumed_2 = [entries_1[0][0], entries_1[1][0]]
+        created_2 = [make_utxo_entry(10 + i, 0, value=10_000_000) for i in range(2)]
+        db.apply_block(consumed=consumed_2, created=created_2, block_slot=2)
+
+        # Snapshot current state
+        utxo_count_before = db.utxo_count
+        remaining_keys = set(k for k in [e[0] for e in entries_1[2:]] + [e[0] for e in created_2])
+
+        # Rollback 1 block, then reapply the same block
+        db.rollback(1)
+        db.apply_block(consumed=consumed_2, created=created_2, block_slot=2)
+
+        # State should be identical
+        assert db.utxo_count == utxo_count_before
+        for key in remaining_keys:
+            assert db.get_utxo(key) is not None
+        for key in consumed_2:
+            assert db.get_utxo(key) is None
+
+
+# ---------------------------------------------------------------------------
+# Past ledger lookup
+# ---------------------------------------------------------------------------
+
+
+class TestPastLedgerLookup:
+    """Test historical ledger state queries.
+
+    Haskell reference:
+        Ouroboros.Consensus.Storage.LedgerDB.API.getPastLedgerAt
+    """
+
+    def test_past_ledger_lookup_within_k(self):
+        """Look up ledger state at a historical point within k blocks.
+
+        After applying 5 blocks with k=10, we should be able to look
+        back to any of the 5 stored states.
+        """
+        db = LedgerDB(k=10)
+
+        # Apply 5 blocks, each creating one UTxO
+        all_entries = []
+        for slot in range(1, 6):
+            key, cols = make_utxo_entry(slot, 0, value=slot * 1_000_000)
+            db.apply_block(consumed=[], created=[(key, cols)], block_slot=slot)
+            all_entries.append((key, cols))
+
+        assert db.utxo_count == 5
+
+        # Look back 3 blocks — should see state after block 2
+        past = db.get_past_ledger(3)
+        assert past is not None
+        assert past.utxo_count == 2  # Only blocks 1 and 2's UTxOs
+
+        # Entries from blocks 1 and 2 should exist
+        assert past.get_utxo(all_entries[0][0]) is not None
+        assert past.get_utxo(all_entries[1][0]) is not None
+
+        # Entries from blocks 3, 4, 5 should NOT exist
+        assert past.get_utxo(all_entries[2][0]) is None
+        assert past.get_utxo(all_entries[3][0]) is None
+        assert past.get_utxo(all_entries[4][0]) is None
+
+    def test_past_ledger_beyond_k_returns_none(self):
+        """Historical point beyond k is unavailable.
+
+        With k=3, after pushing 3 blocks, we can look back 3 but not 4.
+        """
+        db = LedgerDB(k=3)
+
+        for slot in range(1, 4):
+            key, cols = make_utxo_entry(slot, 0)
+            db.apply_block(consumed=[], created=[(key, cols)], block_slot=slot)
+
+        assert db.max_rollback == 3
+
+        # Looking back exactly 3 should work
+        past = db.get_past_ledger(3)
+        assert past is not None
+        assert past.utxo_count == 0  # Back to empty anchor
+
+        # Looking back 4 should return None
+        past = db.get_past_ledger(4)
+        assert past is None
+
+    def test_past_ledger_zero_is_current(self):
+        """Looking back 0 blocks returns current state."""
+        db = LedgerDB(k=10)
+
+        key, cols = make_utxo_entry(1, 0, value=42_000_000)
+        db.apply_block(consumed=[], created=[(key, cols)], block_slot=1)
+
+        past = db.get_past_ledger(0)
+        assert past is not None
+        assert past.utxo_count == 1
+        result = past.get_utxo(key)
+        assert result is not None
+        assert result["value"] == 42_000_000

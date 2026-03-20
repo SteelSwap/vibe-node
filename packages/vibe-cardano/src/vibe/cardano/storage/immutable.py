@@ -35,7 +35,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO
 
-__all__ = ["ImmutableDB", "ChunkInfo", "AppendBlockNotNewerThanTipError"]
+__all__ = [
+    "ImmutableDB",
+    "ImmutableDBIterator",
+    "ChunkInfo",
+    "AppendBlockNotNewerThanTipError",
+    "ClosedDBError",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +99,14 @@ _SEC_ENTRY_SIZE = struct.calcsize(_SEC_ENTRY_FMT)
 # Primary index entry: uint64 big-endian offset
 _PRI_ENTRY_FMT = ">Q"
 _PRI_ENTRY_SIZE = struct.calcsize(_PRI_ENTRY_FMT)
+
+
+class ClosedDBError(Exception):
+    """Raised when operating on a closed database.
+
+    Haskell reference:
+        Ouroboros.Consensus.Storage.ImmutableDB.API.ClosedDBError
+    """
 
 
 class AppendBlockNotNewerThanTipError(Exception):
@@ -602,3 +616,297 @@ class ImmutableDB:
                 if block_data is not None:
                     key = struct.pack(">Q", entry.slot) + entry.block_hash
                     yield key, block_data
+
+    # -------------------------------------------------------------------
+    # Iterator with explicit control
+    # -------------------------------------------------------------------
+
+    def stream(self, start_slot: int = 0) -> ImmutableDBIterator:
+        """Create a stateful iterator over blocks from start_slot.
+
+        Returns an :class:`ImmutableDBIterator` with explicit ``has_next``,
+        ``next``, and ``close`` methods.
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.ImmutableDB.API.stream
+        """
+        return ImmutableDBIterator(self, start_slot)
+
+    # -------------------------------------------------------------------
+    # DeleteAfter — truncate chain
+    # -------------------------------------------------------------------
+
+    async def delete_after(self, slot: int) -> int:
+        """Truncate all blocks after the given slot.
+
+        Removes blocks with slot > the given slot from chunk files and
+        indexes.  Returns the number of blocks removed.
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.ImmutableDB.API.deleteAfter
+        """
+        if self._tip_slot is None or slot >= self._tip_slot:
+            return 0
+
+        removed = 0
+        # Walk through secondary entries and remove those with slot > cutoff
+        hashes_to_remove = [
+            h for h, entry in self._hash_index.items()
+            if entry.slot > slot
+        ]
+        removed = len(hashes_to_remove)
+
+        for h in hashes_to_remove:
+            del self._hash_index[h]
+
+        if slot < 0 or not self._hash_index:
+            # Removed everything — truncate all files
+            self._tip_slot = None
+            self._tip_hash = None
+            self._current_chunk = 0
+            self._current_chunk_offset = 0
+            # Remove all chunk / index files
+            for f in self._chunk_dir.glob("chunk-*.dat"):
+                f.unlink()
+            for f in self._primary_dir.glob("chunk-*.idx"):
+                f.unlink()
+            for f in self._secondary_dir.glob("chunk-*.idx"):
+                f.unlink()
+            return removed
+
+        # Find the new tip
+        new_tip_entry = max(self._hash_index.values(), key=lambda e: e.slot)
+        self._tip_slot = new_tip_entry.slot
+        self._tip_hash = new_tip_entry.block_hash
+        self._current_chunk = new_tip_entry.chunk_number
+        self._current_chunk_offset = new_tip_entry.offset + new_tip_entry.size
+
+        # Rebuild secondary index files by rewriting only surviving entries
+        # Group entries by chunk
+        chunks_with_entries: dict[int, list[_SecondaryEntry]] = {}
+        for entry in self._hash_index.values():
+            chunks_with_entries.setdefault(entry.chunk_number, []).append(entry)
+
+        # Determine which chunk files exist
+        max_chunk_on_disk = 0
+        for f in self._secondary_dir.glob("chunk-*.idx"):
+            cn = int(f.stem.split("-")[1])
+            max_chunk_on_disk = max(max_chunk_on_disk, cn)
+
+        # Rewrite secondary indexes and truncate chunk files for affected chunks
+        cutoff_chunk = self._slot_to_chunk(slot)
+        for cn in range(cutoff_chunk, max_chunk_on_disk + 1):
+            entries = sorted(
+                chunks_with_entries.get(cn, []),
+                key=lambda e: e.slot,
+            )
+            sec_path = self._secondary_path(cn)
+            if not entries:
+                # Remove empty chunk and its indexes
+                sec_path.unlink(missing_ok=True)
+                self._primary_path(cn).unlink(missing_ok=True)
+                self._chunk_path(cn).unlink(missing_ok=True)
+                continue
+
+            # Rewrite secondary index
+            with open(sec_path, "wb") as f:
+                for entry in entries:
+                    f.write(struct.pack(
+                        _SEC_ENTRY_FMT,
+                        entry.block_hash,
+                        entry.chunk_number,
+                        entry.offset,
+                        entry.size,
+                        entry.slot,
+                    ))
+
+            # Truncate chunk file to end of last surviving block
+            last = entries[-1]
+            chunk_path = self._chunk_path(cn)
+            if chunk_path.exists():
+                new_size = last.offset + last.size
+                with open(chunk_path, "r+b") as f:
+                    f.truncate(new_size)
+
+            # Rebuild primary index for this chunk
+            pri_path = self._primary_path(cn)
+            max_rel_slot = max(self._slot_to_relative(e.slot) for e in entries)
+            # Build offset array
+            offsets: list[int] = []
+            entry_map = {self._slot_to_relative(e.slot): e for e in entries}
+            last_offset = 0
+            for rs in range(max_rel_slot + 2):  # +2 for the end sentinel
+                if rs in entry_map:
+                    offsets.append(entry_map[rs].offset)
+                    last_offset = entry_map[rs].offset + entry_map[rs].size
+                else:
+                    offsets.append(last_offset)
+            with open(pri_path, "wb") as f:
+                for o in offsets:
+                    f.write(struct.pack(_PRI_ENTRY_FMT, o))
+
+        return removed
+
+    # -------------------------------------------------------------------
+    # Close — mark DB as closed
+    # -------------------------------------------------------------------
+
+    def close(self) -> None:
+        """Close the ImmutableDB, preventing further operations.
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.ImmutableDB.API.closeDB
+        """
+        self._closed = True
+
+    @property
+    def is_closed(self) -> bool:
+        """Whether the DB has been closed."""
+        return getattr(self, "_closed", False)
+
+    # -------------------------------------------------------------------
+    # Corruption recovery
+    # -------------------------------------------------------------------
+
+    async def validate_and_recover(self) -> int:
+        """Validate chunk files against indexes and recover from corruption.
+
+        Scans all chunks and verifies that each block can be read and has
+        the expected size.  If corruption is detected, truncates to the
+        last valid block.
+
+        Returns the number of blocks that survived validation.
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.ImmutableDB.Impl.Validation
+        """
+        valid_entries: dict[bytes, _SecondaryEntry] = {}
+        last_valid_slot: int | None = None
+        last_valid_hash: bytes | None = None
+        last_valid_chunk: int = 0
+        last_valid_offset: int = 0
+
+        sec_files = sorted(self._secondary_dir.glob("chunk-*.idx"))
+        for sec_path in sec_files:
+            chunk_num = int(sec_path.stem.split("-")[1])
+            chunk_path = self._chunk_path(chunk_num)
+
+            if not chunk_path.exists():
+                # Missing chunk file — stop here, truncate everything after
+                break
+
+            chunk_data = chunk_path.read_bytes()
+            entries = self._read_secondary_entries(chunk_num)
+
+            chunk_valid = True
+            for entry in entries:
+                # Validate: can we read the block at the declared offset/size?
+                if entry.offset + entry.size > len(chunk_data):
+                    chunk_valid = False
+                    break
+
+                block_bytes = chunk_data[entry.offset : entry.offset + entry.size]
+                if len(block_bytes) != entry.size:
+                    chunk_valid = False
+                    break
+
+                valid_entries[entry.block_hash] = entry
+                last_valid_slot = entry.slot
+                last_valid_hash = entry.block_hash
+                last_valid_chunk = entry.chunk_number
+                last_valid_offset = entry.offset + entry.size
+
+            if not chunk_valid:
+                break
+
+        # Update state to reflect validated entries only
+        self._hash_index = valid_entries
+        self._tip_slot = last_valid_slot
+        self._tip_hash = last_valid_hash
+        self._current_chunk = last_valid_chunk
+        self._current_chunk_offset = last_valid_offset
+
+        return len(valid_entries)
+
+
+# ---------------------------------------------------------------------------
+# ImmutableDBIterator — stateful iterator with has_next / close
+# ---------------------------------------------------------------------------
+
+
+class ImmutableDBIterator:
+    """Stateful iterator over ImmutableDB blocks.
+
+    Provides ``has_next()``, ``next()``, and ``close()`` for explicit
+    lifecycle control — mirrors the Haskell Iterator type:
+
+        Ouroboros.Consensus.Storage.ImmutableDB.API.Iterator
+
+    Once closed, calling ``next()`` raises :class:`ClosedDBError`.
+    """
+
+    def __init__(self, db: ImmutableDB, start_slot: int = 0) -> None:
+        self._db = db
+        self._closed = False
+
+        # Pre-load all secondary entries from start_slot onward
+        self._entries: list[_SecondaryEntry] = []
+        self._pos: int = 0
+
+        if db._tip_slot is None:
+            return
+
+        start_chunk = db._slot_to_chunk(start_slot)
+        end_chunk = db._slot_to_chunk(db._tip_slot)
+
+        for chunk_num in range(start_chunk, end_chunk + 1):
+            entries = db._read_secondary_entries(chunk_num)
+            for entry in entries:
+                if entry.slot >= start_slot:
+                    self._entries.append(entry)
+
+        # Sort by slot for deterministic ordering
+        self._entries.sort(key=lambda e: e.slot)
+
+    def has_next(self) -> bool:
+        """Check whether more blocks are available.
+
+        Returns ``False`` if closed or exhausted.
+        """
+        if self._closed:
+            return False
+        return self._pos < len(self._entries)
+
+    def next(self) -> tuple[bytes, bytes]:
+        """Return the next ``(key, cbor_bytes)`` pair.
+
+        Raises:
+            ClosedDBError: If the iterator has been closed.
+            StopIteration: If no more blocks are available.
+        """
+        if self._closed:
+            raise ClosedDBError("Iterator has been closed")
+
+        if self._pos >= len(self._entries):
+            raise StopIteration
+
+        entry = self._entries[self._pos]
+        self._pos += 1
+
+        block_data = self._db._read_block(
+            entry.chunk_number, entry.offset, entry.size
+        )
+        if block_data is None:
+            block_data = b""
+
+        key = struct.pack(">Q", entry.slot) + entry.block_hash
+        return key, block_data
+
+    def close(self) -> None:
+        """Close the iterator, releasing resources.
+
+        After closing, :meth:`has_next` returns ``False`` and
+        :meth:`next` raises :class:`ClosedDBError`.
+        """
+        self._closed = True
+        self._entries.clear()
