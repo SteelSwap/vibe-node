@@ -14,12 +14,12 @@ Current status: INFRASTRUCTURE PHASE
 
 CDDL schema locations in the Haskell cardano-ledger repository:
   - eras/byron/cddl-spec/byron.cddl
-  - eras/shelley/impl/cddl-files/shelley.cddl
-  - eras/allegra/impl/cddl-files/allegra.cddl
-  - eras/mary/impl/cddl-files/mary.cddl
-  - eras/alonzo/impl/cddl-files/alonzo.cddl
-  - eras/babbage/impl/cddl-files/babbage.cddl
-  - eras/conway/impl/cddl-files/conway.cddl
+  - eras/shelley/impl/cddl/data/shelley.cddl
+  - eras/allegra/impl/cddl/data/allegra.cddl
+  - eras/mary/impl/cddl/data/mary.cddl
+  - eras/alonzo/impl/cddl/data/alonzo.cddl
+  - eras/babbage/impl/cddl/data/babbage.cddl
+  - eras/conway/impl/cddl/data/conway.cddl
 
 Spec references:
   - RFC 8610: Concise Data Definition Language (CDDL)
@@ -51,12 +51,12 @@ VENDOR_LEDGER = PROJECT_ROOT / "vendor" / "cardano-ledger"
 # These paths match the cardano-ledger repository structure
 CDDL_SCHEMAS: dict[str, str] = {
     "byron": "eras/byron/cddl-spec/byron.cddl",
-    "shelley": "eras/shelley/impl/cddl-files/shelley.cddl",
-    "allegra": "eras/allegra/impl/cddl-files/allegra.cddl",
-    "mary": "eras/mary/impl/cddl-files/mary.cddl",
-    "alonzo": "eras/alonzo/impl/cddl-files/alonzo.cddl",
-    "babbage": "eras/babbage/impl/cddl-files/babbage.cddl",
-    "conway": "eras/conway/impl/cddl-files/conway.cddl",
+    "shelley": "eras/shelley/impl/cddl/data/shelley.cddl",
+    "allegra": "eras/allegra/impl/cddl/data/allegra.cddl",
+    "mary": "eras/mary/impl/cddl/data/mary.cddl",
+    "alonzo": "eras/alonzo/impl/cddl/data/alonzo.cddl",
+    "babbage": "eras/babbage/impl/cddl/data/babbage.cddl",
+    "conway": "eras/conway/impl/cddl/data/conway.cddl",
 }
 
 # Whether any CDDL parser library is available
