@@ -110,6 +110,7 @@ nav:
       - Block Production: development/subsystems/block-production.md
     - Development Log:
       - Journal: development/devlog/index.md
+      - "Phase 3 — Chain Sync & Storage": development/devlog/phase3.md
       - "Phase 2 — Serialization & Networking": development/devlog/phase2.md
       - "Phase 1 — Research & Analysis": development/devlog/phase1.md
       - "Phase 0 — Development Architecture": development/devlog/phase0.md

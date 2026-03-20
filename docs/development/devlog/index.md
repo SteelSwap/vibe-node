@@ -6,6 +6,14 @@ Each entry is organized by phase, with specific module and work item details.
 
 ---
 
+## Phase 3: Chain Sync & Storage
+
+- **[Phase 3 — Chain Sync & Storage](phase3.md)** (M3.1–M3.10)
+    - Block-fetch client, Arrow+Dict storage engine (ImmutableDB, VolatileDB, LedgerDB, ChainDB)
+    - Byron through Mary ledger rules (UTXO, delegation, timelocks, multi-asset)
+    - Mithril snapshot import, crash recovery (Arrow IPC + diff replay)
+    - 1,264 tests, real preprod benchmark (3.96M UTxOs, 1.72s cold start)
+
 ## Phase 2: Serialization & Networking
 
 - **[Phase 2 — Serialization & Networking](phase2.md)** (M2.1–M2.6)
