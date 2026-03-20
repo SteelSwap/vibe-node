@@ -397,3 +397,127 @@ class TestScriptContext:
         assert len(ctx.fields) == 3
         # Redeemer is the second field
         assert ctx.fields[1] == redeemer
+
+
+# ---------------------------------------------------------------------------
+# Test 6: V1 context should NOT parse as V2/V3
+# ---------------------------------------------------------------------------
+
+
+class TestScriptContextVersionIncompatibility:
+    """Test that ScriptContext built for one version cannot be misinterpreted as another.
+
+    Each Plutus version has a different TxInfo structure:
+        - V1 TxInfo: 10 fields
+        - V2 TxInfo: 12 fields (adds reference_inputs, redeemers)
+        - V3 TxInfo: 16 fields (adds governance fields)
+
+    And ScriptContext itself differs:
+        - V1/V2 ScriptContext: 2 fields [TxInfo, ScriptPurpose]
+        - V3 ScriptContext: 3 fields [TxInfo, Redeemer, ScriptPurpose]
+
+    A V1 context passed to a V2/V3 script would have the wrong number of
+    fields, causing the script to fail or produce wrong results.
+
+    Haskell ref: ``TxInfo`` in ``PlutusLedgerApi.V1/V2/V3.Contexts``
+    """
+
+    def _make_address(self) -> bytes:
+        return bytes([0x00]) + b"\x11" * 28 + b"\x22" * 28
+
+    def test_v1_txinfo_has_10_fields(self) -> None:
+        """V1 TxInfo must have exactly 10 fields."""
+        builder = TxInfoBuilder()
+        builder.set_tx_id(b"\xaa" * 32)
+        tx_info = builder.build_v1()
+        assert len(tx_info.fields) == 10
+
+    def test_v2_txinfo_has_12_fields(self) -> None:
+        """V2 TxInfo must have exactly 12 fields."""
+        builder = TxInfoBuilder()
+        builder.set_tx_id(b"\xaa" * 32)
+        tx_info = builder.build_v2()
+        assert len(tx_info.fields) == 12
+
+    def test_v3_txinfo_has_16_fields(self) -> None:
+        """V3 TxInfo must have exactly 16 fields."""
+        builder = TxInfoBuilder()
+        builder.set_tx_id(b"\xaa" * 32)
+        tx_info = builder.build_v3()
+        assert len(tx_info.fields) == 16
+
+    def test_v1_txinfo_field_count_differs_from_v2(self) -> None:
+        """V1 TxInfo cannot be mistaken for V2 TxInfo (different field count).
+
+        If a script expects V2 TxInfo (12 fields) but receives V1 TxInfo
+        (10 fields), accessing field index 10 or 11 would fail.
+        """
+        builder = TxInfoBuilder()
+        builder.set_tx_id(b"\xaa" * 32)
+        v1_info = builder.build_v1()
+        v2_info = builder.build_v2()
+        assert len(v1_info.fields) != len(v2_info.fields), (
+            "V1 and V2 TxInfo should have different field counts"
+        )
+
+    def test_v1_txinfo_field_count_differs_from_v3(self) -> None:
+        """V1 TxInfo cannot be mistaken for V3 TxInfo (different field count)."""
+        builder = TxInfoBuilder()
+        builder.set_tx_id(b"\xaa" * 32)
+        v1_info = builder.build_v1()
+        v3_info = builder.build_v3()
+        assert len(v1_info.fields) != len(v3_info.fields), (
+            "V1 and V3 TxInfo should have different field counts"
+        )
+
+    def test_v2_txinfo_field_count_differs_from_v3(self) -> None:
+        """V2 TxInfo cannot be mistaken for V3 TxInfo (different field count)."""
+        builder = TxInfoBuilder()
+        builder.set_tx_id(b"\xaa" * 32)
+        v2_info = builder.build_v2()
+        v3_info = builder.build_v3()
+        assert len(v2_info.fields) != len(v3_info.fields), (
+            "V2 and V3 TxInfo should have different field counts"
+        )
+
+    def test_v1_v2_script_context_same_shape_different_txinfo(self) -> None:
+        """V1 and V2 ScriptContext have same outer shape (2 fields) but different TxInfo.
+
+        Both have [TxInfo, ScriptPurpose], but the TxInfo differs.
+        A V1 context in a V2 validator would have wrong TxInfo field count.
+        """
+        builder = TxInfoBuilder()
+        builder.set_tx_id(b"\xaa" * 32)
+        purpose = minting_purpose(b"\xbb" * 28)
+
+        ctx_v1 = build_script_context_v1(builder.build_v1(), purpose)
+        ctx_v2 = build_script_context_v2(builder.build_v2(), purpose)
+
+        # Both have 2 fields at the ScriptContext level
+        assert len(ctx_v1.fields) == 2
+        assert len(ctx_v2.fields) == 2
+
+        # But the TxInfo inside has different field count
+        v1_txinfo = ctx_v1.fields[0]
+        v2_txinfo = ctx_v2.fields[0]
+        assert len(v1_txinfo.fields) != len(v2_txinfo.fields)
+
+    def test_v3_script_context_has_different_shape(self) -> None:
+        """V3 ScriptContext has 3 fields (TxInfo, Redeemer, ScriptPurpose).
+
+        A V1/V2 context (2 fields) passed to a V3 validator would fail
+        because the validator expects 3 fields.
+        """
+        builder = TxInfoBuilder()
+        builder.set_tx_id(b"\xaa" * 32)
+        purpose = minting_purpose(b"\xbb" * 28)
+        redeemer = PlutusConstr(0, [PlutusInteger(42)])
+
+        ctx_v1 = build_script_context_v1(builder.build_v1(), purpose)
+        ctx_v3 = build_script_context_v3(builder.build_v3(), redeemer, purpose)
+
+        assert len(ctx_v1.fields) == 2
+        assert len(ctx_v3.fields) == 3
+        assert len(ctx_v1.fields) != len(ctx_v3.fields), (
+            "V1 and V3 ScriptContext must have different field counts"
+        )
