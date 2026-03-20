@@ -1,20 +1,3 @@
-<<<<<<< HEAD
-"""Ouroboros Praos consensus subsystem — epoch boundary, rewards, nonce evolution.
-
-This package implements the epoch-level consensus rules from the Shelley
-ledger formal spec and the Ouroboros Praos paper:
-
-- **epoch_boundary** — epoch transition processing (TICK/NEWEPOCH rules)
-- **rewards** — per-epoch reward calculation (Shelley spec Section 5.5.3)
-- **nonce** — epoch nonce evolution from VRF outputs
-
-Haskell references:
-    * ``Cardano.Ledger.Shelley.Rules.Tick`` (TICK transition)
-    * ``Cardano.Ledger.Shelley.Rules.NewEpoch`` (NEWEPOCH transition)
-    * ``Cardano.Ledger.Shelley.Rewards`` (reward calculation)
-    * ``Cardano.Ledger.Shelley.Rules.PoolReap`` (pool retirement at epoch boundary)
-"""
-=======
 """vibe.cardano.consensus — Ouroboros Praos consensus implementation.
 
 This package provides:
@@ -31,11 +14,17 @@ This package provides:
 * **Praos Protocol** — the top-level Ouroboros Praos state machine
   that ties together leader election, header validation, and chain
   state transitions.
+* **Epoch Boundary** — epoch transition processing (TICK/NEWEPOCH),
+  stake distribution snapshots with 2-epoch lag, reward calculation
+  (Shelley spec Section 5.5.3), and nonce evolution from VRF outputs.
 
 Spec references:
     - Ouroboros Praos paper (Crypto 2017), Sections 3-4
     - Shelley formal spec, Sections 3 (chain state), 16 (VRF/leader)
     - Ouroboros.Consensus.Protocol.Praos (Haskell)
+    - Cardano.Ledger.Shelley.Rules.Tick (TICK transition)
+    - Cardano.Ledger.Shelley.Rules.NewEpoch (NEWEPOCH transition)
+    - Cardano.Ledger.Shelley.Rewards (reward calculation)
 """
 
 from .chain_selection import (
@@ -87,4 +76,3 @@ __all__ = [
     "apply_header",
     "leader_check",
 ]
->>>>>>> origin/main
