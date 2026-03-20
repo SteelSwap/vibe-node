@@ -84,7 +84,10 @@ git clone --recurse-submodules https://github.com/SteelSwap/vibe-node.git
 cd vibe-node
 uv sync
 
-# Run the test suite (1,617 tests)
+# Build VRF native extension (optional — requires C compiler)
+./scripts/build-vrf.sh
+
+# Run the full test suite (~2,400 tests)
 uv run pytest
 
 # Start infrastructure (ParadeDB, cardano-node, Ogmios, etc.)
@@ -92,17 +95,6 @@ uv run vibe-node infra up
 
 # Search the knowledge base
 uv run vibe-node db search "Ouroboros Praos VRF"
-```
-
-### Building the VRF native extension
-
-```bash
-git submodule update --init vendor/libsodium-iog
-pip install pybind11 cmake
-cd packages/vibe-cardano
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-cp build/_vrf_native*.so src/vibe/cardano/crypto/
 ```
 
 ## Documentation
