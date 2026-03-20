@@ -23,23 +23,12 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
-# Minimum CMake version
 cmake.version = ">=3.18"
-
-# Build directory (keeps it clean)
 build-dir = "build/{wheel_tag}"
-
-# Install the extension into the correct package path
 wheel.install-dir = "vibe/cardano/crypto"
-
-# The wheel still includes our pure Python source
 wheel.packages = ["src/vibe"]
-
-# If libsodium submodule isn't initialized or autotools missing, fall back
-# to a pure Python wheel (VRF ops raise NotImplementedError)
 cmake.build-type = "Release"
 minimum-version = "build-system.requires"
 
-# Allow building without the native extension (graceful fallback)
 [tool.scikit-build.cmake.define]
 CMAKE_BUILD_TYPE = "Release"
