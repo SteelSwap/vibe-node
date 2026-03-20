@@ -9,7 +9,7 @@ This page summarizes the project milestones tracked in [Plane](https://plane.so)
 | **Phase 0 — Development Architecture** | :material-check-circle: Complete | Knowledge base, search infrastructure, MCP integrations, CLI, docs |
 | **Phase 1 — Research & Analysis** | :material-check-circle: Complete | 2,046 rules, 1,567 gaps, architecture blueprint, test strategy |
 | **Phase 2 — Serialization & Networking** | :material-check-circle: Complete | CBOR decoders, multiplexer, handshake, chain-sync — 643 tests, Haskell test parity |
-| **Phase 3 — Chain Sync & Storage** | :material-clock-outline: Planned | Chain-sync client, block fetch, CBOR deserialization, persistent storage |
+| **Phase 3 — Chain Sync & Storage** | :material-check-circle: Complete | Block-fetch, Arrow+Dict storage, Byron-Mary ledger, Mithril import, crash recovery — 1,264 tests |
 | **Phase 4 — Ledger & Consensus** | :material-clock-outline: Planned | UTxO ledger rules, Plutus evaluation, Ouroboros Praos, VRF/KES |
 | **Phase 5 — Block Production & N2C** | :material-clock-outline: Planned | Block forging, mempool, all node-to-client miniprotocols |
 | **Phase 6 — Hardening** | :material-clock-outline: Planned | Power-loss recovery, memory optimization, 10-day soak test |
@@ -112,10 +112,52 @@ Phase 2 also improved the research pipeline:
 
 ---
 
-## Phase 3–6 Overview
+## Phase 3 — Chain Sync & Storage :material-check-circle:{ .green }
 
-- **Phase 3 — Chain Sync & Storage:** Block-fetch client, Arrow+Dict storage engine, Mithril import, crash recovery
-- **Phase 4 — Ledger & Consensus:** UTxO ledger validation, Plutus script evaluation, Ouroboros Praos consensus, tip selection
+**Status: COMPLETE** — vibe-node syncs the chain. 1,264 tests, real preprod benchmark.
+
+Phase 3 built the storage engine, block-fetch protocol, Byron through Mary ledger rules, Mithril snapshot import, and crash recovery. The full preprod benchmark proved we can import 4.5M blocks and hold 3.96M UTxOs in an Arrow table with 1.72s cold start.
+
+| Module | Description | Status |
+|--------|-------------|--------|
+| M3.1 — Block-Fetch Client | CBOR messages, FSM, client, integration test | :material-check-circle: Complete |
+| M3.2 — Storage Abstractions | AppendStore, KeyValueStore, StateStore protocols | :material-check-circle: Complete |
+| M3.3 — ImmutableDB | Chunked flat files, primary/secondary indexes, iterators, DeleteAfter | :material-check-circle: Complete |
+| M3.4 — VolatileDB | Hash-indexed blocks, successor map, GC, disk persistence | :material-check-circle: Complete |
+| M3.5 — LedgerDB | Arrow table + dict UTxO, diff layer, snapshot/restore, rollback | :material-check-circle: Complete |
+| M3.6 — Byron Ledger | Byron types, UTXO rules, fee calculation | :material-check-circle: Complete |
+| M3.7 — Shelley-Mary Ledger | UTXO/UTXOW, delegation, timelocks, multi-asset | :material-check-circle: Complete |
+| M3.8 — ChainDB Coordinator | Block routing, chain selection, GC, wipe volatile | :material-check-circle: Complete |
+| M3.9 — Mithril Import | Parse Haskell chunks, import UTxO state | :material-check-circle: Complete |
+| M3.10 — Crash Recovery | Arrow IPC snapshots, diff replay, cold start <3s | :material-check-circle: Complete |
+
+### Phase 3 Benchmark (Real Preprod)
+
+| Metric | Value |
+|--------|-------|
+| Chain size | 4,523,663 blocks, 13.86 GiB |
+| UTxO count | 3,959,509 |
+| Arrow IPC size | 642 MiB (22% smaller than Haskell's 826 MiB) |
+| Cold start | 1.72 seconds |
+| Lookup latency | 0.70 μs/op |
+| Arrow+dict RSS | 1.8 GiB |
+| Parse throughput | 15,208 blocks/s |
+
+### Phase 3 Test Output
+
+| Category | Tests |
+|----------|-------|
+| Unit tests | 1,168 |
+| Property tests (Hypothesis) | 71 |
+| Conformance tests (Ogmios) | 12 |
+| Integration tests (live node) | 13 |
+| **Total** | **1,264** |
+
+---
+
+## Phase 4–6 Overview
+
+- **Phase 4 — Ledger & Consensus:** UTxO ledger validation (Alonzo-Conway), Plutus script evaluation via uplc, Ouroboros Praos consensus, VRF/KES, tip selection
 - **Phase 5 — Block Production & N2C:** Block forging, mempool, leader schedule, all node-to-client miniprotocols
 - **Phase 6 — Hardening:** Power-loss recovery, memory optimization, 10-day soak test against Haskell nodes
 
