@@ -161,7 +161,7 @@ def _git_grep(term: str, repo_path: Path, max_results: int = 5) -> list[str]:
 
 def _search_vendor_repos(search_terms: list[str]) -> dict[str, list[str]]:
     """Search all vendor repos for terms. Returns {repo: [matching lines]}."""
-    project_root = Path(__file__).resolve().parents[3]
+    project_root = Path(__file__).resolve().parents[6]
     vendor_dir = project_root / "vendor"
 
     all_results = {}
