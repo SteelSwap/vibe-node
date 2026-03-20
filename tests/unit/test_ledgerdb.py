@@ -530,45 +530,46 @@ class TestPerformanceBenchmarks:
         db.apply_block(consumed=[], created=entries, block_slot=1)
         return db
 
-    @pytest.mark.benchmark
-    def test_lookup_performance(self, benchmark):
-        """Benchmark: point lookup should be fast."""
+    def test_lookup_performance(self):
+        """Point lookup should be fast (~single-digit μs)."""
+        import time
         db = self._build_db(10_000)
         key = make_txin(5000, 0)
 
-        benchmark(db.get_utxo, key)
+        start = time.perf_counter()
+        for _ in range(1000):
+            db.get_utxo(key)
+        elapsed = time.perf_counter() - start
+        us_per_op = elapsed / 1000 * 1e6
+        assert us_per_op < 100, f"Lookup too slow: {us_per_op:.1f} μs/op"
 
-    @pytest.mark.benchmark
-    def test_block_apply_performance(self, benchmark):
-        """Benchmark: applying a block with ~300 mutations."""
-        counter = [0]
+    def test_block_apply_performance(self):
+        """Applying a block with ~300 mutations should be fast."""
+        import time
+        db = LedgerDB(k=10)
+        initial = [make_utxo_entry(i, 0) for i in range(150)]
+        db.apply_block(consumed=[], created=initial, block_slot=1)
 
-        def apply_one():
-            # Each iteration builds a fresh small DB and applies one block.
-            db = LedgerDB(k=10)
-            base = counter[0] * 1000
-            counter[0] += 1
-            initial = [make_utxo_entry(base + i, 0) for i in range(150)]
-            db.apply_block(consumed=[], created=initial, block_slot=1)
-            consumed = [initial[i][0] for i in range(150)]
-            created = [make_utxo_entry(base + 150 + i, 0) for i in range(150)]
-            db.apply_block(consumed=consumed, created=created, block_slot=2)
+        start = time.perf_counter()
+        consumed = [initial[i][0] for i in range(150)]
+        created = [make_utxo_entry(150 + i, 0) for i in range(150)]
+        db.apply_block(consumed=consumed, created=created, block_slot=2)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        assert elapsed_ms < 50, f"Block apply too slow: {elapsed_ms:.1f} ms"
 
-        benchmark(apply_one)
+    def test_rollback_performance(self):
+        """Rollback of 100 blocks should complete quickly."""
+        import time
+        k = 100
+        db = LedgerDB(k=k)
+        for slot in range(1, k + 1):
+            entries = [make_utxo_entry(slot * 10 + i, 0) for i in range(3)]
+            db.apply_block(consumed=[], created=entries, block_slot=slot)
 
-    @pytest.mark.benchmark
-    def test_rollback_performance(self, benchmark):
-        """Benchmark: rollback of k blocks."""
-        k = 100  # Use smaller k for benchmark sanity.
-
-        def setup_and_rollback():
-            db = LedgerDB(k=k)
-            for slot in range(1, k + 1):
-                entries = [make_utxo_entry(slot * 10 + i, 0) for i in range(3)]
-                db.apply_block(consumed=[], created=entries, block_slot=slot)
-            db.rollback(k)
-
-        benchmark(setup_and_rollback)
+        start = time.perf_counter()
+        db.rollback(k)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        assert elapsed_ms < 500, f"Rollback too slow: {elapsed_ms:.1f} ms"
 
 
 # ---------------------------------------------------------------------------
