@@ -1,0 +1,215 @@
+# vibe-node private devnet — 3-node cluster
+# 2 Haskell cardano-nodes (block producers) + 1 vibe-node (passive sync)
+#
+# Usage:
+#   1. Generate keys:  ./scripts/generate-keys.sh
+#   2. Start devnet:   docker compose -f docker-compose.devnet.yml up -d
+#   3. Monitor tips:   python scripts/monitor-tips.py
+#
+# Configuration:
+#   - 0.2s slots, 100-slot epochs (~20s), k=10, f=0.1
+#   - 3 stake pools with equal delegation
+#   - Private network (magic 42), not connected to public testnets
+
+services:
+  # ─── Genesis Initialization ──────────────────────────────────────
+  # Sets systemStart in shelley-genesis.json to current time + 30s,
+  # and startTime in byron-genesis.json to matching unix timestamp.
+
+  genesis-init:
+    image: alpine:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache jq coreutils
+        # Compute system start: 30 seconds from now (UTC)
+        START_EPOCH=$$(( $$(date +%s) + 30 ))
+        START_ISO=$$(date -u -d "@$$START_EPOCH" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || \
+                     date -u -r "$$START_EPOCH" +%Y-%m-%dT%H:%M:%SZ)
+        echo "=== Devnet system start: $$START_ISO (epoch $$START_EPOCH) ==="
+        # Patch shelley genesis
+        jq --arg start "$$START_ISO" '.systemStart = $$start' \
+          /genesis-src/shelley-genesis.json > /genesis/shelley-genesis.json
+        # Patch byron genesis
+        jq --argjson start "$$START_EPOCH" '.startTime = $$start' \
+          /genesis-src/byron-genesis.json > /genesis/byron-genesis.json
+        # Copy alonzo and conway as-is
+        cp /genesis-src/alonzo-genesis.json /genesis/alonzo-genesis.json
+        cp /genesis-src/conway-genesis.json /genesis/conway-genesis.json
+        echo "=== Genesis files ready ==="
+        ls -la /genesis/
+    volumes:
+      - ./genesis:/genesis-src:ro
+      - devnet-genesis:/genesis
+    networks:
+      - devnet
+    restart: "no"
+
+  # ─── Haskell Node 1 (Block Producer) ────────────────────────────
+
+  haskell-node-1:
+    image: ghcr.io/intersectmbo/cardano-node:10.4.1
+    depends_on:
+      genesis-init:
+        condition: service_completed_successfully
+    environment:
+      CARDANO_NODE_SOCKET_PATH: /ipc/node.socket
+    command:
+      - run
+      - --topology
+      - /topology/haskell-node-1.json
+      - --database-path
+      - /data/db
+      - --socket-path
+      - /ipc/node.socket
+      - --port
+      - "3001"
+      - --config
+      - /config/config.json
+      - --shelley-kes-key
+      - /keys/pool1/kes.skey
+      - --shelley-vrf-key
+      - /keys/pool1/vrf.skey
+      - --shelley-operational-certificate
+      - /keys/pool1/opcert.cert
+    volumes:
+      - ./topology:/topology:ro
+      - ./keys:/keys:ro
+      - ./config:/config:ro
+      - devnet-genesis:/genesis:ro
+      - haskell-node-1-data:/data
+      - haskell-node-1-ipc:/ipc
+    ports:
+      - "${HASKELL_NODE_1_PORT:-30001}:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /ipc/node.socket"]
+      interval: 5s
+      timeout: 5s
+      retries: 120
+      start_period: 30s
+    networks:
+      - devnet
+    restart: unless-stopped
+
+  # ─── Haskell Node 2 (Block Producer) ────────────────────────────
+
+  haskell-node-2:
+    image: ghcr.io/intersectmbo/cardano-node:10.4.1
+    depends_on:
+      genesis-init:
+        condition: service_completed_successfully
+    environment:
+      CARDANO_NODE_SOCKET_PATH: /ipc/node.socket
+    command:
+      - run
+      - --topology
+      - /topology/haskell-node-2.json
+      - --database-path
+      - /data/db
+      - --socket-path
+      - /ipc/node.socket
+      - --port
+      - "3001"
+      - --config
+      - /config/config.json
+      - --shelley-kes-key
+      - /keys/pool2/kes.skey
+      - --shelley-vrf-key
+      - /keys/pool2/vrf.skey
+      - --shelley-operational-certificate
+      - /keys/pool2/opcert.cert
+    volumes:
+      - ./topology:/topology:ro
+      - ./keys:/keys:ro
+      - ./config:/config:ro
+      - devnet-genesis:/genesis:ro
+      - haskell-node-2-data:/data
+      - haskell-node-2-ipc:/ipc
+    ports:
+      - "${HASKELL_NODE_2_PORT:-30002}:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /ipc/node.socket"]
+      interval: 5s
+      timeout: 5s
+      retries: 120
+      start_period: 30s
+    networks:
+      - devnet
+    restart: unless-stopped
+
+  # ─── Vibe Node (Passive Sync) ──────────────────────────────────
+
+  vibe-node:
+    build:
+      context: ../..
+      dockerfile: infra/devnet/Dockerfile.vibe-node
+    depends_on:
+      genesis-init:
+        condition: service_completed_successfully
+      haskell-node-1:
+        condition: service_healthy
+    environment:
+      VIBE_NODE_PORT: "3001"
+      VIBE_NETWORK_MAGIC: "42"
+      VIBE_PEERS: "haskell-node-1:3001,haskell-node-2:3001"
+      VIBE_GENESIS_DIR: "/genesis"
+      VIBE_DATA_DIR: "/data"
+    volumes:
+      - devnet-genesis:/genesis:ro
+      - ./keys/pool3:/keys:ro
+      - vibe-node-data:/data
+    ports:
+      - "${VIBE_NODE_PORT:-30003}:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'print(\"ok\")'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks:
+      - devnet
+    restart: unless-stopped
+
+  # ─── Tip Monitor ───────────────────────────────────────────────
+
+  monitor:
+    build:
+      context: ../..
+      dockerfile: infra/devnet/Dockerfile.vibe-node
+    depends_on:
+      haskell-node-1:
+        condition: service_healthy
+      haskell-node-2:
+        condition: service_healthy
+    environment:
+      MONITOR_NODES: "haskell-node-1:3001,haskell-node-2:3001,vibe-node:3001"
+      MONITOR_INTERVAL: "10"
+      MONITOR_DURATION: "86400"
+      MONITOR_MAX_DELTA: "10"
+    entrypoint: ["python", "/app/infra/devnet/scripts/monitor-tips.py"]
+    volumes:
+      - ./scripts:/app/infra/devnet/scripts:ro
+    networks:
+      - devnet
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+# ─── Networks ─────────────────────────────────────────────────────
+
+networks:
+  devnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+# ─── Volumes ──────────────────────────────────────────────────────
+
+volumes:
+  devnet-genesis:
+  haskell-node-1-data:
+  haskell-node-1-ipc:
+  haskell-node-2-data:
+  haskell-node-2-ipc:
+  vibe-node-data:

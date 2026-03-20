@@ -70,6 +70,7 @@ markers = [
     "conformance: Conformance tests — bit-for-bit match with Haskell node",
     "integration: Integration tests — multi-component with Docker Compose",
     "fixture_only: Tests using cached fixtures only — never skipped for missing Ogmios",
+    "devnet: Devnet integration tests — 3-node private cluster validation",
 ]
 
 [dependency-groups]

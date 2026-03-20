@@ -17,6 +17,9 @@ This package provides:
 * **Epoch Boundary** — epoch transition processing (TICK/NEWEPOCH),
   stake distribution snapshots with 2-epoch lag, reward calculation
   (Shelley spec Section 5.5.3), and nonce evolution from VRF outputs.
+* **Hard Fork Combinator** — era dispatch, state translation across
+  era boundaries (Byron through Conway), and protocol version-based
+  era transition detection.
 
 Spec references:
     - Ouroboros Praos paper (Crypto 2017), Sections 3-4
@@ -43,6 +46,20 @@ from .praos import (
     PraosState,
     apply_header,
     leader_check,
+)
+from .hfc import (
+    Era,
+    EraValidationError,
+    HardForkConfig,
+    HFCState,
+    TranslatedState,
+    current_era,
+    detect_era_transition,
+    epoch_to_first_slot_hfc,
+    slot_to_epoch_hfc,
+    translate_ledger_state,
+    translate_through_eras,
+    validate_block,
 )
 from .slot_arithmetic import (
     SlotConfig,
@@ -75,4 +92,17 @@ __all__ = [
     "PraosState",
     "apply_header",
     "leader_check",
+    # Hard Fork Combinator
+    "Era",
+    "EraValidationError",
+    "HardForkConfig",
+    "HFCState",
+    "TranslatedState",
+    "current_era",
+    "detect_era_transition",
+    "epoch_to_first_slot_hfc",
+    "slot_to_epoch_hfc",
+    "translate_ledger_state",
+    "translate_through_eras",
+    "validate_block",
 ]

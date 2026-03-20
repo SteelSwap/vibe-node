@@ -1,0 +1,5 @@
+# Never commit cryptographic keys
+# Run scripts/generate-keys.sh to generate fresh keys
+*
+!.gitignore
+!README.md
