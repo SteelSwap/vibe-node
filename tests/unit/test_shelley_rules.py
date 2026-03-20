@@ -728,6 +728,167 @@ class TestEdgeCases:
 
 
 # ---------------------------------------------------------------------------
+# Pool state internal consistency tests
+#
+# Spec ref: Shelley formal spec, Section 8, Figures 35-36 (POOL transition).
+# Haskell ref: ``Cardano.Ledger.Shelley.Rules.Pool`` — the transition
+# guarantees that retiring pools are a subset of registered pools, and
+# all pool entries have valid PoolParams.
+# ---------------------------------------------------------------------------
+
+
+class TestPoolStateInvariants:
+    """Pool state invariant checks after DELEG/POOL transitions."""
+
+    def test_pool_state_internal_consistency(self):
+        """Pool state invariant: retiring pools are a subset of registered pools.
+
+        After any sequence of register/retire operations, every pool in
+        the retiring map must also be present in the pools map. This is
+        guaranteed by the POOL transition rule: RetirePool requires the
+        pool to be registered.
+
+        Spec ref: Shelley formal spec, Figure 35 (POOL transition rule).
+        """
+        from fractions import Fraction
+        from pycardano.certificate import PoolParams, PoolRegistration, PoolRetirement
+        from pycardano.hash import PoolKeyHash, VerificationKeyHash
+        from vibe.cardano.ledger.shelley_delegation import (
+            DelegationState,
+            process_certificate,
+        )
+
+        # Create a pool with valid params
+        pool_hash = PoolKeyHash(b"\x01" * 28)
+        vrf_hash = b"\x02" * 32
+
+        pool_params = PoolParams(
+            operator=pool_hash,
+            vrf_keyhash=vrf_hash,
+            pledge=10_000_000,
+            cost=340_000_000,
+            margin=Fraction(1, 100),
+            reward_account=b"\xaa" * 29,
+            pool_owners=[VerificationKeyHash(b"\x01" * 28)],
+        )
+
+        state = DelegationState()
+        params = TEST_PARAMS
+
+        # Register the pool
+        state = process_certificate(
+            PoolRegistration(pool_params=pool_params),
+            state, params, current_epoch=0,
+        )
+
+        # Invariant: registered pool has valid params
+        pool_key = bytes(pool_hash)
+        assert pool_key in state.pools
+        assert state.pools[pool_key].operator == pool_hash
+
+        # Retire the pool
+        state = process_certificate(
+            PoolRetirement(pool_keyhash=pool_hash, epoch=5),
+            state, params, current_epoch=0,
+        )
+
+        # Invariant: retiring pools are subset of registered pools
+        for retiring_key in state.retiring:
+            assert retiring_key in state.pools, (
+                f"Retiring pool {retiring_key.hex()} not in registered pools"
+            )
+
+    def test_non_negative_deposits(self):
+        """Deposits field is never negative after any DELEG/POOL transition.
+
+        The key_deposit and pool_deposit are always positive, so the
+        total deposit accounting should never go negative.
+
+        Spec ref: Shelley formal spec, Section 8, deposit equations.
+        """
+        from fractions import Fraction
+        from pycardano.certificate import (
+            PoolParams,
+            PoolRegistration,
+            StakeRegistration,
+            StakeDeregistration,
+        )
+        from pycardano.hash import PoolKeyHash, VerificationKeyHash
+        from pycardano.certificate import StakeCredential
+        from vibe.cardano.ledger.shelley_delegation import (
+            DelegationState,
+            compute_certificate_deposits,
+            process_certificate,
+        )
+
+        state = DelegationState()
+        params = TEST_PARAMS
+
+        # Register a stake key
+        cred = StakeCredential(VerificationKeyHash(b"\x11" * 28))
+        reg = StakeRegistration(stake_credential=cred)
+        state = process_certificate(reg, state, params, current_epoch=0)
+        deposits = compute_certificate_deposits([reg], params)
+        assert deposits >= 0, f"Deposits should be non-negative, got {deposits}"
+
+        # Register a pool
+        pool_hash = PoolKeyHash(b"\x22" * 28)
+        pool_params = PoolParams(
+            operator=pool_hash,
+            vrf_keyhash=b"\x33" * 32,
+            pledge=1_000_000,
+            cost=340_000_000,
+            margin=Fraction(1, 100),
+            reward_account=b"\xbb" * 29,
+            pool_owners=[VerificationKeyHash(b"\x22" * 28)],
+        )
+        pool_reg = PoolRegistration(pool_params=pool_params)
+        state = process_certificate(pool_reg, state, params, current_epoch=0)
+        deposits = compute_certificate_deposits([pool_reg], params)
+        assert deposits >= 0, f"Pool deposits should be non-negative, got {deposits}"
+
+        # Deregister the stake key — refund is negative deposit
+        dereg = StakeDeregistration(stake_credential=cred)
+        refund_deposits = compute_certificate_deposits([dereg], params)
+        # Refund is negative (money returned to tx), registration is positive
+        # Net of all three certs should equal key_deposit + pool_deposit - key_deposit = pool_deposit
+        net = compute_certificate_deposits([reg, pool_reg, dereg], params)
+        assert net == params.pool_deposit, (
+            f"Net deposits after reg+pool_reg+dereg should be pool_deposit={params.pool_deposit}, got {net}"
+        )
+
+    def test_preserve_balance_restricted(self):
+        """Property: restricted-balance preservation.
+
+        After applying a valid transaction, the total value in the UTxO
+        set restricted to the addresses involved in the transaction
+        should satisfy:
+            consumed(tx, utxo) == produced(tx, pp)
+
+        where consumed = sum of spent inputs + withdrawals
+        and produced = sum of outputs + fee + deposits
+
+        Spec ref: Shelley formal spec, Section 9, Equation (1).
+        """
+        utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
+        tx = make_valid_tx(utxo_set, txin, sk, vk, output_value=8_000_000, fee=2_000_000)
+
+        # Consumed: value at the spent input
+        consumed = sum(
+            _output_lovelace(utxo_set[inp])
+            for inp in tx.transaction_body.inputs
+            if inp in utxo_set
+        )
+
+        # Produced: outputs + fee
+        produced = sum(
+            _output_lovelace(out)
+            for out in tx.transaction_body.outputs
+        ) + tx.transaction_body.fee
+
+        assert consumed == produced, (
+            f"Balance not preserved: consumed={consumed}, produced={produced}"
+        )
 # Withdrawal and staking witness tests
 # ---------------------------------------------------------------------------
 

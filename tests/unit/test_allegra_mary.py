@@ -950,3 +950,229 @@ class TestMaryProtocolParams:
         p = MaryProtocolParams()
         with pytest.raises(AttributeError):
             p.min_fee_a = 99  # type: ignore
+
+
+# ---------------------------------------------------------------------------
+# Mary minting value preservation property
+#
+# Spec ref: Mary ledger formal spec, Section 3 — multi-asset value
+# preservation with minting.
+# Haskell ref: maryUtxoTransition consumed/produced equations.
+# ---------------------------------------------------------------------------
+
+
+class TestMaryMintingPreservation:
+    """Property tests for Mary-era minting and value preservation."""
+
+    def test_mary_minting_preserves_total_value(self):
+        """Property: with minting, total value in + mint = total value out + fee.
+
+        The fundamental Mary invariant:
+            sum(inputs) + mint == sum(outputs) + fee
+
+        This must hold for both the ADA component and all token components.
+        """
+        from pycardano import AssetName
+
+        pid = make_policy_id(0)
+        an = AssetName(b"vibetoken")
+
+        # Input: 10 ADA, 50 tokens
+        input_val = Value(
+            coin=10_000_000,
+            multi_asset=MultiAsset({pid: Asset({an: 50})}),
+        )
+
+        # Mint: 100 new tokens
+        mint_val = Value(
+            coin=0,
+            multi_asset=MultiAsset({pid: Asset({an: 100})}),
+        )
+
+        # Output: 8 ADA, 150 tokens (50 from input + 100 minted)
+        output_val = Value(
+            coin=8_000_000,
+            multi_asset=MultiAsset({pid: Asset({an: 150})}),
+        )
+
+        fee = 2_000_000
+
+        # This should pass: input(10M, 50t) + mint(0, 100t) = output(8M, 150t) + fee(2M)
+        errors = validate_mary_value_preservation(
+            [input_val], [output_val], fee=fee, mint=mint_val,
+        )
+        assert errors == [], f"Expected no errors, got: {errors}"
+
+        # Verify the invariant manually:
+        consumed = _sum_values([input_val])
+        consumed = consumed + mint_val
+        produced = _sum_values([output_val]) + Value(coin=fee)
+        assert _value_eq(consumed, produced)
+
+    def test_mary_minting_unbalanced_detected(self):
+        """Minting that doesn't balance should fail validation."""
+        from pycardano import AssetName
+
+        pid = make_policy_id(0)
+        an = AssetName(b"vibetoken")
+
+        input_val = Value(coin=10_000_000)
+        mint_val = Value(
+            coin=0,
+            multi_asset=MultiAsset({pid: Asset({an: 100})}),
+        )
+        # Output claims 200 tokens but only 100 were minted
+        output_val = Value(
+            coin=8_000_000,
+            multi_asset=MultiAsset({pid: Asset({an: 200})}),
+        )
+
+        errors = validate_mary_value_preservation(
+            [input_val], [output_val], fee=2_000_000, mint=mint_val,
+        )
+        assert any("ValueNotConservedUTxO" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# Timelock determinism test
+#
+# Spec ref: Allegra ledger formal spec, evalTimelock.
+# Haskell ref: validateTimelock in Cardano.Ledger.Allegra.Scripts
+# ---------------------------------------------------------------------------
+
+
+class TestTimelockDeterminism:
+    """Determinism tests for timelock script evaluation."""
+
+    def test_timelock_script_evaluation_deterministic(self):
+        """Same timelock script, same slot -> same result always.
+
+        Timelock evaluation is a pure function of (script, signers, slot).
+        Evaluating it multiple times must always produce the same result.
+        This is critical for consensus — all nodes must agree on script
+        validity.
+        """
+        kh = make_key_hash(42)
+        script = Timelock(
+            type=TimelockType.REQUIRE_ALL_OF,
+            scripts=(
+                Timelock(type=TimelockType.REQUIRE_SIGNATURE, key_hash=kh),
+                Timelock(type=TimelockType.REQUIRE_TIME_AFTER, slot=100),
+                Timelock(
+                    type=TimelockType.REQUIRE_M_OF_N,
+                    required=1,
+                    scripts=(
+                        Timelock(type=TimelockType.REQUIRE_SIGNATURE, key_hash=make_key_hash(0)),
+                        Timelock(type=TimelockType.REQUIRE_SIGNATURE, key_hash=kh),
+                    ),
+                ),
+            ),
+        )
+
+        signers = frozenset({kh})
+
+        # Evaluate 100 times at the same slot — must all be identical
+        results_at_100 = [
+            evaluate_timelock(script, signers, current_slot=100)
+            for _ in range(100)
+        ]
+        assert all(r == results_at_100[0] for r in results_at_100), (
+            "Timelock evaluation is not deterministic"
+        )
+        assert results_at_100[0] is True
+
+        # And at a failing slot
+        results_at_99 = [
+            evaluate_timelock(script, signers, current_slot=99)
+            for _ in range(100)
+        ]
+        assert all(r == results_at_99[0] for r in results_at_99)
+        assert results_at_99[0] is False
+
+    def test_timelock_empty_nested_deterministic(self):
+        """Nested empty scripts evaluate deterministically."""
+        # AllOf(AnyOf()) — AllOf is vacuously true, but contains AnyOf
+        # which is vacuously false.  The overall result depends on whether
+        # AllOf short-circuits.
+        script = Timelock(
+            type=TimelockType.REQUIRE_ALL_OF,
+            scripts=(
+                Timelock(type=TimelockType.REQUIRE_ANY_OF, scripts=()),
+            ),
+        )
+        results = [
+            evaluate_timelock(script, frozenset(), current_slot=0)
+            for _ in range(50)
+        ]
+        assert all(r == results[0] for r in results)
+        # AnyOf() is false, so AllOf(AnyOf()) is false
+        assert results[0] is False
+
+
+# ---------------------------------------------------------------------------
+# Validity interval subsumes TTL
+#
+# Spec ref: Allegra ledger formal spec — ValidityInterval replaced TTL.
+# A Shelley TTL is equivalent to ValidityInterval(None, ttl).
+# ---------------------------------------------------------------------------
+
+
+class TestValidityIntervalSubsumesTTL:
+    """Test that ValidityInterval(None, ttl) behaves identically to Shelley TTL."""
+
+    def test_validity_interval_subsumes_ttl(self):
+        """A TTL is equivalent to a ValidityInterval with only invalid_hereafter set.
+
+        Shelley: tx is valid iff current_slot < ttl
+        Allegra: tx is valid iff current_slot < invalid_hereafter
+
+        These must produce identical results for all slot/ttl combinations.
+        """
+        test_cases = [
+            # (ttl/hereafter, current_slot, expected_valid)
+            (100, 0, True),
+            (100, 50, True),
+            (100, 99, True),
+            (100, 100, False),  # at boundary: expired
+            (100, 101, False),
+            (100, 200, False),
+            (1, 0, True),
+            (1, 1, False),
+            (0, 0, False),
+        ]
+
+        for ttl, current_slot, expected_valid in test_cases:
+            # Allegra: ValidityInterval with only invalid_hereafter
+            interval = ValidityInterval(invalid_before=None, invalid_hereafter=ttl)
+            errors = validate_validity_interval(interval, current_slot)
+            allegra_valid = len(errors) == 0
+
+            assert allegra_valid == expected_valid, (
+                f"TTL={ttl}, slot={current_slot}: "
+                f"expected valid={expected_valid}, got valid={allegra_valid}"
+            )
+
+    def test_validity_interval_with_both_bounds_strictly_more_expressive(self):
+        """ValidityInterval with both bounds is strictly more expressive than TTL.
+
+        TTL can only express "valid before slot X". ValidityInterval can
+        also express "valid after slot Y", which TTL cannot.
+        """
+        # This interval is not expressible as a TTL
+        interval = ValidityInterval(invalid_before=50, invalid_hereafter=100)
+
+        # Slot 49: fails lower bound (TTL would pass this!)
+        errors_49 = validate_validity_interval(interval, current_slot=49)
+        assert any("invalid_before" in e for e in errors_49)
+
+        # Slot 50: passes both bounds
+        errors_50 = validate_validity_interval(interval, current_slot=50)
+        assert errors_50 == []
+
+        # Slot 99: passes both bounds
+        errors_99 = validate_validity_interval(interval, current_slot=99)
+        assert errors_99 == []
+
+        # Slot 100: fails upper bound (same as TTL behavior)
+        errors_100 = validate_validity_interval(interval, current_slot=100)
+        assert any("invalid_hereafter" in e for e in errors_100)
