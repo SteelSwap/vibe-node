@@ -290,6 +290,61 @@ def _process_reg_pool(
             f"is below minimum {params.min_pool_cost}"
         )
 
+    # --- VRF key uniqueness ---
+    # Spec (POOL rule): ∀ pool ∈ stpools, vrf pool ≠ vrf poolParams
+    #   (unless same pool re-registering)
+    # Haskell: StakePoolDuplicateVrfKeyPOOL (added in later eras but the
+    #   invariant is enforced from Shelley onward via the protocol spec)
+    vrf_key = bytes(cert.pool_params.vrf_keyhash)
+    for existing_hash, existing_params in state.pools.items():
+        if existing_hash == pool_hash:
+            # Same pool re-registering -- allow VRF update
+            continue
+        if bytes(existing_params.vrf_keyhash) == vrf_key:
+            raise DelegationError(
+                f"StakePoolDuplicateVrfKeyPOOL: VRF key {vrf_key.hex()[:16]}... "
+                f"is already registered to pool {existing_hash.hex()[:16]}..."
+            )
+
+    # --- Pool metadata URL length ---
+    # Spec: |url metadata| ≤ 64  (Shelley CDDL: url = tstr .size (0..64))
+    # Haskell: StakePoolMetadataUrlTooLongPOOL (indirectly via CDDL validation)
+    if cert.pool_params.pool_metadata is not None:
+        url = cert.pool_params.pool_metadata.url
+        if len(url.encode("utf-8")) > 64:
+            raise DelegationError(
+                f"PoolMetadataUrlTooLongPOOL: metadata URL is "
+                f"{len(url.encode('utf-8'))} bytes, max 64"
+            )
+        # Metadata hash must be exactly 32 bytes
+        meta_hash = bytes(cert.pool_params.pool_metadata.pool_metadata_hash)
+        if len(meta_hash) != 32:
+            raise DelegationError(
+                f"PoolMetadataHashWrongSizePOOL: metadata hash is "
+                f"{len(meta_hash)} bytes, expected 32"
+            )
+
+    # --- Reward address network ID ---
+    # Spec: netId (poolRewardAddr poolParams) = NetworkId
+    # Haskell: WrongNetworkPOOL
+    #
+    # Reward address header format: high nibble identifies address type
+    #   0xE0/0xE1 = VKey staking credential (testnet/mainnet)
+    #   0xF0/0xF1 = Script staking credential (testnet/mainnet)
+    # Low nibble (bit 0) is the network ID: 0=testnet, 1=mainnet
+    reward_account = bytes(cert.pool_params.reward_account)
+    if len(reward_account) >= 1:
+        header = reward_account[0]
+        header_type = header & 0xF0
+        # Only validate network if this is a recognized reward address type
+        if header_type in (0xE0, 0xF0):
+            reward_network = header & 0x0F
+            if reward_network != params.network_id:
+                raise DelegationError(
+                    f"WrongNetworkPOOL: pool reward address has network_id="
+                    f"{reward_network}, expected={params.network_id}"
+                )
+
     new_state = deepcopy(state)
     new_state.pools[pool_hash] = cert.pool_params
     # Cancel any pending retirement if re-registering

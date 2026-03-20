@@ -45,8 +45,9 @@ from pycardano import (
     TransactionInput,
     TransactionOutput,
 )
-from pycardano.hash import TransactionId, VerificationKeyHash
+from pycardano.hash import ScriptHash, TransactionId, VerificationKeyHash
 from pycardano.key import VerificationKey
+from pycardano.nativescript import NativeScript
 from pycardano.witness import TransactionWitnessSet, VerificationKeyWitness
 
 if TYPE_CHECKING:
@@ -105,6 +106,13 @@ class ShelleyProtocolParams:
     min_pool_cost: int = 340_000_000
     """Minimum pool cost in lovelace. Shelley mainnet: 340000000 (340 ADA)."""
 
+    network_id: int = 1
+    """Network ID for address validation. 0 = testnet, 1 = mainnet.
+
+    Spec ref: Shelley ledger formal spec, Section 9 (WrongNetwork).
+    Haskell ref: ``WrongNetwork`` in ``ShelleyUtxoPredFailure``
+    """
+
 
 # Shelley mainnet protocol parameters (genesis values)
 SHELLEY_MAINNET_PARAMS = ShelleyProtocolParams()
@@ -160,6 +168,43 @@ def _output_lovelace(txout: TransactionOutput) -> int:
         return amount
     # pycardano Value object — .coin is the lovelace component
     return amount.coin
+
+
+# ---------------------------------------------------------------------------
+# Address helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_network_id(addr) -> int | None:
+    """Extract the network ID from a pycardano Address or raw bytes address.
+
+    Shelley addresses encode the network in the low nibble of the header byte:
+        - 0x00/0x01 for base addresses (testnet/mainnet)
+        - 0x60/0x61 for enterprise addresses
+        - 0xe0/0xe1 for reward addresses
+        - etc.
+    The low bit (bit 0) is the network discriminator:
+        0 = testnet, 1 = mainnet.
+
+    Spec ref: Shelley ledger formal spec, Section 4 (Address format).
+    Haskell ref: ``getNetwork`` in ``Cardano.Ledger.Address``
+
+    Returns:
+        Network ID (0 or 1), or None if the address format is unrecognized.
+    """
+    from pycardano.address import Address
+    from pycardano.network import Network
+
+    if isinstance(addr, Address):
+        if addr.network == Network.TESTNET:
+            return 0
+        elif addr.network == Network.MAINNET:
+            return 1
+        return None
+    elif isinstance(addr, bytes) and len(addr) >= 1:
+        # Raw bytes address: low nibble of header
+        return addr[0] & 0x0F
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +308,21 @@ def validate_shelley_utxo(
             errors.append(
                 f"OutputTooSmallUTxO: output[{i}] value={out_value}, "
                 f"min={params.min_utxo_value}"
+            )
+
+    # --- Rule 5b: Output address network ID must match ---
+    # Spec: ∀ txout ∈ txouts txb, netId txout_addr = NetworkId
+    # Haskell: WrongNetwork
+    for i, txout in enumerate(tx_body.outputs):
+        addr = txout.address
+        # pycardano Address has a network attribute (Network.TESTNET=0 or
+        # Network.MAINNET=1). For raw bytes addresses the network is encoded
+        # in the low nibble of the header byte.
+        addr_network = _extract_network_id(addr)
+        if addr_network is not None and addr_network != params.network_id:
+            errors.append(
+                f"WrongNetwork: output[{i}] address has network_id={addr_network}, "
+                f"expected={params.network_id}"
             )
 
     # --- Rule 6: Value preservation ---
@@ -455,6 +515,42 @@ def validate_shelley_witnesses(
             errors.append(
                 f"MissingVKeyWitnessesUTxOW: missing witness for "
                 f"key_hash={key_hash.hex()[:16]}..."
+            )
+
+    # --- Check 3: Script witness validation ---
+    # Spec: scriptsNeeded ⊆ dom(txscripts)
+    # Haskell: MissingScriptWitnessesUTxOW
+    #
+    # Script-locked inputs require the corresponding script in the witness set.
+    # In Shelley, these are native scripts referenced by script address hashes.
+    required_script_hashes: set[bytes] = set()
+
+    for txin in tx_body.inputs:
+        if txin in utxo_set:
+            txout = utxo_set[txin]
+            addr = txout.address
+            # Script addresses have a payment_part that is a ScriptHash.
+            # In pycardano, Address header type indicates script vs key:
+            #   header & 0x10 (bit 4) set = script payment credential
+            if hasattr(addr, 'payment_part') and addr.payment_part is not None:
+                from pycardano.hash import ScriptHash as SH
+                if isinstance(addr.payment_part, SH):
+                    required_script_hashes.add(bytes(addr.payment_part))
+
+    # Collect script hashes from the witness set
+    provided_script_hashes: set[bytes] = set()
+    if witness_set.native_scripts:
+        for script in witness_set.native_scripts:
+            script_hash = script.hash()
+            provided_script_hashes.add(bytes(script_hash))
+
+    # Check for missing script witnesses
+    missing_scripts = required_script_hashes - provided_script_hashes
+    if missing_scripts:
+        for sh in missing_scripts:
+            errors.append(
+                f"MissingScriptWitnessesUTxOW: missing script witness for "
+                f"script_hash={sh.hex()[:16]}..."
             )
 
     return errors
