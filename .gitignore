@@ -13,3 +13,4 @@ snapshots/
 .worktrees/
 .private/
 .claude/worktrees/
+.hypothesis/
