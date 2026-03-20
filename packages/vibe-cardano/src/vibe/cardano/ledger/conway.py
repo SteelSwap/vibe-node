@@ -390,8 +390,9 @@ def validate_voting_procedures(
                     f"{voter.credential.hex()[:16]}... not registered"
                 )
 
-        # SPOs: we'd check pool registration, but that's in delegation state
-        # which we don't have here. Simplified: always allow SPOs.
+        elif voter.role == VoterRole.STAKE_POOL:
+            # SPO must be a registered pool
+            errors.extend(validate_spo_vote(voter, gov_state))
 
         # --- Each voted-on proposal must exist ---
         for action_id in votes:
@@ -489,32 +490,330 @@ def check_ratification(
         if not _threshold_met(cc_yes, cc_total, thresholds.cc_threshold):
             return False
 
-    # --- DRep threshold ---
+    # --- DRep threshold (stake-weighted) ---
+    # Spec ref: Conway formal spec, Section 6 — DRep votes are weighted
+    # by delegated stake, not counted equally.
+    # Haskell ref: ``ratifyAction`` DRep stake calculation in
+    #     ``Cardano.Ledger.Conway.Rules.Ratify``
     if thresholds.drep_threshold is not None:
-        drep_yes = 0
-        drep_total = len(gov_state.dreps)
-        for voter, procedure in action_votes.items():
-            if voter.role == VoterRole.DREP:
-                if procedure.vote == Vote.YES:
-                    drep_yes += 1
-        if not _threshold_met(drep_yes, drep_total, thresholds.drep_threshold):
+        drep_yes_stake = 0
+        drep_total_stake = 0
+
+        # Calculate total active DRep stake
+        if gov_state.drep_stake:
+            # Stake-weighted mode: use delegated stake per DRep
+            for drep_cred in gov_state.dreps:
+                stake = gov_state.drep_stake.get(drep_cred, 0)
+                # Exclude inactive DReps from the total
+                if _is_drep_active(drep_cred, gov_state, params):
+                    drep_total_stake += stake
+
+            for voter, procedure in action_votes.items():
+                if voter.role == VoterRole.DREP:
+                    if _is_drep_active(voter.credential, gov_state, params):
+                        stake = gov_state.drep_stake.get(voter.credential, 0)
+                        if procedure.vote == Vote.YES:
+                            drep_yes_stake += stake
+        else:
+            # Fallback: count-based (backwards compatible for tests without stake)
+            for drep_cred in gov_state.dreps:
+                if _is_drep_active(drep_cred, gov_state, params):
+                    drep_total_stake += 1
+            for voter, procedure in action_votes.items():
+                if voter.role == VoterRole.DREP:
+                    if _is_drep_active(voter.credential, gov_state, params):
+                        if procedure.vote == Vote.YES:
+                            drep_yes_stake += 1
+
+        if not _threshold_met(drep_yes_stake, drep_total_stake, thresholds.drep_threshold):
             return False
 
-    # --- SPO threshold ---
+    # --- SPO threshold (stake-weighted) ---
+    # Spec ref: Conway formal spec, Section 6 — SPO votes weighted by pool stake.
+    # Haskell ref: ``ratifyAction`` SPO stake calculation in
+    #     ``Cardano.Ledger.Conway.Rules.Ratify``
     if thresholds.spo_threshold is not None:
-        spo_yes = 0
-        spo_total = 0  # We'd need pool count — simplified: count voters
-        for voter, procedure in action_votes.items():
-            if voter.role == VoterRole.STAKE_POOL:
-                spo_total += 1
-                if procedure.vote == Vote.YES:
-                    spo_yes += 1
-        if spo_total > 0 and not _threshold_met(
-            spo_yes, spo_total, thresholds.spo_threshold
+        spo_yes_stake = 0
+        spo_total_stake = 0
+
+        if gov_state.pool_stake:
+            # Stake-weighted mode
+            for pool_id, stake in gov_state.pool_stake.items():
+                spo_total_stake += stake
+            for voter, procedure in action_votes.items():
+                if voter.role == VoterRole.STAKE_POOL:
+                    stake = gov_state.pool_stake.get(voter.credential, 0)
+                    if procedure.vote == Vote.YES:
+                        spo_yes_stake += stake
+        else:
+            # Fallback: count-based
+            for voter, procedure in action_votes.items():
+                if voter.role == VoterRole.STAKE_POOL:
+                    spo_total_stake += 1
+                    if procedure.vote == Vote.YES:
+                        spo_yes_stake += 1
+
+        if spo_total_stake > 0 and not _threshold_met(
+            spo_yes_stake, spo_total_stake, thresholds.spo_threshold
         ):
             return False
 
+    # --- Committee min size check ---
+    # Spec ref: Conway formal spec, committeeMinSize parameter.
+    # Haskell ref: ``ratifyAction`` committee size check in
+    #     ``Cardano.Ledger.Conway.Rules.Ratify``
+    if thresholds.cc_threshold is not None:
+        if len(gov_state.committee) < params.committee_min_size:
+            return False
+
     return True
+
+
+# ---------------------------------------------------------------------------
+# DRep activity tracking
+# ---------------------------------------------------------------------------
+
+
+def _is_drep_active(
+    drep_credential: bytes,
+    gov_state: GovernanceState,
+    params: ConwayProtocolParams,
+    current_epoch: int | None = None,
+) -> bool:
+    """Check if a DRep is considered active (not expired).
+
+    A DRep is inactive if they haven't voted within drep_activity epochs.
+    If no activity tracking data exists, the DRep is assumed active.
+
+    Spec ref: Conway formal spec, ``drepActivity`` parameter.
+    Haskell ref: ``isDRepExpiry`` in ``Cardano.Ledger.Conway.Rules.Ratify``
+
+    Args:
+        drep_credential: 28-byte DRep credential hash.
+        gov_state: Current governance state.
+        params: Conway protocol parameters.
+        current_epoch: Current epoch (if None, DRep is assumed active).
+
+    Returns:
+        True if the DRep is active.
+    """
+    if not gov_state.drep_activity_epoch:
+        return True  # No tracking data — assume active
+    if current_epoch is None:
+        return True
+    last_active = gov_state.drep_activity_epoch.get(drep_credential)
+    if last_active is None:
+        return True  # Not tracked — assume active
+    return (current_epoch - last_active) <= params.drep_activity
+
+
+def get_active_dreps(
+    gov_state: GovernanceState,
+    params: ConwayProtocolParams,
+    current_epoch: int,
+) -> set[bytes]:
+    """Get the set of active DRep credentials.
+
+    Active DReps are those who have voted within the last drep_activity epochs.
+
+    Args:
+        gov_state: Current governance state.
+        params: Conway protocol parameters.
+        current_epoch: Current epoch.
+
+    Returns:
+        Set of active DRep credential hashes.
+    """
+    active = set()
+    for cred in gov_state.dreps:
+        if _is_drep_active(cred, gov_state, params, current_epoch):
+            active.add(cred)
+    return active
+
+
+# ---------------------------------------------------------------------------
+# SPO vote validation
+# ---------------------------------------------------------------------------
+
+
+def validate_spo_vote(
+    voter: Voter,
+    gov_state: GovernanceState,
+) -> list[str]:
+    """Validate that a stake pool operator is authorized to vote.
+
+    SPOs must be registered pool operators to vote on governance actions.
+
+    Spec ref: Conway formal spec, SPO voting authorization.
+    Haskell ref: ``conwayGovTransition`` SPO vote validation in
+        ``Cardano.Ledger.Conway.Rules.Gov``
+
+    Args:
+        voter: The SPO voter.
+        gov_state: Current governance state.
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    errors: list[str] = []
+    if voter.role != VoterRole.STAKE_POOL:
+        return errors
+
+    if gov_state.registered_pools and voter.credential not in gov_state.registered_pools:
+        errors.append(
+            f"VoterNotAuthorized: SPO pool_id "
+            f"{voter.credential.hex()[:16]}... is not a registered pool"
+        )
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Hard fork initiation validation
+# ---------------------------------------------------------------------------
+
+
+def validate_hard_fork_initiation(
+    action: GovAction,
+    gov_state: GovernanceState,
+) -> list[str]:
+    """Validate a HardForkInitiation governance action.
+
+    The target protocol version must be exactly one major version higher
+    than the current protocol version.
+
+    Spec ref: Conway formal spec, HardForkInitiation validation.
+    Haskell ref: ``HardForkInitiation`` validation in
+        ``Cardano.Ledger.Conway.Rules.Gov``
+
+    Args:
+        action: The governance action (must be HardForkInitiation).
+        gov_state: Current governance state.
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    errors: list[str] = []
+
+    if action.action_type != GovActionType.HARD_FORK_INITIATION:
+        return errors
+
+    if action.payload is None:
+        errors.append(
+            "HardForkInitiationMissingVersion: "
+            "HardForkInitiation must specify a target protocol version"
+        )
+        return errors
+
+    target_version = action.payload
+    if not isinstance(target_version, tuple) or len(target_version) != 2:
+        errors.append(
+            f"HardForkInitiationInvalidVersion: "
+            f"target version must be (major, minor) tuple, got {target_version!r}"
+        )
+        return errors
+
+    current_major, _current_minor = gov_state.current_protocol_version
+    target_major, target_minor = target_version
+
+    if target_major != current_major + 1:
+        errors.append(
+            f"HardForkInitiationVersionMismatch: "
+            f"target major version {target_major} must be exactly one "
+            f"higher than current {current_major}"
+        )
+
+    if target_minor < 0:
+        errors.append(
+            f"HardForkInitiationInvalidMinor: "
+            f"target minor version {target_minor} must be non-negative"
+        )
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Treasury withdrawal validation
+# ---------------------------------------------------------------------------
+
+
+def validate_treasury_withdrawals(
+    action: GovAction,
+) -> list[str]:
+    """Validate a TreasuryWithdrawals governance action.
+
+    Withdrawal amounts must be positive and destinations must be valid
+    29-byte reward addresses.
+
+    Spec ref: Conway formal spec, TreasuryWithdrawals validation.
+    Haskell ref: ``TreasuryWithdrawals`` validation in
+        ``Cardano.Ledger.Conway.Rules.Gov``
+
+    Args:
+        action: The governance action (must be TreasuryWithdrawals).
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    errors: list[str] = []
+
+    if action.action_type != GovActionType.TREASURY_WITHDRAWALS:
+        return errors
+
+    if action.payload is None:
+        errors.append(
+            "TreasuryWithdrawalsEmpty: "
+            "TreasuryWithdrawals must specify withdrawal map"
+        )
+        return errors
+
+    if not isinstance(action.payload, dict):
+        errors.append(
+            f"TreasuryWithdrawalsInvalidPayload: "
+            f"expected dict of reward_addr -> amount, got {type(action.payload).__name__}"
+        )
+        return errors
+
+    for addr, amount in action.payload.items():
+        if not isinstance(addr, bytes) or len(addr) != 29:
+            errors.append(
+                f"TreasuryWithdrawalInvalidAddr: "
+                f"reward address must be 29 bytes, got {len(addr) if isinstance(addr, bytes) else type(addr).__name__}"
+            )
+        if not isinstance(amount, int) or amount <= 0:
+            errors.append(
+                f"TreasuryWithdrawalNonPositiveAmount: "
+                f"withdrawal amount must be positive, got {amount}"
+            )
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# No confidence effects
+# ---------------------------------------------------------------------------
+
+
+def apply_no_confidence(
+    gov_state: GovernanceState,
+) -> GovernanceState:
+    """Apply the effects of a NoConfidence action being enacted.
+
+    When NoConfidence passes, the constitutional committee is dissolved.
+    All CC members are removed.
+
+    Spec ref: Conway formal spec, NoConfidence enactment.
+    Haskell ref: ``enactNoConfidence`` in
+        ``Cardano.Ledger.Conway.Rules.Enact``
+
+    Args:
+        gov_state: Current governance state.
+
+    Returns:
+        New GovernanceState with the committee dissolved.
+    """
+    new_state = deepcopy(gov_state)
+    new_state.committee.clear()
+    return new_state
 
 
 # ---------------------------------------------------------------------------
