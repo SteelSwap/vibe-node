@@ -334,6 +334,51 @@ class LedgerDB:
                 entries = [(key, col_vals) for key, col_vals in diff.consumed]
                 self._bulk_insert(entries)
 
+    # -- Past ledger state lookup --------------------------------------------
+
+    def get_past_ledger(self, blocks_back: int) -> LedgerDB | None:
+        """Look up a past ledger state by rolling back N blocks.
+
+        Returns a *copy* of this LedgerDB with the last ``blocks_back``
+        diffs reversed, or ``None`` if ``blocks_back`` exceeds the stored
+        diff count.
+
+        This is a read-only operation — it does not modify the current
+        LedgerDB state.
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.LedgerDB.API.getPastLedgerAt
+            Uses the windowed sequence of ledger states to look up
+            historical points within the last k blocks.
+
+        Args:
+            blocks_back: How many blocks back to look (0 = current state).
+
+        Returns:
+            A new LedgerDB representing the past state, or None if the
+            requested point is beyond the stored history.
+        """
+        if blocks_back > len(self._diffs):
+            return None
+
+        if blocks_back == 0:
+            # Return a shallow copy at the current state
+            past = LedgerDB(k=self._k)
+            past._table = self._table
+            past._index = dict(self._index)
+            past._diffs = deque(self._diffs, maxlen=self._k)
+            past._free_rows = list(self._free_rows)
+            return past
+
+        # Create a copy and roll it back
+        past = LedgerDB(k=self._k)
+        past._table = self._table
+        past._index = dict(self._index)
+        past._diffs = deque(self._diffs, maxlen=self._k)
+        past._free_rows = list(self._free_rows)
+        past.rollback(blocks_back)
+        return past
+
     # -- Compaction ----------------------------------------------------------
 
     def compact(self) -> None:

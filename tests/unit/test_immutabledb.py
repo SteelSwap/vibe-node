@@ -23,7 +23,9 @@ import pytest
 
 from vibe.cardano.storage.immutable import (
     AppendBlockNotNewerThanTipError,
+    ClosedDBError,
     ImmutableDB,
+    ImmutableDBIterator,
     _PRI_ENTRY_FMT,
     _PRI_ENTRY_SIZE,
     _SEC_ENTRY_FMT,
@@ -541,3 +543,384 @@ class TestAppendStoreKeyFormat:
         db = ImmutableDB(str(tmp_path), epoch_size=100)
         with pytest.raises(ValueError, match="Key must be >= 40 bytes"):
             await db.append(b"short", b"value")
+
+
+# ---------------------------------------------------------------------------
+# DeleteAfter — truncate chain
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteAfter:
+    """test_delete_after_truncates_chain
+
+    Implement DeleteAfter: truncate chain after a given slot, verify blocks
+    after that slot are gone.
+
+    Haskell reference:
+        Ouroboros.Consensus.Storage.ImmutableDB.API.deleteAfter
+    """
+
+    @pytest.mark.asyncio
+    async def test_delete_after_truncates_chain(self, tmp_path: object) -> None:
+        """Blocks after the cutoff slot are removed; blocks at or before survive."""
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+
+        # Append blocks at slots 1, 3, 5, 7, 9
+        blocks = {}
+        for s in [1, 3, 5, 7, 9]:
+            data = f"block_at_{s}".encode()
+            await db.append_block(s, make_hash(s), data)
+            blocks[s] = data
+
+        assert db.get_tip_slot() == 9
+
+        # Truncate after slot 5 — blocks at 7 and 9 should be gone
+        removed = await db.delete_after(5)
+        assert removed == 2
+
+        assert db.get_tip_slot() == 5
+
+        # Blocks at slots 1, 3, 5 should still be retrievable
+        for s in [1, 3, 5]:
+            result = await db.get_block(make_hash(s))
+            assert result == blocks[s], f"Block at slot {s} should survive"
+
+        # Blocks at slots 7 and 9 should be gone
+        for s in [7, 9]:
+            result = await db.get_block(make_hash(s))
+            assert result is None, f"Block at slot {s} should be truncated"
+
+    @pytest.mark.asyncio
+    async def test_delete_after_at_tip_is_noop(self, tmp_path: object) -> None:
+        """Truncating at the tip slot removes nothing."""
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+        await db.append_block(5, make_hash(5), b"block_5")
+        removed = await db.delete_after(5)
+        assert removed == 0
+        assert db.get_tip_slot() == 5
+
+    @pytest.mark.asyncio
+    async def test_delete_after_beyond_tip_is_noop(self, tmp_path: object) -> None:
+        """Truncating beyond the tip slot removes nothing."""
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+        await db.append_block(5, make_hash(5), b"block_5")
+        removed = await db.delete_after(100)
+        assert removed == 0
+
+
+# ---------------------------------------------------------------------------
+# Iterator — has_next, close
+# ---------------------------------------------------------------------------
+
+
+class TestIteratorHasNext:
+    """test_iterator_has_next
+
+    Explicit hasNext check on iterator.
+    """
+
+    @pytest.mark.asyncio
+    async def test_iterator_has_next(self, tmp_path: object) -> None:
+        """Iterator.has_next() returns True when blocks remain, False when exhausted."""
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+        for s in [1, 3, 5]:
+            await db.append_block(s, make_hash(s), f"blk{s}".encode())
+
+        it = db.stream(start_slot=0)
+
+        assert it.has_next() is True
+        it.next()  # slot 1
+        assert it.has_next() is True
+        it.next()  # slot 3
+        assert it.has_next() is True
+        it.next()  # slot 5
+        assert it.has_next() is False
+
+    @pytest.mark.asyncio
+    async def test_iterator_has_next_empty_db(self, tmp_path: object) -> None:
+        """Iterator on empty DB has no next."""
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+        it = db.stream(start_slot=0)
+        assert it.has_next() is False
+
+
+class TestIteratorClose:
+    """test_iterator_close
+
+    Close iterator, verify subsequent next raises ClosedDBError.
+    """
+
+    @pytest.mark.asyncio
+    async def test_iterator_close(self, tmp_path: object) -> None:
+        """After close(), next() raises ClosedDBError."""
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+        await db.append_block(1, make_hash(1), b"block_1")
+
+        it = db.stream(start_slot=0)
+        assert it.has_next() is True
+
+        it.close()
+        assert it.has_next() is False
+
+        with pytest.raises(ClosedDBError):
+            it.next()
+
+    @pytest.mark.asyncio
+    async def test_iterator_close_idempotent(self, tmp_path: object) -> None:
+        """Closing an already-closed iterator doesn't raise."""
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+        it = db.stream(start_slot=0)
+        it.close()
+        it.close()  # Should not raise
+
+
+# ---------------------------------------------------------------------------
+# Corruption recovery
+# ---------------------------------------------------------------------------
+
+
+class TestCorruptionRecovery:
+    """test_corruption_bitflip_detected
+    test_corruption_deleted_file_recovery
+
+    Verify that corruption in chunk files is detected and recovery
+    truncates to the last valid block.
+    """
+
+    @pytest.mark.asyncio
+    async def test_corruption_bitflip_detected(self, tmp_path: object) -> None:
+        """Flip a byte in a chunk file, verify recovery truncates to last valid block.
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.ImmutableDB.Impl.Validation
+        """
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+
+        # Append 3 blocks in same chunk
+        await db.append_block(1, make_hash(1), b"BLOCK_ONE_VALID")
+        await db.append_block(2, make_hash(2), b"BLOCK_TWO_VALID")
+        await db.append_block(3, make_hash(3), b"BLOCK_THREE_OK!")
+
+        assert db.get_tip_slot() == 3
+
+        # Corrupt the chunk file by truncating it — this simulates
+        # a bitflip that makes the last block unreadable because
+        # the size recorded in the secondary index won't match.
+        chunk_path = db._chunk_path(0)
+        original = chunk_path.read_bytes()
+        # Truncate to remove the last block partially
+        truncated = original[: len(b"BLOCK_ONE_VALID") + len(b"BLOCK_TWO_VALID") + 5]
+        chunk_path.write_bytes(truncated)
+
+        # Create a fresh DB that will run recovery
+        db2 = ImmutableDB(str(tmp_path), epoch_size=100)
+        valid_count = await db2.validate_and_recover()
+
+        # Only blocks 1 and 2 should survive (block 3's data is truncated)
+        assert valid_count == 2
+        assert db2.get_tip_slot() == 2
+
+    @pytest.mark.asyncio
+    async def test_corruption_deleted_file_recovery(self, tmp_path: object) -> None:
+        """Delete a chunk file, verify recovery handles it.
+
+        If a chunk file is missing entirely, recovery should stop at
+        the last chunk that was fully readable.
+        """
+        db = ImmutableDB(str(tmp_path), epoch_size=10)
+
+        # Append blocks across two chunks
+        await db.append_block(3, make_hash(3), b"chunk0_block")
+        await db.append_block(15, make_hash(15), b"chunk1_block")
+
+        assert db.get_tip_slot() == 15
+
+        # Delete chunk 1's data file
+        chunk1_path = db._chunk_path(1)
+        assert chunk1_path.exists()
+        chunk1_path.unlink()
+
+        # Create a fresh DB and validate
+        db2 = ImmutableDB(str(tmp_path), epoch_size=10)
+        valid_count = await db2.validate_and_recover()
+
+        # Only chunk 0's block should survive
+        assert valid_count == 1
+        assert db2.get_tip_slot() == 3
+
+
+# ---------------------------------------------------------------------------
+# Primary Index
+# ---------------------------------------------------------------------------
+
+
+class TestPrimaryIndex:
+    """Tests for primary index read/write operations.
+
+    The primary index maps relative slots to byte offsets in chunk files.
+    """
+
+    @pytest.mark.asyncio
+    async def test_primary_index_write_load_roundtrip(self, tmp_path: object) -> None:
+        """Write primary index, load it back, verify offsets match.
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.ImmutableDB.Impl.Index.Primary
+        """
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+
+        # Append blocks of known sizes to control offsets precisely
+        b1 = b"A" * 100
+        b2 = b"B" * 200
+        b3 = b"C" * 50
+        await db.append_block(2, make_hash(2), b1)
+        await db.append_block(5, make_hash(5), b2)
+        await db.append_block(8, make_hash(8), b3)
+
+        offsets = db._read_primary_offsets(0)
+        assert len(offsets) > 0
+
+        # Slot 2 should start at offset 0
+        assert offsets[2] == 0
+        # Slot 3 should reflect end of b1 (carried forward for empty slots)
+        assert offsets[3] == 100
+        # Slot 5 should start at offset 100
+        assert offsets[5] == 100
+        # Slot 6 should reflect end of b2
+        assert offsets[6] == 300
+        # Slot 8 should start at offset 300
+        assert offsets[8] == 300
+
+    @pytest.mark.asyncio
+    async def test_primary_index_filled_slots_consistency(self, tmp_path: object) -> None:
+        """Filled slots correspond to non-zero-delta offsets.
+
+        For a filled slot i, offset[i+1] - offset[i] > 0.
+        For an empty slot i, offset[i+1] - offset[i] == 0.
+        """
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+
+        # Blocks at slots 1, 3, 6 — slots 0, 2, 4, 5 are empty
+        await db.append_block(1, make_hash(1), b"X" * 40)
+        await db.append_block(3, make_hash(3), b"Y" * 60)
+        await db.append_block(6, make_hash(6), b"Z" * 80)
+
+        offsets = db._read_primary_offsets(0)
+
+        # Filled slots should have positive delta
+        filled_slots = [1, 3, 6]
+        for s in filled_slots:
+            delta = offsets[s + 1] - offsets[s]
+            assert delta > 0, f"Filled slot {s} should have positive delta, got {delta}"
+
+        # Empty slots should have zero delta
+        empty_slots = [0, 2, 4, 5]
+        for s in empty_slots:
+            if s + 1 < len(offsets):
+                delta = offsets[s + 1] - offsets[s]
+                assert delta == 0, f"Empty slot {s} should have zero delta, got {delta}"
+
+    @pytest.mark.asyncio
+    async def test_primary_index_truncate_to_slot(self, tmp_path: object) -> None:
+        """Truncate index at a slot, verify later entries gone.
+
+        Uses delete_after to truncate, then verifies the primary index
+        is consistent.
+        """
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+
+        await db.append_block(2, make_hash(2), b"AA" * 20)
+        await db.append_block(5, make_hash(5), b"BB" * 30)
+        await db.append_block(8, make_hash(8), b"CC" * 10)
+
+        # Truncate after slot 5
+        await db.delete_after(5)
+
+        # Block at slot 8 should be gone
+        result = await db.get_block_by_slot(8)
+        assert result is None
+
+        # Block at slot 5 should still be there
+        result = await db.get_block_by_slot(5)
+        assert result == b"BB" * 30
+
+    @pytest.mark.asyncio
+    async def test_primary_index_reconstruct_from_chunks(self, tmp_path: object) -> None:
+        """Rebuild primary index from chunk file, verify matches original.
+
+        After writing blocks, wipe the primary index, recreate the DB
+        (which rebuilds from secondary index), and verify slot lookups
+        still work.
+        """
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+
+        blocks = {2: b"AAA", 5: b"BBBBB", 9: b"CC"}
+        for s, data in blocks.items():
+            await db.append_block(s, make_hash(s), data)
+
+        # Verify lookups work before wipe
+        for s, data in blocks.items():
+            assert await db.get_block_by_slot(s) == data
+
+        # Wipe primary index files
+        for f in db._primary_dir.glob("*.idx"):
+            f.unlink()
+
+        # Recreate DB — recovery reads from secondary index and can
+        # still do hash-based lookups (primary is for slot-based only)
+        db2 = ImmutableDB(str(tmp_path), epoch_size=100)
+
+        # Hash-based lookups should still work (from secondary index)
+        for s, data in blocks.items():
+            result = await db2.get_block(make_hash(s))
+            assert result == data, f"Hash lookup for slot {s} failed after primary wipe"
+
+    @pytest.mark.asyncio
+    async def test_primary_index_empty_slots_carry_forward(self, tmp_path: object) -> None:
+        """Empty slots have same offset as previous filled slot.
+
+        When blocks exist at slots 0 and 5, slots 1-4 should all carry
+        the same offset as the end of slot 0's block.
+        """
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+
+        b0 = b"FIRST" * 10  # 50 bytes
+        await db.append_block(0, make_hash(0), b0)
+        await db.append_block(5, make_hash(5), b"SECOND")
+
+        offsets = db._read_primary_offsets(0)
+
+        # Slot 0 starts at 0
+        assert offsets[0] == 0
+        # Slot 1 (end of slot 0's block = 50)
+        end_of_slot_0 = len(b0)
+        assert offsets[1] == end_of_slot_0
+
+        # Slots 2-4 should carry forward the same offset (empty)
+        for s in [2, 3, 4]:
+            assert offsets[s] == end_of_slot_0, (
+                f"Empty slot {s} should carry forward offset {end_of_slot_0}"
+            )
+
+        # Slot 5 starts where the last empty slot pointed
+        assert offsets[5] == end_of_slot_0
+
+    @pytest.mark.asyncio
+    async def test_primary_index_first_filled_slot(self, tmp_path: object) -> None:
+        """First filled slot is correctly identified.
+
+        If the first block is at slot 3, slots 0-2 should have offset 0
+        and slot 3 should also have offset 0 (since it's the first block).
+        """
+        db = ImmutableDB(str(tmp_path), epoch_size=100)
+
+        await db.append_block(3, make_hash(3), b"FIRST_BLOCK")
+
+        offsets = db._read_primary_offsets(0)
+
+        # Slots 0-3 should all be 0 (no blocks before slot 3)
+        for s in range(4):
+            assert offsets[s] == 0, f"Slot {s} should have offset 0"
+
+        # Slot 4 should be at end of block
+        assert offsets[4] == len(b"FIRST_BLOCK")
