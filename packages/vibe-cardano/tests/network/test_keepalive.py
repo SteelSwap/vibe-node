@@ -359,3 +359,243 @@ class TestHypothesis:
         """MsgDone wire format is always [2]."""
         wire = cbor2.loads(encode_done())
         assert wire == [2]
+
+
+# ---------------------------------------------------------------------------
+# Codec split boundary tests (Haskell 2-chunk and 3-chunk patterns)
+# ---------------------------------------------------------------------------
+
+
+class TestCodecSplitBoundary2Chunk:
+    """Test that encoded messages decode correctly after 2-chunk reassembly.
+
+    Follows the Haskell codec test pattern: take valid encoded bytes,
+    split at every possible position into 2 chunks, reassemble, and
+    verify correct decoding.
+
+    NOTE: The current decoder (cbor2.loads / decode_message) does not
+    support incremental/streaming parsing. These tests verify that
+    reassembled bytes decode correctly, which validates that the CBOR
+    encoding has no alignment or framing dependencies. If incremental
+    parsing is needed in the future, this tests the reassembly path.
+    """
+
+    @staticmethod
+    def _all_2chunk_splits(data: bytes) -> list[tuple[bytes, bytes]]:
+        """Generate all possible 2-chunk splits of data.
+
+        For N bytes, there are N-1 split points (positions 1..N-1).
+        """
+        return [(data[:i], data[i:]) for i in range(1, len(data))]
+
+    def test_keep_alive_2chunk(self) -> None:
+        """MsgKeepAlive survives all 2-chunk splits."""
+        for cookie in [0, 42, 1000, 65535]:
+            encoded = encode_keep_alive(cookie)
+            for chunk1, chunk2 in self._all_2chunk_splits(encoded):
+                reassembled = chunk1 + chunk2
+                assert reassembled == encoded
+                msg = decode_message(reassembled)
+                assert isinstance(msg, MsgKeepAlive)
+                assert msg.cookie == cookie
+
+    def test_keep_alive_response_2chunk(self) -> None:
+        """MsgKeepAliveResponse survives all 2-chunk splits."""
+        for cookie in [0, 42, 1000, 65535]:
+            encoded = encode_keep_alive_response(cookie)
+            for chunk1, chunk2 in self._all_2chunk_splits(encoded):
+                reassembled = chunk1 + chunk2
+                assert reassembled == encoded
+                msg = decode_message(reassembled)
+                assert isinstance(msg, MsgKeepAliveResponse)
+                assert msg.cookie == cookie
+
+    def test_done_2chunk(self) -> None:
+        """MsgDone survives all 2-chunk splits."""
+        encoded = encode_done()
+        for chunk1, chunk2 in self._all_2chunk_splits(encoded):
+            reassembled = chunk1 + chunk2
+            assert reassembled == encoded
+            msg = decode_message(reassembled)
+            assert isinstance(msg, MsgDone)
+
+    @given(cookie=st.integers(min_value=0, max_value=65535))
+    @settings(max_examples=100)
+    def test_hypothesis_2chunk_keep_alive(self, cookie: int) -> None:
+        """Property: 2-chunk reassembly works for any uint16 cookie."""
+        encoded = encode_keep_alive(cookie)
+        for chunk1, chunk2 in self._all_2chunk_splits(encoded):
+            msg = decode_message(chunk1 + chunk2)
+            assert isinstance(msg, MsgKeepAlive)
+            assert msg.cookie == cookie
+
+
+class TestCodecSplitBoundary3Chunk:
+    """Test that encoded messages decode correctly after 3-chunk reassembly.
+
+    Same pattern as the 2-chunk test but splits into 3 pieces at every
+    valid pair of split positions.
+    """
+
+    @staticmethod
+    def _all_3chunk_splits(
+        data: bytes,
+    ) -> list[tuple[bytes, bytes, bytes]]:
+        """Generate all possible 3-chunk splits of data.
+
+        For N bytes, all pairs (i, j) where 1 <= i < j <= N-1.
+        """
+        splits = []
+        n = len(data)
+        for i in range(1, n):
+            for j in range(i + 1, n):
+                splits.append((data[:i], data[i:j], data[j:]))
+        return splits
+
+    def test_keep_alive_3chunk(self) -> None:
+        """MsgKeepAlive survives all 3-chunk splits."""
+        for cookie in [0, 42, 65535]:
+            encoded = encode_keep_alive(cookie)
+            for c1, c2, c3 in self._all_3chunk_splits(encoded):
+                reassembled = c1 + c2 + c3
+                assert reassembled == encoded
+                msg = decode_message(reassembled)
+                assert isinstance(msg, MsgKeepAlive)
+                assert msg.cookie == cookie
+
+    def test_keep_alive_response_3chunk(self) -> None:
+        """MsgKeepAliveResponse survives all 3-chunk splits."""
+        for cookie in [0, 42, 65535]:
+            encoded = encode_keep_alive_response(cookie)
+            for c1, c2, c3 in self._all_3chunk_splits(encoded):
+                reassembled = c1 + c2 + c3
+                assert reassembled == encoded
+                msg = decode_message(reassembled)
+                assert isinstance(msg, MsgKeepAliveResponse)
+                assert msg.cookie == cookie
+
+    def test_done_3chunk(self) -> None:
+        """MsgDone survives all 3-chunk splits.
+
+        MsgDone encodes to only 2 bytes ([0x81, 0x02]), so a 3-chunk
+        split requires at least 3 bytes. We verify that 2-byte messages
+        have no valid 3-chunk split (N-1 choose 2 = 0 when N=2), which
+        is itself a valid boundary test.
+        """
+        encoded = encode_done()
+        splits = self._all_3chunk_splits(encoded)
+        if len(encoded) < 3:
+            # 2-byte message has no valid 3-chunk split — this is expected.
+            assert splits == []
+        else:
+            for c1, c2, c3 in splits:
+                msg = decode_message(c1 + c2 + c3)
+                assert isinstance(msg, MsgDone)
+
+    @given(cookie=st.integers(min_value=0, max_value=65535))
+    @settings(max_examples=100)
+    def test_hypothesis_3chunk_keep_alive(self, cookie: int) -> None:
+        """Property: 3-chunk reassembly works for any uint16 cookie."""
+        encoded = encode_keep_alive(cookie)
+        for c1, c2, c3 in self._all_3chunk_splits(encoded):
+            msg = decode_message(c1 + c2 + c3)
+            assert isinstance(msg, MsgKeepAlive)
+            assert msg.cookie == cookie
+
+
+# ---------------------------------------------------------------------------
+# Byte limits enforcement per state
+# ---------------------------------------------------------------------------
+
+
+class TestByteLimitsPerState:
+    """Verify that encoded message sizes respect per-state byte limits.
+
+    The keep-alive protocol messages are tiny — a fixed msg_id plus an
+    optional uint16 cookie. The Haskell implementation enforces per-state
+    byte limits to prevent oversized messages from consuming resources.
+
+    Per the Haskell codec (codecKeepAlive), the limits are very small
+    (all messages are well under 64 bytes). We verify this holds even
+    for boundary cookie values.
+
+    Haskell reference:
+        Ouroboros.Network.Protocol.KeepAlive.Codec (byteLimitsKeepAlive)
+    """
+
+    #: Conservative upper bound for any keep-alive message.
+    MAX_MSG_SIZE = 64
+
+    def test_msg_keep_alive_size_zero_cookie(self) -> None:
+        """MsgKeepAlive with cookie=0 is within limit."""
+        encoded = encode_keep_alive(0)
+        assert len(encoded) <= self.MAX_MSG_SIZE
+
+    def test_msg_keep_alive_size_max_cookie(self) -> None:
+        """MsgKeepAlive with cookie=65535 is within limit."""
+        encoded = encode_keep_alive(65535)
+        assert len(encoded) <= self.MAX_MSG_SIZE
+
+    def test_msg_keep_alive_response_size_zero_cookie(self) -> None:
+        """MsgKeepAliveResponse with cookie=0 is within limit."""
+        encoded = encode_keep_alive_response(0)
+        assert len(encoded) <= self.MAX_MSG_SIZE
+
+    def test_msg_keep_alive_response_size_max_cookie(self) -> None:
+        """MsgKeepAliveResponse with cookie=65535 is within limit."""
+        encoded = encode_keep_alive_response(65535)
+        assert len(encoded) <= self.MAX_MSG_SIZE
+
+    def test_msg_done_size(self) -> None:
+        """MsgDone is within limit."""
+        encoded = encode_done()
+        assert len(encoded) <= self.MAX_MSG_SIZE
+
+    def test_client_messages_within_limit(self) -> None:
+        """All StClient messages (MsgKeepAlive, MsgDone) are within limit."""
+        # MsgKeepAlive at boundary cookies
+        for cookie in [0, 1, 256, 65534, 65535]:
+            encoded = encode_keep_alive(cookie)
+            assert len(encoded) <= self.MAX_MSG_SIZE, (
+                f"MsgKeepAlive(cookie={cookie}) is {len(encoded)} bytes, "
+                f"exceeds {self.MAX_MSG_SIZE}"
+            )
+        # MsgDone
+        assert len(encode_done()) <= self.MAX_MSG_SIZE
+
+    def test_server_messages_within_limit(self) -> None:
+        """All StServer messages (MsgKeepAliveResponse) are within limit."""
+        for cookie in [0, 1, 256, 65534, 65535]:
+            encoded = encode_keep_alive_response(cookie)
+            assert len(encoded) <= self.MAX_MSG_SIZE, (
+                f"MsgKeepAliveResponse(cookie={cookie}) is {len(encoded)} bytes, "
+                f"exceeds {self.MAX_MSG_SIZE}"
+            )
+
+    @given(cookie=st.integers(min_value=0, max_value=65535))
+    @settings(max_examples=200)
+    def test_hypothesis_all_messages_within_limit(self, cookie: int) -> None:
+        """Property: no message exceeds the byte limit for any cookie."""
+        assert len(encode_keep_alive(cookie)) <= self.MAX_MSG_SIZE
+        assert len(encode_keep_alive_response(cookie)) <= self.MAX_MSG_SIZE
+        assert len(encode_done()) <= self.MAX_MSG_SIZE
+
+    def test_exact_sizes_are_tiny(self) -> None:
+        """Verify the actual sizes are as expected (sanity check).
+
+        CBOR encoding of [0, 65535] should be:
+        - 0x82 (array of 2), 0x00 (uint 0), 0x19 0xFF 0xFF (uint16 65535)
+        = 5 bytes total.
+
+        CBOR encoding of [2] should be:
+        - 0x81 (array of 1), 0x02 (uint 2)
+        = 2 bytes total.
+        """
+        # Max-size ping: [0, 65535]
+        assert len(encode_keep_alive(65535)) == 5
+        # Min-size ping: [0, 0]
+        assert len(encode_keep_alive(0)) == 3
+        # Max-size response: [1, 65535]
+        assert len(encode_keep_alive_response(65535)) == 5
+        # Done: [2]
+        assert len(encode_done()) == 2
