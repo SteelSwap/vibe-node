@@ -579,3 +579,187 @@ class TestHasVRFNative:
         if not HAS_VRF_NATIVE:
             with pytest.raises(NotImplementedError):
                 vrf_prove(b"\x00" * VRF_SK_SIZE, b"test")
+
+
+# ---------------------------------------------------------------------------
+# Test 1: VRF proof CBOR serialization round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestVRFCborRoundTrip:
+    """Test that VRF proof, output, and PK bytes round-trip through CBOR.
+
+    Block headers encode VRF proofs/outputs as CBOR bytestrings. This test
+    ensures raw bytes of the correct sizes survive encode/decode via cbor2.
+
+    Haskell ref: Cardano.Protocol.TPraos.BHeader — VRF fields are
+    CBOR-encoded as raw bytestrings in the block header.
+    """
+
+    def test_vrf_proof_cbor_roundtrip(self) -> None:
+        """80-byte VRF proof round-trips through CBOR bytestring encoding."""
+        import cbor2
+
+        proof = os.urandom(VRF_PROOF_SIZE)
+        encoded = cbor2.dumps(proof)
+        decoded = cbor2.loads(encoded)
+        assert decoded == proof
+        assert isinstance(decoded, bytes)
+        assert len(decoded) == VRF_PROOF_SIZE
+
+    def test_vrf_output_cbor_roundtrip(self) -> None:
+        """64-byte VRF output round-trips through CBOR bytestring encoding."""
+        import cbor2
+
+        output = os.urandom(VRF_OUTPUT_SIZE)
+        encoded = cbor2.dumps(output)
+        decoded = cbor2.loads(encoded)
+        assert decoded == output
+        assert len(decoded) == VRF_OUTPUT_SIZE
+
+    def test_vrf_pk_cbor_roundtrip(self) -> None:
+        """32-byte VRF public key round-trips through CBOR bytestring encoding."""
+        import cbor2
+
+        pk = os.urandom(VRF_PK_SIZE)
+        encoded = cbor2.dumps(pk)
+        decoded = cbor2.loads(encoded)
+        assert decoded == pk
+        assert len(decoded) == VRF_PK_SIZE
+
+    def test_vrf_proof_cbor_is_major_type_2(self) -> None:
+        """CBOR encoding of a VRF proof should use major type 2 (bytestring).
+
+        CBOR major type 2 means the first byte's high 3 bits are 010 (0x40-0x5b).
+        For an 80-byte bytestring: 0x58 0x50 (2-byte length encoding).
+        """
+        import cbor2
+
+        proof = b"\xab" * VRF_PROOF_SIZE
+        encoded = cbor2.dumps(proof)
+        # Major type 2, additional info 24 (1-byte length follows) = 0x58
+        assert encoded[0] == 0x58
+        assert encoded[1] == VRF_PROOF_SIZE  # 80
+
+    def test_vrf_all_fields_in_cbor_array(self) -> None:
+        """A CBOR array of [proof, output, pk] round-trips correctly."""
+        import cbor2
+
+        proof = os.urandom(VRF_PROOF_SIZE)
+        output = os.urandom(VRF_OUTPUT_SIZE)
+        pk = os.urandom(VRF_PK_SIZE)
+
+        payload = [proof, output, pk]
+        encoded = cbor2.dumps(payload)
+        decoded = cbor2.loads(encoded)
+
+        assert decoded[0] == proof
+        assert decoded[1] == output
+        assert decoded[2] == pk
+
+
+# ---------------------------------------------------------------------------
+# Test 6 (VRF part): Key size mismatch edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestVRFKeySizeMismatch:
+    """Test that VRF functions reject keys of incorrect sizes.
+
+    Haskell ref: rawDeserialise* functions in cardano-crypto-class
+    check exact byte sizes and return Nothing on mismatch.
+    """
+
+    def test_vrf_verify_pk_too_short(self) -> None:
+        """31-byte VRF PK should be rejected by vrf_verify."""
+        if not HAS_VRF_NATIVE:
+            pytest.skip("Needs native VRF extension")
+        with pytest.raises(ValueError, match=f"{VRF_PK_SIZE} bytes"):
+            vrf_verify(
+                pk=b"\x00" * 31,
+                proof=b"\x00" * VRF_PROOF_SIZE,
+                alpha=b"test",
+            )
+
+    def test_vrf_verify_pk_too_long(self) -> None:
+        """33-byte VRF PK should be rejected by vrf_verify."""
+        if not HAS_VRF_NATIVE:
+            pytest.skip("Needs native VRF extension")
+        with pytest.raises(ValueError, match=f"{VRF_PK_SIZE} bytes"):
+            vrf_verify(
+                pk=b"\x00" * 33,
+                proof=b"\x00" * VRF_PROOF_SIZE,
+                alpha=b"test",
+            )
+
+    def test_vrf_verify_proof_too_short(self) -> None:
+        """79-byte VRF proof should be rejected."""
+        if not HAS_VRF_NATIVE:
+            pytest.skip("Needs native VRF extension")
+        with pytest.raises(ValueError, match=f"{VRF_PROOF_SIZE} bytes"):
+            vrf_verify(
+                pk=b"\x00" * VRF_PK_SIZE,
+                proof=b"\x00" * 79,
+                alpha=b"test",
+            )
+
+    def test_vrf_verify_proof_too_long(self) -> None:
+        """81-byte VRF proof should be rejected."""
+        if not HAS_VRF_NATIVE:
+            pytest.skip("Needs native VRF extension")
+        with pytest.raises(ValueError, match=f"{VRF_PROOF_SIZE} bytes"):
+            vrf_verify(
+                pk=b"\x00" * VRF_PK_SIZE,
+                proof=b"\x00" * 81,
+                alpha=b"test",
+            )
+
+    def test_vrf_prove_sk_too_short(self) -> None:
+        """63-byte VRF SK should be rejected by vrf_prove."""
+        if not HAS_VRF_NATIVE:
+            pytest.skip("Needs native VRF extension")
+        with pytest.raises(ValueError, match=f"{VRF_SK_SIZE} bytes"):
+            vrf_prove(sk=b"\x00" * 63, alpha=b"test")
+
+    def test_vrf_prove_sk_too_long(self) -> None:
+        """65-byte VRF SK should be rejected by vrf_prove."""
+        if not HAS_VRF_NATIVE:
+            pytest.skip("Needs native VRF extension")
+        with pytest.raises(ValueError, match=f"{VRF_SK_SIZE} bytes"):
+            vrf_prove(sk=b"\x00" * 65, alpha=b"test")
+
+    def test_vrf_proof_to_hash_too_short(self) -> None:
+        """79-byte proof should be rejected by vrf_proof_to_hash."""
+        if not HAS_VRF_NATIVE:
+            pytest.skip("Needs native VRF extension")
+        with pytest.raises(ValueError, match=f"{VRF_PROOF_SIZE} bytes"):
+            vrf_proof_to_hash(proof=b"\x00" * 79)
+
+    def test_vrf_proof_to_hash_too_long(self) -> None:
+        """81-byte proof should be rejected by vrf_proof_to_hash."""
+        if not HAS_VRF_NATIVE:
+            pytest.skip("Needs native VRF extension")
+        with pytest.raises(ValueError, match=f"{VRF_PROOF_SIZE} bytes"):
+            vrf_proof_to_hash(proof=b"\x00" * 81)
+
+    def test_vrf_verify_empty_pk(self) -> None:
+        """Empty PK should be rejected."""
+        if not HAS_VRF_NATIVE:
+            pytest.skip("Needs native VRF extension")
+        with pytest.raises(ValueError, match=f"{VRF_PK_SIZE} bytes"):
+            vrf_verify(pk=b"", proof=b"\x00" * VRF_PROOF_SIZE, alpha=b"x")
+
+    def test_vrf_verify_empty_proof(self) -> None:
+        """Empty proof should be rejected."""
+        if not HAS_VRF_NATIVE:
+            pytest.skip("Needs native VRF extension")
+        with pytest.raises(ValueError, match=f"{VRF_PROOF_SIZE} bytes"):
+            vrf_verify(pk=b"\x00" * VRF_PK_SIZE, proof=b"", alpha=b"x")
+
+    def test_certified_nat_max_check_wrong_output_size(self) -> None:
+        """VRF output of wrong size should be rejected by leader check."""
+        for bad_size in [0, 31, 32, 63, 65, 128]:
+            with pytest.raises(ValueError, match="64 bytes"):
+                certified_nat_max_check(
+                    b"\x00" * bad_size, sigma=0.5, f=MAINNET_F
+                )

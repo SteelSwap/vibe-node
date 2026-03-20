@@ -484,3 +484,295 @@ class TestOcertHypothesis:
             assert OCertFailure.KES_AFTER_END in failures
         else:
             assert OCertFailure.KES_AFTER_END not in failures
+
+
+# ---------------------------------------------------------------------------
+# Test 3: OCert CBOR golden test
+# ---------------------------------------------------------------------------
+
+
+class TestOcertCborGolden:
+    """Test OCert CBOR serialization against the Haskell format.
+
+    The Haskell OCert is serialized as a 4-element CBOR array:
+        [kes_vk, cert_counter, kes_period, cold_sig]
+
+    where kes_vk and cold_sig are CBOR bytestrings, and cert_counter
+    and kes_period are CBOR unsigned integers.
+
+    Haskell ref: toCBOR for OCert in Cardano.Protocol.TPraos.OCert —
+        encodeListLen 4
+        <> toCBOR vk_hot
+        <> toCBOR n
+        <> toCBOR c_0
+        <> toCBOR tau
+    """
+
+    def test_ocert_cbor_golden_known_values(self) -> None:
+        """Serialize an OCert with known values and verify exact CBOR bytes."""
+        import cbor2
+
+        # Use deterministic known values
+        kes_vk = bytes(range(32))  # 0x00..0x1f
+        cert_count = 42
+        kes_period = 100
+        cold_sig = bytes(range(64, 128))  # 0x40..0x7f
+
+        # Encode as Haskell-format CBOR array: [kes_vk, n, c_0, tau]
+        ocert_cbor = cbor2.dumps([kes_vk, cert_count, kes_period, cold_sig])
+
+        # Decode and verify structure
+        decoded = cbor2.loads(ocert_cbor)
+        assert isinstance(decoded, list)
+        assert len(decoded) == 4
+        assert decoded[0] == kes_vk
+        assert decoded[1] == cert_count
+        assert decoded[2] == kes_period
+        assert decoded[3] == cold_sig
+
+    def test_ocert_cbor_golden_exact_bytes(self) -> None:
+        """Verify the exact CBOR encoding of a known OCert.
+
+        CBOR encoding of [h'0000...00' (32 bytes), 0, 0, h'0000...00' (64 bytes)]:
+          84                 -- array(4)
+          5820               -- bytes(32)
+          00*32              -- 32 zero bytes
+          00                 -- unsigned(0)
+          00                 -- unsigned(0)
+          5840               -- bytes(64)
+          00*64              -- 64 zero bytes
+        """
+        import cbor2
+
+        kes_vk = b"\x00" * 32
+        cert_count = 0
+        kes_period = 0
+        cold_sig = b"\x00" * 64
+
+        ocert_cbor = cbor2.dumps([kes_vk, cert_count, kes_period, cold_sig])
+
+        # Verify the CBOR structure byte by byte
+        assert ocert_cbor[0] == 0x84  # array(4)
+        assert ocert_cbor[1] == 0x58  # bytes, 1-byte length follows
+        assert ocert_cbor[2] == 32    # length = 32
+        assert ocert_cbor[3:35] == b"\x00" * 32  # kes_vk
+        assert ocert_cbor[35] == 0x00  # unsigned(0) = cert_count
+        assert ocert_cbor[36] == 0x00  # unsigned(0) = kes_period
+        assert ocert_cbor[37] == 0x58  # bytes, 1-byte length follows
+        assert ocert_cbor[38] == 64   # length = 64
+        assert ocert_cbor[39:103] == b"\x00" * 64  # cold_sig
+        assert len(ocert_cbor) == 103
+
+    def test_ocert_cbor_roundtrip_with_real_sig(self) -> None:
+        """Create a real OCert and verify CBOR round-trip preserves all fields."""
+        import cbor2
+
+        cold_sk, cold_vk = _make_cold_keypair()
+        kes_sk = kes_keygen(2)
+        kes_vk = kes_derive_vk(kes_sk)
+        ocert = _make_ocert(cold_sk, kes_vk, cert_count=7, kes_period_start=15)
+
+        # Serialize in Haskell format
+        ocert_cbor = cbor2.dumps([
+            ocert.kes_vk,
+            ocert.cert_count,
+            ocert.kes_period_start,
+            ocert.cold_sig,
+        ])
+
+        # Deserialize and reconstruct
+        decoded = cbor2.loads(ocert_cbor)
+        reconstructed = OperationalCert(
+            kes_vk=decoded[0],
+            cert_count=decoded[1],
+            kes_period_start=decoded[2],
+            cold_sig=decoded[3],
+        )
+
+        # Verify the reconstructed OCert matches the original
+        assert reconstructed.kes_vk == ocert.kes_vk
+        assert reconstructed.cert_count == ocert.cert_count
+        assert reconstructed.kes_period_start == ocert.kes_period_start
+        assert reconstructed.cold_sig == ocert.cold_sig
+
+        # And the cold signature still verifies
+        assert verify_ocert_cold_sig(cold_vk, reconstructed)
+
+
+# ---------------------------------------------------------------------------
+# Test 4: OCert counter increment across blocks
+# ---------------------------------------------------------------------------
+
+
+class TestOcertCounterSequence:
+    """Simulate a sequence of blocks from the same pool where the OCert
+    counter must be non-decreasing.
+
+    The OCERT rule requires: m <= n, where m is the on-chain counter and
+    n is the cert's counter. When a new cert is issued, the on-chain
+    counter updates to max(m, n).
+
+    Spec ref: Shelley formal spec, Figure 16 (OCERT rule), predicate:
+        currentIssueNo(oce, cs, hk) = m AND m <= n
+
+    Haskell ref: ocertTransition in Cardano.Ledger.Shelley.Rules.OCert
+    """
+
+    def test_incrementing_counters_accepted(self) -> None:
+        """A sequence of OCerts with increasing counters should all validate."""
+        cold_sk, cold_vk = _make_cold_keypair()
+        kes_depth = 2
+        kes_sk = kes_keygen(kes_depth)
+        kes_vk = kes_derive_vk(kes_sk)
+
+        on_chain_counter = 0
+
+        for cert_count in [0, 1, 2, 5, 10]:
+            ocert = _make_ocert(
+                cold_sk, kes_vk,
+                cert_count=cert_count,
+                kes_period_start=0,
+            )
+            msg = f"block with counter {cert_count}".encode()
+            kes_sig = kes_sign(kes_sk, 0, msg)
+
+            errors = validate_ocert(
+                ocert=ocert,
+                cold_vk=cold_vk,
+                current_kes_period=0,
+                current_issue_no=on_chain_counter,
+                header_body_cbor=msg,
+                kes_sig=kes_sig,
+                max_kes_evo=4,
+                kes_depth=kes_depth,
+            )
+            failures = {e.failure for e in errors}
+            assert OCertFailure.COUNTER_TOO_SMALL not in failures, (
+                f"Counter {cert_count} rejected with on-chain {on_chain_counter}"
+            )
+
+            # Simulate on-chain counter update: max(m, n)
+            on_chain_counter = max(on_chain_counter, cert_count)
+
+    def test_decremented_counter_rejected(self) -> None:
+        """An OCert with counter lower than on-chain should be rejected."""
+        cold_sk, cold_vk = _make_cold_keypair()
+        kes_depth = 2
+        kes_sk = kes_keygen(kes_depth)
+        kes_vk = kes_derive_vk(kes_sk)
+
+        # Simulate: on-chain counter is 5, new cert says 3
+        ocert = _make_ocert(
+            cold_sk, kes_vk,
+            cert_count=3,
+            kes_period_start=0,
+        )
+        msg = b"block with stale counter"
+        kes_sig = kes_sign(kes_sk, 0, msg)
+
+        errors = validate_ocert(
+            ocert=ocert,
+            cold_vk=cold_vk,
+            current_kes_period=0,
+            current_issue_no=5,  # on-chain > cert counter
+            header_body_cbor=msg,
+            kes_sig=kes_sig,
+            max_kes_evo=4,
+            kes_depth=kes_depth,
+        )
+        failures = {e.failure for e in errors}
+        assert OCertFailure.COUNTER_TOO_SMALL in failures
+
+    def test_equal_counter_accepted(self) -> None:
+        """An OCert with counter equal to on-chain should be accepted."""
+        cold_sk, cold_vk = _make_cold_keypair()
+        kes_depth = 2
+        kes_sk = kes_keygen(kes_depth)
+        kes_vk = kes_derive_vk(kes_sk)
+
+        ocert = _make_ocert(
+            cold_sk, kes_vk,
+            cert_count=5,
+            kes_period_start=0,
+        )
+        msg = b"block with equal counter"
+        kes_sig = kes_sign(kes_sk, 0, msg)
+
+        errors = validate_ocert(
+            ocert=ocert,
+            cold_vk=cold_vk,
+            current_kes_period=0,
+            current_issue_no=5,  # equal to cert counter
+            header_body_cbor=msg,
+            kes_sig=kes_sig,
+            max_kes_evo=4,
+            kes_depth=kes_depth,
+        )
+        failures = {e.failure for e in errors}
+        assert OCertFailure.COUNTER_TOO_SMALL not in failures
+
+    def test_counter_sequence_with_gaps(self) -> None:
+        """Non-contiguous counter increments (0, 3, 7, 100) should all pass.
+
+        The spec only requires m <= n, not n == m + 1.
+        """
+        cold_sk, cold_vk = _make_cold_keypair()
+        kes_depth = 2
+        kes_sk = kes_keygen(kes_depth)
+        kes_vk = kes_derive_vk(kes_sk)
+
+        on_chain_counter = 0
+        for cert_count in [0, 3, 7, 100]:
+            ocert = _make_ocert(
+                cold_sk, kes_vk,
+                cert_count=cert_count,
+                kes_period_start=0,
+            )
+            msg = f"gap-counter-{cert_count}".encode()
+            kes_sig = kes_sign(kes_sk, 0, msg)
+
+            errors = validate_ocert(
+                ocert=ocert,
+                cold_vk=cold_vk,
+                current_kes_period=0,
+                current_issue_no=on_chain_counter,
+                header_body_cbor=msg,
+                kes_sig=kes_sig,
+                max_kes_evo=4,
+                kes_depth=kes_depth,
+            )
+            failures = {e.failure for e in errors}
+            assert OCertFailure.COUNTER_TOO_SMALL not in failures
+            on_chain_counter = max(on_chain_counter, cert_count)
+
+    def test_replay_old_counter_after_increment(self) -> None:
+        """After counter advances to 5, replaying counter=2 fails."""
+        cold_sk, cold_vk = _make_cold_keypair()
+        kes_depth = 2
+        kes_sk = kes_keygen(kes_depth)
+        kes_vk = kes_derive_vk(kes_sk)
+
+        # First: valid cert with counter 5
+        ocert5 = _make_ocert(cold_sk, kes_vk, cert_count=5, kes_period_start=0)
+        msg = b"valid block"
+        kes_sig = kes_sign(kes_sk, 0, msg)
+
+        errors = validate_ocert(
+            ocert=ocert5, cold_vk=cold_vk, current_kes_period=0,
+            current_issue_no=0, header_body_cbor=msg, kes_sig=kes_sig,
+            max_kes_evo=4, kes_depth=kes_depth,
+        )
+        assert not any(e.failure == OCertFailure.COUNTER_TOO_SMALL for e in errors)
+
+        # Now on-chain counter is 5. Replay counter=2 should fail.
+        ocert2 = _make_ocert(cold_sk, kes_vk, cert_count=2, kes_period_start=0)
+        msg2 = b"replay block"
+        kes_sig2 = kes_sign(kes_sk, 0, msg2)
+
+        errors = validate_ocert(
+            ocert=ocert2, cold_vk=cold_vk, current_kes_period=0,
+            current_issue_no=5, header_body_cbor=msg2, kes_sig=kes_sig2,
+            max_kes_evo=4, kes_depth=kes_depth,
+        )
+        failures = {e.failure for e in errors}
+        assert OCertFailure.COUNTER_TOO_SMALL in failures
