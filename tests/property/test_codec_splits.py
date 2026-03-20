@@ -7,6 +7,8 @@ This catches bugs where decoders assume complete messages arrive in a single
 TCP read — a dangerous assumption on real networks where TCP segments arrive
 in arbitrary chunks.
 
+Covers chain-sync, handshake, mux-segment, and block-fetch protocols.
+
 Our current decoders (cbor2.loads, struct.unpack_from) expect a complete
 buffer.  These tests verify that:
 
@@ -36,6 +38,22 @@ import pytest
 from hypothesis import given, settings, assume, HealthCheck
 from hypothesis import strategies as st
 
+from vibe.cardano.network.blockfetch import (
+    MsgBatchDone,
+    MsgBlock,
+    MsgClientDone as BFMsgClientDone,
+    MsgNoBlocks,
+    MsgRequestRange,
+    MsgStartBatch,
+    decode_client_message as bf_decode_client_message,
+    decode_server_message as bf_decode_server_message,
+    encode_batch_done,
+    encode_block,
+    encode_client_done as bf_encode_client_done,
+    encode_no_blocks,
+    encode_request_range,
+    encode_start_batch,
+)
 from vibe.cardano.network.chainsync import (
     ORIGIN,
     MsgAwaitReply,
@@ -449,6 +467,341 @@ class TestSegmentSplits2:
         assert decoded.is_initiator == segment.is_initiator
         assert decoded.payload == segment.payload
         assert consumed == len(encoded)
+
+
+# ============================================================================
+# Block-Fetch message generators
+# ============================================================================
+
+# Block bodies — opaque bytes at the codec layer.  Keep small for fast tests
+# but cover edge cases (empty, single byte, realistic size).
+block_bodies = st.binary(min_size=0, max_size=512)
+
+
+@st.composite
+def blockfetch_server_messages(draw: st.DrawFn) -> tuple[bytes, object]:
+    """Generate a random block-fetch server message as (cbor_bytes, expected)."""
+    msg_type = draw(st.sampled_from([
+        "start_batch", "no_blocks", "block", "batch_done",
+    ]))
+
+    if msg_type == "start_batch":
+        return encode_start_batch(), MsgStartBatch()
+    elif msg_type == "no_blocks":
+        return encode_no_blocks(), MsgNoBlocks()
+    elif msg_type == "block":
+        body = draw(block_bodies)
+        return encode_block(body), MsgBlock(block_cbor=body)
+    else:  # batch_done
+        return encode_batch_done(), MsgBatchDone()
+
+
+@st.composite
+def blockfetch_client_messages(draw: st.DrawFn) -> tuple[bytes, object]:
+    """Generate a random block-fetch client message as (cbor_bytes, expected)."""
+    msg_type = draw(st.sampled_from(["request_range", "client_done"]))
+
+    if msg_type == "request_range":
+        pf = draw(points)
+        pt = draw(points)
+        return encode_request_range(pf, pt), MsgRequestRange(point_from=pf, point_to=pt)
+    else:  # client_done
+        return bf_encode_client_done(), BFMsgClientDone()
+
+
+@st.composite
+def blockfetch_all_messages(draw: st.DrawFn) -> tuple[bytes, object]:
+    """Generate any block-fetch message (client or server) as (cbor_bytes, expected)."""
+    side = draw(st.sampled_from(["server", "client"]))
+    if side == "server":
+        return draw(blockfetch_server_messages())
+    else:
+        return draw(blockfetch_client_messages())
+
+
+def _bf_decode_any(cbor_bytes: bytes) -> object:
+    """Decode a block-fetch message, trying server then client decoder."""
+    try:
+        return bf_decode_server_message(cbor_bytes)
+    except ValueError:
+        return bf_decode_client_message(cbor_bytes)
+
+
+# ============================================================================
+# Block-Fetch codec split tests (prop_codec_splits2_BlockFetch)
+# ============================================================================
+
+
+class TestBlockFetchCodecSplits2:
+    """Split block-fetch messages at 1 random point (2 fragments).
+
+    Mirrors Haskell: prop_codec_splits2_BlockFetch
+    """
+
+    @given(data=st.data(), msg_pair=blockfetch_server_messages())
+    @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    def test_blockfetch_server_splits2(self, data, msg_pair):
+        """Server message split into 2 fragments decodes correctly after buffering."""
+        encoded, expected = msg_pair
+        assume(len(encoded) >= 2)
+
+        split = data.draw(st.integers(min_value=1, max_value=len(encoded) - 1))
+        frag1, frag2 = encoded[:split], encoded[split:]
+
+        decoded = _buffer_and_decode_cbor([frag1, frag2], bf_decode_server_message)
+        assert decoded == expected
+
+        _partial_decode_raises(frag1, bf_decode_server_message)
+
+    @given(data=st.data(), msg_pair=blockfetch_client_messages())
+    @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    def test_blockfetch_client_splits2(self, data, msg_pair):
+        """Client message split into 2 fragments decodes correctly after buffering."""
+        encoded, expected = msg_pair
+        assume(len(encoded) >= 2)
+
+        split = data.draw(st.integers(min_value=1, max_value=len(encoded) - 1))
+        frag1, frag2 = encoded[:split], encoded[split:]
+
+        decoded = _buffer_and_decode_cbor([frag1, frag2], bf_decode_client_message)
+        assert decoded == expected
+
+        _partial_decode_raises(frag1, bf_decode_client_message)
+
+
+# ============================================================================
+# Block-Fetch codec split tests (prop_codec_splits3_BlockFetch)
+# ============================================================================
+
+
+class TestBlockFetchCodecSplits3:
+    """Split block-fetch messages at 2 random points (3 fragments).
+
+    Mirrors Haskell: prop_codec_splits3_BlockFetch
+    """
+
+    @given(data=st.data(), msg_pair=blockfetch_server_messages())
+    @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    def test_blockfetch_server_splits3(self, data, msg_pair):
+        """Server message split into 3 fragments decodes correctly after buffering."""
+        encoded, expected = msg_pair
+        assume(len(encoded) >= 3)
+
+        s1 = data.draw(st.integers(min_value=1, max_value=len(encoded) - 2))
+        s2 = data.draw(st.integers(min_value=s1 + 1, max_value=len(encoded) - 1))
+        frag1, frag2, frag3 = encoded[:s1], encoded[s1:s2], encoded[s2:]
+
+        decoded = _buffer_and_decode_cbor([frag1, frag2, frag3], bf_decode_server_message)
+        assert decoded == expected
+
+    @given(data=st.data(), msg_pair=blockfetch_client_messages())
+    @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    def test_blockfetch_client_splits3(self, data, msg_pair):
+        """Client message split into 3 fragments decodes correctly after buffering."""
+        encoded, expected = msg_pair
+        assume(len(encoded) >= 3)
+
+        s1 = data.draw(st.integers(min_value=1, max_value=len(encoded) - 2))
+        s2 = data.draw(st.integers(min_value=s1 + 1, max_value=len(encoded) - 1))
+        frag1, frag2, frag3 = encoded[:s1], encoded[s1:s2], encoded[s2:]
+
+        decoded = _buffer_and_decode_cbor([frag1, frag2, frag3], bf_decode_client_message)
+        assert decoded == expected
+
+
+# ============================================================================
+# BlockFetchSerialised codec split tests
+# ============================================================================
+#
+# In Haskell, BlockFetchSerialised is a separate codec that keeps block bodies
+# as opaque Serialised bytes.  Our Python codec ALWAYS uses opaque bytes, so
+# the "Serialised" variant is identical to the standard variant.  We provide
+# explicit test classes for Haskell test parity traceability.
+
+
+class TestBlockFetchSerialisedCodecSplits2:
+    """Split block-fetch-serialised messages at 1 random point (2 fragments).
+
+    Mirrors Haskell: prop_codec_splits2_BlockFetchSerialised
+
+    In Python, this is identical to TestBlockFetchCodecSplits2 because our
+    codec always keeps block bodies as opaque bytes (the Serialised path).
+    """
+
+    @given(data=st.data(), msg_pair=blockfetch_server_messages())
+    @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    def test_blockfetch_serialised_server_splits2(self, data, msg_pair):
+        """Serialised server message split into 2 fragments decodes correctly."""
+        encoded, expected = msg_pair
+        assume(len(encoded) >= 2)
+
+        split = data.draw(st.integers(min_value=1, max_value=len(encoded) - 1))
+        frag1, frag2 = encoded[:split], encoded[split:]
+
+        decoded = _buffer_and_decode_cbor([frag1, frag2], bf_decode_server_message)
+        assert decoded == expected
+
+    @given(data=st.data(), msg_pair=blockfetch_client_messages())
+    @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    def test_blockfetch_serialised_client_splits2(self, data, msg_pair):
+        """Serialised client message split into 2 fragments decodes correctly."""
+        encoded, expected = msg_pair
+        assume(len(encoded) >= 2)
+
+        split = data.draw(st.integers(min_value=1, max_value=len(encoded) - 1))
+        frag1, frag2 = encoded[:split], encoded[split:]
+
+        decoded = _buffer_and_decode_cbor([frag1, frag2], bf_decode_client_message)
+        assert decoded == expected
+
+
+class TestBlockFetchSerialisedCodecSplits3:
+    """Split block-fetch-serialised messages at 2 random points (3 fragments).
+
+    Mirrors Haskell: prop_codec_splits3_BlockFetchSerialised
+
+    In Python, identical to TestBlockFetchCodecSplits3 — see note above.
+    """
+
+    @given(data=st.data(), msg_pair=blockfetch_server_messages())
+    @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    def test_blockfetch_serialised_server_splits3(self, data, msg_pair):
+        """Serialised server message split into 3 fragments decodes correctly."""
+        encoded, expected = msg_pair
+        assume(len(encoded) >= 3)
+
+        s1 = data.draw(st.integers(min_value=1, max_value=len(encoded) - 2))
+        s2 = data.draw(st.integers(min_value=s1 + 1, max_value=len(encoded) - 1))
+        frag1, frag2, frag3 = encoded[:s1], encoded[s1:s2], encoded[s2:]
+
+        decoded = _buffer_and_decode_cbor([frag1, frag2, frag3], bf_decode_server_message)
+        assert decoded == expected
+
+    @given(data=st.data(), msg_pair=blockfetch_client_messages())
+    @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    def test_blockfetch_serialised_client_splits3(self, data, msg_pair):
+        """Serialised client message split into 3 fragments decodes correctly."""
+        encoded, expected = msg_pair
+        assume(len(encoded) >= 3)
+
+        s1 = data.draw(st.integers(min_value=1, max_value=len(encoded) - 2))
+        s2 = data.draw(st.integers(min_value=s1 + 1, max_value=len(encoded) - 1))
+        frag1, frag2, frag3 = encoded[:s1], encoded[s1:s2], encoded[s2:]
+
+        decoded = _buffer_and_decode_cbor([frag1, frag2, frag3], bf_decode_client_message)
+        assert decoded == expected
+
+
+# ============================================================================
+# BlockFetch / BlockFetchSerialised binary compatibility tests
+# ============================================================================
+#
+# In the Haskell node, ``BlockFetch`` and ``BlockFetchSerialised`` are two
+# codec variants: the former decodes block bodies eagerly, the latter keeps
+# them as opaque ``Serialised`` bytes.  Both produce identical wire bytes.
+#
+# Our Python implementation always keeps block bodies as opaque ``bytes``
+# (equivalent to the Serialised variant).  These tests verify that encoding
+# a message via the "standard" path and decoding it via both decoders
+# (server + client) produces the same result — confirming wire compatibility
+# between the two conceptual variants.
+#
+# Mirrors Haskell:
+#   prop_codec_binary_compat_BlockFetch_BlockFetchSerialised
+#   prop_codec_binary_compat_BlockFetchSerialised_BlockFetch
+
+
+class TestBlockFetchBinaryCompat:
+    """Verify wire-format compatibility between BlockFetch and BlockFetchSerialised.
+
+    Since our Python codec always uses opaque bytes (the Serialised path),
+    both directions should produce identical encode/decode results.
+    """
+
+    @given(msg_pair=blockfetch_server_messages())
+    @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    def test_binary_compat_blockfetch_to_serialised(self, msg_pair):
+        """BlockFetch -> BlockFetchSerialised: encode, decode, re-encode yields same bytes.
+
+        Mirrors: prop_codec_binary_compat_BlockFetch_BlockFetchSerialised
+        """
+        encoded, expected = msg_pair
+
+        # "Standard" decode
+        decoded = bf_decode_server_message(encoded)
+        assert decoded == expected
+
+        # Re-encode from the decoded message (simulates Serialised encoder)
+        if isinstance(decoded, MsgStartBatch):
+            re_encoded = encode_start_batch()
+        elif isinstance(decoded, MsgNoBlocks):
+            re_encoded = encode_no_blocks()
+        elif isinstance(decoded, MsgBlock):
+            re_encoded = encode_block(decoded.block_cbor)
+        elif isinstance(decoded, MsgBatchDone):
+            re_encoded = encode_batch_done()
+        else:
+            raise AssertionError(f"Unexpected type: {type(decoded)}")
+
+        # Wire bytes must be identical
+        assert re_encoded == encoded
+
+    @given(msg_pair=blockfetch_client_messages())
+    @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    def test_binary_compat_serialised_to_blockfetch(self, msg_pair):
+        """BlockFetchSerialised -> BlockFetch: encode, decode, re-encode yields same bytes.
+
+        Mirrors: prop_codec_binary_compat_BlockFetchSerialised_BlockFetch
+        """
+        encoded, expected = msg_pair
+
+        # "Serialised" decode (same codec in Python)
+        decoded = bf_decode_client_message(encoded)
+        assert decoded == expected
+
+        # Re-encode (simulates standard BlockFetch encoder)
+        if isinstance(decoded, MsgRequestRange):
+            re_encoded = encode_request_range(decoded.point_from, decoded.point_to)
+        elif isinstance(decoded, BFMsgClientDone):
+            re_encoded = bf_encode_client_done()
+        else:
+            raise AssertionError(f"Unexpected type: {type(decoded)}")
+
+        # Wire bytes must be identical
+        assert re_encoded == encoded
+
+
+# ============================================================================
+# Block-Fetch valid CBOR test (prop_codec_valid_cbor_BlockFetch)
+# ============================================================================
+
+
+class TestBlockFetchValidCBOR:
+    """All encoded block-fetch messages produce valid, decodable CBOR.
+
+    Mirrors Haskell: prop_codec_valid_cbor_BlockFetch
+    """
+
+    @given(msg_pair=blockfetch_all_messages())
+    @settings(max_examples=300, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+    def test_all_blockfetch_messages_are_valid_cbor(self, msg_pair):
+        """Every encoded block-fetch message is well-formed CBOR."""
+        encoded, _expected = msg_pair
+
+        # Must decode as valid CBOR without errors
+        parsed = cbor2.loads(encoded)
+
+        # Must be a list (all block-fetch messages are CBOR arrays)
+        assert isinstance(parsed, list), f"Expected CBOR list, got {type(parsed)}"
+
+        # First element is the message ID (integer 0-5)
+        assert isinstance(parsed[0], int), f"Message ID must be int, got {type(parsed[0])}"
+        assert 0 <= parsed[0] <= 5, f"Message ID out of range: {parsed[0]}"
+
+        # Re-encoding the parsed CBOR and decoding again should round-trip
+        re_encoded = cbor2.dumps(parsed)
+        re_parsed = cbor2.loads(re_encoded)
+        assert re_parsed == parsed
 
 
 # ============================================================================
