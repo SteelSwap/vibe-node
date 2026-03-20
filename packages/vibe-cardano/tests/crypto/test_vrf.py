@@ -5,7 +5,7 @@ Tests cover:
 2. VRF constants
 3. Input validation
 4. Property-based tests via Hypothesis (leader probability monotonic in stake)
-5. Native VRF verification (only when IOG libsodium fork is available)
+5. Native VRF operations (only when _vrf_native extension is built)
 
 Key insight: sigma=1.0 does NOT mean "always elected." The Praos formula is:
     elected iff vrf_nat / 2^512 < 1 - (1 - f)^sigma
@@ -15,6 +15,7 @@ with probability f per slot, which is the maximum possible probability.
 
 from __future__ import annotations
 
+import os
 from decimal import Decimal, getcontext
 
 import pytest
@@ -28,7 +29,9 @@ from vibe.cardano.crypto.vrf import (
     VRF_PROOF_SIZE,
     VRF_SK_SIZE,
     certified_nat_max_check,
+    vrf_keypair,
     vrf_proof_to_hash,
+    vrf_prove,
     vrf_verify,
 )
 
@@ -291,28 +294,34 @@ class TestCertifiedNatMaxCheckProperties:
 
 
 # ---------------------------------------------------------------------------
-# VRF native bindings (conditional on IOG libsodium)
+# VRF native bindings (conditional on _vrf_native extension)
 # ---------------------------------------------------------------------------
+
+# Marker for tests that need the native extension
+needs_native = pytest.mark.skipif(
+    not HAS_VRF_NATIVE, reason="_vrf_native extension not built"
+)
+no_native = pytest.mark.skipif(
+    HAS_VRF_NATIVE, reason="Testing fallback behavior (native IS available)"
+)
 
 
 class TestVRFVerify:
-    """Tests for vrf_verify — requires IOG libsodium fork."""
+    """Tests for vrf_verify."""
 
-    @pytest.mark.skipif(HAS_VRF_NATIVE, reason="Testing fallback behavior")
+    @no_native
     def test_raises_without_native(self) -> None:
-        """vrf_verify raises NotImplementedError without IOG libsodium."""
-        with pytest.raises(NotImplementedError, match="IOG libsodium"):
+        """vrf_verify raises NotImplementedError without the extension."""
+        with pytest.raises(NotImplementedError, match="_vrf_native"):
             vrf_verify(
                 pk=b"\x00" * VRF_PK_SIZE,
                 proof=b"\x00" * VRF_PROOF_SIZE,
                 alpha=b"test",
             )
 
-    @pytest.mark.skipif(
-        not HAS_VRF_NATIVE, reason="IOG libsodium not available"
-    )
+    @needs_native
     def test_invalid_proof_returns_none(self) -> None:
-        """An all-zeros proof should fail verification."""
+        """An all-zeros proof should fail verification (return None)."""
         result = vrf_verify(
             pk=b"\x00" * VRF_PK_SIZE,
             proof=b"\x00" * VRF_PROOF_SIZE,
@@ -320,10 +329,9 @@ class TestVRFVerify:
         )
         assert result is None
 
+    @needs_native
     def test_wrong_pk_size(self) -> None:
         """Wrong public key size raises ValueError."""
-        if not HAS_VRF_NATIVE:
-            pytest.skip("IOG libsodium not available")
         with pytest.raises(ValueError, match=f"{VRF_PK_SIZE} bytes"):
             vrf_verify(
                 pk=b"\x00" * 16,
@@ -331,10 +339,9 @@ class TestVRFVerify:
                 alpha=b"x",
             )
 
+    @needs_native
     def test_wrong_proof_size(self) -> None:
         """Wrong proof size raises ValueError."""
-        if not HAS_VRF_NATIVE:
-            pytest.skip("IOG libsodium not available")
         with pytest.raises(ValueError, match=f"{VRF_PROOF_SIZE} bytes"):
             vrf_verify(
                 pk=b"\x00" * VRF_PK_SIZE,
@@ -344,20 +351,200 @@ class TestVRFVerify:
 
 
 class TestVRFProofToHash:
-    """Tests for vrf_proof_to_hash — requires IOG libsodium fork."""
+    """Tests for vrf_proof_to_hash."""
 
-    @pytest.mark.skipif(HAS_VRF_NATIVE, reason="Testing fallback behavior")
+    @no_native
     def test_raises_without_native(self) -> None:
-        """vrf_proof_to_hash raises NotImplementedError without libsodium."""
-        with pytest.raises(NotImplementedError, match="IOG libsodium"):
+        """vrf_proof_to_hash raises NotImplementedError without extension."""
+        with pytest.raises(NotImplementedError, match="_vrf_native"):
             vrf_proof_to_hash(proof=b"\x00" * VRF_PROOF_SIZE)
 
+    @needs_native
     def test_wrong_proof_size(self) -> None:
         """Wrong proof size raises ValueError."""
-        if not HAS_VRF_NATIVE:
-            pytest.skip("IOG libsodium not available")
         with pytest.raises(ValueError, match=f"{VRF_PROOF_SIZE} bytes"):
             vrf_proof_to_hash(proof=b"\x00" * 32)
+
+
+class TestVRFProve:
+    """Tests for vrf_prove."""
+
+    @no_native
+    def test_raises_without_native(self) -> None:
+        """vrf_prove raises NotImplementedError without extension."""
+        with pytest.raises(NotImplementedError, match="_vrf_native"):
+            vrf_prove(sk=b"\x00" * VRF_SK_SIZE, alpha=b"test")
+
+    @needs_native
+    def test_wrong_sk_size(self) -> None:
+        """Wrong secret key size raises ValueError."""
+        with pytest.raises(ValueError, match=f"{VRF_SK_SIZE} bytes"):
+            vrf_prove(sk=b"\x00" * 32, alpha=b"test")
+
+
+class TestVRFKeypair:
+    """Tests for vrf_keypair."""
+
+    @no_native
+    def test_raises_without_native(self) -> None:
+        """vrf_keypair raises NotImplementedError without extension."""
+        with pytest.raises(NotImplementedError, match="_vrf_native"):
+            vrf_keypair()
+
+
+# ---------------------------------------------------------------------------
+# End-to-end VRF tests (native extension required)
+# ---------------------------------------------------------------------------
+
+
+class TestVRFEndToEnd:
+    """Full prove-verify-hash round-trip tests.
+
+    These tests exercise the complete VRF pipeline:
+    keypair generation -> prove -> verify -> proof_to_hash.
+
+    Only run when the _vrf_native extension is built.
+    """
+
+    @needs_native
+    def test_keypair_sizes(self) -> None:
+        """Generated keypair has correct sizes."""
+        pk, sk = vrf_keypair()
+        assert len(pk) == VRF_PK_SIZE
+        assert len(sk) == VRF_SK_SIZE
+
+    @needs_native
+    def test_keypair_unique(self) -> None:
+        """Two keypairs should be distinct (CSPRNG)."""
+        pk1, sk1 = vrf_keypair()
+        pk2, sk2 = vrf_keypair()
+        assert pk1 != pk2
+        assert sk1 != sk2
+
+    @needs_native
+    def test_prove_returns_correct_size(self) -> None:
+        """vrf_prove returns an 80-byte proof."""
+        pk, sk = vrf_keypair()
+        proof = vrf_prove(sk, alpha=b"test alpha string")
+        assert len(proof) == VRF_PROOF_SIZE
+
+    @needs_native
+    def test_prove_verify_roundtrip(self) -> None:
+        """prove then verify succeeds and returns 64-byte output."""
+        pk, sk = vrf_keypair()
+        alpha = b"slot 12345 nonce"
+        proof = vrf_prove(sk, alpha)
+        output = vrf_verify(pk, proof, alpha)
+        assert output is not None
+        assert len(output) == VRF_OUTPUT_SIZE
+
+    @needs_native
+    def test_verify_wrong_alpha_fails(self) -> None:
+        """Verify with a different alpha string returns None."""
+        pk, sk = vrf_keypair()
+        proof = vrf_prove(sk, alpha=b"correct alpha")
+        result = vrf_verify(pk, proof, alpha=b"wrong alpha")
+        assert result is None
+
+    @needs_native
+    def test_verify_wrong_pk_fails(self) -> None:
+        """Verify with a different public key returns None."""
+        pk1, sk1 = vrf_keypair()
+        pk2, sk2 = vrf_keypair()
+        alpha = b"test"
+        proof = vrf_prove(sk1, alpha)
+        # Verify with pk2 should fail.
+        result = vrf_verify(pk2, proof, alpha)
+        assert result is None
+
+    @needs_native
+    def test_tampered_proof_fails(self) -> None:
+        """Flipping a bit in the proof causes verification failure."""
+        pk, sk = vrf_keypair()
+        alpha = b"tamper test"
+        proof = vrf_prove(sk, alpha)
+
+        # Flip one bit in the proof.
+        tampered = bytearray(proof)
+        tampered[40] ^= 0x01
+        tampered = bytes(tampered)
+
+        result = vrf_verify(pk, tampered, alpha)
+        assert result is None
+
+    @needs_native
+    def test_proof_to_hash_matches_verify(self) -> None:
+        """proof_to_hash output matches the output from vrf_verify."""
+        pk, sk = vrf_keypair()
+        alpha = b"consistency check"
+        proof = vrf_prove(sk, alpha)
+
+        verify_output = vrf_verify(pk, proof, alpha)
+        hash_output = vrf_proof_to_hash(proof)
+
+        assert verify_output is not None
+        assert verify_output == hash_output
+
+    @needs_native
+    def test_proof_to_hash_size(self) -> None:
+        """proof_to_hash returns 64 bytes."""
+        pk, sk = vrf_keypair()
+        proof = vrf_prove(sk, alpha=b"hash size test")
+        output = vrf_proof_to_hash(proof)
+        assert len(output) == VRF_OUTPUT_SIZE
+
+    @needs_native
+    def test_deterministic_prove(self) -> None:
+        """Same sk + alpha produces the same proof (VRF is deterministic)."""
+        pk, sk = vrf_keypair()
+        alpha = b"determinism check"
+        proof1 = vrf_prove(sk, alpha)
+        proof2 = vrf_prove(sk, alpha)
+        assert proof1 == proof2
+
+    @needs_native
+    def test_different_alpha_different_proof(self) -> None:
+        """Different alpha strings produce different proofs."""
+        pk, sk = vrf_keypair()
+        proof1 = vrf_prove(sk, alpha=b"alpha one")
+        proof2 = vrf_prove(sk, alpha=b"alpha two")
+        assert proof1 != proof2
+
+    @needs_native
+    def test_vrf_output_feeds_leader_check(self) -> None:
+        """The VRF output can be passed to certified_nat_max_check.
+
+        This is the integration point: VRF produces a 64-byte output,
+        and the leader check consumes it.
+        """
+        pk, sk = vrf_keypair()
+        alpha = b"leader election slot 42"
+        proof = vrf_prove(sk, alpha)
+        output = vrf_proof_to_hash(proof)
+
+        # Should not raise — the output is the right size.
+        # We don't care about the boolean result, just that it works.
+        result = certified_nat_max_check(output, sigma=0.5, f=0.05)
+        assert isinstance(result, bool)
+
+    @needs_native
+    def test_empty_alpha(self) -> None:
+        """VRF works with an empty alpha string."""
+        pk, sk = vrf_keypair()
+        proof = vrf_prove(sk, alpha=b"")
+        output = vrf_verify(pk, proof, alpha=b"")
+        assert output is not None
+        assert len(output) == VRF_OUTPUT_SIZE
+
+    @needs_native
+    def test_large_alpha(self) -> None:
+        """VRF works with a large alpha string (1 KB)."""
+        pk, sk = vrf_keypair()
+        alpha = os.urandom(1024)
+        proof = vrf_prove(sk, alpha)
+        output = vrf_verify(pk, proof, alpha)
+        assert output is not None
+        assert len(output) == VRF_OUTPUT_SIZE
 
 
 # ---------------------------------------------------------------------------
@@ -380,3 +567,15 @@ class TestHasVRFNative:
                     b"\x00" * VRF_PROOF_SIZE,
                     b"test",
                 )
+
+    def test_consistent_with_keypair(self) -> None:
+        """If HAS_VRF_NATIVE is False, keypair should raise."""
+        if not HAS_VRF_NATIVE:
+            with pytest.raises(NotImplementedError):
+                vrf_keypair()
+
+    def test_consistent_with_prove(self) -> None:
+        """If HAS_VRF_NATIVE is False, prove should raise."""
+        if not HAS_VRF_NATIVE:
+            with pytest.raises(NotImplementedError):
+                vrf_prove(b"\x00" * VRF_SK_SIZE, b"test")

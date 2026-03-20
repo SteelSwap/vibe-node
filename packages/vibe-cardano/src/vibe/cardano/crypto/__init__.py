@@ -16,7 +16,9 @@ from vibe.cardano.crypto.vrf import (
     VRF_PROOF_SIZE,
     VRF_SK_SIZE,
     certified_nat_max_check,
+    vrf_keypair,
     vrf_proof_to_hash,
+    vrf_prove,
     vrf_verify,
 )
 
@@ -27,6 +29,8 @@ __all__ = [
     "VRF_PROOF_SIZE",
     "VRF_SK_SIZE",
     "certified_nat_max_check",
+    "vrf_keypair",
     "vrf_proof_to_hash",
+    "vrf_prove",
     "vrf_verify",
 ]
