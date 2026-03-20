@@ -1,0 +1,91 @@
+{
+  "_comment": "Minimal Alonzo block fixture with Plutus scripts, matching Ogmios v6 JSON output.",
+  "era": "alonzo",
+  "id": "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3",
+  "ancestor": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "height": 512000,
+  "slot": 16588800,
+  "size": {
+    "bytes": 8192
+  },
+  "issuer": {
+    "verificationKey": "d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3",
+    "vrfVerificationKey": "e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3"
+  },
+  "protocol": {
+    "version": {
+      "major": 5,
+      "minor": 0
+    }
+  },
+  "transactions": [
+    {
+      "id": "f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3",
+      "spends": "inputs",
+      "inputs": [
+        {
+          "transaction": {
+            "id": "c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1"
+          },
+          "index": 0
+        }
+      ],
+      "outputs": [
+        {
+          "address": "addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3jcu5d8ps7zex2k2xt3uqxgjqnnj83ws8lhrn648jjxtwq2ytjqp",
+          "value": {
+            "ada": {
+              "lovelace": 5000000
+            }
+          },
+          "datumHash": "a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4"
+        }
+      ],
+      "collaterals": [
+        {
+          "transaction": {
+            "id": "d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1"
+          },
+          "index": 1
+        }
+      ],
+      "fee": {
+        "ada": {
+          "lovelace": 350000
+        }
+      },
+      "validityInterval": {
+        "invalidBefore": 16588700,
+        "invalidAfter": 16588900
+      },
+      "scripts": {
+        "a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8": {
+          "language": "plutus:v1",
+          "cbor": "82015820a11b"
+        }
+      },
+      "datums": {
+        "a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4": "d87980"
+      },
+      "redeemers": [
+        {
+          "validator": {
+            "purpose": "spend",
+            "index": 0
+          },
+          "executionUnits": {
+            "memory": 1200000,
+            "cpu": 500000000
+          },
+          "redeemer": "d87980"
+        }
+      ],
+      "signatories": [
+        {
+          "key": "c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2",
+          "signature": "d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2"
+        }
+      ]
+    }
+  ]
+}
