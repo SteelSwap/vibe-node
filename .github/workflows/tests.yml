@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -20,8 +22,11 @@ jobs:
       - name: Install Python 3.14
         run: uv python install 3.14
 
-      - name: Install dependencies
+      - name: Install system dependencies (libsodium build)
+        run: sudo apt-get update && sudo apt-get install -y build-essential autoconf automake libtool cmake
+
+      - name: Install dependencies + build VRF native extension
         run: uv sync --dev
 
-      - name: Run unit tests
-        run: uv run pytest tests/unit/ -n auto -v --tb=short -p no:sugar -p no:benchmark --timeout=60
+      - name: Run tests
+        run: uv run pytest -n auto -v --tb=short -p no:sugar -p no:benchmark --timeout=60
