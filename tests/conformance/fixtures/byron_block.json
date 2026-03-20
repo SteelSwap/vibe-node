@@ -1,0 +1,20 @@
+{
+  "_comment": "Minimal Byron BFT block fixture matching Ogmios v6 JSON output structure. Preprod block at height 1.",
+  "era": "byron",
+  "type": "bft",
+  "id": "f4986c21b6e22b6cba38603ad64327f1a03e2aa5d9c1e1bb57430e777a6d2f3f",
+  "ancestor": "d4b8de7a11d929a323373cbab6c1a9bdc931beffff11db111cf9d57356ee1937",
+  "height": 1,
+  "slot": 0,
+  "size": {
+    "bytes": 665
+  },
+  "issuer": {
+    "verificationKey": "a60fe2f2e6b3dd2e13c4c35c86fb4c8e9a95be8b3a6e0a17e1f5e2c7b1a3d0f1"
+  },
+  "delegate": {
+    "verificationKey": "b51fc30a8e8a3f5c7e9d2b1a4c6f8e0d2a4b6c8e0f1a3c5e7d9b1a3c5e7f9d1b"
+  },
+  "transactions": [],
+  "operationalCertificates": []
+}

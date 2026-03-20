@@ -3,18 +3,39 @@
 Provides WebSocket connectivity to Ogmios (JSON-RPC over WS) for querying
 the Haskell cardano-node. All conformance tests skip automatically when
 Docker Compose services aren't running.
+
+Fixture files in tests/conformance/fixtures/ provide fallback data when
+Ogmios is unavailable, allowing structural validation tests to run in CI
+without Docker.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 import httpx
 import pytest
 import websockets
+
+# Make helpers importable — add this directory to sys.path
+_THIS_DIR = Path(__file__).parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
+
+from helpers import (  # noqa: E402
+    ERA_FIXTURE_FILES,
+    FIXTURES_DIR,
+    extract_block_metadata,
+    fetch_blocks_from_origin,
+    fetch_blocks_from_point,
+    load_fixture,
+    ogmios_rpc,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +79,13 @@ def skip_without_ogmios(request: pytest.FixtureRequest, ogmios_available: bool) 
     """Auto-skip conformance tests when Ogmios is not running.
 
     Only applies to tests marked with @pytest.mark.conformance.
+    Tests marked with @pytest.mark.fixture_only are never skipped — they
+    use cached fixture files and don't need Ogmios.
     """
+    # Never skip fixture_only tests
+    if request.node.get_closest_marker("fixture_only") is not None:
+        return
+
     marker = request.node.get_closest_marker("conformance")
     if marker is not None and not ogmios_available:
         pytest.skip("Ogmios not available — skipping conformance test")
@@ -90,6 +117,46 @@ async def ogmios_client(ogmios_url: str) -> AsyncGenerator[websockets.ClientConn
 
 
 # ---------------------------------------------------------------------------
+# Fixture-file fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session")
+def byron_block_fixture() -> dict:
+    """Pre-cached Byron block data."""
+    return load_fixture("byron")
+
+
+@pytest.fixture(scope="session")
+def shelley_block_fixture() -> dict:
+    """Pre-cached Shelley block data."""
+    return load_fixture("shelley")
+
+
+@pytest.fixture(scope="session")
+def alonzo_block_fixture() -> dict:
+    """Pre-cached Alonzo block data (with Plutus scripts)."""
+    return load_fixture("alonzo")
+
+
+@pytest.fixture(scope="session")
+def babbage_block_fixture() -> dict:
+    """Pre-cached Babbage block data (with inline datums + reference inputs)."""
+    return load_fixture("babbage")
+
+
+@pytest.fixture(scope="session")
+def conway_block_fixture() -> dict:
+    """Pre-cached Conway block data (with governance actions)."""
+    return load_fixture("conway")
+
+
+@pytest.fixture(scope="session")
+def all_era_fixtures() -> dict[str, dict]:
+    """All pre-cached era block fixtures keyed by era name."""
+    return {era: load_fixture(era) for era in ERA_FIXTURE_FILES}
+
+
+# ---------------------------------------------------------------------------
 # Helper: fetch block CBOR
 # ---------------------------------------------------------------------------
 
@@ -100,8 +167,8 @@ async def fetch_block_cbor(
 ) -> bytes:
     """Fetch a block's raw CBOR bytes from Ogmios.
 
-    Uses the queryNetwork/blockBySlot JSON-RPC method. Ogmios returns the
-    block as a hex-encoded CBOR string.
+    Uses chain-sync findIntersection + nextBlock to retrieve the block
+    following the given point. Ogmios v6 returns CBOR when available.
 
     Args:
         ogmios_url: WebSocket URL for Ogmios (e.g. "ws://localhost:1337").
@@ -114,52 +181,18 @@ async def fetch_block_cbor(
     Raises:
         RuntimeError: If Ogmios returns an error or unexpected response.
     """
-    request = {
-        "jsonrpc": "2.0",
-        "method": "queryLedgerState/constitutionalCommittee",
-        "id": None,
-    }
-    # Ogmios v6 uses a different approach for fetching blocks.
-    # The primary way to get block CBOR is through the chain-sync
-    # mini-protocol via nextBlock. For specific block fetches,
-    # we use queryNetwork with a point reference.
-    request = {
-        "jsonrpc": "2.0",
-        "method": "findIntersection",
-        "params": {
-            "points": [{"slot": slot, "id": block_hash}],
-        },
-        "id": "fetch-block-cbor",
-    }
-
     async with _ogmios_ws(ogmios_url) as ws:
         # Step 1: Find the intersection at the target block
-        await ws.send(json.dumps(request))
-        resp = json.loads(await ws.recv())
-
-        if "error" in resp:
-            raise RuntimeError(
-                f"Ogmios findIntersection error: {resp['error']}"
-            )
+        await ogmios_rpc(
+            ws,
+            "findIntersection",
+            {"points": [{"slot": slot, "id": block_hash}]},
+            "fetch-block-cbor",
+        )
 
         # Step 2: Request the next block (which should be the one after our point)
-        next_block_req = {
-            "jsonrpc": "2.0",
-            "method": "nextBlock",
-            "id": "fetch-block-next",
-        }
-        await ws.send(json.dumps(next_block_req))
-        block_resp = json.loads(await ws.recv())
+        result = await ogmios_rpc(ws, "nextBlock", rpc_id="fetch-block-next")
 
-        if "error" in block_resp:
-            raise RuntimeError(
-                f"Ogmios nextBlock error: {block_resp['error']}"
-            )
-
-        result = block_resp.get("result", {})
-
-        # Ogmios v6 returns block data in result.block with a cbor field
-        # when the block contains CBOR data
         block = result.get("block")
         if block is None:
             raise RuntimeError(
@@ -173,5 +206,6 @@ async def fetch_block_cbor(
                 return bytes.fromhex(cbor_hex)
 
         raise RuntimeError(
-            f"No CBOR data in block response. Keys: {list(block.keys()) if isinstance(block, dict) else type(block)}"
+            f"No CBOR data in block response. Keys: "
+            f"{list(block.keys()) if isinstance(block, dict) else type(block)}"
         )

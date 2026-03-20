@@ -1,0 +1,124 @@
+{
+  "_comment": "Minimal Babbage block fixture with inline datums and reference inputs, matching Ogmios v6 JSON.",
+  "era": "babbage",
+  "id": "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4",
+  "ancestor": "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3",
+  "height": 1024000,
+  "slot": 36288000,
+  "size": {
+    "bytes": 12288
+  },
+  "issuer": {
+    "verificationKey": "e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4",
+    "vrfVerificationKey": "f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4"
+  },
+  "protocol": {
+    "version": {
+      "major": 7,
+      "minor": 0
+    }
+  },
+  "transactions": [
+    {
+      "id": "a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4",
+      "spends": "inputs",
+      "inputs": [
+        {
+          "transaction": {
+            "id": "e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1"
+          },
+          "index": 0
+        }
+      ],
+      "references": [
+        {
+          "transaction": {
+            "id": "f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1"
+          },
+          "index": 0
+        }
+      ],
+      "outputs": [
+        {
+          "address": "addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3jcu5d8ps7zex2k2xt3uqxgjqnnj83ws8lhrn648jjxtwq2ytjqp",
+          "value": {
+            "ada": {
+              "lovelace": 10000000
+            }
+          },
+          "datum": "d87980",
+          "script": {
+            "language": "plutus:v2",
+            "cbor": "82025820b22c"
+          }
+        },
+        {
+          "address": "addr_test1qrp8nglm8d8x9w783c5g0qa4spzaft5z5xyx0kp495p8wksjc20jdj570ep8tj3yw97hqxe3w408tu93xf4ny5grpygs3yhhff",
+          "value": {
+            "ada": {
+              "lovelace": 1989650000
+            }
+          }
+        }
+      ],
+      "collaterals": [
+        {
+          "transaction": {
+            "id": "a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1"
+          },
+          "index": 0
+        }
+      ],
+      "collateralReturn": {
+        "address": "addr_test1qrp8nglm8d8x9w783c5g0qa4spzaft5z5xyx0kp495p8wksjc20jdj570ep8tj3yw97hqxe3w408tu93xf4ny5grpygs3yhhff",
+        "value": {
+          "ada": {
+            "lovelace": 4750000
+          }
+        }
+      },
+      "totalCollateral": {
+        "ada": {
+          "lovelace": 250000
+        }
+      },
+      "fee": {
+        "ada": {
+          "lovelace": 350000
+        }
+      },
+      "validityInterval": {
+        "invalidBefore": 36287900,
+        "invalidAfter": 36288100
+      },
+      "scripts": {
+        "b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9": {
+          "language": "plutus:v2",
+          "cbor": "82025820b22c"
+        }
+      },
+      "datums": {
+        "b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5": "d87980"
+      },
+      "redeemers": [
+        {
+          "validator": {
+            "purpose": "spend",
+            "index": 0
+          },
+          "executionUnits": {
+            "memory": 2400000,
+            "cpu": 800000000
+          },
+          "redeemer": "d87980"
+        }
+      ],
+      "signatories": [
+        {
+          "key": "d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3",
+          "signature": "e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2"
+        }
+      ]
+    }
+  ]
+}
