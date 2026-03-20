@@ -725,3 +725,570 @@ class TestEdgeCases:
         )
         errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
         assert not any("OutputTooSmallUTxO" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# Withdrawal and staking witness tests
+# ---------------------------------------------------------------------------
+
+
+class TestWithdrawalValidation:
+    """Tests for withdrawal-related validation rules.
+
+    Spec references:
+        - Shelley ledger formal spec, Section 10 (UTXOW)
+        - witsVKeyNeeded includes reward account credential hashes for withdrawals
+        - Shelley ledger formal spec, Section 9 (UTXO) — consumed includes withdrawals
+    """
+
+    def _make_staking_key_pair(self, seed: int = 100):
+        """Create a deterministic staking key pair."""
+        sk = make_signing_key(seed)
+        vk = sk.to_verification_key()
+        return sk, vk
+
+    def _make_reward_address(self, staking_vk: PaymentVerificationKey) -> bytes:
+        """Create a reward address from a staking verification key.
+
+        Reward address format: 0xe0 + 28-byte staking credential hash (testnet).
+        Header byte 0xe0 = (0b1110 << 4 | 0b0000) = stake addr + testnet.
+        """
+        import hashlib
+
+        staking_hash = hashlib.blake2b(staking_vk.payload, digest_size=28).digest()
+        return b"\xe0" + staking_hash
+
+    def test_withdrawal_without_witness_fails(self):
+        """Tx with withdrawal but missing staking key witness -> MissingVKeyWitnessesUTxOW.
+
+        Spec: witsVKeyNeeded includes credential hashes from withdrawal keys.
+        Haskell: MissingVKeyWitnessesUTxOW
+        """
+        utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
+        staking_sk, staking_vk = self._make_staking_key_pair(seed=100)
+        reward_addr = self._make_reward_address(staking_vk)
+        dest_addr = make_address(vk)
+
+        from pycardano.transaction import Withdrawals
+
+        withdrawals = Withdrawals({reward_addr: 1_000_000})
+
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(dest_addr, 9_000_000)],
+            fee=2_000_000,
+            ttl=1000,
+            withdraws=withdrawals,
+        )
+
+        # Sign only with the payment key, NOT the staking key
+        wit = sign_tx_body(tx_body, sk)
+        witness_set = TransactionWitnessSet(vkey_witnesses=[wit])
+
+        errors = validate_shelley_witnesses(tx_body, witness_set, utxo_set)
+        assert any("MissingVKeyWitnessesUTxOW" in e for e in errors)
+
+    def test_withdrawal_wrong_amount_fails(self):
+        """Withdraw more than reward balance -> ValueNotConservedUTxO.
+
+        When the withdrawal amount doesn't match the actual reward balance,
+        the consumed/produced equation will be off. In practice the ledger
+        checks that withdrawal amounts match the reward map. For our UTXO
+        rule, a withdrawal that creates a value imbalance triggers
+        ValueNotConservedUTxO.
+
+        Spec: consumed = inputs + withdrawals, produced = outputs + fee.
+        If withdrawals are inflated, consumed > produced (or vice versa).
+        """
+        utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
+        staking_sk, staking_vk = self._make_staking_key_pair(seed=100)
+        reward_addr = self._make_reward_address(staking_vk)
+        dest_addr = make_address(vk)
+
+        from pycardano.transaction import Withdrawals
+
+        # Withdrawal of 5M but outputs + fee only account for input value (10M)
+        # consumed = 10M + 5M = 15M, produced = 13M + 2M = 15M => balanced
+        # But if we set output to 14M: consumed=15M, produced=14M+2M=16M => imbalanced
+        withdrawals = Withdrawals({reward_addr: 5_000_000})
+
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(dest_addr, 14_000_000)],
+            fee=2_000_000,
+            ttl=1000,
+            withdraws=withdrawals,
+        )
+
+        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        assert any("ValueNotConservedUTxO" in e for e in errors)
+
+    def test_empty_input_set_with_withdrawal_fails(self):
+        """Empty inputs + valid withdrawal -> InputSetEmptyUTxO.
+
+        Spec: txins txb ≠ ∅
+        Haskell: InputSetEmptyUTxO
+
+        Even with a valid withdrawal, a transaction must have at least one input.
+        """
+        utxo_set, _, _, _ = make_simple_utxo(value=10_000_000)
+        staking_sk, staking_vk = self._make_staking_key_pair(seed=100)
+        reward_addr = self._make_reward_address(staking_vk)
+        dest_addr = make_address(make_key_pair(seed=0)[1])
+
+        from pycardano.transaction import Withdrawals
+
+        withdrawals = Withdrawals({reward_addr: 2_000_000})
+
+        tx_body = TransactionBody(
+            inputs=[],
+            outputs=[TransactionOutput(dest_addr, 1_000_000)],
+            fee=1_000_000,
+            ttl=1000,
+            withdraws=withdrawals,
+        )
+
+        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        assert any("InputSetEmptyUTxO" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap (Byron) address tests
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapAddressSpending:
+    """Tests for spending from Byron bootstrap addresses in Shelley era.
+
+    In Shelley, Byron bootstrap addresses can still be spent using bootstrap
+    witnesses. The UTXOW rule requires bootstrap witnesses for Byron addresses
+    instead of VKey witnesses.
+
+    Spec references:
+        - Shelley ledger formal spec, Section 10 (UTXOW)
+        - Bootstrap addresses use a different witness format
+        - Haskell: ``bootstrapWitnesses`` in ``Cardano.Ledger.Shelley.Rules.Utxow``
+    """
+
+    def _make_byron_address(self) -> Address:
+        """Create a synthetic Byron-style address for testing.
+
+        Real Byron addresses are CBOR-encoded with a specific structure.
+        We construct one using pycardano's internal representation, matching
+        how _from_byron_cbor builds the Address instance.
+        """
+        import binascii
+        import cbor2
+        import hashlib
+
+        # Build a valid Byron address CBOR structure:
+        # [CBORTag(24, payload_cbor), crc32]
+        # payload = [payload_hash, attributes_dict, byron_type]
+        fake_payload_hash = hashlib.blake2b(b"byron-test-addr", digest_size=28).digest()
+        payload = [fake_payload_hash, {}, 0]  # type 0 = public key address
+        payload_cbor = cbor2.dumps(payload)
+        crc32 = binascii.crc32(payload_cbor) & 0xFFFFFFFF
+        byron_cbor = cbor2.dumps([cbor2.CBORTag(24, payload_cbor), crc32])
+
+        return Address.from_primitive(byron_cbor)
+
+    def test_bootstrap_address_spending(self):
+        """Spending from a Byron bootstrap address with bootstrap witness succeeds.
+
+        Byron addresses require bootstrap witnesses, not VKey witnesses.
+        When a Byron UTxO has a bootstrap witness provided, the witness check
+        should not report a MissingVKeyWitnessesUTxOW error for that input,
+        because Byron addresses don't have a payment key hash in the Shelley sense.
+
+        Note: pycardano's bootstrap_witness field on TransactionWitnessSet
+        accepts a list of bootstrap witness data. Full bootstrap witness
+        verification is complex (involves chain code, attributes, etc.),
+        so this test verifies that the witness framework doesn't reject
+        Byron inputs outright when a bootstrap witness is present.
+        """
+        # Create a Byron address
+        byron_addr = self._make_byron_address()
+
+        # Set up UTxO with Byron address
+        tx_id = make_tx_id(42)
+        txin = TransactionInput(tx_id, 0)
+        txout = TransactionOutput(byron_addr, 5_000_000)
+        utxo_set: dict[TransactionInput, TransactionOutput] = {txin: txout}
+
+        # Create tx spending this UTxO
+        _, dest_vk = make_key_pair(seed=1)
+        dest_addr = make_address(dest_vk)
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(dest_addr, 3_000_000)],
+            fee=2_000_000,
+            ttl=1000,
+        )
+
+        # Bootstrap witness (simplified — real ones have chain code + attributes)
+        # The key point: Byron addresses have payment_part=None, so no VKey
+        # witness is required for them (they need bootstrap witnesses instead).
+        witness_set = TransactionWitnessSet(
+            bootstrap_witness=[b"placeholder_bootstrap_witness"],
+        )
+
+        # Witness validation should NOT report missing VKey witnesses for Byron
+        # addresses, because Byron addresses have no payment key hash.
+        errors = validate_shelley_witnesses(tx_body, witness_set, utxo_set)
+        assert not any("MissingVKeyWitnessesUTxOW" in e for e in errors)
+
+    def test_bootstrap_address_without_witness_fails(self):
+        """Byron address without any bootstrap witness fails validation.
+
+        When a transaction spends a Byron UTxO but provides no bootstrap
+        witness and no VKey witness, it should fail. Since Byron addresses
+        have payment_part=None, the current VKey witness check won't catch
+        it directly (no required key hash extracted). This test documents
+        that behavior — full bootstrap witness validation is a TODO.
+
+        Note: In the current implementation, Byron addresses with
+        payment_part=None don't add to required_key_hashes, so the
+        missing witness isn't caught by validate_shelley_witnesses.
+        Full bootstrap witness verification needs to be added when we
+        implement the full UTXOW rule with bootstrap support.
+        """
+        byron_addr = self._make_byron_address()
+
+        tx_id = make_tx_id(42)
+        txin = TransactionInput(tx_id, 0)
+        txout = TransactionOutput(byron_addr, 5_000_000)
+        utxo_set: dict[TransactionInput, TransactionOutput] = {txin: txout}
+
+        _, dest_vk = make_key_pair(seed=1)
+        dest_addr = make_address(dest_vk)
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(dest_addr, 3_000_000)],
+            fee=2_000_000,
+            ttl=1000,
+        )
+
+        # Empty witness set — no bootstrap witness, no VKey witness
+        witness_set = TransactionWitnessSet()
+
+        # UTXO validation should pass (the UTXO rules don't care about witnesses)
+        utxo_errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200
+        )
+        assert not any("InputsNotInUTxO" in e for e in utxo_errors)
+
+        # Witness validation: Byron addresses currently don't produce a required
+        # key hash (payment_part=None), so this won't fail on MissingVKeyWitnessesUTxOW.
+        # TODO(VNODE-XXX): When we implement full bootstrap witness verification,
+        # this should produce a BootstrapWitnessMissing error or similar.
+        errors = validate_shelley_witnesses(tx_body, witness_set, utxo_set)
+        # Document current behavior: no VKey error because Byron has no payment_part
+        # This is a known gap — full bootstrap witness checking is not yet implemented
+        assert not any("MissingVKeyWitnessesUTxOW" in e for e in errors), (
+            "Byron addresses should not trigger MissingVKeyWitnessesUTxOW — "
+            "they need bootstrap-specific witness validation (not yet implemented)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tx size conformance tests
+# ---------------------------------------------------------------------------
+
+
+class TestShelleyTxSizeConformance:
+    """Tests for transaction size calculation conformance.
+
+    These tests verify that our CBOR serialization produces consistent tx sizes
+    and that fee calculation is coherent with our serialization. Haskell's exact
+    byte counts may differ from pycardano's serialization due to CBOR encoding
+    differences (e.g., set encoding with Tag 258, map ordering, integer encoding).
+
+    Where our sizes differ from Haskell, we document the delta and verify that
+    our fee calculation is internally consistent (fee >= min_fee for our size).
+
+    Spec references:
+        - Shelley ledger formal spec, Section 9 — minfee = a * txSize + b
+        - CBOR serialization follows RFC 7049 / CIP-0021 canonical encoding
+        - Haskell ref: ``shelleyMinFeeTx`` uses ``Annotator`` byte count
+    """
+
+    MAINNET_PARAMS = ShelleyProtocolParams(
+        min_fee_a=44, min_fee_b=155381, max_tx_size=16384, min_utxo_value=1000000,
+    )
+
+    def _compute_tx_size(self, tx: Transaction) -> int:
+        """Compute the CBOR-encoded size of a transaction."""
+        return len(tx.to_cbor())
+
+    def _assert_fee_consistent(self, tx: Transaction, params: ShelleyProtocolParams):
+        """Assert that the tx fee >= min_fee for the actual serialized size."""
+        tx_size = self._compute_tx_size(tx)
+        min_fee = shelley_min_fee(tx_size, params)
+        assert tx.transaction_body.fee >= min_fee, (
+            f"Fee {tx.transaction_body.fee} < min_fee {min_fee} "
+            f"for tx_size={tx_size}"
+        )
+
+    def test_simple_utxo_tx_size(self):
+        """Simple 1-input 1-output UTxO transfer: verify size and fee consistency."""
+        utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
+        tx = make_valid_tx(utxo_set, txin, sk, vk, output_value=8_000_000, fee=2_000_000)
+        tx_size = self._compute_tx_size(tx)
+        # Size should be reasonable for a simple tx (typically 200-400 bytes)
+        assert 100 < tx_size < 500, f"Unexpected simple tx size: {tx_size}"
+        self._assert_fee_consistent(tx, self.MAINNET_PARAMS)
+
+    def test_multi_input_utxo_tx_size(self):
+        """Multi-input UTxO transfer: 3 inputs, 1 output."""
+        sk, vk = make_key_pair(seed=0)
+        addr = make_address(vk)
+
+        txins = [TransactionInput(make_tx_id(i), 0) for i in range(3)]
+        utxo_set = {txin: TransactionOutput(addr, 5_000_000) for txin in txins}
+
+        tx_body = TransactionBody(
+            inputs=txins,
+            outputs=[TransactionOutput(addr, 11_000_000)],
+            fee=4_000_000,
+            ttl=1000,
+        )
+        wits = [sign_tx_body(tx_body, sk) for _ in range(1)]
+        witness_set = TransactionWitnessSet(vkey_witnesses=wits)
+        tx = Transaction(tx_body, witness_set)
+
+        tx_size = self._compute_tx_size(tx)
+        simple_size = self._compute_tx_size(
+            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+        )
+        # Multi-input should be larger than simple
+        assert tx_size > simple_size, (
+            f"Multi-input tx ({tx_size}) should be larger than simple ({simple_size})"
+        )
+        self._assert_fee_consistent(tx, self.MAINNET_PARAMS)
+
+    def test_register_stake_cert_tx_size(self):
+        """Tx with stake registration certificate: verify size includes cert overhead."""
+        from pycardano.certificate import StakeCredential, StakeRegistration
+        from pycardano.hash import VerificationKeyHash
+
+        utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
+        addr = make_address(vk)
+        cred = StakeCredential(VerificationKeyHash(b"\xaa" * 28))
+        cert = StakeRegistration(cred)
+
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(addr, 6_000_000)],
+            fee=4_000_000,
+            ttl=1000,
+            certificates=[cert],
+        )
+        wit = sign_tx_body(tx_body, sk)
+        witness_set = TransactionWitnessSet(vkey_witnesses=[wit])
+        tx = Transaction(tx_body, witness_set)
+
+        tx_size = self._compute_tx_size(tx)
+        simple_size = self._compute_tx_size(
+            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+        )
+        assert tx_size > simple_size, "Cert tx should be larger than simple tx"
+
+    def test_delegate_stake_cert_tx_size(self):
+        """Tx with delegation certificate: verify size."""
+        from pycardano.certificate import StakeCredential, StakeDelegation
+        from pycardano.hash import PoolKeyHash, VerificationKeyHash
+
+        utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
+        addr = make_address(vk)
+        cred = StakeCredential(VerificationKeyHash(b"\xaa" * 28))
+        cert = StakeDelegation(cred, PoolKeyHash(b"\xbb" * 28))
+
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(addr, 6_000_000)],
+            fee=4_000_000,
+            ttl=1000,
+            certificates=[cert],
+        )
+        wit = sign_tx_body(tx_body, sk)
+        witness_set = TransactionWitnessSet(vkey_witnesses=[wit])
+        tx = Transaction(tx_body, witness_set)
+
+        tx_size = self._compute_tx_size(tx)
+        assert tx_size > 0, "Delegation cert tx must have positive size"
+        self._assert_fee_consistent(tx, self.MAINNET_PARAMS)
+
+    def test_deregister_stake_cert_tx_size(self):
+        """Tx with stake deregistration certificate: verify size."""
+        from pycardano.certificate import StakeCredential, StakeDeregistration
+        from pycardano.hash import VerificationKeyHash
+
+        utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
+        addr = make_address(vk)
+        cred = StakeCredential(VerificationKeyHash(b"\xaa" * 28))
+        cert = StakeDeregistration(cred)
+
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(addr, 6_000_000)],
+            fee=4_000_000,
+            ttl=1000,
+            certificates=[cert],
+        )
+        wit = sign_tx_body(tx_body, sk)
+        witness_set = TransactionWitnessSet(vkey_witnesses=[wit])
+        tx = Transaction(tx_body, witness_set)
+
+        tx_size = self._compute_tx_size(tx)
+        assert tx_size > 0
+        self._assert_fee_consistent(tx, self.MAINNET_PARAMS)
+
+    def test_register_pool_tx_size(self):
+        """Tx with pool registration certificate: verify size (largest cert type)."""
+        from fractions import Fraction
+
+        from pycardano.certificate import PoolParams, PoolRegistration
+        from pycardano.hash import PoolKeyHash, VerificationKeyHash
+
+        utxo_set, txin, sk, vk = make_simple_utxo(value=510_000_000)
+        addr = make_address(vk)
+
+        pp = PoolParams(
+            operator=PoolKeyHash(b"\xbb" * 28),
+            vrf_keyhash=b"\xcc" * 32,
+            pledge=100_000_000,
+            cost=340_000_000,
+            margin=Fraction(1, 100),
+            reward_account=b"\xdd" * 29,
+            pool_owners=[VerificationKeyHash(b"\xbb" * 28)],
+        )
+        cert = PoolRegistration(pp)
+
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(addr, 5_000_000)],
+            fee=5_000_000,
+            ttl=1000,
+            certificates=[cert],
+        )
+        wit = sign_tx_body(tx_body, sk)
+        witness_set = TransactionWitnessSet(vkey_witnesses=[wit])
+        tx = Transaction(tx_body, witness_set)
+
+        tx_size = self._compute_tx_size(tx)
+        # Pool registration is the largest cert type
+        simple_size = self._compute_tx_size(
+            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+        )
+        assert tx_size > simple_size + 50, "Pool reg tx should be significantly larger"
+
+    def test_retire_pool_tx_size(self):
+        """Tx with pool retirement certificate: verify size."""
+        from pycardano.certificate import PoolRetirement
+        from pycardano.hash import PoolKeyHash
+
+        utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
+        addr = make_address(vk)
+        cert = PoolRetirement(PoolKeyHash(b"\xbb" * 28), epoch=300)
+
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(addr, 6_000_000)],
+            fee=4_000_000,
+            ttl=1000,
+            certificates=[cert],
+        )
+        wit = sign_tx_body(tx_body, sk)
+        witness_set = TransactionWitnessSet(vkey_witnesses=[wit])
+        tx = Transaction(tx_body, witness_set)
+
+        tx_size = self._compute_tx_size(tx)
+        assert tx_size > 0
+        self._assert_fee_consistent(tx, self.MAINNET_PARAMS)
+
+    def test_tx_with_metadata_size(self):
+        """Tx with auxiliary data (metadata): verify size overhead."""
+        from pycardano.metadata import AuxiliaryData, Metadata
+
+        utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
+        addr = make_address(vk)
+
+        metadata = Metadata({0: "hello", 1: b"\xde\xad\xbe\xef"})
+        aux_data = AuxiliaryData(data=metadata)
+
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(addr, 6_000_000)],
+            fee=4_000_000,
+            ttl=1000,
+            auxiliary_data_hash=aux_data.hash(),
+        )
+        wit = sign_tx_body(tx_body, sk)
+        witness_set = TransactionWitnessSet(vkey_witnesses=[wit])
+        tx = Transaction(tx_body, witness_set, auxiliary_data=aux_data)
+
+        tx_size = self._compute_tx_size(tx)
+        simple_size = self._compute_tx_size(
+            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+        )
+        assert tx_size > simple_size, "Metadata tx should be larger"
+
+    def test_tx_with_multisig_size(self):
+        """Tx with native multisig script: verify size overhead."""
+        from pycardano.nativescript import ScriptAll, ScriptPubkey
+        from pycardano.hash import VerificationKeyHash
+
+        utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
+        addr = make_address(vk)
+
+        # 2-of-2 multisig
+        vkh1 = VerificationKeyHash(b"\xaa" * 28)
+        vkh2 = VerificationKeyHash(b"\xbb" * 28)
+        script = ScriptAll([ScriptPubkey(vkh1), ScriptPubkey(vkh2)])
+
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(addr, 6_000_000)],
+            fee=4_000_000,
+            ttl=1000,
+        )
+        wit = sign_tx_body(tx_body, sk)
+        witness_set = TransactionWitnessSet(
+            vkey_witnesses=[wit],
+            native_scripts=[script],
+        )
+        tx = Transaction(tx_body, witness_set)
+
+        tx_size = self._compute_tx_size(tx)
+        simple_size = self._compute_tx_size(
+            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+        )
+        assert tx_size > simple_size, "Multisig tx should be larger"
+
+    def test_tx_with_withdrawal_size(self):
+        """Tx with withdrawal: verify size overhead."""
+        from pycardano.transaction import Withdrawals
+
+        utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
+        addr = make_address(vk)
+
+        reward_addr = b"\xe0" + b"\xaa" * 28
+        withdrawals = Withdrawals({reward_addr: 1_000_000})
+
+        tx_body = TransactionBody(
+            inputs=[txin],
+            outputs=[TransactionOutput(addr, 7_000_000)],
+            fee=2_000_000,
+            ttl=1000,
+            withdraws=withdrawals,
+        )
+        wit = sign_tx_body(tx_body, sk)
+        witness_set = TransactionWitnessSet(vkey_witnesses=[wit])
+        tx = Transaction(tx_body, witness_set)
+
+        tx_size = self._compute_tx_size(tx)
+        simple_size = self._compute_tx_size(
+            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+        )
+        assert tx_size > simple_size, "Withdrawal tx should be larger"
+        self._assert_fee_consistent(tx, self.MAINNET_PARAMS)

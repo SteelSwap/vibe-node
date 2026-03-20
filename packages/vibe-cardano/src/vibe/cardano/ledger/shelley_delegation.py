@@ -281,6 +281,15 @@ def _process_reg_pool(
     """
     pool_hash = _pool_key_hash(cert.pool_params.operator)
 
+    # Check minPoolCost constraint
+    # Spec (POOL rule): cost pp ≥ minPoolCost pp
+    # Haskell: StakePoolCostTooLowPOOL
+    if cert.pool_params.cost < params.min_pool_cost:
+        raise DelegationError(
+            f"StakePoolCostTooLowPOOL: pool cost {cert.pool_params.cost} "
+            f"is below minimum {params.min_pool_cost}"
+        )
+
     new_state = deepcopy(state)
     new_state.pools[pool_hash] = cert.pool_params
     # Cancel any pending retirement if re-registering
