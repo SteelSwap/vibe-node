@@ -342,3 +342,244 @@ class TestKesHypothesis:
         sig = kes_sign(sk, 0, msg)
         assert not kes_verify(vk, depth, 4, sig, msg)
         assert not kes_verify(vk, depth, 100, sig, msg)
+
+
+# ---------------------------------------------------------------------------
+# Test 2: KES signature CBOR serialization round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestKesCborRoundTrip:
+    """Test that KES signatures round-trip through CBOR bytestring encoding.
+
+    In Cardano block headers, the KES signature is encoded as a CBOR
+    bytestring. This tests that the raw signature bytes survive
+    encode/decode and that the size matches expectations.
+
+    Haskell ref: rawSerialiseSigKES / rawDeserialiseSigKES in
+    Cardano.Crypto.KES.Sum
+    """
+
+    def test_kes_sig_cbor_roundtrip_depth_6(self) -> None:
+        """448-byte KES signature (depth 6) round-trips through CBOR."""
+        import cbor2
+
+        sk = kes_keygen(CARDANO_KES_DEPTH)
+        msg = b"block header body for CBOR test"
+        sig = kes_sign(sk, 0, msg)
+
+        assert len(sig) == 448  # 64 * (6 + 1)
+
+        encoded = cbor2.dumps(sig)
+        decoded = cbor2.loads(encoded)
+        assert decoded == sig
+        assert isinstance(decoded, bytes)
+        assert len(decoded) == 448
+
+    @pytest.mark.parametrize("depth", [0, 1, 2, 3])
+    def test_kes_sig_cbor_roundtrip_various_depths(self, depth: int) -> None:
+        """KES signatures at various depths round-trip through CBOR."""
+        import cbor2
+
+        sk = kes_keygen(depth)
+        msg = b"cbor test message"
+        sig = kes_sign(sk, 0, msg)
+
+        expected_size = kes_sig_size(depth)
+        assert len(sig) == expected_size
+
+        encoded = cbor2.dumps(sig)
+        decoded = cbor2.loads(encoded)
+        assert decoded == sig
+
+    def test_kes_sig_cbor_is_bytestring(self) -> None:
+        """CBOR encoding of KES sig should be major type 2 (bytestring)."""
+        import cbor2
+
+        sk = kes_keygen(2)
+        sig = kes_sign(sk, 0, b"type check")
+        encoded = cbor2.dumps(sig)
+
+        # Major type 2, length 192 (0xC0): 0x58 0xC0
+        # 0x58 = major type 2 (010) + additional info 24 (11000) = byte length follows
+        assert encoded[0] == 0x58
+        assert encoded[1] == kes_sig_size(2)  # 192
+
+    def test_kes_vk_cbor_roundtrip(self) -> None:
+        """32-byte KES VK round-trips through CBOR."""
+        import cbor2
+
+        sk = kes_keygen(3)
+        vk = kes_derive_vk(sk)
+        assert len(vk) == ED25519_VK_SIZE
+
+        encoded = cbor2.dumps(vk)
+        decoded = cbor2.loads(encoded)
+        assert decoded == vk
+
+
+# ---------------------------------------------------------------------------
+# Test 5: KES evolution with multi-block chain replay
+# ---------------------------------------------------------------------------
+
+
+class TestKesMultiBlockReplay:
+    """Sign multiple consecutive blocks, evolve the key through each period,
+    and verify that all old signatures still validate against the original VK.
+
+    This simulates a chain replay scenario where a syncing node verifies
+    a sequence of block headers signed at consecutive KES periods.
+
+    Haskell ref: verifySignedKES in Cardano.Crypto.KES.Class —
+    verification uses only the VK and period, not the secret key state.
+    """
+
+    def test_sign_5_consecutive_blocks_verify_all(self) -> None:
+        """Generate KES key, sign 5 blocks at periods 0-4, verify all."""
+        depth = 3  # 8 periods — enough for 5 blocks
+        sk = kes_keygen(depth)
+        vk = kes_derive_vk(sk)
+
+        signatures: list[tuple[int, bytes, bytes]] = []
+
+        for period in range(5):
+            msg = f"block header at period {period}".encode()
+            sig = kes_sign(sk, period, msg)
+            signatures.append((period, msg, sig))
+
+            # Evolve key if not the last period we need
+            if period < 4:
+                sk = kes_update(sk, period)
+                assert sk is not None, f"Key exhausted at period {period}"
+
+        # Verify all signatures against the original VK
+        for period, msg, sig in signatures:
+            assert kes_verify(vk, depth, period, sig, msg), (
+                f"Signature at period {period} failed verification"
+            )
+
+    def test_sign_all_periods_depth_3_verify_after_full_evolution(self) -> None:
+        """Sign at all 8 periods of depth-3 key, verify all after full evolution."""
+        depth = 3
+        total = 1 << depth  # 8
+        sk = kes_keygen(depth)
+        vk = kes_derive_vk(sk)
+
+        signatures = []
+
+        for period in range(total):
+            msg = f"block-{period}".encode()
+            sig = kes_sign(sk, period, msg)
+            signatures.append((period, msg, sig))
+
+            if period < total - 1:
+                sk = kes_update(sk, period)
+                assert sk is not None
+
+        # Key should now be exhausted
+        assert kes_update(sk, total - 1) is None
+
+        # All signatures still verify against the original VK
+        for period, msg, sig in signatures:
+            assert kes_verify(vk, depth, period, sig, msg), (
+                f"Post-evolution verification failed at period {period}"
+            )
+
+    def test_vk_stable_through_evolution_chain(self) -> None:
+        """VK derived from the evolved key matches the original VK at each step."""
+        depth = 3
+        sk = kes_keygen(depth)
+        original_vk = kes_derive_vk(sk)
+
+        for period in range(7):  # 0..6, evolve 7 times for depth 3
+            sk = kes_update(sk, period)
+            assert sk is not None
+            assert kes_derive_vk(sk) == original_vk, (
+                f"VK changed after evolution at period {period}"
+            )
+
+    def test_evolved_key_cannot_sign_past_periods(self) -> None:
+        """After evolving past period 0, the period-0 leaf is erased.
+
+        The evolved key can still sign at later periods but the internal
+        tree structure has been modified. We verify that signing at the
+        current period works but the old signatures still verify.
+        """
+        depth = 2  # 4 periods
+        sk = kes_keygen(depth)
+        vk = kes_derive_vk(sk)
+
+        # Sign at period 0
+        msg0 = b"period zero block"
+        sig0 = kes_sign(sk, 0, msg0)
+
+        # Evolve to period 1
+        sk = kes_update(sk, 0)
+        assert sk is not None
+
+        # Sign at period 1
+        msg1 = b"period one block"
+        sig1 = kes_sign(sk, 1, msg1)
+
+        # Both signatures verify against original VK
+        assert kes_verify(vk, depth, 0, sig0, msg0)
+        assert kes_verify(vk, depth, 1, sig1, msg1)
+
+
+# ---------------------------------------------------------------------------
+# Test 6 (KES part): Key size mismatch edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestKesKeySizeMismatch:
+    """Test that KES verification rejects inputs of incorrect sizes.
+
+    Haskell ref: rawDeserialiseSigKES checks exact byte size
+    and returns Nothing on mismatch.
+    """
+
+    def test_truncated_kes_sig_rejected(self) -> None:
+        """A KES signature shorter than expected should be rejected."""
+        sk = kes_keygen(2)
+        vk = kes_derive_vk(sk)
+        msg = b"truncated sig test"
+        sig = kes_sign(sk, 0, msg)
+
+        # Truncate by 1 byte
+        assert not kes_verify(vk, 2, 0, sig[:-1], msg)
+
+    def test_extended_kes_sig_rejected(self) -> None:
+        """A KES signature longer than expected should be rejected."""
+        sk = kes_keygen(2)
+        vk = kes_derive_vk(sk)
+        msg = b"extended sig test"
+        sig = kes_sign(sk, 0, msg)
+
+        # Append an extra byte
+        assert not kes_verify(vk, 2, 0, sig + b"\x00", msg)
+
+    def test_empty_kes_sig_rejected(self) -> None:
+        """An empty KES signature should be rejected."""
+        sk = kes_keygen(2)
+        vk = kes_derive_vk(sk)
+        assert not kes_verify(vk, 2, 0, b"", b"msg")
+
+    def test_wrong_vk_size_rejected(self) -> None:
+        """A VK of wrong size should be rejected by kes_verify."""
+        sk = kes_keygen(2)
+        sig = kes_sign(sk, 0, b"msg")
+
+        # 31-byte VK (too short)
+        assert not kes_verify(b"\x00" * 31, 2, 0, sig, b"msg")
+        # 33-byte VK (too long)
+        assert not kes_verify(b"\x00" * 33, 2, 0, sig, b"msg")
+
+    def test_half_size_kes_sig_rejected(self) -> None:
+        """A signature that's exactly half the expected size should fail."""
+        sk = kes_keygen(CARDANO_KES_DEPTH)
+        vk = kes_derive_vk(sk)
+        msg = b"half size test"
+        sig = kes_sign(sk, 0, msg)
+
+        half = len(sig) // 2
+        assert not kes_verify(vk, CARDANO_KES_DEPTH, 0, sig[:half], msg)
