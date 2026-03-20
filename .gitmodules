@@ -16,3 +16,6 @@
 [submodule "vendor/formal-ledger-specs"]
 	path = vendor/formal-ledger-specs
 	url = https://github.com/IntersectMBO/formal-ledger-specifications.git
+[submodule "vendor/libsodium-iog"]
+	path = vendor/libsodium-iog
+	url = https://github.com/input-output-hk/libsodium
