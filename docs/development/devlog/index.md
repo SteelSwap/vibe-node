@@ -6,6 +6,14 @@ Each entry is organized by phase, with specific module and work item details.
 
 ---
 
+## Phase 4: Ledger & Consensus
+
+- **[Phase 4 — Ledger & Consensus](phase4.md)** (M4.1–M4.12)
+    - VRF (libsodium FFI via pybind11), KES (sum-composition over Ed25519)
+    - Alonzo through Conway ledger rules, Plutus integration via uplc
+    - Ouroboros Praos consensus, epoch boundary, hard fork combinator
+    - Tx-submission + keep-alive miniprotocols, 3-node devnet
+
 ## Phase 3: Chain Sync & Storage
 
 - **[Phase 3 — Chain Sync & Storage](phase3.md)** (M3.1–M3.10)

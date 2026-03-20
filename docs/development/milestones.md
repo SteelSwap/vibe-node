@@ -155,9 +155,31 @@ Phase 3 built the storage engine, block-fetch protocol, Byron through Mary ledge
 
 ---
 
-## Phase 4–6 Overview
+## Phase 4 — Ledger & Consensus :material-progress-wrench:{ .yellow }
 
-- **Phase 4 — Ledger & Consensus:** UTxO ledger validation (Alonzo-Conway), Plutus script evaluation via uplc, Ouroboros Praos consensus, VRF/KES, tip selection
+**Status: IN PROGRESS** — 12 modules across 4 tracks, 3 waves.
+
+Phase 4 builds the full ledger validation (Alonzo through Conway), Ouroboros Praos consensus with VRF/KES verification, Plutus script evaluation via uplc, and the remaining N2N miniprotocols. The gate test: 3-node private devnet with tip agreement within 2160 slots for 24 continuous hours.
+
+| Module | Wave | Description | Status |
+|--------|------|-------------|--------|
+| M4.1 — VRF (libsodium FFI) | 1 | pybind11 wrapping IOG libsodium fork, ECVRF-ED25519-SHA512-Elligator2 | :material-check-circle: Complete |
+| M4.2 — KES | 1 | Sum-composition over Ed25519 via cryptography library | :material-check-circle: Complete |
+| M4.3 — Alonzo Ledger | 1 | Collateral, datums, script integrity hash, two-phase validation | :material-check-circle: Complete |
+| M4.4 — Plutus Integration | 1 | uplc bridge, ScriptContext, cost model, ExUnits, VNODE-151 | :material-check-circle: Complete |
+| M4.5 — Tx-Submission Protocol | 1 | N2N tx-submission miniprotocol (protocol ID 4) | :material-check-circle: Complete |
+| M4.6 — Keep-Alive Protocol | 1 | N2N keep-alive miniprotocol (protocol ID 8) | :material-check-circle: Complete |
+| M4.7 — Babbage-Conway Ledger | 2 | Inline datums, reference scripts, governance, DRep delegation | :material-clock-outline: Planned |
+| M4.8 — Ouroboros Praos | 2 | Chain selection, leader election, block header verification | :material-clock-outline: Planned |
+| M4.9 — Epoch Boundary | 2 | Stake snapshots, rewards, nonce evolution, protocol params | :material-clock-outline: Planned |
+| M4.10 — Hard Fork Combinator | 3 | Era transitions Byron→Conway, state translation | :material-clock-outline: Planned |
+| M4.11 — Conformance Suite | 3 | Full-era ledger conformance, 1000 Plutus script evaluation | :material-clock-outline: Planned |
+| M4.12 — Devnet Integration | 3 | 3-node devnet, 24h tip agreement monitoring | :material-clock-outline: Planned |
+
+---
+
+## Phase 5–6 Overview
+
 - **Phase 5 — Block Production & N2C:** Block forging, mempool, leader schedule, all node-to-client miniprotocols
 - **Phase 6 — Hardening:** Power-loss recovery, memory optimization, 10-day soak test against Haskell nodes
 
