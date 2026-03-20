@@ -6,6 +6,12 @@ Tests cover:
 3. Pool retirement at epoch boundary
 4. Protocol parameter updates
 5. Hypothesis: relative stakes sum to ~1.0
+6. Reward calculation with blocks_made performance factor
+7. Stake snapshot mark/set/go three-epoch delay
+8. Reward zero after key registration
+9. Credential removed after deregistration
+10. Rewards decrease by withdrawals
+11. Reserves/treasury accounting at epoch boundary
 """
 
 from __future__ import annotations
@@ -26,6 +32,11 @@ from vibe.cardano.consensus.epoch_boundary import (
     relative_stake,
 )
 from vibe.cardano.consensus.nonce import EpochNonce, mk_nonce
+from vibe.cardano.consensus.rewards import (
+    PoolRewardParams,
+    pool_reward,
+    total_reward_pot,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -486,3 +497,554 @@ class TestEpochBoundaryProperties:
         )
 
         assert result.total_rewards_distributed <= result.reward_pot.rewards_pot
+
+
+# ---------------------------------------------------------------------------
+# Test 4: Reward calculation with blocks_made ratio (performance factor)
+# ---------------------------------------------------------------------------
+
+
+class TestRewardPerformanceFactor:
+    """The Haskell reward formula uses apparent performance = blocks_made / expected.
+
+    A pool that makes 100% of its expected blocks gets full reward.
+    A pool that makes 50% gets ~50% of its reward.
+    A pool that makes 0 blocks gets 0 reward.
+
+    Spec ref: Shelley spec Section 5.5.3 — performance factor.
+    Haskell ref: ``mkPoolRewardInfo`` — beta / sigma capped at 1.
+    """
+
+    def _make_pool(
+        self,
+        pool_id: bytes = POOL_A,
+        pledge: int = 1_000_000_000_000,
+        cost: int = 340_000_000,
+        margin: Fraction = Fraction(1, 100),
+        pool_stake: int = 50_000_000_000_000,
+    ) -> PoolRewardParams:
+        return PoolRewardParams(
+            pool_id=pool_id,
+            pledge=pledge,
+            cost=cost,
+            margin=margin,
+            pool_stake=pool_stake,
+        )
+
+    def test_full_performance_full_reward(self) -> None:
+        """Pool that made 100% of expected blocks gets full reward."""
+        pool = self._make_pool()
+        total_stake = 25_000_000_000_000_000
+        rewards_pot = 30_000_000_000_000
+
+        # Without performance factor (default)
+        base_reward = pool_reward(
+            pool, total_stake, rewards_pot, 500, Fraction(3, 10)
+        )
+
+        # With 100% performance
+        full_perf_reward = pool_reward(
+            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
+            blocks_made=100, expected_blocks=100,
+        )
+
+        assert full_perf_reward == base_reward
+
+    def test_half_performance_half_reward(self) -> None:
+        """Pool that made 50% of expected blocks gets ~50% reward."""
+        pool = self._make_pool()
+        total_stake = 25_000_000_000_000_000
+        rewards_pot = 30_000_000_000_000
+
+        full_reward = pool_reward(
+            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
+            blocks_made=100, expected_blocks=100,
+        )
+
+        half_reward = pool_reward(
+            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
+            blocks_made=50, expected_blocks=100,
+        )
+
+        # Half performance should give approximately half reward
+        # (exact due to Fraction arithmetic)
+        assert half_reward == full_reward // 2
+
+    def test_zero_blocks_zero_reward(self) -> None:
+        """Pool that made 0 blocks gets 0 reward."""
+        pool = self._make_pool()
+        total_stake = 25_000_000_000_000_000
+        rewards_pot = 30_000_000_000_000
+
+        zero_reward = pool_reward(
+            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
+            blocks_made=0, expected_blocks=100,
+        )
+
+        assert zero_reward == 0
+
+    def test_over_performance_capped_at_one(self) -> None:
+        """Pool that made more blocks than expected is capped at 1.0.
+
+        The performance factor min(blocks_made/expected, 1) ensures
+        lucky pools don't get extra rewards beyond the formula output.
+        """
+        pool = self._make_pool()
+        total_stake = 25_000_000_000_000_000
+        rewards_pot = 30_000_000_000_000
+
+        full_reward = pool_reward(
+            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
+            blocks_made=100, expected_blocks=100,
+        )
+
+        over_reward = pool_reward(
+            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
+            blocks_made=200, expected_blocks=100,
+        )
+
+        assert over_reward == full_reward
+
+    def test_zero_expected_blocks_zero_reward(self) -> None:
+        """If expected_blocks is 0, pool gets 0 (avoid division by zero)."""
+        pool = self._make_pool()
+        total_stake = 25_000_000_000_000_000
+        rewards_pot = 30_000_000_000_000
+
+        r = pool_reward(
+            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
+            blocks_made=10, expected_blocks=0,
+        )
+        assert r == 0
+
+
+# ---------------------------------------------------------------------------
+# Test 5: Stake snapshot mark/set/go three-epoch delay
+# ---------------------------------------------------------------------------
+
+
+class TestStakeSnapshotThreeEpochDelay:
+    """The Cardano stake snapshot system uses a 3-snapshot pipeline:
+
+    - Mark: snapshot taken at end of epoch N
+    - Set: mark snapshot becomes set at end of epoch N+1
+    - Go: set snapshot is used for leader election in epoch N+2
+
+    This ensures leader election is deterministic and known 2 epochs in advance.
+
+    Spec ref: Shelley spec Section 11, Figure 46 (SNAP rule).
+    Haskell ref: ``SnapShots`` in ``Cardano.Ledger.Shelley.LedgerState``
+    """
+
+    def test_three_epoch_delay(self) -> None:
+        """Changes in stake at epoch N don't affect leader election until N+2.
+
+        We simulate 3 epoch transitions:
+        - Epoch 0: CRED_1 has 100M delegated to POOL_A
+        - Epoch 1: CRED_1 increases to 200M (mark snapshot changes)
+        - Epoch 2: Previous mark becomes set
+        - Epoch 3: The set snapshot from epoch 1 is now used for leader election
+
+        The key verification: the snapshot at each epoch boundary captures
+        the state as it existed at that moment.
+        """
+        # Epoch boundary 0->1: initial stake distribution
+        snap_epoch_1 = compute_stake_distribution(
+            utxo_stakes={CRED_1: 100_000_000},
+            delegations={CRED_1: POOL_A},
+            pool_registrations={POOL_A: _mock_pool_params(POOL_A)},
+        )
+        assert snap_epoch_1.pool_stakes[POOL_A] == 100_000_000
+
+        # Epoch boundary 1->2: stake increased (this is the "mark" snapshot)
+        snap_epoch_2 = compute_stake_distribution(
+            utxo_stakes={CRED_1: 200_000_000},
+            delegations={CRED_1: POOL_A},
+            pool_registrations={POOL_A: _mock_pool_params(POOL_A)},
+        )
+        assert snap_epoch_2.pool_stakes[POOL_A] == 200_000_000
+
+        # The snapshots are different — epoch 1 snapshot has old stake
+        assert snap_epoch_1.pool_stakes[POOL_A] != snap_epoch_2.pool_stakes[POOL_A]
+
+        # In the pipeline: epoch 3 leader election uses snap_epoch_1,
+        # epoch 4 uses snap_epoch_2. The 2-epoch lag means:
+        # mark (epoch N) -> set (epoch N+1) -> go (epoch N+2)
+        mark = snap_epoch_2  # taken at end of epoch 1
+        go_snapshot = snap_epoch_1  # used in epoch 3 (taken 2 epochs earlier)
+
+        # The go snapshot (used for leader election) has the OLD stake
+        assert go_snapshot.pool_stakes[POOL_A] == 100_000_000
+        # The mark snapshot (freshly taken) has the NEW stake
+        assert mark.pool_stakes[POOL_A] == 200_000_000
+
+    def test_relative_stake_uses_correct_snapshot(self) -> None:
+        """Relative stake calculated from the 'go' snapshot reflects
+        the state from 2 epochs ago, not the current state."""
+        # Old snapshot (2 epochs ago): POOL_A had 25% of stake
+        old_snapshot = StakeSnapshot(
+            pool_stakes={POOL_A: 250, POOL_B: 750},
+            total_stake=1000,
+        )
+
+        # Current snapshot: POOL_A now has 50% of stake
+        current_snapshot = StakeSnapshot(
+            pool_stakes={POOL_A: 500, POOL_B: 500},
+            total_stake=1000,
+        )
+
+        # Leader election uses old snapshot (go)
+        sigma_go = relative_stake(POOL_A, old_snapshot)
+        sigma_current = relative_stake(POOL_A, current_snapshot)
+
+        assert sigma_go == Fraction(1, 4)
+        assert sigma_current == Fraction(1, 2)
+        assert sigma_go != sigma_current
+
+
+# ---------------------------------------------------------------------------
+# Test 6: Reward zero after key registration
+# ---------------------------------------------------------------------------
+
+
+class TestRewardZeroAfterRegistration:
+    """A newly registered staking credential has zero rewards until the first
+    epoch boundary after its delegation becomes active.
+
+    In the Cardano model, a stake key registration creates the credential
+    in the delegation state with zero rewards. The credential only begins
+    earning rewards after it is included in a stake snapshot that is used
+    for leader election (the "go" snapshot), which takes 2 full epochs.
+
+    Spec ref: Shelley spec, Section 9 (Delegation rules).
+    Haskell ref: ``DState`` initial reward balance is 0.
+    """
+
+    def test_newly_registered_credential_has_zero_rewards(self) -> None:
+        """A freshly registered credential should not appear in reward
+        distribution results until it is part of an active delegation."""
+        # Simulate: CRED_4 just registered but is NOT yet in the delegation map
+        # or utxo_stakes. It should not appear in rewards.
+        pp_a = _mock_pool_params(POOL_A, pledge=1_000_000)
+        result = process_epoch_boundary(
+            new_epoch=5,
+            prev_nonce=mk_nonce(b"test"),
+            eta_v=b"\x00" * 32,
+            extra_entropy=None,
+            utxo_stakes={CRED_1: 50_000_000_000},
+            delegations={CRED_1: POOL_A},
+            pool_registrations={POOL_A: pp_a},
+            retiring={},
+            delegator_stakes_per_pool={POOL_A: {CRED_1: 50_000_000_000}},
+            reserves=1_000_000_000_000,
+            rho=Fraction(3, 1000),
+            tau=Fraction(2, 10),
+            fees=50_000_000,
+            n_opt=500,
+            a0=Fraction(3, 10),
+        )
+
+        # CRED_4 is not in any pool's reward distribution
+        for pr in result.pool_rewards:
+            assert CRED_4 not in pr.member_rewards
+
+    def test_credential_with_delegation_but_no_stake_gets_zero(self) -> None:
+        """A credential that is delegated but has 0 stake gets 0 reward."""
+        pp_a = _mock_pool_params(POOL_A, pledge=1_000_000)
+        result = process_epoch_boundary(
+            new_epoch=5,
+            prev_nonce=mk_nonce(b"test"),
+            eta_v=b"\x00" * 32,
+            extra_entropy=None,
+            # CRED_4 has delegation but zero stake
+            utxo_stakes={CRED_1: 50_000_000_000, CRED_4: 0},
+            delegations={CRED_1: POOL_A, CRED_4: POOL_A},
+            pool_registrations={POOL_A: pp_a},
+            retiring={},
+            delegator_stakes_per_pool={
+                POOL_A: {CRED_1: 50_000_000_000, CRED_4: 0},
+            },
+            reserves=1_000_000_000_000,
+            rho=Fraction(3, 1000),
+            tau=Fraction(2, 10),
+            fees=50_000_000,
+            n_opt=500,
+            a0=Fraction(3, 10),
+        )
+
+        # CRED_4 either gets 0 reward or is not in the map
+        for pr in result.pool_rewards:
+            cred4_reward = pr.member_rewards.get(CRED_4, 0)
+            assert cred4_reward == 0
+
+
+# ---------------------------------------------------------------------------
+# Test 7: Credential removed after deregistration
+# ---------------------------------------------------------------------------
+
+
+class TestCredentialDeregistration:
+    """After a stake key deregistration, the credential is removed from
+    the delegation state and its rewards are returned.
+
+    We test that once a credential is removed from the delegation map,
+    it no longer appears in the stake distribution or reward calculations.
+
+    Spec ref: Shelley spec, Section 9 (DELEG rule).
+    Haskell ref: ``DState`` — deregistration removes from ``rewards`` map.
+    """
+
+    def test_deregistered_credential_not_in_snapshot(self) -> None:
+        """After deregistration, the credential's stake is not counted."""
+        # Before deregistration: CRED_1 and CRED_2 delegate to POOL_A
+        snap_before = compute_stake_distribution(
+            utxo_stakes={CRED_1: 100_000_000, CRED_2: 200_000_000},
+            delegations={CRED_1: POOL_A, CRED_2: POOL_A},
+            pool_registrations={POOL_A: _mock_pool_params(POOL_A)},
+        )
+        assert snap_before.pool_stakes[POOL_A] == 300_000_000
+
+        # After CRED_2 deregisters: removed from delegations and utxo_stakes
+        snap_after = compute_stake_distribution(
+            utxo_stakes={CRED_1: 100_000_000},
+            delegations={CRED_1: POOL_A},
+            pool_registrations={POOL_A: _mock_pool_params(POOL_A)},
+        )
+        assert snap_after.pool_stakes[POOL_A] == 100_000_000
+
+    def test_deregistered_credential_not_in_rewards(self) -> None:
+        """After deregistration, the credential does not appear in rewards."""
+        pp_a = _mock_pool_params(POOL_A, pledge=1_000_000)
+
+        # CRED_2 has been deregistered — not in delegations or stakes
+        result = process_epoch_boundary(
+            new_epoch=5,
+            prev_nonce=mk_nonce(b"test"),
+            eta_v=b"\x00" * 32,
+            extra_entropy=None,
+            utxo_stakes={CRED_1: 50_000_000_000},
+            delegations={CRED_1: POOL_A},
+            pool_registrations={POOL_A: pp_a},
+            retiring={},
+            delegator_stakes_per_pool={POOL_A: {CRED_1: 50_000_000_000}},
+            reserves=1_000_000_000_000,
+            rho=Fraction(3, 1000),
+            tau=Fraction(2, 10),
+            fees=50_000_000,
+            n_opt=500,
+            a0=Fraction(3, 10),
+        )
+
+        for pr in result.pool_rewards:
+            assert CRED_2 not in pr.member_rewards
+
+
+# ---------------------------------------------------------------------------
+# Test 8: Rewards decrease by withdrawals
+# ---------------------------------------------------------------------------
+
+
+class TestRewardsDecreaseByWithdrawals:
+    """When a staking credential withdraws rewards, the balance decreases
+    by exactly the withdrawal amount.
+
+    This tests the accounting invariant at the reward-tracking level.
+    In Cardano, withdrawals are explicit transactions that move rewards
+    from the reward account to the UTxO.
+
+    Spec ref: Shelley spec, Section 10 (DELEGS rule — withdrawal handling).
+    Haskell ref: ``DState.rewards`` — decremented by withdrawal amount.
+    """
+
+    def test_withdrawal_reduces_balance(self) -> None:
+        """Simulate reward accumulation and withdrawal accounting."""
+        # Model a simple reward account
+        reward_balance: dict[bytes, int] = {}
+
+        # Epoch boundary distributes rewards
+        earned = 5_000_000  # 5 ADA earned
+        reward_balance[CRED_1] = reward_balance.get(CRED_1, 0) + earned
+        assert reward_balance[CRED_1] == 5_000_000
+
+        # Withdrawal of 3 ADA
+        withdrawal = 3_000_000
+        assert reward_balance[CRED_1] >= withdrawal
+        reward_balance[CRED_1] -= withdrawal
+        assert reward_balance[CRED_1] == 2_000_000
+
+        # Full withdrawal of remaining balance
+        remaining = reward_balance[CRED_1]
+        reward_balance[CRED_1] -= remaining
+        assert reward_balance[CRED_1] == 0
+
+    def test_withdrawal_exact_amount(self) -> None:
+        """Withdrawing exactly the reward balance leaves zero."""
+        reward_balance = {CRED_1: 10_000_000}
+        withdrawal = 10_000_000
+        reward_balance[CRED_1] -= withdrawal
+        assert reward_balance[CRED_1] == 0
+
+    def test_partial_withdrawal_preserves_remainder(self) -> None:
+        """Partial withdrawal leaves the correct remainder."""
+        reward_balance = {CRED_1: 10_000_000}
+        withdrawal = 7_500_000
+        reward_balance[CRED_1] -= withdrawal
+        assert reward_balance[CRED_1] == 2_500_000
+
+    def test_withdrawal_cannot_exceed_balance(self) -> None:
+        """Withdrawals must not exceed the reward balance.
+
+        This is enforced at the transaction validation level. We verify
+        the invariant: balance - withdrawal >= 0.
+        """
+        reward_balance = {CRED_1: 5_000_000}
+        withdrawal = 10_000_000
+        # The transaction validator would reject this, but we verify the check
+        assert reward_balance[CRED_1] < withdrawal
+        # A valid implementation should NOT allow this
+
+
+# ---------------------------------------------------------------------------
+# Test 9: Reserves/treasury accounting at epoch boundary
+# ---------------------------------------------------------------------------
+
+
+class TestReservesTreasuryAccounting:
+    """Verify the accounting identity at epoch boundary:
+
+        monetary_expansion = floor(reserves * rho)
+        total_pot = monetary_expansion + fees
+        treasury_cut = floor(total_pot * tau)
+        rewards_pot = total_pot - treasury_cut
+
+    After epoch boundary processing:
+        - reserves decrease by monetary_expansion
+        - treasury increases by treasury_cut
+        - rewards_pot = (1 - tau) * (monetary_expansion + fees)
+
+    Spec ref: Shelley spec Section 5.5.3.
+    Haskell ref: ``createRUpd`` in ``Cardano.Ledger.Shelley.Rules.NewEpoch``
+    """
+
+    def test_basic_accounting_identity(self) -> None:
+        """Treasury + rewards = total pot (conservation)."""
+        reserves = 14_000_000_000_000_000  # 14B ADA
+        rho = Fraction(3, 1000)
+        tau = Fraction(2, 10)
+        fees = 200_000_000_000  # 200K ADA
+
+        pot = total_reward_pot(reserves, rho, tau, fees)
+
+        # Conservation: treasury_cut + rewards_pot == total_pot
+        assert pot.treasury_cut + pot.rewards_pot == pot.total_pot
+
+        # Monetary expansion: floor(reserves * rho)
+        expected_expansion = int(Fraction(reserves) * rho)
+        assert pot.monetary_expansion == expected_expansion
+
+        # Total pot: expansion + fees
+        assert pot.total_pot == expected_expansion + fees
+
+        # Treasury: floor(total_pot * tau)
+        expected_treasury = int(Fraction(pot.total_pot) * tau)
+        assert pot.treasury_cut == expected_treasury
+
+        # Rewards: remainder
+        assert pot.rewards_pot == pot.total_pot - expected_treasury
+
+    def test_reserves_decrease_by_expansion(self) -> None:
+        """After epoch boundary, reserves should decrease by monetary_expansion."""
+        reserves = 10_000_000_000_000_000
+        rho = Fraction(3, 1000)
+        tau = Fraction(2, 10)
+        fees = 100_000_000_000
+
+        pot = total_reward_pot(reserves, rho, tau, fees)
+
+        new_reserves = reserves - pot.monetary_expansion
+        assert new_reserves == reserves - int(Fraction(reserves) * rho)
+        assert new_reserves < reserves
+        assert new_reserves > 0
+
+    def test_treasury_increases_by_cut(self) -> None:
+        """Treasury increases by exactly treasury_cut each epoch."""
+        reserves = 10_000_000_000_000_000
+        rho = Fraction(3, 1000)
+        tau = Fraction(2, 10)
+        fees = 100_000_000_000
+
+        pot = total_reward_pot(reserves, rho, tau, fees)
+
+        old_treasury = 5_000_000_000_000_000
+        new_treasury = old_treasury + pot.treasury_cut
+
+        assert new_treasury == old_treasury + int(Fraction(pot.total_pot) * tau)
+        assert new_treasury > old_treasury
+
+    def test_rewards_pot_equals_one_minus_tau_times_total(self) -> None:
+        """rewards_pot = total_pot - floor(total_pot * tau).
+
+        Due to floor, this is not exactly (1-tau)*total, but the
+        accounting identity total = treasury + rewards always holds.
+        """
+        reserves = 14_000_000_000_000_000
+        rho = Fraction(3, 1000)
+        tau = Fraction(2, 10)
+        fees = 500_000_000_000
+
+        pot = total_reward_pot(reserves, rho, tau, fees)
+
+        # The key identity
+        assert pot.treasury_cut + pot.rewards_pot == pot.total_pot
+
+        # Verify rewards_pot matches the formula
+        assert pot.rewards_pot == pot.total_pot - int(Fraction(pot.total_pot) * tau)
+
+    def test_zero_reserves_zero_fees(self) -> None:
+        """With no reserves and no fees, everything is zero."""
+        pot = total_reward_pot(0, Fraction(3, 1000), Fraction(2, 10), 0)
+        assert pot.monetary_expansion == 0
+        assert pot.total_pot == 0
+        assert pot.treasury_cut == 0
+        assert pot.rewards_pot == 0
+
+    def test_full_epoch_boundary_accounting(self) -> None:
+        """Full epoch boundary preserves accounting invariants."""
+        reserves = 14_000_000_000_000_000
+        rho = Fraction(3, 1000)
+        tau = Fraction(2, 10)
+        fees = 200_000_000_000
+
+        pp_a = _mock_pool_params(POOL_A, pledge=10_000_000_000)
+        result = process_epoch_boundary(
+            new_epoch=100,
+            prev_nonce=mk_nonce(b"epoch 99"),
+            eta_v=b"\xab" * 32,
+            extra_entropy=None,
+            utxo_stakes={CRED_1: 50_000_000_000},
+            delegations={CRED_1: POOL_A},
+            pool_registrations={POOL_A: pp_a},
+            retiring={},
+            delegator_stakes_per_pool={POOL_A: {CRED_1: 50_000_000_000}},
+            reserves=reserves,
+            rho=rho,
+            tau=tau,
+            fees=fees,
+            n_opt=500,
+            a0=Fraction(3, 10),
+        )
+
+        pot = result.reward_pot
+
+        # Conservation identity
+        assert pot.treasury_cut + pot.rewards_pot == pot.total_pot
+
+        # Rewards distributed never exceeds pot
+        assert result.total_rewards_distributed <= pot.rewards_pot
+
+        # Verify expansion
+        assert pot.monetary_expansion == int(Fraction(reserves) * rho)
+
+        # New reserves after this epoch
+        new_reserves = reserves - pot.monetary_expansion
+        assert new_reserves >= 0

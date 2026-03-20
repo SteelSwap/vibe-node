@@ -172,6 +172,8 @@ def pool_reward(
     rewards_pot: int,
     n_opt: int,
     a0: Fraction,
+    blocks_made: int | None = None,
+    expected_blocks: int | None = None,
 ) -> int:
     """Calculate the optimal reward for a single pool.
 
@@ -205,6 +207,11 @@ def pool_reward(
         n_opt: Desired number of pools (``nOpt`` protocol parameter,
                a.k.a. ``k`` in the spec formula).
         a0: Pledge influence factor (protocol parameter).
+        blocks_made: Number of blocks the pool actually produced in the epoch.
+            If None, the performance factor is assumed to be 1.0 (full performance).
+        expected_blocks: Number of blocks the pool was expected to produce
+            (proportional to its stake and the total blocks in the epoch).
+            If None, the performance factor is assumed to be 1.0 (full performance).
 
     Returns:
         The pool's total reward in lovelace (floor of the rational result).
@@ -212,6 +219,25 @@ def pool_reward(
     """
     if total_stake == 0 or pool.pool_stake == 0:
         return 0
+
+    # Performance factor: ratio of actual blocks made to expected blocks.
+    # The Haskell node uses "apparent performance" = beta / sigma, but we
+    # express it directly as blocks_made / expected_blocks and cap at 1.0.
+    # If a pool made 0 blocks, it gets 0 rewards.
+    # If blocks_made/expected_blocks are not provided, assume full performance.
+    #
+    # Spec ref: Shelley spec Section 5.5.3 — performance factor in reward calc.
+    # Haskell ref: ``desirability`` and ``mkPoolRewardInfo`` in
+    #     ``Cardano.Ledger.Shelley.Rewards`` — uses ``beta / sigma`` capped at 1.
+    if blocks_made is not None and expected_blocks is not None:
+        if expected_blocks == 0:
+            # No blocks expected — pool gets nothing
+            return 0
+        if blocks_made == 0:
+            return 0
+        performance = min(Fraction(blocks_made, expected_blocks), Fraction(1))
+    else:
+        performance = Fraction(1)
 
     R = Fraction(rewards_pot)
     sigma = Fraction(pool.pool_stake, total_stake)
@@ -238,6 +264,9 @@ def pool_reward(
     middle = sigma_prime - s_prime * inner
     right = s_prime * a0 * middle / z
     pool_R = R / (1 + a0) * (sigma_prime + right)
+
+    # Apply performance factor
+    pool_R = pool_R * performance
 
     return int(pool_R)  # floor toward zero
 
