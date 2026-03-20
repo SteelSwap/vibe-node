@@ -25,6 +25,7 @@ from vibe.cardano.plutus.cost_model import (
     CostModel,
     ExUnits,
     PlutusVersion,
+    is_plutus_version_available,
 )
 from vibe.cardano.plutus.evaluate import (
     EvalResult,
@@ -37,4 +38,5 @@ __all__ = [
     "EvalResult",
     "PlutusVersion",
     "evaluate_script",
+    "is_plutus_version_available",
 ]

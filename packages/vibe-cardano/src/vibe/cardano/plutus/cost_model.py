@@ -66,6 +66,259 @@ COST_MODEL_PARAM_COUNTS: dict[PlutusVersion, int] = {
 
 
 # ---------------------------------------------------------------------------
+# Plutus version availability per protocol version
+# ---------------------------------------------------------------------------
+
+# Minimum protocol major version required for each Plutus version.
+# Haskell ref: ``ledgerLanguages`` in ``Cardano.Ledger.Plutus.Language``
+#   - PlutusV1: introduced in Alonzo (protocol version 5)
+#   - PlutusV2: introduced in Babbage (protocol version 7)
+#   - PlutusV3: introduced in Conway (protocol version 9)
+PLUTUS_VERSION_INTRODUCED_AT: dict[PlutusVersion, int] = {
+    PlutusVersion.V1: 5,  # Alonzo: PV 5/6
+    PlutusVersion.V2: 7,  # Babbage: PV 7/8
+    PlutusVersion.V3: 9,  # Conway: PV 9/10
+}
+
+
+def is_plutus_version_available(
+    plutus_version: PlutusVersion,
+    protocol_version: int,
+) -> bool:
+    """Check if a Plutus language version is available at a given protocol version.
+
+    Each Plutus version is introduced at a specific protocol version (era):
+        - PlutusV1: Alonzo (PV >= 5)
+        - PlutusV2: Babbage (PV >= 7)
+        - PlutusV3: Conway (PV >= 9)
+
+    Spec ref: Alonzo ledger formal spec, ``Language`` availability.
+    Haskell ref: ``ledgerLanguages`` in ``Cardano.Ledger.Plutus.Language``
+
+    Args:
+        plutus_version: The Plutus language version to check.
+        protocol_version: The major protocol version number.
+
+    Returns:
+        True if the Plutus version is available at this protocol version.
+    """
+    min_pv = PLUTUS_VERSION_INTRODUCED_AT.get(plutus_version)
+    if min_pv is None:
+        return False
+    return protocol_version >= min_pv
+
+
+# ---------------------------------------------------------------------------
+# Builtin availability per Plutus version
+# ---------------------------------------------------------------------------
+
+# Builtins introduced in each Plutus version (not available in earlier versions).
+# This maps each version to the set of builtin names added in that version.
+#
+# Haskell ref: ``builtinsIntroducedIn`` in ``PlutusLedgerApi.Common.Versions``
+# Spec ref: CIP-0035 (PlutusV2), CIP-0055 (PlutusV3)
+#
+# Note: V1 builtins are the "base" set. V2 adds a small number, V3 adds many.
+# We use string names matching the uplc BuiltInFun enum names.
+
+BUILTINS_INTRODUCED_IN: dict[PlutusVersion, frozenset[str]] = {
+    PlutusVersion.V1: frozenset({
+        # All base builtins (0-50) — the original Alonzo set
+        "AddInteger", "SubtractInteger", "MultiplyInteger", "DivideInteger",
+        "QuotientInteger", "RemainderInteger", "ModInteger",
+        "EqualsInteger", "LessThanInteger", "LessThanEqualsInteger",
+        "AppendByteString", "ConsByteString", "SliceByteString",
+        "LengthOfByteString", "IndexByteString", "EqualsByteString",
+        "LessThanByteString", "LessThanEqualsByteString",
+        "Sha2_256", "Sha3_256", "Blake2b_256", "VerifyEd25519Signature",
+        "AppendString", "EqualsString", "EncodeUtf8", "DecodeUtf8",
+        "IfThenElse", "ChooseUnit", "Trace",
+        "FstPair", "SndPair",
+        "ChooseList", "MkCons", "HeadList", "TailList", "NullList",
+        "ChooseData", "ConstrData", "MapData", "ListData",
+        "IData", "BData", "UnConstrData", "UnMapData", "UnListData",
+        "UnIData", "UnBData", "EqualsData",
+        "MkPairData", "MkNilData", "MkNilPairData",
+    }),
+    PlutusVersion.V2: frozenset({
+        # V2 additions (Babbage): serialiseData and secp256k1 builtins
+        "SerialiseData",
+        "VerifyEcdsaSecp256k1Signature",
+        "VerifySchnorrSecp256k1Signature",
+    }),
+    PlutusVersion.V3: frozenset({
+        # V3 additions (Conway): BLS12-381, bitwise operations, new hashes
+        "Bls12_381_G1_Add", "Bls12_381_G1_Neg", "Bls12_381_G1_ScalarMul",
+        "Bls12_381_G1_Equal", "Bls12_381_G1_Compress", "Bls12_381_G1_Uncompress",
+        "Bls12_381_G1_HashToGroup",
+        "Bls12_381_G2_Add", "Bls12_381_G2_Neg", "Bls12_381_G2_ScalarMul",
+        "Bls12_381_G2_Equal", "Bls12_381_G2_Compress", "Bls12_381_G2_Uncompress",
+        "Bls12_381_G2_HashToGroup",
+        "Bls12_381_MillerLoop", "Bls12_381_MulMlResult", "Bls12_381_FinalVerify",
+        "Keccak_256", "Blake2b_224",
+        "IntegerToByteString", "ByteStringToInteger",
+        "AndByteString", "OrByteString", "XorByteString", "ComplementByteString",
+        "ReadBit", "WriteBits", "ReplicateByte",
+        "ShiftByteString", "RotateByteString",
+        "CountSetBits", "FindFirstSetBit",
+        "Ripemd_160",
+    }),
+}
+
+
+def builtins_available_at(plutus_version: PlutusVersion) -> frozenset[str]:
+    """Return the set of all builtin names available at a given Plutus version.
+
+    V2 includes all V1 builtins plus V2 additions.
+    V3 includes all V1+V2 builtins plus V3 additions.
+
+    Haskell ref: ``builtinsAvailableIn`` in ``PlutusLedgerApi.Common.Versions``
+
+    Args:
+        plutus_version: The Plutus language version.
+
+    Returns:
+        Frozenset of builtin name strings available at this version.
+    """
+    result: set[str] = set()
+    for version in PlutusVersion:
+        result |= BUILTINS_INTRODUCED_IN.get(version, frozenset())
+        if version == plutus_version:
+            break
+    return frozenset(result)
+
+
+# ---------------------------------------------------------------------------
+# Cost model parameter names
+# ---------------------------------------------------------------------------
+
+# Ordered parameter names for each Plutus version's cost model.
+# These are the canonical names used in protocol parameter updates and
+# on-chain governance proposals. The order defines the index mapping.
+#
+# Haskell ref: ``costModelParamNames`` in ``Cardano.Ledger.Plutus.CostModels``
+#
+# NOTE: These are loaded lazily from the uplc package's network config files,
+# which contain the canonical parameter names as JSON keys sorted alphabetically.
+# We cache them on first access.
+
+_COST_MODEL_PARAM_NAMES_CACHE: dict[PlutusVersion, tuple[str, ...]] = {}
+
+
+def cost_model_param_names(version: PlutusVersion) -> tuple[str, ...]:
+    """Get the ordered parameter names for a Plutus version's cost model.
+
+    Parameter names follow the convention from the Haskell implementation,
+    e.g., "addInteger-cpu-arguments-intercept", "addInteger-cpu-arguments-slope".
+
+    The names are extracted from the uplc package's network config files,
+    which mirror the on-chain cost model parameter ordering.
+
+    Haskell ref: ``costModelParamNames`` in ``Cardano.Ledger.Plutus.CostModels``
+
+    Args:
+        version: The Plutus language version.
+
+    Returns:
+        Tuple of parameter name strings in canonical order.
+    """
+    if version not in _COST_MODEL_PARAM_NAMES_CACHE:
+        _COST_MODEL_PARAM_NAMES_CACHE[version] = _load_param_names(version)
+    return _COST_MODEL_PARAM_NAMES_CACHE[version]
+
+
+def _load_param_names(version: PlutusVersion) -> tuple[str, ...]:
+    """Load parameter names from the uplc network config.
+
+    The network config JSON has parameter names as keys, sorted alphabetically.
+    We filter out CEK machine cost keys (cek*) since those are separate.
+    """
+    import json
+    from pathlib import Path
+
+    # Use the latest uplc network config
+    config_dir = Path(__file__).parent
+    # Walk up to find the uplc package's config
+    try:
+        import uplc.cost_model as uplc_cm
+        config_dir = Path(uplc_cm.__file__).parent / "cost_model_files"
+    except ImportError:
+        return ()
+
+    # Find the latest dated directory
+    latest_dir = None
+    for d in sorted(config_dir.iterdir()):
+        if d.is_dir() and d.name != "base":
+            latest_dir = d
+
+    if latest_dir is None:
+        return ()
+
+    config_file = latest_dir / "cost-model-merged.json"
+    if not config_file.exists():
+        return ()
+
+    with open(config_file) as f:
+        data = json.load(f)
+
+    version_key = f"PlutusV{version.value}"
+    if version_key not in data:
+        return ()
+
+    # Include ALL parameters (both builtin and CEK machine costs).
+    # The on-chain cost model parameter vector is a flat array that
+    # includes both builtin cost params and CEK machine cost params.
+    # The sorted alphabetical order defines the canonical index mapping.
+    # Haskell ref: ``costModelParamsForScriptHash`` which includes all params.
+    all_keys = sorted(data[version_key].keys())
+    return tuple(all_keys)
+
+
+def param_name_to_index(version: PlutusVersion, name: str) -> int:
+    """Convert a cost model parameter name to its index.
+
+    Args:
+        version: The Plutus language version.
+        name: The parameter name string.
+
+    Returns:
+        The integer index of this parameter in the cost model vector.
+
+    Raises:
+        KeyError: If the name is not a valid parameter for this version.
+    """
+    names = cost_model_param_names(version)
+    try:
+        return names.index(name)
+    except ValueError:
+        raise KeyError(
+            f"Parameter '{name}' not found in {version.name} cost model"
+        ) from None
+
+
+def param_index_to_name(version: PlutusVersion, index: int) -> str:
+    """Convert a cost model parameter index to its name.
+
+    Args:
+        version: The Plutus language version.
+        index: The parameter index.
+
+    Returns:
+        The parameter name string.
+
+    Raises:
+        IndexError: If the index is out of range.
+    """
+    names = cost_model_param_names(version)
+    if index < 0 or index >= len(names):
+        raise IndexError(
+            f"Parameter index {index} out of range for {version.name} "
+            f"(has {len(names)} parameters)"
+        )
+    return names[index]
+
+
+# ---------------------------------------------------------------------------
 # ExUnits -- execution budget
 # ---------------------------------------------------------------------------
 
