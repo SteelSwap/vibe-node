@@ -3194,6 +3194,7 @@ source = { editable = "packages/vibe-cardano" }
 dependencies = [
     { name = "cbor2pure" },
     { name = "httpx" },
+    { name = "pyarrow" },
     { name = "pycardano" },
     { name = "rich" },
     { name = "vibe-core" },
@@ -3204,6 +3205,7 @@ dependencies = [
 requires-dist = [
     { name = "cbor2pure", specifier = ">=5.8.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "pyarrow", specifier = ">=19.0.0" },
     { name = "pycardano", specifier = ">=0.19.2" },
     { name = "rich", specifier = ">=14.3.3" },
     { name = "vibe-core", editable = "packages/vibe-core" },
