@@ -114,14 +114,10 @@ class TestCddlSchemaDiscovery:
     def test_cddl_file_exists(self, era: str, rel_path: str):
         """Each era's CDDL schema file should exist in the vendor checkout."""
         full_path = VENDOR_LEDGER / rel_path
-        if not VENDOR_LEDGER.exists() or not any(VENDOR_LEDGER.iterdir()):
-            pytest.skip(
-                f"cardano-ledger vendor not populated. "
-                f"Expected CDDL at: {full_path}"
-            )
         assert full_path.exists(), (
             f"{era} CDDL schema not found at {full_path}. "
-            f"The cardano-ledger vendor directory may need updating."
+            f"Ensure vendor submodules are at latest tags: "
+            f"git submodule update --init vendor/cardano-ledger"
         )
 
     @pytest.mark.parametrize("era,rel_path", list(CDDL_SCHEMAS.items()))
