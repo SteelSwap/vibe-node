@@ -1,4 +1,0 @@
-# file: /Users/eldermillenial/Cardano/vibe-node/packages/vibe-core/src/vibe/core/protocols/runner.py
-# hypothesis_version: 6.151.9
-
-['ProtocolRunner', '_channel', '_codec', '_protocol', '_role', '_state']

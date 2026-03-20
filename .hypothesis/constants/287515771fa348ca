@@ -1,4 +1,0 @@
-# file: /Users/eldermillenial/Cardano/vibe-node/packages/vibe-core/src/vibe/core/protocols/peer.py
-# hypothesis_version: 6.151.9
-
-['Peer', '_protocol', '_recv_q', '_role', '_send_q', '_state']

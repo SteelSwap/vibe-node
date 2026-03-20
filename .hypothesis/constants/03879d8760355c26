@@ -1,4 +1,0 @@
-# file: /Users/eldermillenial/Cardano/vibe-node/packages/vibe-core/src/vibe/core/multiplexer/mux.py
-# hypothesis_version: 6.151.9
-
-[0.001, 32767, 1000000, 4294967295, '_bearer', '_channels', '_closed', '_is_initiator', '_receiver_task', '_running', '_sender_task', '_stop_event', 'mux-receiver', 'mux-sender']

@@ -1,4 +1,0 @@
-# file: /Users/eldermillenial/Cardano/vibe-node/packages/vibe-core/src/vibe/core/multiplexer/bearer.py
-# hypothesis_version: 6.151.9
-
-[32767, 32768, '!IHH', '_closed', '_reader', '_writer', 'bearer is closed']

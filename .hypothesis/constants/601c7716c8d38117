@@ -1,4 +1,0 @@
-# file: /Users/eldermillenial/Cardano/vibe-node/packages/vibe-tools/src/vibe/tools/ingest/haskell_parser.py
-# hypothesis_version: 6.151.9
-
-['<unknown>', 'bind', 'class', 'constructor', 'data_family', 'data_type', 'declarations', 'deriving_instance', 'foreign_export', 'foreign_import', 'function', 'header', 'instance', 'kind_signature', 'module', 'name', 'newtype', 'pattern_synonym', 'prefix_id', 'qualified', 'replace', 'signature', 'type_family', 'type_synomym', 'utf-8', 'variable']

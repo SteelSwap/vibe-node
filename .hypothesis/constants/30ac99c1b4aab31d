@@ -1,4 +1,0 @@
-# file: /Users/eldermillenial/Cardano/vibe-node/packages/vibe-core/src/vibe/core/protocols/codec.py
-# hypothesis_version: 6.151.9
-
-['Codec', 'CodecError']
