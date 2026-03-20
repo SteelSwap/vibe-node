@@ -117,6 +117,7 @@ nav:
       - "Phase 0 — Development Architecture": development/devlog/phase0.md
   - Reference:
     - Overview: reference/index.md
+    - Testing Guide: reference/testing.md
     - CLI Reference: reference/cli-reference.md
     - Database Schema: reference/schema.md
     - Development Workflow: reference/workflow.md

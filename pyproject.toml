@@ -61,9 +61,10 @@ values = ["dev", "rel"]
 first_value = 0
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "packages/vibe-cardano/tests"]
 asyncio_mode = "auto"
 timeout = 300
+addopts = "-p no:benchmark"
 markers = [
     "unit: Unit tests — isolated function/module correctness",
     "property: Property tests — invariant verification via Hypothesis",
@@ -71,6 +72,7 @@ markers = [
     "integration: Integration tests — multi-component with Docker Compose",
     "fixture_only: Tests using cached fixtures only — never skipped for missing Ogmios",
     "devnet: Devnet integration tests — 3-node private cluster validation",
+    "slow: Slow tests — benchmarks, statistical tests, large data sets",
 ]
 
 [dependency-groups]
