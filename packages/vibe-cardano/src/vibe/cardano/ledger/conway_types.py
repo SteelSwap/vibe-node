@@ -464,6 +464,41 @@ class GovernanceState:
     E.g., (2, 3) means 2/3 of committee must approve.
     """
 
+    drep_stake: dict[bytes, int] = field(default_factory=dict)
+    """Delegated stake per DRep credential: credential_hash -> lovelace.
+    Used for stake-weighted DRep voting in ratification.
+
+    Spec ref: Conway formal spec, Section 6 (stake-weighted DRep votes).
+    Haskell ref: ``ratifyAction`` DRep stake calculation in
+        ``Cardano.Ledger.Conway.Rules.Ratify``
+    """
+
+    drep_activity_epoch: dict[bytes, int] = field(default_factory=dict)
+    """Last epoch each DRep was active (voted or registered): credential_hash -> epoch.
+    DReps inactive for more than drep_activity epochs are excluded from thresholds.
+
+    Spec ref: Conway formal spec, ``drepActivity`` parameter.
+    Haskell ref: ``isDRepExpiry`` in ``Cardano.Ledger.Conway.Rules.Ratify``
+    """
+
+    registered_pools: set[bytes] = field(default_factory=set)
+    """Set of registered pool key hashes (for SPO vote validation).
+
+    Haskell ref: pool registration in ``Cardano.Ledger.Shelley.LedgerState``
+    """
+
+    pool_stake: dict[bytes, int] = field(default_factory=dict)
+    """Stake per pool: pool_key_hash -> lovelace.
+    Used for stake-weighted SPO voting in ratification.
+
+    Spec ref: Conway formal spec, Section 6 (stake-weighted SPO votes).
+    """
+
+    current_protocol_version: tuple[int, int] = (9, 0)
+    """Current protocol version as (major, minor).
+    Used for HardForkInitiation validation.
+    """
+
 
 # ---------------------------------------------------------------------------
 # Ratification thresholds

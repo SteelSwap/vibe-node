@@ -355,6 +355,65 @@ def _validate_inline_datums(
 
 
 # ---------------------------------------------------------------------------
+# Reference script size limit
+# ---------------------------------------------------------------------------
+
+
+def _validate_reference_script_size(
+    reference_inputs: list[TransactionInput],
+    utxo_set: ShelleyUTxO,
+    output_extensions: dict[int, BabbageOutputExtension] | None,
+    max_ref_script_size: int = 204800,
+) -> list[str]:
+    """Validate that total reference script size does not exceed the limit.
+
+    Spec ref: Babbage formal spec, reference script size bound.
+    Haskell ref: ``validateTotalReferenceScriptSize`` in
+        ``Cardano.Ledger.Babbage.Rules.Utxo``
+
+    The total serialized size of all reference scripts referenced by
+    a transaction must not exceed max_ref_script_size_per_tx bytes.
+
+    Args:
+        reference_inputs: Reference inputs from the tx body.
+        utxo_set: Current UTxO set.
+        output_extensions: Babbage extensions for outputs (keyed by TxIn or index).
+        max_ref_script_size: Maximum total reference script bytes (default: 200KB).
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    errors: list[str] = []
+    total_size = 0
+
+    # Check reference scripts attached to reference input UTxOs via pycardano
+    for txin in reference_inputs:
+        if txin in utxo_set:
+            txout = utxo_set[txin]
+            if hasattr(txout, 'script') and txout.script is not None:
+                script_bytes = getattr(txout.script, 'to_cbor', None)
+                if callable(script_bytes):
+                    total_size += len(script_bytes())
+                else:
+                    # Rough estimate
+                    total_size += 100
+
+    # Check reference scripts from output extensions
+    if output_extensions is not None:
+        for _idx, ext in output_extensions.items():
+            if ext.reference_script is not None:
+                total_size += len(ext.reference_script.script_bytes)
+
+    if total_size > max_ref_script_size:
+        errors.append(
+            f"TotalReferenceScriptSizeTooBig: total_size={total_size}, "
+            f"max={max_ref_script_size}"
+        )
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Babbage UTXO transition rule
 # ---------------------------------------------------------------------------
 
@@ -530,6 +589,22 @@ def validate_babbage_utxo(
 
     # --- Inline datum validation (Babbage) ---
     errors.extend(_validate_inline_datums(output_extensions))
+
+    # --- Reference script total size limit (Babbage) ---
+    # Spec ref: Babbage formal spec, total reference script size bound.
+    # Haskell ref: ``validateTotalReferenceScriptSize`` in
+    #     ``Cardano.Ledger.Babbage.Rules.Utxo``
+    # The total serialized size of all reference scripts used in a tx
+    # must not exceed max_ref_script_size_per_tx (default 204800 bytes).
+    if reference_inputs:
+        errors.extend(
+            _validate_reference_script_size(
+                reference_inputs,
+                utxo_set,
+                output_extensions,
+                getattr(params, 'max_ref_script_size_per_tx', 204800),
+            )
+        )
 
     return errors
 

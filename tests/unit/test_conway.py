@@ -599,21 +599,26 @@ class TestRatification:
         drep1 = make_credential(1)
         drep2 = make_credential(2)
         drep3 = make_credential(3)
-        cc1 = make_credential(10)
+
+        # Need at least committee_min_size (7) CC members for ratification
+        cc_members = {make_credential(10 + i): 1000 for i in range(7)}
 
         state = GovernanceState(
             proposals={action_id: proposal},
             dreps={drep1: 500_000_000, drep2: 500_000_000, drep3: 500_000_000},
-            committee={cc1: 1000},
+            committee=cc_members,
         )
 
-        # 2 of 3 DReps vote yes, CC votes yes
+        # 2 of 3 DReps vote yes, all CC members vote yes
         state.votes[action_id] = {
             Voter(VoterRole.DREP, drep1): VotingProcedure(vote=Vote.YES),
             Voter(VoterRole.DREP, drep2): VotingProcedure(vote=Vote.YES),
             Voter(VoterRole.DREP, drep3): VotingProcedure(vote=Vote.NO),
-            Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc1): VotingProcedure(vote=Vote.YES),
         }
+        for cc_cred in cc_members:
+            state.votes[action_id][
+                Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)
+            ] = VotingProcedure(vote=Vote.YES)
 
         assert check_ratification(action_id, state, TEST_PARAMS)
 
