@@ -3193,6 +3193,7 @@ version = "0.1.0"
 source = { editable = "packages/vibe-cardano" }
 dependencies = [
     { name = "cbor2pure" },
+    { name = "cryptography" },
     { name = "httpx" },
     { name = "pyarrow" },
     { name = "pycardano" },
@@ -3204,6 +3205,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cbor2pure", specifier = ">=5.8.0" },
+    { name = "cryptography", specifier = ">=44.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pyarrow", specifier = ">=19.0.0" },
     { name = "pycardano", specifier = ">=0.19.2" },
