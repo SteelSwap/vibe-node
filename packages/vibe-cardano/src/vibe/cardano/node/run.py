@@ -201,11 +201,12 @@ class PeerManager:
         chain_db: ChainDB instance for storing received blocks.
     """
 
-    __slots__ = ("_config", "_chain_db", "_peers", "_stopped", "_tasks")
+    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks")
 
-    def __init__(self, config: NodeConfig, chain_db: Any = None) -> None:
+    def __init__(self, config: NodeConfig, chain_db: Any = None, node_kernel: Any = None) -> None:
         self._config = config
         self._chain_db = chain_db
+        self._node_kernel = node_kernel
         self._peers: dict[str, _PeerConnection] = {}
         self._stopped = False
         self._tasks: list[asyncio.Task[None]] = []
@@ -406,6 +407,7 @@ class PeerManager:
         # Queue of points discovered by chain-sync, consumed by block-fetch.
         fetch_queue: asyncio.Queue[Point] = asyncio.Queue(maxsize=1000)
         chain_db = self._chain_db
+        node_kernel = self._node_kernel
         _headers_received = 0
 
         async def _on_roll_forward(header: object, tip: object) -> None:
@@ -503,22 +505,27 @@ class PeerManager:
 
                 async def _on_block(block_cbor: bytes) -> None:
                     nonlocal _blocks_stored
-                    if chain_db is not None:
-                        try:
-                            # Parse minimal info from block CBOR for storage
-                            block_data = cbor2.loads(block_cbor)
-                            # block = [header, tx_bodies, tx_witnesses, aux]
-                            hdr = block_data[0]  # [header_body, kes_sig]
-                            hdr_body = hdr[0]
-                            block_number = hdr_body[0]
-                            slot = hdr_body[1]
-                            prev_hash = hdr_body[2] or b"\x00" * 32
-                            # Re-encode header for hash
-                            hdr_cbor = cbor2.dumps(hdr)
-                            block_hash = hashlib.blake2b(
-                                hdr_cbor, digest_size=32
-                            ).digest()
+                    try:
+                        # Parse block header for storage metadata.
+                        block_data = cbor2.loads(block_cbor)
+                        hdr = block_data[0]  # [header_body, kes_sig]
+                        hdr_body = hdr[0]
+                        block_number = hdr_body[0]
+                        slot = hdr_body[1]
+                        prev_hash = hdr_body[2] or b"\x00" * 32
+                        hdr_cbor = cbor2.dumps(hdr)
+                        block_hash = hashlib.blake2b(
+                            hdr_cbor, digest_size=32
+                        ).digest()
 
+                        # TODO(M5.20): Full block validation through
+                        # era-aware validate_block() once the block
+                        # deserialization pipeline is wired. For now
+                        # we store all received blocks (the Haskell
+                        # node already validated them).
+
+                        # Store in ChainDB.
+                        if chain_db is not None:
                             await chain_db.add_block(
                                 slot=slot,
                                 block_hash=block_hash,
@@ -526,22 +533,30 @@ class PeerManager:
                                 block_number=block_number,
                                 cbor_bytes=block_cbor,
                             )
-                            _blocks_stored += 1
-                            if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
-                                logger.info(
-                                    "Peer %s: stored block #%d slot=%d hash=%s "
-                                    "[%d total]",
-                                    peer.address,
-                                    block_number,
-                                    slot,
-                                    block_hash.hex()[:16],
-                                    _blocks_stored,
-                                )
-                        except Exception as exc:
-                            logger.debug(
-                                "Peer %s: block store error: %s",
-                                peer.address, exc,
+
+                        # Add to NodeKernel for serving to peers.
+                        if node_kernel is not None:
+                            node_kernel.add_block(
+                                slot=slot,
+                                block_hash=block_hash,
+                                block_number=block_number,
+                                header_cbor=hdr_cbor,
+                                block_cbor=block_cbor,
                             )
+
+                        _blocks_stored += 1
+                        if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
+                            logger.info(
+                                "Peer %s: stored block #%d slot=%d hash=%s "
+                                "[%d total]",
+                                peer.address, block_number, slot,
+                                block_hash.hex()[:16], _blocks_stored,
+                            )
+                    except Exception as exc:
+                        logger.debug(
+                            "Peer %s: block store error: %s",
+                            peer.address, exc,
+                        )
 
                 try:
                     await run_block_fetch(
@@ -1296,7 +1311,7 @@ async def run_node(config: NodeConfig) -> None:
     logger.info("Current slot: %d", current_slot)
 
     # --- Peer manager ---
-    peer_manager = PeerManager(config, chain_db=chain_db)
+    peer_manager = PeerManager(config, chain_db=chain_db, node_kernel=node_kernel)
     for peer_addr in config.peers:
         peer_manager.add_peer(peer_addr)
 
