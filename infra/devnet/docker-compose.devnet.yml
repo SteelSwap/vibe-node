@@ -82,7 +82,8 @@ services:
       retries: 120
       start_period: 30s
     networks:
-      - devnet
+      devnet:
+        ipv4_address: 172.30.0.10
     restart: unless-stopped
 
   # ─── Haskell Node 2 (Block Producer) ────────────────────────────
@@ -121,7 +122,8 @@ services:
       retries: 120
       start_period: 30s
     networks:
-      - devnet
+      devnet:
+        ipv4_address: 172.30.0.11
     restart: unless-stopped
 
   # ─── Vibe Node (Passive Sync) ──────────────────────────────────
@@ -138,7 +140,7 @@ services:
     environment:
       VIBE_NODE_PORT: "3001"
       VIBE_NETWORK_MAGIC: "42"
-      VIBE_PEERS: "haskell-node-1:3001,haskell-node-2:3001"
+      VIBE_PEERS: "172.30.0.10:3001,172.30.0.11:3001"
       VIBE_GENESIS_DIR: "/genesis"
       VIBE_DATA_DIR: "/data"
       VIBE_KES_KEY: "/keys/kes.skey"
@@ -160,7 +162,8 @@ services:
       retries: 30
       start_period: 10s
     networks:
-      - devnet
+      devnet:
+        ipv4_address: 172.30.0.12
     restart: unless-stopped
 
   # ─── Tip Monitor ───────────────────────────────────────────────
