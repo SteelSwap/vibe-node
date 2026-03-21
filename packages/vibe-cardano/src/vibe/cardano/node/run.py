@@ -201,11 +201,12 @@ class PeerManager:
         chain_db: ChainDB instance for storing received blocks.
     """
 
-    __slots__ = ("_config", "_chain_db", "_peers", "_stopped", "_tasks")
+    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks")
 
-    def __init__(self, config: NodeConfig, chain_db: Any = None) -> None:
+    def __init__(self, config: NodeConfig, chain_db: Any = None, node_kernel: Any = None) -> None:
         self._config = config
         self._chain_db = chain_db
+        self._node_kernel = node_kernel
         self._peers: dict[str, _PeerConnection] = {}
         self._stopped = False
         self._tasks: list[asyncio.Task[None]] = []
@@ -406,6 +407,7 @@ class PeerManager:
         # Queue of points discovered by chain-sync, consumed by block-fetch.
         fetch_queue: asyncio.Queue[Point] = asyncio.Queue(maxsize=1000)
         chain_db = self._chain_db
+        node_kernel = self._node_kernel
         _headers_received = 0
 
         async def _on_roll_forward(header: object, tip: object) -> None:
@@ -503,22 +505,100 @@ class PeerManager:
 
                 async def _on_block(block_cbor: bytes) -> None:
                     nonlocal _blocks_stored
-                    if chain_db is not None:
-                        try:
-                            # Parse minimal info from block CBOR for storage
-                            block_data = cbor2.loads(block_cbor)
-                            # block = [header, tx_bodies, tx_witnesses, aux]
-                            hdr = block_data[0]  # [header_body, kes_sig]
-                            hdr_body = hdr[0]
-                            block_number = hdr_body[0]
-                            slot = hdr_body[1]
-                            prev_hash = hdr_body[2] or b"\x00" * 32
-                            # Re-encode header for hash
-                            hdr_cbor = cbor2.dumps(hdr)
-                            block_hash = hashlib.blake2b(
-                                hdr_cbor, digest_size=32
-                            ).digest()
 
+                    from vibe.cardano.serialization.block import (
+                        decode_block_header,
+                        detect_era,
+                    )
+                    from vibe.cardano.serialization.transaction import (
+                        decode_block_body,
+                    )
+                    from vibe.cardano.consensus.hfc import validate_block
+
+                    try:
+                        # --- Parse block ---
+                        header = decode_block_header(block_cbor)
+                        slot = header.slot
+                        block_number = header.block_number
+                        block_hash = header.hash
+                        prev_hash = header.prev_hash or b"\x00" * 32
+                        era = header.era
+
+                        # --- Validate block transactions ---
+                        body = decode_block_body(block_cbor)
+                        if body.transactions:
+                            errors = validate_block(
+                                era=era,
+                                block=body.transactions,
+                                ledger_state=(
+                                    chain_db.ledger_db if chain_db else None
+                                ),
+                                protocol_params=None,  # Use defaults
+                                current_slot=slot,
+                            )
+                            if errors:
+                                logger.warning(
+                                    "Peer %s: block #%d slot=%d has %d "
+                                    "validation errors: %s",
+                                    peer.address, block_number, slot,
+                                    len(errors), errors[:3],
+                                )
+                                # Still store — Haskell already validated.
+                                # Log for diagnostics during integration.
+
+                        # --- Apply ledger state (UTxO mutations) ---
+                        if chain_db is not None and chain_db.ledger_db is not None:
+                            consumed: list[bytes] = []
+                            created: list[tuple[bytes, dict]] = []
+                            for tx in body.transactions:
+                                if not tx.valid:
+                                    continue
+                                tb = tx.body
+                                # Extract consumed inputs
+                                inputs = getattr(tb, "inputs", None)
+                                if inputs:
+                                    for inp in inputs:
+                                        tx_id = getattr(inp, "transaction_id", None)
+                                        tx_idx = getattr(inp, "index", None)
+                                        if tx_id is not None and tx_idx is not None:
+                                            payload = getattr(tx_id, "payload", tx_id)
+                                            if isinstance(payload, bytes) and len(payload) == 32:
+                                                key = payload + tx_idx.to_bytes(2, "big")
+                                                consumed.append(key)
+                                # Extract created outputs
+                                outputs = getattr(tb, "outputs", None)
+                                if outputs:
+                                    for idx, out in enumerate(outputs):
+                                        key = tx.tx_hash + idx.to_bytes(2, "big")
+                                        addr = str(getattr(out, "address", ""))
+                                        amount = getattr(out, "amount", 0)
+                                        if isinstance(amount, int):
+                                            value = amount
+                                        else:
+                                            value = getattr(amount, "coin", 0) or 0
+                                        datum_hash = getattr(out, "datum_hash", b"") or b""
+                                        if hasattr(datum_hash, "payload"):
+                                            datum_hash = datum_hash.payload
+                                        created.append((key, {
+                                            "tx_hash": tx.tx_hash,
+                                            "tx_index": idx,
+                                            "address": addr,
+                                            "value": int(value),
+                                            "datum_hash": datum_hash if isinstance(datum_hash, bytes) else b"",
+                                        }))
+                            if consumed or created:
+                                try:
+                                    chain_db.ledger_db.apply_block(
+                                        consumed, created, block_slot=slot,
+                                    )
+                                except Exception as exc:
+                                    logger.debug(
+                                        "Peer %s: ledger apply error: %s",
+                                        peer.address, exc,
+                                    )
+
+                        # --- Store in ChainDB ---
+                        if chain_db is not None:
                             await chain_db.add_block(
                                 slot=slot,
                                 block_hash=block_hash,
@@ -526,22 +606,31 @@ class PeerManager:
                                 block_number=block_number,
                                 cbor_bytes=block_cbor,
                             )
-                            _blocks_stored += 1
-                            if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
-                                logger.info(
-                                    "Peer %s: stored block #%d slot=%d hash=%s "
-                                    "[%d total]",
-                                    peer.address,
-                                    block_number,
-                                    slot,
-                                    block_hash.hex()[:16],
-                                    _blocks_stored,
-                                )
-                        except Exception as exc:
-                            logger.debug(
-                                "Peer %s: block store error: %s",
-                                peer.address, exc,
+
+                        # --- Add to NodeKernel for serving to peers ---
+                        if node_kernel is not None:
+                            node_kernel.add_block(
+                                slot=slot,
+                                block_hash=block_hash,
+                                block_number=block_number,
+                                header_cbor=header.header_cbor,
+                                block_cbor=block_cbor,
                             )
+
+                        _blocks_stored += 1
+                        if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
+                            logger.info(
+                                "Peer %s: stored block #%d slot=%d era=%s "
+                                "txs=%d hash=%s [%d total]",
+                                peer.address, block_number, slot,
+                                era.name, body.tx_count,
+                                block_hash.hex()[:16], _blocks_stored,
+                            )
+                    except Exception as exc:
+                        logger.debug(
+                            "Peer %s: block process error: %s",
+                            peer.address, exc,
+                        )
 
                 try:
                     await run_block_fetch(
@@ -683,6 +772,7 @@ async def _forge_loop(
     shutdown_event: asyncio.Event,
     chain_db: Any = None,
     node_kernel: Any = None,
+    mempool: Any = None,
 ) -> None:
     """Slot-by-slot leader check and block forging loop.
 
@@ -721,28 +811,57 @@ async def _forge_loop(
     pool_keys = config.pool_keys
 
     # --- Initialise forge credentials ---
-    # Generate a fresh KES key pair (depth 6 = 2^6 = 64 KES periods).
-    # Sign an operational certificate binding pool cold key → KES VK.
-    kes_sk = kes_keygen(CARDANO_KES_DEPTH)
-    kes_vk = kes_derive_vk(kes_sk)
+    # Prefer deserialized KES key from cardano-cli skey file; fall back to
+    # fresh random keygen (for testing without real key files).
+    if pool_keys.kes_sk:
+        from vibe.cardano.crypto.kes_serialization import deserialize_kes_sk
+        try:
+            kes_sk = deserialize_kes_sk(pool_keys.kes_sk, CARDANO_KES_DEPTH)
+            kes_vk = kes_derive_vk(kes_sk)
+            logger.info("Loaded KES key from pool configuration (%d bytes)", len(pool_keys.kes_sk))
+        except Exception as exc:
+            logger.warning("Failed to deserialize KES key (%s), generating fresh", exc)
+            kes_sk = kes_keygen(CARDANO_KES_DEPTH)
+            kes_vk = kes_derive_vk(kes_sk)
+    else:
+        kes_sk = kes_keygen(CARDANO_KES_DEPTH)
+        kes_vk = kes_derive_vk(kes_sk)
 
-    # Sign opcert: cold_sk signs (kes_vk || cert_count=0 || kes_period_start=0)
-    ocert_payload = ocert_signed_payload(kes_vk, cert_count=0, kes_period_start=0)
-    cold_sk_ed = Ed25519PrivateKey.from_private_bytes(pool_keys.cold_sk)
-    cold_sig = cold_sk_ed.sign(ocert_payload)
-    ocert = OperationalCert(
-        kes_vk=kes_vk,
-        cert_count=0,
-        kes_period_start=0,
-        cold_sig=cold_sig,
+    # Load opcert from pool_keys if available, otherwise sign a fresh one.
+    if pool_keys.ocert:
+        import cbor2 as _cbor2
+        try:
+            ocert_data = _cbor2.loads(pool_keys.ocert)
+            # opcert = [[kes_vk, cert_count, kes_period, cold_sig], vrf_keyhash]
+            inner = ocert_data[0] if isinstance(ocert_data, list) else ocert_data
+            ocert = OperationalCert(
+                kes_vk=bytes(inner[0]),
+                cert_count=inner[1],
+                kes_period_start=inner[2],
+                cold_sig=bytes(inner[3]),
+            )
+            logger.info("Loaded operational certificate (cert_count=%d)", ocert.cert_count)
+        except Exception as exc:
+            logger.warning("Failed to parse opcert (%s), signing fresh", exc)
+            ocert_payload = ocert_signed_payload(kes_vk, cert_count=0, kes_period_start=0)
+            cold_sk_ed = Ed25519PrivateKey.from_private_bytes(pool_keys.cold_sk)
+            cold_sig = cold_sk_ed.sign(ocert_payload)
+            ocert = OperationalCert(kes_vk=kes_vk, cert_count=0, kes_period_start=0, cold_sig=cold_sig)
+    elif pool_keys.cold_sk:
+        ocert_payload = ocert_signed_payload(kes_vk, cert_count=0, kes_period_start=0)
+        cold_sk_ed = Ed25519PrivateKey.from_private_bytes(pool_keys.cold_sk)
+        cold_sig = cold_sk_ed.sign(ocert_payload)
+        ocert = OperationalCert(kes_vk=kes_vk, cert_count=0, kes_period_start=0, cold_sig=cold_sig)
+    else:
+        logger.error("No opcert or cold signing key — cannot forge blocks")
+        return
+
+    # Epoch nonce from NodeKernel (seeded from genesis hash) or fallback.
+    epoch_nonce = (
+        node_kernel.epoch_nonce.value
+        if node_kernel is not None
+        else hashlib.blake2b(config.network_magic.to_bytes(4, "big"), digest_size=32).digest()
     )
-
-    # For the devnet, epoch nonce starts as the genesis hash (blake2b-256 of
-    # the shelley-genesis.json content). In production this evolves each epoch.
-    # For simplicity, use a deterministic nonce derived from the network magic.
-    epoch_nonce = hashlib.blake2b(
-        config.network_magic.to_bytes(4, "big"), digest_size=32
-    ).digest()
 
     # Pool3 has 1/3 relative stake in the devnet genesis.
     # In production this comes from the stake distribution snapshot.
@@ -788,7 +907,10 @@ async def _forge_loop(
                 leader_proof=proof,
                 prev_block_number=prev_block_number,
                 prev_header_hash=prev_header_hash,
-                mempool_txs=[],  # Empty blocks for now
+                mempool_txs=[
+                    vtx.tx_cbor
+                    for vtx in (await mempool.get_txs_for_block(65536))
+                ] if mempool is not None else [],
                 kes_sk=kes_sk,
                 kes_period=0,
                 ocert=ocert,
@@ -847,6 +969,7 @@ async def _run_n2n_server(
     port: int,
     network_magic: int,
     node_kernel: Any,
+    mempool: Any,
     shutdown_event: asyncio.Event,
 ) -> None:
     """Run the TCP listener for inbound N2N peer connections.
@@ -933,6 +1056,42 @@ async def _run_n2n_server(
                     name=f"bf-server-{peer_info}",
                 )
 
+            # Launch tx-submission server (pull txs from peer into mempool).
+            if mempool is not None:
+                from vibe.cardano.network.txsubmission_protocol import (
+                    run_tx_submission_server,
+                )
+
+                async def _on_tx_ids(txids: list[tuple[bytes, int]]) -> None:
+                    logger.debug(
+                        "N2N inbound %s: received %d tx IDs",
+                        peer_info, len(txids),
+                    )
+
+                async def _on_txs(txs: list[bytes]) -> None:
+                    for tx_cbor in txs:
+                        try:
+                            await mempool.add_tx(tx_cbor)
+                            logger.info(
+                                "N2N inbound %s: added tx to mempool (%d bytes)",
+                                peer_info, len(tx_cbor),
+                            )
+                        except Exception as exc:
+                            logger.debug(
+                                "N2N inbound %s: tx rejected: %s",
+                                peer_info, exc,
+                            )
+
+                asyncio.create_task(
+                    run_tx_submission_server(
+                        channels[TX_SUBMISSION_N2N_ID],
+                        on_tx_ids_received=_on_tx_ids,
+                        on_txs_received=_on_txs,
+                        stop_event=stop,
+                    ),
+                    name=f"txsub-server-{peer_info}",
+                )
+
             # Wait for mux to end (peer disconnect) or shutdown.
             done, _ = await asyncio.wait(
                 [mux_task, asyncio.create_task(shutdown_event.wait())],
@@ -972,9 +1131,19 @@ async def _run_n2n_server(
 
 async def _run_n2c_server(
     socket_path: str,
+    network_magic: int,
+    chain_db: Any,
+    ledger_db: Any,
+    mempool: Any,
     shutdown_event: asyncio.Event,
 ) -> None:
     """Run the Unix socket listener for N2C local client connections.
+
+    For each incoming connection:
+    1. Wrap in a Bearer + Multiplexer
+    2. Run N2C handshake responder on channel 0
+    3. Launch all 4 N2C miniprotocol servers on their channels
+    4. Run until disconnect or shutdown
 
     Haskell ref:
         ``Ouroboros.Network.Snocket.localSnocket`` -- the local (Unix
@@ -982,8 +1151,21 @@ async def _run_n2c_server(
 
     Args:
         socket_path: Path to the Unix domain socket.
+        network_magic: Network magic for handshake negotiation.
+        chain_db: The ChainDB instance (for local chain-sync).
+        ledger_db: The LedgerDB instance (for local state-query).
         shutdown_event: Set when the node is shutting down.
     """
+    from vibe.cardano.network.handshake_protocol import (
+        HandshakeError,
+        run_handshake_server_n2c,
+    )
+    from vibe.cardano.network.local_chainsync_protocol import create_local_chainsync_server
+    from vibe.cardano.network.local_statequery_protocol import run_local_state_query_server
+    from vibe.cardano.network.local_txmonitor_protocol import run_local_tx_monitor_server
+    from vibe.cardano.network.local_txsubmission_protocol import run_local_tx_submission_server
+
+    conn_tasks: list[asyncio.Task[None]] = []
 
     async def handle_connection(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -991,14 +1173,133 @@ async def _run_n2c_server(
         logger.info("N2C client connected via %s", socket_path)
 
         bearer = Bearer(reader, writer)
-        mux = _setup_n2c_mux(bearer)
+        mux = Multiplexer(bearer, is_initiator=False)
+
+        # Register N2C miniprotocol channels.
+        channels: dict[int, MiniProtocolChannel] = {}
+        for proto_id in N2C_PROTOCOL_IDS:
+            channels[proto_id] = mux.add_protocol(proto_id)
+
+        # Start the mux in background.
+        mux_task = asyncio.create_task(mux.run(), name="mux-n2c")
+        stop = asyncio.Event()
 
         try:
-            await mux.run()
+            # Run N2C handshake responder on channel 0.
+            hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
+            hs_result = await run_handshake_server_n2c(hs_channel, network_magic)
+            logger.info(
+                "N2C handshake accepted v%d (query=%s)",
+                hs_result.version_number,
+                hs_result.version_data.query,
+            )
+
+            # Launch local chain-sync server (protocol 5).
+            if chain_db is not None:
+                cs_server = create_local_chainsync_server(
+                    channels[CHAIN_SYNC_N2C_ID], chain_db,
+                )
+                asyncio.create_task(
+                    cs_server.run(),
+                    name="n2c-local-chainsync",
+                )
+            else:
+                logger.warning(
+                    "N2C local chain-sync: skipped (no ChainDB available)"
+                )
+
+            # Launch local tx-submission server (protocol 6).
+            async def _validate_and_add_tx(era_id: int, tx_bytes: bytes) -> bytes | None:
+                if mempool is not None:
+                    try:
+                        await mempool.add_tx(tx_bytes)
+                        return None  # None = accepted
+                    except Exception as exc:
+                        return str(exc).encode()  # Error bytes = rejected
+                return b"mempool not available"
+
+            asyncio.create_task(
+                run_local_tx_submission_server(
+                    channels[LOCAL_TX_SUBMISSION_ID],
+                    validate_tx=_validate_and_add_tx,
+                ),
+                name="n2c-local-txsubmission",
+            )
+
+            # Launch local state-query server (protocol 7).
+            if ledger_db is not None:
+                asyncio.create_task(
+                    run_local_state_query_server(
+                        channels[LOCAL_STATE_QUERY_PROTOCOL_ID],
+                        ledgerdb=ledger_db,
+                    ),
+                    name="n2c-local-statequery",
+                )
+            else:
+                logger.warning(
+                    "N2C local state-query: skipped (no LedgerDB available)"
+                )
+
+            # Launch local tx-monitor server (protocol 9).
+            _monitor_snapshot = None
+            _monitor_idx = 0
+
+            async def _acquire_snapshot() -> int:
+                nonlocal _monitor_snapshot, _monitor_idx
+                if mempool is not None:
+                    _monitor_snapshot = await mempool.get_snapshot()
+                    _monitor_idx = 0
+                    return _monitor_snapshot.slot if _monitor_snapshot else 0
+                return 0
+
+            async def _get_next_tx() -> tuple[int, bytes] | None:
+                nonlocal _monitor_idx
+                if _monitor_snapshot and _monitor_idx < len(_monitor_snapshot.tickets):
+                    ticket = _monitor_snapshot.tickets[_monitor_idx]
+                    _monitor_idx += 1
+                    return (ticket.validated_tx.tx_size, ticket.validated_tx.tx_cbor)
+                return None
+
+            async def _has_tx(tx_id: bytes) -> bool:
+                if mempool is not None:
+                    return await mempool.has_tx(tx_id)
+                return False
+
+            async def _mempool_sizes() -> tuple[int, int, int]:
+                if mempool is not None:
+                    return (mempool.size, mempool.total_size_bytes, mempool.capacity_bytes)
+                return (0, 0, 0)
+
+            asyncio.create_task(
+                run_local_tx_monitor_server(
+                    channels[LOCAL_TX_MONITOR_ID],
+                    acquire_snapshot=_acquire_snapshot,
+                    get_next_tx=_get_next_tx,
+                    has_tx_in_snapshot=_has_tx,
+                    get_mempool_sizes=_mempool_sizes,
+                ),
+                name="n2c-local-txmonitor",
+            )
+
+            # Wait for mux to end (client disconnect) or shutdown.
+            done, _ = await asyncio.wait(
+                [mux_task, asyncio.create_task(shutdown_event.wait())],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+        except (HandshakeError, ConnectionError, MuxClosedError) as exc:
+            logger.debug("N2C connection ended: %s", exc)
         except Exception as exc:
             logger.debug("N2C connection ended: %s", exc)
         finally:
+            stop.set()
             await mux.close()
+            if not mux_task.done():
+                mux_task.cancel()
+                try:
+                    await mux_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     try:
         server = await asyncio.start_unix_server(handle_connection, socket_path)
@@ -1011,6 +1312,9 @@ async def _run_n2c_server(
         if "server" in locals():
             server.close()
             await server.wait_closed()
+        for task in conn_tasks:
+            if not task.done():
+                task.cancel()
 
 
 # ---------------------------------------------------------------------------
@@ -1074,6 +1378,8 @@ async def run_node(config: NodeConfig) -> None:
     Args:
         config: The full node configuration.
     """
+    import hashlib
+
     from vibe.cardano.storage import ChainDB, ImmutableDB, LedgerDB, VolatileDB
 
     from .kernel import NodeKernel
@@ -1119,8 +1425,24 @@ async def run_node(config: NodeConfig) -> None:
     else:
         logger.info("ChainDB loaded: empty (starting from genesis)")
 
+    # --- Mempool ---
+    from vibe.cardano.mempool import Mempool, MempoolConfig
+    from vibe.cardano.mempool.validator import LedgerTxValidator
+
+    tx_validator = LedgerTxValidator(ledger_db)
+    mempool = Mempool(
+        config=MempoolConfig(),
+        validator=tx_validator,
+        current_slot=0,
+    )
+    logger.info("Mempool initialised (capacity=%d bytes)", mempool.capacity_bytes)
+
     # --- NodeKernel: shared state for protocol servers ---
     node_kernel = NodeKernel()
+    nonce_seed = config.genesis_hash or hashlib.blake2b(
+        config.network_magic.to_bytes(4, "big"), digest_size=32
+    ).digest()
+    node_kernel.init_nonce(nonce_seed, config.epoch_length)
 
     # --- Slot clock ---
     slot_config = SlotConfig(
@@ -1134,7 +1456,7 @@ async def run_node(config: NodeConfig) -> None:
     logger.info("Current slot: %d", current_slot)
 
     # --- Peer manager ---
-    peer_manager = PeerManager(config, chain_db=chain_db)
+    peer_manager = PeerManager(config, chain_db=chain_db, node_kernel=node_kernel)
     for peer_addr in config.peers:
         peer_manager.add_peer(peer_addr)
 
@@ -1146,7 +1468,7 @@ async def run_node(config: NodeConfig) -> None:
         asyncio.create_task(
             _run_n2n_server(
                 config.host, config.port, config.network_magic,
-                node_kernel, shutdown_event,
+                node_kernel, mempool, shutdown_event,
             ),
             name="n2n-server",
         )
@@ -1156,7 +1478,14 @@ async def run_node(config: NodeConfig) -> None:
     if config.socket_path is not None:
         tasks.append(
             asyncio.create_task(
-                _run_n2c_server(config.socket_path, shutdown_event),
+                _run_n2c_server(
+                    config.socket_path,
+                    config.network_magic,
+                    chain_db,
+                    ledger_db,
+                    mempool,
+                    shutdown_event,
+                ),
                 name="n2c-server",
             )
         )
@@ -1168,7 +1497,7 @@ async def run_node(config: NodeConfig) -> None:
     if config.is_block_producer:
         tasks.append(
             asyncio.create_task(
-                _forge_loop(config, slot_clock, shutdown_event, chain_db, node_kernel),
+                _forge_loop(config, slot_clock, shutdown_event, chain_db, node_kernel, mempool),
                 name="forge-loop",
             )
         )

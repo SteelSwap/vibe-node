@@ -32,12 +32,18 @@ from .kes import (
     KesSecretKey,
     kes_derive_vk,
     kes_keygen,
+    kes_keygen_from_seed,
     kes_sig_size,
     kes_sign,
     kes_update,
     kes_verify,
     kes_verify_block_signature,
     kes_vk_hash,
+)
+from .kes_serialization import (
+    deserialize_kes_sk,
+    kes_sk_serialized_size,
+    serialize_kes_sk,
 )
 from .ocert import (
     MAX_KES_EVOLUTIONS as OCERT_MAX_KES_EVO,
@@ -72,12 +78,17 @@ __all__ = [
     "KesSecretKey",
     "kes_derive_vk",
     "kes_keygen",
+    "kes_keygen_from_seed",
     "kes_sig_size",
     "kes_sign",
     "kes_update",
     "kes_verify",
     "kes_verify_block_signature",
     "kes_vk_hash",
+    # KES Serialization
+    "deserialize_kes_sk",
+    "kes_sk_serialized_size",
+    "serialize_kes_sk",
     # OCert
     "SLOTS_PER_KES_PERIOD",
     "OCertError",

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import enum
+from dataclasses import dataclass
 from typing import Protocol as TypingProtocol, Union
 
 from vibe.core.protocols import Agency, Message, Protocol, ProtocolError
@@ -40,11 +41,16 @@ from .handshake import (
     MsgAcceptVersion,
     MsgProposeVersions,
     MsgRefuse,
+    NodeToClientVersionData,
     NodeToNodeVersionData,
     RefuseReasonVersionMismatch,
+    _decode_n2c_version_data,
+    build_n2c_version_table,
     build_version_table,
     decode_handshake_response,
+    encode_n2c_accept_version,
     encode_propose_versions,
+    encode_refuse,
 )
 
 __all__ = [
@@ -57,6 +63,7 @@ __all__ = [
     "MsgRefuseMsg",
     "run_handshake_client",
     "run_handshake_server",
+    "run_handshake_server_n2c",
 ]
 
 
@@ -418,7 +425,114 @@ async def run_handshake_server(
         return result
     else:
         # Refuse — version mismatch
-        from .handshake import encode_refuse
+        refuse = MsgRefuse(reason=RefuseReasonVersionMismatch(
+            versions=list(server_versions.keys())
+        ))
+        refuse_bytes = encode_refuse(refuse)
+        try:
+            async with asyncio.timeout(timeout):
+                await channel.send(refuse_bytes)
+        except TimeoutError:
+            pass
+        raise HandshakeRefusedError(refuse)
+
+
+# ---------------------------------------------------------------------------
+# Server-side N2C handshake runner
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class N2CHandshakeResult:
+    """Result of a successful N2C handshake."""
+
+    version_number: int
+    version_data: NodeToClientVersionData
+
+
+async def run_handshake_server_n2c(
+    channel: Channel,
+    network_magic: int,
+    *,
+    timeout: float = HANDSHAKE_TIMEOUT_S,
+) -> N2CHandshakeResult:
+    """Run the server side of the N2C handshake miniprotocol.
+
+    N2C handshake uses versions 16--20 with 2-element version data
+    ``[networkMagic, query]`` instead of N2N's 4-element format.
+
+    Haskell ref:
+        ``Ouroboros.Network.NodeToClient.Version``
+        ``nodeToClientCodecCBORTerm``
+
+    Args:
+        channel: Async byte-level channel (wraps multiplexer sub-channel).
+        network_magic: Our network magic for version negotiation.
+        timeout: Maximum time for the handshake (default: 10 s per spec).
+
+    Returns:
+        ``N2CHandshakeResult`` with the negotiated version and parameters.
+
+    Raises:
+        HandshakeRefusedError: If no common version exists.
+        HandshakeTimeoutError: If the handshake exceeds the timeout.
+        HandshakeError: For unexpected protocol errors.
+    """
+    import cbor2
+
+    # Build our N2C version table
+    server_versions = build_n2c_version_table(network_magic)
+
+    try:
+        async with asyncio.timeout(timeout):
+            # Receive client's proposal
+            propose_bytes = await channel.recv()
+    except TimeoutError:
+        raise HandshakeTimeoutError(
+            f"N2C handshake server timed out after {timeout}s"
+        ) from None
+
+    # Decode the proposal
+    proposal = cbor2.loads(propose_bytes)
+    # proposal = [0, {version: version_data, ...}]
+    if not isinstance(proposal, list) or len(proposal) < 2 or proposal[0] != 0:
+        raise HandshakeError(f"Invalid MsgProposeVersions (N2C): {proposal!r}")
+
+    version_map = proposal[1]
+
+    client_versions: dict[int, NodeToClientVersionData] = {}
+    for ver_num, ver_data in version_map.items():
+        if isinstance(ver_data, list) and len(ver_data) >= 2:
+            try:
+                client_versions[ver_num] = _decode_n2c_version_data(ver_data)
+            except ValueError:
+                continue  # skip undecodable versions
+
+    # Negotiate: find highest common version with matching network magic
+    common = set(client_versions.keys()) & set(server_versions.keys())
+    best: int | None = None
+    for ver in sorted(common, reverse=True):
+        if client_versions[ver].network_magic == server_versions[ver].network_magic:
+            best = ver
+            break
+
+    if best is not None:
+        # Accept — encode and send
+        merged = NodeToClientVersionData(
+            network_magic=server_versions[best].network_magic,
+            query=client_versions[best].query,
+        )
+        accept_bytes = encode_n2c_accept_version(best, merged)
+        try:
+            async with asyncio.timeout(timeout):
+                await channel.send(accept_bytes)
+        except TimeoutError:
+            raise HandshakeTimeoutError(
+                f"N2C handshake server send timed out after {timeout}s"
+            ) from None
+        return N2CHandshakeResult(version_number=best, version_data=merged)
+    else:
+        # Refuse — version mismatch
         refuse = MsgRefuse(reason=RefuseReasonVersionMismatch(
             versions=list(server_versions.keys())
         ))

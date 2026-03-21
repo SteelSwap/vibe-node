@@ -73,6 +73,7 @@ __all__ = [
     "BlockFetchCodec",
     "BlockFetchClient",
     "run_block_fetch",
+    "run_block_fetch_continuous",
     "run_block_fetch_server",
     "BlockProvider",
     # Re-export message wrappers for convenience
@@ -543,6 +544,72 @@ async def run_block_fetch(
                 await on_block_received(block_cbor)
 
     await client.done()
+
+
+async def run_block_fetch_continuous(
+    channel: object,
+    range_queue: asyncio.Queue,
+    on_block_received: OnBlockReceived,
+    on_no_blocks: OnNoBlocks | None = None,
+    *,
+    stop_event: asyncio.Event | None = None,
+) -> None:
+    """Run block-fetch in continuous mode — pulls ranges from a queue.
+
+    Unlike run_block_fetch(), this keeps the protocol alive between
+    ranges. The BlockFetchClient loops in BFIdle, sending RequestRange
+    for each item from the queue. Only sends ClientDone on stop.
+
+    The FSM naturally supports this: BatchDone -> BFIdle allows
+    another RequestRange without recreating the runner.
+
+    Parameters
+    ----------
+    channel : MiniProtocolChannel
+        The mux channel for block-fetch.
+    range_queue : asyncio.Queue
+        Queue of (point_from, point_to) tuples to fetch.
+    on_block_received : OnBlockReceived
+        Async callback invoked for each block received.
+    on_no_blocks : OnNoBlocks | None
+        Async callback when server has no blocks for a range.
+    stop_event : asyncio.Event | None
+        If provided, the loop exits when this event is set.
+    """
+    protocol = BlockFetchProtocol()
+    codec = BlockFetchCodec()
+    runner = ProtocolRunner(
+        role=PeerRole.Initiator,
+        protocol=protocol,
+        codec=codec,
+        channel=channel,
+    )
+    client = BlockFetchClient(runner)
+
+    try:
+        while True:
+            if stop_event is not None and stop_event.is_set():
+                break
+
+            try:
+                point_from, point_to = await asyncio.wait_for(
+                    range_queue.get(), timeout=1.0
+                )
+            except TimeoutError:
+                continue
+
+            blocks = await client.request_range(point_from, point_to)
+            if blocks is None:
+                if on_no_blocks is not None:
+                    await on_no_blocks(point_from, point_to)
+            else:
+                for block_cbor in blocks:
+                    await on_block_received(block_cbor)
+    finally:
+        try:
+            await client.done()
+        except (ProtocolError, Exception):
+            pass  # Channel may already be closed on shutdown
 
 
 # ---------------------------------------------------------------------------

@@ -20,6 +20,12 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from vibe.cardano.consensus.nonce import (
+    EpochNonce,
+    accumulate_vrf_output,
+    evolve_nonce,
+    is_in_stability_window,
+)
 from vibe.cardano.network.chainsync import Point, Tip, ORIGIN, PointOrOrigin
 from vibe.cardano.network.chainsync_protocol import ChainProvider
 from vibe.cardano.network.blockfetch_protocol import BlockProvider
@@ -58,6 +64,11 @@ class NodeKernel(ChainProvider, BlockProvider):
         self._tip: Tip | None = None
         # Event set whenever tip changes (wakes chain-sync servers)
         self.tip_changed: asyncio.Event = asyncio.Event()
+        # Epoch nonce tracking
+        self._epoch_nonce: EpochNonce = EpochNonce(value=b"\x00" * 32)
+        self._eta_v: bytes = b"\x00" * 32
+        self._current_epoch: int = 0
+        self._epoch_length: int = 432000
 
     @property
     def tip(self) -> Tip | None:
@@ -66,6 +77,35 @@ class NodeKernel(ChainProvider, BlockProvider):
     @property
     def chain_length(self) -> int:
         return len(self._chain)
+
+    @property
+    def epoch_nonce(self) -> EpochNonce:
+        return self._epoch_nonce
+
+    def init_nonce(self, genesis_hash: bytes, epoch_length: int) -> None:
+        """Seed the epoch nonce from the genesis hash."""
+        self._epoch_nonce = EpochNonce(value=genesis_hash)
+        self._eta_v = genesis_hash
+        self._epoch_length = epoch_length
+        logger.info(
+            "Epoch nonce initialised: %s (epoch_length=%d)",
+            genesis_hash.hex()[:16], epoch_length,
+        )
+
+    def on_block_vrf_output(self, slot: int, epoch_start_slot: int, vrf_output: bytes) -> None:
+        """Accumulate VRF output from a block within the stability window."""
+        if is_in_stability_window(slot, epoch_start_slot, self._epoch_length):
+            self._eta_v = accumulate_vrf_output(self._eta_v, vrf_output)
+
+    def on_epoch_boundary(self, new_epoch: int, extra_entropy: bytes | None = None) -> None:
+        """Evolve the epoch nonce at an epoch transition."""
+        if new_epoch <= self._current_epoch:
+            return
+        old_nonce = self._epoch_nonce
+        self._epoch_nonce = evolve_nonce(old_nonce, self._eta_v, extra_entropy)
+        self._eta_v = b"\x00" * 32
+        self._current_epoch = new_epoch
+        logger.info("Epoch nonce evolved: %d -> %d", new_epoch - 1, new_epoch)
 
     def add_block(
         self,
