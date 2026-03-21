@@ -31,7 +31,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-import cbor2
+import cbor2pure as cbor2
 
 from vibe.cardano.crypto.kes import (
     CARDANO_KES_DEPTH,

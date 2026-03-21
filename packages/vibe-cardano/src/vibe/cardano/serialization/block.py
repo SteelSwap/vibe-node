@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
 
-import cbor2
+import cbor2pure as cbor2
 
 
 class Era(IntEnum):

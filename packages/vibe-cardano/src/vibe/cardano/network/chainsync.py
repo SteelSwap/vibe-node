@@ -33,7 +33,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Union
 
-import cbor2
+import cbor2pure as cbor2
 
 # ---------------------------------------------------------------------------
 # Message ID constants — index 0 of the CBOR array

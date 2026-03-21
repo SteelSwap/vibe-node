@@ -409,7 +409,7 @@ class PeerManager:
 
         import hashlib
 
-        import cbor2
+        import cbor2pure as cbor2
 
         from vibe.cardano.network.blockfetch_protocol import run_block_fetch
         from vibe.cardano.network.chainsync import Point
@@ -852,7 +852,7 @@ async def _forge_loop(
 
     # Load opcert from pool_keys if available, otherwise sign a fresh one.
     if pool_keys.ocert:
-        import cbor2 as _cbor2
+        import cbor2pure as _cbor2
         try:
             ocert_data = _cbor2.loads(pool_keys.ocert)
             # opcert = [[kes_vk, cert_count, kes_period, cold_sig], vrf_keyhash]

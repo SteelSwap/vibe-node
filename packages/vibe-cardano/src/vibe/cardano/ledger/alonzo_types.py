@@ -398,7 +398,7 @@ def _serialize_cost_models_for_integrity(
     Returns:
         CBOR-encoded cost model data for hashing.
     """
-    import cbor2
+    import cbor2pure as cbor2
 
     # Build a map: language_tag -> [cost_params_sorted_by_key]
     result: dict[int, list[int]] = {}
@@ -436,7 +436,7 @@ def compute_script_integrity_hash(
     Returns:
         32-byte Blake2b-256 hash.
     """
-    import cbor2
+    import cbor2pure as cbor2
 
     # Encode redeemers as a CBOR array of [tag, index, data, [mem, steps]]
     redeemer_entries = []

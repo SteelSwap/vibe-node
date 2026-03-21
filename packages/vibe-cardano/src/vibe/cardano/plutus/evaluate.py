@@ -141,7 +141,7 @@ def deserialize_script(script_bytes: bytes) -> Program:
     Raises:
         ValueError: If deserialization fails.
     """
-    import cbor2
+    import cbor2pure as cbor2
 
     try:
         # On-chain scripts are double-CBOR-wrapped:
@@ -245,7 +245,7 @@ def _convert_raw_plutus_data(data: object) -> PlutusData:
     RawPlutusData wraps a cbor2.CBORTag. We decode the tag structure
     to determine if it's a Constr, and recursively convert fields.
     """
-    import cbor2
+    import cbor2pure as cbor2
 
     raw_data = data.data  # type: ignore[attr-defined] -- CBORTag or primitive
 
@@ -263,7 +263,7 @@ def _convert_pycardano_plutus_data(data: object) -> PlutusData:
     most robust approach since pycardano's PlutusData can have complex
     nested structures.
     """
-    import cbor2
+    import cbor2pure as cbor2
 
     cbor_bytes = data.to_cbor()  # type: ignore[attr-defined]
     raw = cbor2.loads(cbor_bytes)
@@ -280,7 +280,7 @@ def _cbor_tag_to_plutus_data(tag: object) -> PlutusData:
 
     This matches the Haskell ``Data`` CBOR encoding.
     """
-    import cbor2
+    import cbor2pure as cbor2
 
     assert isinstance(tag, cbor2.CBORTag)
 
@@ -301,7 +301,7 @@ def _cbor_tag_to_plutus_data(tag: object) -> PlutusData:
 
 def _cbor_value_to_plutus_data(value: object) -> PlutusData:
     """Convert a raw CBOR-decoded value to uplc PlutusData."""
-    import cbor2
+    import cbor2pure as cbor2
 
     if isinstance(value, int) and not isinstance(value, bool):
         return PlutusInteger(value)

@@ -43,7 +43,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-import cbor2
+import cbor2pure as cbor2
 import pyarrow as pa
 
 from vibe.cardano.storage import BlockDiff, ImmutableDB, LedgerDB

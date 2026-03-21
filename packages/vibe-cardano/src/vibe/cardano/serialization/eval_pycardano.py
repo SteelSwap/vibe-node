@@ -34,7 +34,7 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Any
 
-import cbor2
+import cbor2pure as cbor2
 import websockets
 from rich.console import Console
 from rich.table import Table

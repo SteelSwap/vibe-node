@@ -230,24 +230,16 @@ class ProtocolRunner(Generic[St]):
         # contains multiple CBOR items (common in block-fetch where
         # StartBatch + Block arrive in one TCP segment), we decode the
         # first and buffer the rest for the next recv_message call.
-        import cbor2 as _cbor2
+        import cbor2pure as _cbor2
 
         try:
-            # Find the boundary of the first CBOR item.
-            # cbor2's CBORDecoder.fp.tell() is unreliable (consumes entire
-            # buffer), so we find the boundary by trial: decode with
-            # increasing slice sizes until cbor2.loads succeeds.
-            consumed = 0
-            for n in range(1, len(data) + 1):
-                try:
-                    _cbor2.loads(data[:n])
-                    consumed = n
-                    break
-                except Exception:
-                    continue
-            if consumed == 0:
-                consumed = len(data)
-
+            # Decode the first CBOR item and find its byte boundary.
+            # A mux segment may contain multiple CBOR messages (e.g.,
+            # block-fetch StartBatch + Block + BatchDone in one segment).
+            # We decode only the first, buffer the rest.
+            decoder = _cbor2.CBORDecoder(io.BytesIO(data))
+            decoder.decode()  # consume first item
+            consumed = decoder.fp.tell()
             remainder = data[consumed:]
             if remainder:
                 self._recv_buf = remainder

@@ -25,8 +25,8 @@ import hashlib
 from dataclasses import dataclass, field
 from typing import ClassVar
 
-import cbor2
-from cbor2 import CBORTag
+import cbor2pure as cbor2
+from cbor2pure import CBORTag
 from pycardano.address import Address
 
 

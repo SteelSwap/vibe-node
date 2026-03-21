@@ -110,7 +110,7 @@ def main() -> None:
         vrf_vkey = os.environ.get("VIBE_VRF_VKEY")
         kes_key = os.environ.get("VIBE_KES_KEY")
         opcert_path = os.environ.get("VIBE_OPCERT")
-        import cbor2 as _cbor2
+        import cbor2pure as _cbor2
         kes_sk_bytes = b""
         if kes_key:
             raw = _read_key_bytes(kes_key)

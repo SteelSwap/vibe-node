@@ -3399,7 +3399,7 @@ source = { editable = "packages/vibe-core" }
 
 [[package]]
 name = "vibe-node"
-version = "0.3.0"
+version = "0.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "typer" },
@@ -3410,7 +3410,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "bump-my-version" },
-    { name = "cbor2" },
+    { name = "cbor2pure" },
     { name = "hypothesis" },
     { name = "lancedb" },
     { name = "mkdocs-material" },
@@ -3434,7 +3434,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "bump-my-version", specifier = ">=1.2.7" },
-    { name = "cbor2", specifier = ">=5.6.0" },
+    { name = "cbor2pure", specifier = ">=5.8.0" },
     { name = "hypothesis", specifier = ">=6.130.0" },
     { name = "lancedb", specifier = ">=0.30.0" },
     { name = "mkdocs-material", specifier = ">=9.7.5" },
