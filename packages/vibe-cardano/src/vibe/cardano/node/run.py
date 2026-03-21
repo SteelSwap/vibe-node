@@ -391,23 +391,71 @@ class PeerManager:
             except Exception as exc:
                 logger.warning("Peer %s: %s error: %s", peer.address, name, exc)
 
-        # Chain-Sync (protocol 2): sync block headers from this peer.
-        _blocks_received = 0
+        # --- Sync pipeline: chain-sync → block-fetch → store ---
+        # Chain-sync receives headers, extracts Point(slot, hash),
+        # queues them for block-fetch. Block-fetch downloads full
+        # block bodies and stores them in ChainDB.
 
-        async def _on_roll_forward(header: bytes, tip: object) -> None:
-            nonlocal _blocks_received
-            _blocks_received += 1
-            if _blocks_received % 50 == 1 or _blocks_received <= 5:
-                logger.info(
-                    "Peer %s: roll forward #%d (%d bytes, tip=%s)",
-                    peer.address, _blocks_received, len(header), tip,
-                )
+        import hashlib
+
+        import cbor2
+
+        from vibe.cardano.network.blockfetch_protocol import run_block_fetch
+        from vibe.cardano.network.chainsync import Point
+
+        # Queue of points discovered by chain-sync, consumed by block-fetch.
+        fetch_queue: asyncio.Queue[Point] = asyncio.Queue(maxsize=1000)
+        chain_db = self._chain_db
+        _headers_received = 0
+
+        async def _on_roll_forward(header: object, tip: object) -> None:
+            nonlocal _headers_received
+            _headers_received += 1
+
+            # header = [era_tag, CBORTag(24, header_cbor)]
+            # Extract slot and block hash from the wrapped header.
+            try:
+                if isinstance(header, (list, tuple)) and len(header) >= 2:
+                    wrapped = header[1]  # CBORTag(24, inner_bytes)
+                    header_bytes = wrapped.value if hasattr(wrapped, "value") else wrapped
+                    inner = cbor2.loads(header_bytes)
+                    hdr_body = inner[0]  # [block_number, slot, prev_hash, ...]
+                    slot = hdr_body[1]
+                    block_hash = hashlib.blake2b(
+                        header_bytes, digest_size=32
+                    ).digest()
+                    point = Point(slot=slot, hash=block_hash)
+
+                    # Queue for block-fetch
+                    try:
+                        fetch_queue.put_nowait(point)
+                    except asyncio.QueueFull:
+                        pass  # Drop if queue full — backpressure
+
+                    if _headers_received % 100 == 1 or _headers_received <= 5:
+                        logger.info(
+                            "Peer %s: header #%d slot=%d hash=%s (tip=%s)",
+                            peer.address,
+                            _headers_received,
+                            slot,
+                            block_hash.hex()[:16],
+                            tip,
+                        )
+                else:
+                    if _headers_received % 100 == 1:
+                        logger.debug(
+                            "Peer %s: header #%d (unparsed, tip=%s)",
+                            peer.address, _headers_received, tip,
+                        )
+            except Exception as exc:
+                logger.debug("Peer %s: header parse error: %s", peer.address, exc)
 
         async def _on_roll_backward(point: object, tip: object) -> None:
             logger.info(
                 "Peer %s: roll backward to %s (tip=%s)",
                 peer.address, point, tip,
             )
+            # TODO: ChainDB rollback to point
 
         asyncio.create_task(
             _safe_run(
@@ -421,6 +469,95 @@ class PeerManager:
                 "chain-sync",
             ),
             name=f"chainsync-{peer.address}",
+        )
+
+        # Block-fetch worker: batches points from the queue into ranges,
+        # fetches full block bodies, and stores them in ChainDB.
+        async def _block_fetch_worker() -> None:
+            bf_channel = channels[BLOCK_FETCH_N2N_ID]
+            _blocks_stored = 0
+
+            while not stop_event.is_set():
+                # Collect a batch of points (up to 100, or whatever's available)
+                batch: list[Point] = []
+                try:
+                    # Wait for at least one point
+                    point = await asyncio.wait_for(
+                        fetch_queue.get(), timeout=1.0
+                    )
+                    batch.append(point)
+                    # Drain up to 99 more without blocking
+                    while len(batch) < 100:
+                        try:
+                            batch.append(fetch_queue.get_nowait())
+                        except asyncio.QueueEmpty:
+                            break
+                except TimeoutError:
+                    continue
+
+                if not batch or stop_event.is_set():
+                    continue
+
+                # Build range: (first_point, last_point)
+                ranges = [(batch[0], batch[-1])]
+
+                async def _on_block(block_cbor: bytes) -> None:
+                    nonlocal _blocks_stored
+                    if chain_db is not None:
+                        try:
+                            # Parse minimal info from block CBOR for storage
+                            block_data = cbor2.loads(block_cbor)
+                            # block = [header, tx_bodies, tx_witnesses, aux]
+                            hdr = block_data[0]  # [header_body, kes_sig]
+                            hdr_body = hdr[0]
+                            block_number = hdr_body[0]
+                            slot = hdr_body[1]
+                            prev_hash = hdr_body[2] or b"\x00" * 32
+                            # Re-encode header for hash
+                            hdr_cbor = cbor2.dumps(hdr)
+                            block_hash = hashlib.blake2b(
+                                hdr_cbor, digest_size=32
+                            ).digest()
+
+                            await chain_db.add_block(
+                                slot=slot,
+                                block_hash=block_hash,
+                                predecessor_hash=prev_hash,
+                                block_number=block_number,
+                                cbor_bytes=block_cbor,
+                            )
+                            _blocks_stored += 1
+                            if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
+                                logger.info(
+                                    "Peer %s: stored block #%d slot=%d hash=%s "
+                                    "[%d total]",
+                                    peer.address,
+                                    block_number,
+                                    slot,
+                                    block_hash.hex()[:16],
+                                    _blocks_stored,
+                                )
+                        except Exception as exc:
+                            logger.debug(
+                                "Peer %s: block store error: %s",
+                                peer.address, exc,
+                            )
+
+                try:
+                    await run_block_fetch(
+                        bf_channel,
+                        ranges=ranges,
+                        on_block_received=_on_block,
+                        stop_event=stop_event,
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "Peer %s: block-fetch error: %s", peer.address, exc
+                    )
+
+        asyncio.create_task(
+            _safe_run(_block_fetch_worker(), "block-fetch"),
+            name=f"blockfetch-{peer.address}",
         )
 
         # Keep-Alive (protocol 8): periodic pings to keep connection alive.
@@ -464,12 +601,6 @@ class PeerManager:
             ),
             name=f"txsub-{peer.address}",
         )
-
-        # Block-Fetch (protocol 3) is demand-driven — it fetches specific
-        # block ranges discovered by chain-sync. We don't start it in a
-        # loop; instead it will be triggered when chain-sync discovers
-        # new headers that need full block bodies.
-        # TODO: Wire block-fetch to chain-sync header pipeline.
 
         # Store the mux task — peer_loop will await it instead of mux.run().
         peer.mux_task = mux_task
