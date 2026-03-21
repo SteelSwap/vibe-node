@@ -682,6 +682,7 @@ async def _forge_loop(
     slot_clock: SlotClock,
     shutdown_event: asyncio.Event,
     chain_db: Any = None,
+    node_kernel: Any = None,
 ) -> None:
     """Slot-by-slot leader check and block forging loop.
 
@@ -812,6 +813,17 @@ async def _forge_loop(
                 except Exception as exc:
                     logger.warning("Failed to store forged block: %s", exc)
 
+            # Add to NodeKernel so chain-sync/block-fetch servers
+            # can serve this block to connected peers.
+            if node_kernel is not None:
+                node_kernel.add_block(
+                    slot=forged.block.slot,
+                    block_hash=forged.block.block_hash,
+                    block_number=forged.block.block_number,
+                    header_cbor=forged.block.header_cbor,
+                    block_cbor=forged.cbor,
+                )
+
             logger.info(
                 "FORGED BLOCK %d at slot %d (%d bytes, hash=%s) "
                 "[%d total]",
@@ -834,6 +846,7 @@ async def _run_n2n_server(
     host: str,
     port: int,
     network_magic: int,
+    node_kernel: Any,
     shutdown_event: asyncio.Event,
 ) -> None:
     """Run the TCP listener for inbound N2N peer connections.
@@ -854,6 +867,8 @@ async def _run_n2n_server(
         network_magic: Network magic for handshake negotiation.
         shutdown_event: Set when the node is shutting down.
     """
+    from vibe.cardano.network.blockfetch_protocol import run_block_fetch_server
+    from vibe.cardano.network.chainsync_protocol import run_chain_sync_server
     from vibe.cardano.network.handshake_protocol import (
         HandshakeError,
         run_handshake_server,
@@ -897,8 +912,26 @@ async def _run_n2n_server(
                 name=f"ka-server-{peer_info}",
             )
 
-            # TODO(M5.17): Launch chain-sync server + block-fetch server
-            # once ChainProvider/BlockProvider are wired to ChainDB.
+            # Launch chain-sync server (serve our headers to the peer).
+            if node_kernel is not None:
+                asyncio.create_task(
+                    run_chain_sync_server(
+                        channels[CHAIN_SYNC_N2N_ID],
+                        chain_provider=node_kernel,
+                        stop_event=stop,
+                    ),
+                    name=f"cs-server-{peer_info}",
+                )
+
+                # Launch block-fetch server (serve full blocks to the peer).
+                asyncio.create_task(
+                    run_block_fetch_server(
+                        channels[BLOCK_FETCH_N2N_ID],
+                        block_provider=node_kernel,
+                        stop_event=stop,
+                    ),
+                    name=f"bf-server-{peer_info}",
+                )
 
             # Wait for mux to end (peer disconnect) or shutdown.
             done, _ = await asyncio.wait(
@@ -1043,6 +1076,8 @@ async def run_node(config: NodeConfig) -> None:
     """
     from vibe.cardano.storage import ChainDB, ImmutableDB, LedgerDB, VolatileDB
 
+    from .kernel import NodeKernel
+
     logger.info(
         "Starting vibe-node (network_magic=%d, host=%s:%d, "
         "block_producer=%s, peers=%d)",
@@ -1084,6 +1119,9 @@ async def run_node(config: NodeConfig) -> None:
     else:
         logger.info("ChainDB loaded: empty (starting from genesis)")
 
+    # --- NodeKernel: shared state for protocol servers ---
+    node_kernel = NodeKernel()
+
     # --- Slot clock ---
     slot_config = SlotConfig(
         system_start=config.system_start,
@@ -1107,7 +1145,8 @@ async def run_node(config: NodeConfig) -> None:
     tasks.append(
         asyncio.create_task(
             _run_n2n_server(
-                config.host, config.port, config.network_magic, shutdown_event,
+                config.host, config.port, config.network_magic,
+                node_kernel, shutdown_event,
             ),
             name="n2n-server",
         )
@@ -1129,7 +1168,7 @@ async def run_node(config: NodeConfig) -> None:
     if config.is_block_producer:
         tasks.append(
             asyncio.create_task(
-                _forge_loop(config, slot_clock, shutdown_event, chain_db),
+                _forge_loop(config, slot_clock, shutdown_event, chain_db, node_kernel),
                 name="forge-loop",
             )
         )
