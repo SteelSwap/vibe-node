@@ -111,6 +111,9 @@ class NodeConfig:
     peers: list[PeerAddress] = field(default_factory=list)
     db_path: Path = field(default_factory=lambda: Path("./db"))
     genesis_hash: bytes = b""
+    protocol_params: dict[str, Any] | None = None
+    permissive_validation: bool = False
+    slots_per_kes_period: int = 129600
 
     @property
     def is_block_producer(self) -> bool:

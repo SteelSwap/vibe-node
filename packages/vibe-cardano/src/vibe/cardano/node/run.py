@@ -533,18 +533,25 @@ class PeerManager:
                                 ledger_state=(
                                     chain_db.ledger_db if chain_db else None
                                 ),
-                                protocol_params=None,  # Use defaults
+                                protocol_params=self._config.protocol_params,
                                 current_slot=slot,
                             )
                             if errors:
-                                logger.warning(
-                                    "Peer %s: block #%d slot=%d has %d "
-                                    "validation errors: %s",
-                                    peer.address, block_number, slot,
-                                    len(errors), errors[:3],
-                                )
-                                # Still store — Haskell already validated.
-                                # Log for diagnostics during integration.
+                                if self._config.permissive_validation:
+                                    logger.warning(
+                                        "Peer %s: block #%d slot=%d has %d "
+                                        "validation errors (permissive): %s",
+                                        peer.address, block_number, slot,
+                                        len(errors), errors[:3],
+                                    )
+                                else:
+                                    logger.warning(
+                                        "Peer %s: REJECTING block #%d "
+                                        "slot=%d: %d errors: %s",
+                                        peer.address, block_number, slot,
+                                        len(errors), errors[:3],
+                                    )
+                                    return  # Don't store invalid blocks
 
                         # --- Apply ledger state (UTxO mutations) ---
                         if chain_db is not None and chain_db.ledger_db is not None:
