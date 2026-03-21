@@ -340,15 +340,15 @@ class TestPipelinedRunnerLifecycle:
             await pipeline.send_request(FakeMessage(1))
 
     @pytest.mark.asyncio
-    async def test_collect_with_nothing_in_flight_raises(self) -> None:
-        """Collecting with no in-flight requests raises RuntimeError."""
+    async def test_collect_with_nothing_in_flight_blocks(self) -> None:
+        """Collecting with no in-flight requests blocks (doesn't crash)."""
         channel = FakeChannel()
         codec = FakeCodec()
         pipeline = PipelinedRunner(channel, codec, max_in_flight=10)
 
         async with pipeline:
-            with pytest.raises(RuntimeError, match="No requests in flight"):
-                await pipeline.collect_response()
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(pipeline.collect_response(), timeout=0.05)
 
     def test_invalid_max_in_flight(self) -> None:
         """max_in_flight < 1 raises ValueError."""

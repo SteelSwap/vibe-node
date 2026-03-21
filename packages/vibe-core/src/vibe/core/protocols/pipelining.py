@@ -205,9 +205,6 @@ class PipelinedRunner:
         Exception
             If the receiver encountered an error (propagated here).
         """
-        if self._in_flight <= 0 and self._response_queue.empty():
-            raise RuntimeError("No requests in flight to collect")
-
         response = await self._response_queue.get()
 
         # Check if the receiver task propagated an error.
