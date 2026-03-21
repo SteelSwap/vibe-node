@@ -5,8 +5,8 @@
 [![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](https://www.python.org/downloads/)
 [![Built with AI](https://img.shields.io/badge/built%20with-AI%20%28vibe%20coded%29-ff6d00.svg)]()
 [![Cardano](https://img.shields.io/badge/Cardano-node-0033AD.svg)](https://cardano.org)
-[![Tests](https://img.shields.io/badge/tests-3%2C415%20passing-brightgreen.svg)]()
-[![Version](https://img.shields.io/badge/version-v0.4.0-blue.svg)](https://github.com/SteelSwap/vibe-node/releases/tag/v0.4.0)
+[![Tests](https://img.shields.io/badge/tests-4%2C045%20passing-brightgreen.svg)]()
+[![Version](https://img.shields.io/badge/version-v0.5.0-blue.svg)]()
 
 A vibe-coded, spec-compliant Cardano node written in Python.
 
@@ -20,26 +20,23 @@ This is not just a node — it's a public education in vibe coding with extreme 
 
 ## Current Status
 
-> **Phase 4 — Ledger & Consensus: COMPLETE.** 3,415 tests passing.
-> vibe-node validates the chain: full Alonzo-Conway ledger, Plutus V1/V2/V3 evaluation, Ouroboros Praos consensus, VRF/KES crypto, all N2N miniprotocols, Hard Fork Combinator, and 3-node devnet infrastructure.
+> **Phase 5 — Block Production & Full Node Integration: COMPLETE.** 4,045+ tests passing.
+> vibe-node is a fully functional Cardano node: syncs from genesis, forges blocks via VRF leader election, validates all eras through Conway, and runs in a 3-node private devnet alongside Haskell nodes with bidirectional communication.
 
 ### What the node can do
 
-- **Sync** from a Mithril snapshot and follow the chain tip via chain-sync + block-fetch
-- **Decode** all-era Cardano blocks (Byron through Conway) via pycardano CBOR
-- **Store** blocks in Arrow+Dict storage engine (ImmutableDB, VolatileDB, LedgerDB, ChainDB)
-- **Validate** Byron, Shelley, Allegra, Mary, and Alonzo ledger rules
-- **Evaluate** Plutus scripts (V1/V2/V3) via uplc with cost model enforcement
-- **Verify** VRF proofs (pybind11 + IOG libsodium) and KES signatures (sum-composition)
-- **Communicate** via all 5 N2N miniprotocols: handshake, chain-sync, block-fetch, tx-submission, keep-alive
-- **Recover** from crashes via Arrow IPC snapshots + diff replay (cold start: 1.72s at 3.96M UTxOs)
+- **Sync** from genesis or Mithril snapshot, following the chain tip via pipelined chain-sync + block-fetch
+- **Forge blocks** via VRF leader election with KES-signed headers and operational certificates
+- **Validate** all-era blocks (Byron through Conway) with full ledger rules, Plutus evaluation, and UTxO tracking
+- **Store** blocks in Arrow+Dict storage engine (ImmutableDB, VolatileDB, LedgerDB, ChainDB) with crash recovery
+- **Communicate** via all N2N miniprotocols (handshake, chain-sync, block-fetch, tx-submission, keep-alive) — both client and server
+- **Serve** local clients via all N2C miniprotocols (local chain-sync, local tx-submission, local state-query, local tx-monitor)
+- **Manage** a mempool with transaction validation, capacity enforcement, and block selection
+- **Run** in a 3-node private devnet with 2 Haskell nodes — bidirectional handshake, header streaming, block forging
 
 ### What's next
 
-- Babbage-Conway ledger rules (inline datums, reference scripts, governance)
-- Ouroboros Praos consensus (chain selection, leader election, block header verification)
-- Hard fork combinator (era transitions)
-- 3-node private devnet (1 vibe-node + 2 Haskell)
+- Phase 6: Hardening — 48-hour devnet soak test, preprod block production, power-loss recovery validation, memory optimization, 10-day conformance window
 
 ### Phase Summary
 
@@ -49,7 +46,8 @@ This is not just a node — it's a public education in vibe coding with extreme 
 | **Phase 1** — Research & Analysis | Complete | 2,046 rules, 1,567 gaps, architecture blueprint |
 | **Phase 2** — Serialization & Networking | Complete | CBOR decoders, multiplexer, handshake, chain-sync — 643 tests |
 | **Phase 3** — Chain Sync & Storage | Complete | Block-fetch, Arrow+Dict storage, Byron-Mary ledger, Mithril, crash recovery — 1,264 tests |
-| **Phase 4** — Ledger & Consensus | Complete | VRF/KES, Alonzo-Conway ledger, Plutus, Praos consensus, HFC, devnet — 3,415 total tests |
+| **Phase 4** — Ledger & Consensus | Complete | VRF/KES, Alonzo-Conway ledger, Plutus, Praos consensus, HFC, devnet — 3,415 tests |
+| **Phase 5** — Block Production & N2C | Complete | Block forging, mempool, all N2C miniprotocols, full node integration, 3-node devnet — 4,045+ tests |
 
 ### Benchmarks (Real Preprod)
 
@@ -62,40 +60,58 @@ This is not just a node — it's a public education in vibe coding with extreme 
 | Lookup latency | 0.70 us/op |
 | Parse throughput | 15,208 blocks/s |
 
+## Quick Start
+
+```bash
+# Clone with submodules (needed for VRF)
+git clone --recurse-submodules https://github.com/SteelSwap/vibe-node.git
+cd vibe-node
+uv sync
+
+# Build VRF native extension (requires cmake + autotools)
+cd packages/vibe-cardano && cmake -B build && cmake --build build && cd ../..
+
+# Run the full test suite (~4,000+ tests)
+uv run pytest
+
+# Start the node (relay mode, connect to preview/preprod)
+uv run vibe-node serve --network-magic 2 --peers relays-new.cardano-testnet.iohkdev.io:3001
+
+# Start the 3-node devnet
+cd infra/devnet
+./scripts/generate-keys.sh
+docker compose -f docker-compose.devnet.yml up -d
+```
+
 ## Architecture
 
 ```
 vibe-node monorepo (uv workspace)
 ├── packages/
-│   ├── vibe-core/        # Protocol-agnostic: multiplexer, typed protocols, storage abstractions
-│   ├── vibe-cardano/     # Cardano-specific: serialization, network, ledger, storage, crypto, plutus
+│   ├── vibe-core/        # Protocol-agnostic: multiplexer, typed protocols, pipelining
+│   ├── vibe-cardano/     # Cardano-specific: serialization, network, ledger, storage, crypto, forge, mempool
 │   └── vibe-tools/       # Dev infrastructure: ingestion, search, MCP, CLI
 ├── vendor/
 │   └── libsodium-iog/    # IOG libsodium fork (VRF extensions)
-├── infra/                # Docker Compose, Dockerfiles
+├── infra/
+│   └── devnet/           # 3-node private devnet (Docker Compose)
 ├── docs/                 # MkDocs Material site
-└── tests/                # Integration and conformance tests
+└── tests/                # Integration, conformance, and property tests
 ```
 
-## Quick Start
+### Node Components
 
-```bash
-git clone --recurse-submodules https://github.com/SteelSwap/vibe-node.git
-cd vibe-node
-uv sync
-
-# Build VRF native extension (optional — requires C compiler)
-./scripts/build-vrf.sh
-
-# Run the full test suite (~2,400 tests)
-uv run pytest
-
-# Start infrastructure (ParadeDB, cardano-node, Ogmios, etc.)
-uv run vibe-node infra up
-
-# Search the knowledge base
-uv run vibe-node db search "Ouroboros Praos VRF"
-```
+| Component | Description |
+|-----------|-------------|
+| **Multiplexer** | Segment framing, async TCP bearer, fair scheduling |
+| **Miniprotocols** | All N2N (5) and N2C (4) protocols — client and server |
+| **Pipelining** | PipelinedRunner with backpressure (chain-sync: 300, block-fetch: 100) |
+| **Ledger** | Byron through Conway validation, Plutus V1/V2/V3 via uplc |
+| **Consensus** | Ouroboros Praos: VRF leader election, KES signing, chain selection |
+| **Storage** | ChainDB (ImmutableDB + VolatileDB + LedgerDB), Arrow IPC snapshots |
+| **Mempool** | Transaction validation, capacity management, block selection |
+| **Block Forge** | VRF proof, KES-signed header, operational certificate |
+| **Node Main** | `vibe-node serve` CLI with full genesis config, key loading, graceful shutdown |
 
 ## Documentation
 

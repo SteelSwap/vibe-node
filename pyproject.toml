@@ -1,6 +1,6 @@
 [project]
 name = "vibe-node"
-version = "0.3.0"
+version = "0.5.0"
 description = "A vibe-coded Cardano node"
 readme = "README.md"
 authors = [
