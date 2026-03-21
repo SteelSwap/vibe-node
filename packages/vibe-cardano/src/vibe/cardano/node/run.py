@@ -201,7 +201,7 @@ class PeerManager:
         chain_db: ChainDB instance for storing received blocks.
     """
 
-    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks")
+    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks", "_known_points")
 
     def __init__(self, config: NodeConfig, chain_db: Any = None, node_kernel: Any = None) -> None:
         self._config = config
@@ -210,6 +210,7 @@ class PeerManager:
         self._peers: dict[str, _PeerConnection] = {}
         self._stopped = False
         self._tasks: list[asyncio.Task[None]] = []
+        self._known_points: list[Any] = []
 
     @property
     def connected_count(self) -> int:
@@ -220,6 +221,18 @@ class PeerManager:
     def peer_ids(self) -> list[str]:
         """List of all tracked peer IDs (host:port strings)."""
         return list(self._peers.keys())
+
+    def set_known_points(self, points: list[Any]) -> None:
+        """Set the chain-sync known points for all future peer connections.
+
+        When the node has been bootstrapped from a Mithril snapshot, the
+        known_points should contain the snapshot tip so chain-sync starts
+        from there instead of Origin.
+
+        Args:
+            points: List of Point(slot, hash) to send in FindIntersect.
+        """
+        self._known_points = list(points)
 
     def add_peer(self, address: PeerAddress) -> None:
         """Register a peer for connection management.
@@ -463,7 +476,7 @@ class PeerManager:
             _safe_run(
                 run_chain_sync(
                     channels[CHAIN_SYNC_N2N_ID],
-                    known_points=[],  # Start from Origin
+                    known_points=self._known_points,  # Snapshot tip or Origin
                     on_roll_forward=_on_roll_forward,
                     on_roll_backward=_on_roll_backward,
                     stop_event=stop_event,
@@ -1425,6 +1438,54 @@ async def run_node(config: NodeConfig) -> None:
     else:
         logger.info("ChainDB loaded: empty (starting from genesis)")
 
+    # --- Mithril snapshot import ---
+    # If a Mithril snapshot path is configured and the ChainDB is empty,
+    # import the snapshot's immutable blocks and (optionally) ledger state
+    # before starting chain-sync.  This bootstraps the node to the snapshot
+    # tip so it only needs to sync the remaining blocks from peers.
+    #
+    # Haskell ref: The Haskell node does not natively support Mithril —
+    # Mithril snapshots are restored externally into the ImmutableDB
+    # directory before the node starts. We achieve the same result
+    # programmatically by calling import_mithril_snapshot.
+    if config.mithril_snapshot_path is not None:
+        if tip is None:
+            logger.info(
+                "Importing Mithril snapshot from %s",
+                config.mithril_snapshot_path,
+            )
+            from vibe.cardano.sync import import_mithril_snapshot
+
+            tip_slot, tip_hash = await import_mithril_snapshot(
+                snapshot_dir=config.mithril_snapshot_path,
+                immutable_db=immutable_db,
+                ledger_db=ledger_db,
+            )
+            # Update the ChainDB's internal tip to reflect the import.
+            # The import wrote directly to ImmutableDB, so we reconstruct
+            # the ChainDB tip from the immutable tip.
+            from vibe.cardano.storage.chaindb import _ChainTip
+
+            chain_db._tip = _ChainTip(
+                slot=tip_slot,
+                block_hash=tip_hash,
+                block_number=0,  # Block number not tracked during import
+            )
+            chain_db._immutable_tip_block_number = 0
+            logger.info(
+                "Mithril import complete: tip at slot %d (hash=%s)",
+                tip_slot,
+                tip_hash.hex()[:16],
+            )
+            # Refresh the tip reference for downstream use.
+            tip = (tip_slot, tip_hash)
+        else:
+            logger.info(
+                "ChainDB already has data (tip slot %d), "
+                "skipping Mithril import",
+                tip[0],
+            )
+
     # --- Mempool ---
     from vibe.cardano.mempool import Mempool, MempoolConfig
     from vibe.cardano.mempool.validator import LedgerTxValidator
@@ -1459,6 +1520,15 @@ async def run_node(config: NodeConfig) -> None:
     peer_manager = PeerManager(config, chain_db=chain_db, node_kernel=node_kernel)
     for peer_addr in config.peers:
         peer_manager.add_peer(peer_addr)
+
+    # If we have a tip (from Mithril import or prior sync), set known_points
+    # so chain-sync starts from where we left off instead of Origin.
+    if tip is not None:
+        from vibe.cardano.network.chainsync import Point
+
+        peer_manager.set_known_points(
+            [Point(slot=tip[0], hash=tip[1])]
+        )
 
     # --- Collect background tasks ---
     tasks: list[asyncio.Task[None]] = []

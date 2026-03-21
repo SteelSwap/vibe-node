@@ -86,6 +86,7 @@ def serve(
     opcert: str = typer.Option(None, envvar="VIBE_OPCERT", help="Path to operational certificate file."),
     cold_vkey: str = typer.Option(None, envvar="VIBE_COLD_VKEY", help="Path to cold verification key file."),
     cold_skey: str = typer.Option(None, envvar="VIBE_COLD_SKEY", help="Path to cold signing key file."),
+    mithril_snapshot: str = typer.Option(None, envvar="VIBE_MITHRIL_SNAPSHOT", help="Path to Mithril snapshot directory for initial import."),
 ) -> None:
     """Start the Cardano node."""
     import asyncio
@@ -166,6 +167,7 @@ def serve(
         pool_keys=pool_keys,
         peers=peer_list,
         db_path=Path(db_path),
+        mithril_snapshot_path=Path(mithril_snapshot) if mithril_snapshot else None,
     )
 
     asyncio.run(run_node(config))

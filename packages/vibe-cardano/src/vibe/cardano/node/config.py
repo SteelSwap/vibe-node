@@ -96,6 +96,9 @@ class NodeConfig:
         pool_keys: Pool operator keys. None means relay-only mode.
         peers: List of outbound peer addresses.
         db_path: Path to the node's data directory (chaindb, ledger, etc.).
+        mithril_snapshot_path: Path to a Mithril snapshot directory to
+            import on first start (contains immutable/, ledger/, etc.).
+            None means no Mithril import — sync from genesis.
     """
 
     network_magic: int
@@ -111,6 +114,7 @@ class NodeConfig:
     peers: list[PeerAddress] = field(default_factory=list)
     db_path: Path = field(default_factory=lambda: Path("./db"))
     genesis_hash: bytes = b""
+    mithril_snapshot_path: Path | None = None
 
     @property
     def is_block_producer(self) -> bool:
@@ -157,4 +161,9 @@ class NodeConfig:
             pool_keys=pool_keys,
             peers=peers,
             db_path=Path(d.get("db_path", "./db")),
+            mithril_snapshot_path=(
+                Path(d["mithril_snapshot_path"])
+                if d.get("mithril_snapshot_path")
+                else None
+            ),
         )
