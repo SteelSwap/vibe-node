@@ -217,9 +217,16 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
     elif msg_id == MSG_BLOCK:
         if len(msg) != 2:
             raise ValueError(f"MsgBlock: expected 2 elements, got {len(msg)}")
-        block_cbor = msg[1]
-        if isinstance(block_cbor, memoryview):
-            block_cbor = bytes(block_cbor)
+        block_data = msg[1]
+        # The block arrives as a decoded CBOR object (CBORTag for era-wrapped
+        # blocks). We need raw bytes for storage and decode_block_header().
+        # Re-encode to get the canonical CBOR bytes.
+        if isinstance(block_data, bytes):
+            block_cbor = block_data
+        elif isinstance(block_data, memoryview):
+            block_cbor = bytes(block_data)
+        else:
+            block_cbor = cbor2.dumps(block_data)
         return MsgBlock(block_cbor=block_cbor)
 
     elif msg_id == MSG_BATCH_DONE:
