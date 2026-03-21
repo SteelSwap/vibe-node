@@ -38,9 +38,32 @@ from vibe.cardano.mempool.types import (
     ValidatedTx,
 )
 
-__all__ = ["Mempool", "TxValidator"]
+__all__ = ["Mempool", "TxValidator", "MempoolEvent"]
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Event types for observability callbacks
+# ---------------------------------------------------------------------------
+
+
+class MempoolEvent:
+    """Event types emitted by the mempool for observability.
+
+    Consumers can register callbacks to observe mempool activity without
+    coupling to the internal implementation. This supports tracing,
+    metrics, and debugging.
+    """
+
+    TX_ADDED = "tx_added"
+    TX_REJECTED = "tx_rejected"
+    TX_REMOVED = "tx_removed"
+    TX_EXPIRED = "tx_expired"
+
+
+# Type alias for event callbacks.
+MempoolCallback = Callable[[str, dict[str, Any]], None]
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +146,7 @@ class Mempool:
     - **get_snapshot**: Atomic snapshot of current contents
     - **sync_with_ledger**: Re-validate all txs against new ledger state
     - **get_txs_for_block**: Select transactions for block forging
+    - **evict_expired**: Remove transactions older than the configured timeout
 
     Haskell reference:
         Ouroboros.Consensus.Mempool.API (Mempool type class)
@@ -143,6 +167,8 @@ class Mempool:
         "_total_size",
         "_next_ticket_no",
         "_lock",
+        "_callbacks",
+        "_added_at_slot",
     )
 
     def __init__(
@@ -170,6 +196,12 @@ class Mempool:
 
         # Mutex for all mutations.
         self._lock = asyncio.Lock()
+
+        # Observability callbacks.
+        self._callbacks: list[MempoolCallback] = []
+
+        # Track when each tx was added (tx_id -> slot at insertion).
+        self._added_at_slot: dict[bytes, int] = {}
 
     # -- Properties ----------------------------------------------------------
 
@@ -202,6 +234,27 @@ class Mempool:
     def available_bytes(self) -> int:
         """Remaining capacity in CBOR bytes."""
         return max(0, self._config.capacity_bytes - self._total_size)
+
+    # -- Callback registration -----------------------------------------------
+
+    def on_event(self, callback: MempoolCallback) -> None:
+        """Register a callback for mempool events.
+
+        The callback receives (event_type: str, data: dict) where
+        event_type is one of the MempoolEvent constants.
+
+        Args:
+            callback: A callable(event_type, data) to invoke on events.
+        """
+        self._callbacks.append(callback)
+
+    def _emit(self, event_type: str, data: dict[str, Any]) -> None:
+        """Emit an event to all registered callbacks."""
+        for cb in self._callbacks:
+            try:
+                cb(event_type, data)
+            except Exception:
+                logger.exception("Mempool event callback error")
 
     # -- Core operations -----------------------------------------------------
 
@@ -239,6 +292,15 @@ class Mempool:
 
             # Check capacity.
             if self._total_size + tx_size > self._config.capacity_bytes:
+                self._emit(
+                    MempoolEvent.TX_REJECTED,
+                    {
+                        "tx_id": tx_id,
+                        "reason": "capacity",
+                        "needed": tx_size,
+                        "available": self._config.capacity_bytes - self._total_size,
+                    },
+                )
                 raise MempoolCapacityError(
                     needed=tx_size,
                     available=self._config.capacity_bytes - self._total_size,
@@ -248,6 +310,10 @@ class Mempool:
             # Validate against the cached ledger state.
             errors = self._validator.validate_tx(tx_cbor, self._current_slot)
             if errors:
+                self._emit(
+                    MempoolEvent.TX_REJECTED,
+                    {"tx_id": tx_id, "reason": "validation", "errors": errors},
+                )
                 raise MempoolValidationError(tx_id, errors)
 
             # Apply to cached ledger state so subsequent validations see
@@ -271,6 +337,7 @@ class Mempool:
             self._tickets.append(ticket)
             self._tx_index[tx_id] = ticket
             self._total_size += tx_size
+            self._added_at_slot[tx_id] = self._current_slot
 
             logger.debug(
                 "Mempool: added tx %s (size=%d, total=%d/%d, count=%d)",
@@ -279,6 +346,11 @@ class Mempool:
                 self._total_size,
                 self._config.capacity_bytes,
                 len(self._tickets),
+            )
+
+            self._emit(
+                MempoolEvent.TX_ADDED,
+                {"tx_id": tx_id, "tx_size": tx_size, "ticket_no": ticket.ticket_no},
             )
 
             return validated
@@ -312,8 +384,13 @@ class Mempool:
         for ticket in self._tickets:
             if ticket.validated_tx.tx_id in tx_ids:
                 del self._tx_index[ticket.validated_tx.tx_id]
+                self._added_at_slot.pop(ticket.validated_tx.tx_id, None)
                 self._total_size -= ticket.validated_tx.tx_size
                 removed += 1
+                self._emit(
+                    MempoolEvent.TX_REMOVED,
+                    {"tx_id": ticket.validated_tx.tx_id},
+                )
             else:
                 new_tickets.append(ticket)
 
@@ -395,6 +472,7 @@ class Mempool:
                 if errors:
                     # Transaction is now invalid — remove it.
                     del self._tx_index[vtx.tx_id]
+                    self._added_at_slot.pop(vtx.tx_id, None)
                     removed_ids.append(vtx.tx_id)
                     logger.debug(
                         "Mempool: re-validation removed tx %s: %s",
@@ -418,6 +496,68 @@ class Mempool:
                 )
 
             return removed_ids
+
+    async def evict_expired(self, current_slot: int) -> list[bytes]:
+        """Evict transactions that have been in the mempool past the timeout.
+
+        This is a safety net for transactions without TTL or with very long
+        TTL. The Haskell node relies on TTL in the tx body, but we add this
+        as an explicit eviction mechanism.
+
+        Haskell reference:
+            No direct equivalent — the Haskell node relies on tx body TTL
+            checked during re-validation. This is a vibe-node extension.
+
+        Args:
+            current_slot: The current slot number.
+
+        Returns:
+            List of tx_ids that were evicted.
+        """
+        timeout = self._config.tx_timeout_slots
+        if timeout is None:
+            return []
+
+        async with self._lock:
+            expired_ids: set[bytes] = set()
+
+            for ticket in self._tickets:
+                tx_id = ticket.validated_tx.tx_id
+                added_slot = self._added_at_slot.get(tx_id, 0)
+                if current_slot - added_slot >= timeout:
+                    expired_ids.add(tx_id)
+
+            if not expired_ids:
+                return []
+
+            # Remove expired transactions.
+            evicted: list[bytes] = []
+            new_tickets: list[TxTicket] = []
+
+            for ticket in self._tickets:
+                tx_id = ticket.validated_tx.tx_id
+                if tx_id in expired_ids:
+                    del self._tx_index[tx_id]
+                    self._added_at_slot.pop(tx_id, None)
+                    self._total_size -= ticket.validated_tx.tx_size
+                    evicted.append(tx_id)
+                    self._emit(
+                        MempoolEvent.TX_EXPIRED,
+                        {"tx_id": tx_id},
+                    )
+                else:
+                    new_tickets.append(ticket)
+
+            self._tickets = new_tickets
+
+            if evicted:
+                logger.info(
+                    "Mempool: evicted %d expired txs, remaining=%d",
+                    len(evicted),
+                    len(self._tickets),
+                )
+
+            return evicted
 
     async def get_txs_for_block(self, max_size: int) -> list[ValidatedTx]:
         """Select transactions for block forging.
@@ -492,6 +632,51 @@ class Mempool:
             if ticket is None:
                 return None
             return ticket.validated_tx.tx_cbor
+
+    def get_ticket_by_no(self, ticket_no: int) -> TxTicket | None:
+        """Look up a ticket by its ticket number.
+
+        Useful for debugging and testing TxSeq internals.
+
+        Args:
+            ticket_no: The monotonic ticket number.
+
+        Returns:
+            TxTicket if found, None otherwise.
+        """
+        for ticket in self._tickets:
+            if ticket.ticket_no == ticket_no:
+                return ticket
+        return None
+
+    def split_by_size(self, max_size: int) -> tuple[list[TxTicket], list[TxTicket]]:
+        """Split the ticket sequence at a size boundary.
+
+        Returns (prefix, suffix) where prefix contains tickets whose
+        cumulative size <= max_size. This is a synchronous method for
+        TxSeq-level operations.
+
+        Haskell reference:
+            Ouroboros.Consensus.Mempool.TxSeq.splitAfterTxSize
+
+        Args:
+            max_size: Maximum cumulative size in bytes for the prefix.
+
+        Returns:
+            Tuple of (prefix_tickets, suffix_tickets).
+        """
+        prefix: list[TxTicket] = []
+        suffix: list[TxTicket] = []
+        running = 0
+
+        for ticket in self._tickets:
+            if running + ticket.validated_tx.tx_size <= max_size:
+                prefix.append(ticket)
+                running += ticket.validated_tx.tx_size
+            else:
+                suffix.append(ticket)
+
+        return prefix, suffix
 
     # -- Debug / inspection --------------------------------------------------
 

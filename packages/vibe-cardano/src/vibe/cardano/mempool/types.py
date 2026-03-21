@@ -116,7 +116,15 @@ class MempoolConfig:
             Default is 2 * 90112 = 180224 (2 * Babbage maxBlockBodySize).
             This can be overridden, but the Haskell node uses 2x as the
             default multiplier.
+        tx_timeout_slots: Number of slots after which a tx is considered
+            expired and eligible for eviction. None means no timeout.
+            The Haskell node doesn't have an explicit timeout — it relies
+            on TTL in the tx body. We add this as a safety net for txs
+            without TTL or with very long TTL.
     """
 
     capacity_bytes: int = 2 * 90112
     """Maximum mempool size in CBOR bytes. Default: 2 * maxBlockBodySize."""
+
+    tx_timeout_slots: int | None = None
+    """Optional slot-based timeout for transaction eviction. None = no timeout."""
