@@ -961,10 +961,9 @@ async def _forge_loop(
         try:
             tip = await chain_db.get_tip()
             if tip is not None:
-                prev_header_hash = tip[1]  # (slot, hash)
-                # Approximate block number from slot
-                prev_block_number = tip[0]  # Use slot as proxy
-                logger.info("Forge: building on chain tip slot=%d", tip[0])
+                prev_header_hash = tip[1]  # (slot, hash, block_number)
+                prev_block_number = tip[2]  # Real block number
+                logger.info("Forge: building on chain tip slot=%d block=%d", tip[0], tip[2])
         except Exception:
             pass
     blocks_forged = 0
@@ -1011,23 +1010,32 @@ async def _forge_loop(
         if proof is None:
             continue
 
-        # Update prev_hash from latest chain tip so we build on the real chain.
-        # Don't forge until we're close to the tip (within 10 slots).
+        # --- Read current chain state (per-slot, not cached) ---
+        # Haskell: mkCurrentBlockContext reads ChainDB.getCurrentChain each slot
         if chain_db is not None:
             try:
                 tip = await chain_db.get_tip()
                 if tip is not None:
-                    tip_slot = tip[0]
+                    tip_slot, tip_hash, tip_block_number = tip
                     if slot - tip_slot > 10:
-                        # Still syncing — too far behind to forge
+                        # Still syncing — too far behind (like forecast failure)
                         continue
-                    prev_header_hash = tip[1]
-                    prev_block_number = tip_slot
+                    prev_header_hash = tip_hash
+                    prev_block_number = tip_block_number  # Real block number, not slot
                 elif slot > 10:
-                    # No tip yet and we're past genesis — still syncing
                     continue
             except Exception:
                 pass
+
+        # Re-read epoch nonce from kernel (evolves at epoch boundaries)
+        if node_kernel is not None:
+            epoch_nonce = node_kernel.epoch_nonce.value
+
+        # Re-read stake distribution (changes at epoch boundaries)
+        if node_kernel is not None and node_kernel.stake_distribution:
+            pool_stake = node_kernel.stake_distribution.get(pool_id, 0)
+            total_stake = sum(node_kernel.stake_distribution.values())
+            relative_stake = pool_stake / total_stake if total_stake > 0 else relative_stake
 
         # Elected! Forge the block.
         try:

@@ -185,8 +185,8 @@ class ChainDB:
         # --- Advance immutable tip if chain is long enough ---
         await self._maybe_advance_immutable()
 
-    async def get_tip(self) -> tuple[int, bytes] | None:
-        """Return the current chain tip as (slot, hash).
+    async def get_tip(self) -> tuple[int, bytes, int] | None:
+        """Return the current chain tip as (slot, hash, block_number).
 
         Returns None if the ChainDB is empty.
 
@@ -195,7 +195,7 @@ class ChainDB:
         """
         if self._tip is None:
             return None
-        return (self._tip.slot, self._tip.block_hash)
+        return (self._tip.slot, self._tip.block_hash, self._tip.block_number)
 
     async def get_block(self, block_hash: bytes) -> bytes | None:
         """Look up a block by hash, searching volatile then immutable.
