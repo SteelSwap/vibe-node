@@ -47,11 +47,13 @@ from pycardano.witness import TransactionWitnessSet
 
 from vibe.cardano.ledger.allegra_mary import (
     MaryProtocolParams,
+    Timelock,
     ValidityInterval,
     _multi_asset_is_empty,
     _output_value,
     _sum_values,
     _value_eq,
+    evaluate_timelock,
     validate_validity_interval,
 )
 from vibe.cardano.ledger.alonzo_types import (
@@ -562,6 +564,403 @@ def validate_alonzo_utxo(
 
 
 # ---------------------------------------------------------------------------
+# Phase-1 native script validation
+# ---------------------------------------------------------------------------
+
+
+def _validate_native_scripts(
+    tx_body: TransactionBody,
+    utxo_set: ShelleyUTxO,
+    native_scripts: dict[bytes, Timelock] | None = None,
+    signers: frozenset[bytes] | None = None,
+    current_slot: int = 0,
+) -> list[str]:
+    """Validate phase-1 native (timelock) scripts referenced by inputs.
+
+    Native scripts are evaluated before phase-2 Plutus scripts. If a native
+    script fails, the transaction is rejected outright (no collateral forfeited).
+
+    Spec ref: Alonzo formal spec, Section 5 (phase-1 scripts).
+    Haskell ref: ``validateFailedNativeScripts`` in
+        ``Cardano.Ledger.Alonzo.Rules.Utxow``
+
+    Args:
+        tx_body: The transaction body.
+        utxo_set: Current UTxO set.
+        native_scripts: Map of script hash -> Timelock script in witness set.
+        signers: Set of key hashes that provided valid signatures.
+        current_slot: Current slot for timelock evaluation.
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    if native_scripts is None or signers is None:
+        return []
+
+    errors: list[str] = []
+
+    for txin in tx_body.inputs:
+        if txin not in utxo_set:
+            continue
+        txout = utxo_set[txin]
+        addr = txout.address
+        payment_part = addr.payment_part
+        if payment_part is None:
+            continue
+        payment_hash = bytes(payment_part)
+        if len(payment_hash) == 28 and payment_hash in native_scripts:
+            script = native_scripts[payment_hash]
+            if not evaluate_timelock(script, signers, current_slot):
+                errors.append(
+                    f"NativeScriptFailure: native script "
+                    f"hash={payment_hash.hex()[:16]}... failed evaluation "
+                    f"(phase-1 rejection, no collateral forfeited)"
+                )
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Missing redeemers validation
+# ---------------------------------------------------------------------------
+
+
+def _missing_redeemers(
+    tx_body: TransactionBody,
+    utxo_set: ShelleyUTxO,
+    redeemers: list[Redeemer],
+    script_hashes: set[bytes] | None = None,
+) -> list[str]:
+    """Check that every Plutus script input has a matching redeemer.
+
+    Each Plutus-locked input (identified by its script hash in the address)
+    must have a corresponding Spend redeemer at the correct index.
+
+    Spec ref: Alonzo formal spec, ``missingRedeemers``.
+    Haskell ref: ``missingRedeemers`` in
+        ``Cardano.Ledger.Alonzo.Rules.Utxow``
+
+    Args:
+        tx_body: The transaction body.
+        utxo_set: Current UTxO set.
+        redeemers: Redeemers from the witness set.
+        script_hashes: Set of known Plutus script hashes.
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    if script_hashes is None:
+        return []
+
+    errors: list[str] = []
+
+    # Build set of Spend redeemer indices
+    spend_redeemer_indices = {
+        r.index for r in redeemers if r.tag == RedeemerTag.SPEND
+    }
+
+    # Sorted inputs determine the index mapping
+    sorted_inputs = sorted(
+        tx_body.inputs,
+        key=lambda i: (i.transaction_id.payload, i.index),
+    )
+
+    for idx, txin in enumerate(sorted_inputs):
+        if txin not in utxo_set:
+            continue
+        txout = utxo_set[txin]
+        addr = txout.address
+        payment_part = addr.payment_part
+        if payment_part is None:
+            continue
+        payment_hash = bytes(payment_part)
+        if len(payment_hash) == 28 and payment_hash in script_hashes:
+            if idx not in spend_redeemer_indices:
+                errors.append(
+                    f"MissingRedeemers: Plutus script input at index {idx} "
+                    f"(script_hash={payment_hash.hex()[:16]}...) has no "
+                    f"matching Spend redeemer"
+                )
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Not-allowed supplemental datums validation
+# ---------------------------------------------------------------------------
+
+
+def _not_allowed_supplemental_datums(
+    tx_body: TransactionBody,
+    utxo_set: ShelleyUTxO,
+    datums: list[bytes],
+    script_hashes: set[bytes] | None = None,
+) -> list[str]:
+    """Check that all datums in the witness set are actually needed.
+
+    A datum in the witness set is "supplemental" (and not allowed) if its hash
+    is not referenced by any output being spent or produced. Extra datums
+    bloat the transaction and are rejected.
+
+    Spec ref: Alonzo formal spec, ``notAllowedSupplementalDatums``.
+    Haskell ref: ``validateNotAllowedSupplementalDatums`` in
+        ``Cardano.Ledger.Alonzo.Rules.Utxow``
+
+    Args:
+        tx_body: The transaction body.
+        utxo_set: Current UTxO set.
+        datums: Datum CBOR encodings from the witness set.
+        script_hashes: Set of known Plutus script hashes.
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    import hashlib as _hashlib
+
+    if not datums:
+        return []
+
+    errors: list[str] = []
+
+    # Collect all datum hashes that are referenced (needed)
+    needed_datum_hashes: set[bytes] = set()
+
+    # From outputs being created (datum hashes on tx outputs)
+    for txout in tx_body.outputs:
+        datum_hash = getattr(txout, 'datum_hash', None)
+        if datum_hash is not None:
+            dh_bytes = bytes(datum_hash) if not isinstance(datum_hash, bytes) else datum_hash
+            needed_datum_hashes.add(dh_bytes)
+
+    # From inputs being spent (datum hashes on UTxO outputs locked by scripts)
+    for txin in tx_body.inputs:
+        if txin in utxo_set:
+            txout = utxo_set[txin]
+            datum_hash = getattr(txout, 'datum_hash', None)
+            if datum_hash is not None:
+                dh_bytes = bytes(datum_hash) if not isinstance(datum_hash, bytes) else datum_hash
+                needed_datum_hashes.add(dh_bytes)
+
+    # Check each witnessed datum
+    for d in datums:
+        dh = _hashlib.blake2b(d, digest_size=32).digest()
+        if dh not in needed_datum_hashes:
+            errors.append(
+                f"NotAllowedSupplementalDatums: datum with hash="
+                f"{dh.hex()[:16]}... is not referenced by any input or output"
+            )
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Unspendable UTxO without datum hash
+# ---------------------------------------------------------------------------
+
+
+def _unspendable_utxo_no_datum_hash(
+    tx_body: TransactionBody,
+    script_hashes: set[bytes] | None = None,
+) -> list[str]:
+    """Check that script-addressed outputs include a datum hash.
+
+    In Alonzo, any output sent to a Plutus script address MUST include a
+    datum hash. Without it, the output is permanently unspendable (the
+    Plutus script cannot evaluate without datum input).
+
+    Spec ref: Alonzo formal spec, ``UnspendableUTxONoDatumHash``.
+    Haskell ref: ``validateOutputMissingDatumHash`` in
+        ``Cardano.Ledger.Alonzo.Rules.Utxo``
+
+    Args:
+        tx_body: The transaction body.
+        script_hashes: Set of known Plutus script hashes.
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    if script_hashes is None:
+        return []
+
+    errors: list[str] = []
+
+    for i, txout in enumerate(tx_body.outputs):
+        addr = txout.address
+        payment_part = addr.payment_part
+        if payment_part is None:
+            continue
+        payment_hash = bytes(payment_part)
+        if len(payment_hash) == 28 and payment_hash in script_hashes:
+            datum_hash = getattr(txout, 'datum_hash', None)
+            if datum_hash is None:
+                errors.append(
+                    f"UnspendableUTxONoDatumHash: output[{i}] is locked by "
+                    f"Plutus script hash={payment_hash.hex()[:16]}... but has "
+                    f"no datum hash — output will be permanently unspendable"
+                )
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Missing script witness validation
+# ---------------------------------------------------------------------------
+
+
+def _missing_script_witnesses(
+    tx_body: TransactionBody,
+    utxo_set: ShelleyUTxO,
+    witnessed_script_hashes: set[bytes] | None = None,
+    script_hashes: set[bytes] | None = None,
+) -> list[str]:
+    """Check that every Plutus script referenced has its witness present.
+
+    Each input locked by a Plutus script requires the script itself to
+    be included in the transaction witness set.
+
+    Spec ref: Alonzo formal spec, Section 10 (UTXOW).
+    Haskell ref: ``validateMissingScripts`` in
+        ``Cardano.Ledger.Alonzo.Rules.Utxow``
+
+    Args:
+        tx_body: The transaction body.
+        utxo_set: Current UTxO set.
+        witnessed_script_hashes: Script hashes present in the witness set.
+        script_hashes: Set of known Plutus script hashes.
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    if script_hashes is None or witnessed_script_hashes is None:
+        return []
+
+    errors: list[str] = []
+
+    # Check inputs
+    for txin in tx_body.inputs:
+        if txin not in utxo_set:
+            continue
+        txout = utxo_set[txin]
+        addr = txout.address
+        payment_part = addr.payment_part
+        if payment_part is None:
+            continue
+        payment_hash = bytes(payment_part)
+        if len(payment_hash) == 28 and payment_hash in script_hashes:
+            if payment_hash not in witnessed_script_hashes:
+                errors.append(
+                    f"MissingScriptWitness: Plutus script "
+                    f"hash={payment_hash.hex()[:16]}... is referenced by "
+                    f"input but not present in witness set"
+                )
+
+    # Check minting policies
+    if tx_body.mint:
+        for policy_id in tx_body.mint:
+            pid_bytes = bytes(policy_id)
+            if pid_bytes in script_hashes and pid_bytes not in witnessed_script_hashes:
+                errors.append(
+                    f"MissingScriptWitness: Plutus minting policy "
+                    f"hash={pid_bytes.hex()[:16]}... not present in witness set"
+                )
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Extra redeemers validation
+# ---------------------------------------------------------------------------
+
+
+def _extra_redeemers(
+    tx_body: TransactionBody,
+    utxo_set: ShelleyUTxO,
+    redeemers: list[Redeemer],
+    script_hashes: set[bytes] | None = None,
+) -> list[str]:
+    """Check that all redeemers point to valid script purposes.
+
+    A redeemer is "extra" if it points to a non-existent script purpose:
+    - Spend redeemer index beyond the number of Plutus inputs
+    - Mint redeemer index beyond the number of Plutus minting policies
+    - Cert redeemer index beyond the number of Plutus certificates
+    - Redeemer tag doesn't match the actual script purpose
+
+    Spec ref: Alonzo formal spec, ``extraRedeemers``.
+    Haskell ref: ``validateExtraRedeemers`` in
+        ``Cardano.Ledger.Alonzo.Rules.Utxow``
+
+    Args:
+        tx_body: The transaction body.
+        utxo_set: Current UTxO set.
+        redeemers: Redeemers from the witness set.
+        script_hashes: Set of known Plutus script hashes.
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    if script_hashes is None:
+        return []
+
+    errors: list[str] = []
+
+    # Build the set of valid Spend indices (Plutus-locked inputs)
+    sorted_inputs = sorted(
+        tx_body.inputs,
+        key=lambda i: (i.transaction_id.payload, i.index),
+    )
+    valid_spend_indices: set[int] = set()
+    for idx, txin in enumerate(sorted_inputs):
+        if txin in utxo_set:
+            txout = utxo_set[txin]
+            addr = txout.address
+            payment_part = addr.payment_part
+            if payment_part is not None:
+                payment_hash = bytes(payment_part)
+                if len(payment_hash) == 28 and payment_hash in script_hashes:
+                    valid_spend_indices.add(idx)
+
+    # Build the set of valid Mint indices (Plutus minting policies)
+    valid_mint_indices: set[int] = set()
+    if tx_body.mint:
+        sorted_policies = sorted(tx_body.mint.keys(), key=lambda p: bytes(p))
+        for idx, policy_id in enumerate(sorted_policies):
+            pid_bytes = bytes(policy_id)
+            if pid_bytes in script_hashes:
+                valid_mint_indices.add(idx)
+
+    # Build the set of valid Cert indices
+    valid_cert_indices: set[int] = set()
+    if tx_body.certificates:
+        for idx in range(len(tx_body.certificates)):
+            # Cert validation is complex; for now accept any index within range
+            valid_cert_indices.add(idx)
+
+    # Check each redeemer
+    for r in redeemers:
+        if r.tag == RedeemerTag.SPEND:
+            if r.index not in valid_spend_indices:
+                errors.append(
+                    f"ExtraRedeemers: Spend redeemer at index {r.index} "
+                    f"does not point to a Plutus-locked input"
+                )
+        elif r.tag == RedeemerTag.MINT:
+            if r.index not in valid_mint_indices:
+                errors.append(
+                    f"ExtraRedeemers: Mint redeemer at index {r.index} "
+                    f"does not point to a Plutus minting policy"
+                )
+        elif r.tag == RedeemerTag.CERT:
+            if r.index not in valid_cert_indices:
+                errors.append(
+                    f"ExtraRedeemers: Cert redeemer at index {r.index} "
+                    f"does not point to a valid certificate"
+                )
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Missing required datums validation
 # ---------------------------------------------------------------------------
 
@@ -685,11 +1084,16 @@ def validate_alonzo_witnesses(
     cost_models: dict[Language, dict[str, int]] | None = None,
     languages_used: set[Language] | None = None,
     has_plutus_scripts: bool = False,
+    native_scripts: dict[bytes, Timelock] | None = None,
+    script_hashes: set[bytes] | None = None,
+    witnessed_script_hashes: set[bytes] | None = None,
+    current_slot: int = 0,
 ) -> list[str]:
     """Validate Alonzo-era UTXOW transition rules.
 
     Extends Shelley witness validation with Alonzo-specific checks for
-    script integrity, datum witnesses, and redeemer resolution.
+    script integrity, datum witnesses, redeemer resolution, native script
+    evaluation, and script witness completeness.
 
     Spec ref: Alonzo ledger formal spec, Section 10 (UTXOW).
     Haskell ref: ``alonzoUtxowTransition`` in
@@ -705,6 +1109,10 @@ def validate_alonzo_witnesses(
         cost_models: Cost models from protocol parameters.
         languages_used: Plutus language versions used in the tx.
         has_plutus_scripts: Whether the tx uses any Plutus scripts.
+        native_scripts: Map of script hash -> Timelock script in witness set.
+        script_hashes: Set of known Plutus script hashes.
+        witnessed_script_hashes: Script hashes present in the witness set.
+        current_slot: Current slot for timelock evaluation.
 
     Returns:
         List of validation error strings (empty = valid).
@@ -723,6 +1131,25 @@ def validate_alonzo_witnesses(
     # Shelley VKey witness checks (inherited)
     errors.extend(validate_shelley_witnesses(tx_body, witness_set, utxo_set))
 
+    # --- Phase-1 native script validation ---
+    # Native scripts are evaluated before phase-2 Plutus scripts.
+    # Spec ref: Alonzo formal spec, Section 5 (phase-1 scripts)
+    # Haskell ref: ``validateFailedNativeScripts`` in Alonzo.Rules.Utxow
+    if native_scripts is not None:
+        import hashlib as _hashlib
+
+        # Build signers set from valid VKey witnesses
+        signers: set[bytes] = set()
+        if witness_set.vkey_witnesses:
+            for wit in witness_set.vkey_witnesses:
+                signers.add(_hashlib.blake2b(wit.vkey.payload, digest_size=28).digest())
+        errors.extend(
+            _validate_native_scripts(
+                tx_body, utxo_set, native_scripts,
+                frozenset(signers), current_slot,
+            )
+        )
+
     # --- Script integrity hash ---
     errors.extend(
         _script_integrity_hash_mismatch(
@@ -733,6 +1160,49 @@ def validate_alonzo_witnesses(
             languages_used,
             has_plutus_scripts,
         )
+    )
+
+    # --- Missing redeemers ---
+    # Every Plutus script input must have a matching redeemer.
+    # Spec ref: Alonzo formal spec, ``missingRedeemers``
+    # Haskell ref: ``missingRedeemers`` in Alonzo.Rules.Utxow
+    errors.extend(
+        _missing_redeemers(tx_body, utxo_set, redeemers, script_hashes)
+    )
+
+    # --- Not-allowed supplemental datums ---
+    # Datums in the witness set must be referenced by an input or output.
+    # Only checked when Plutus scripts are present (datums are irrelevant
+    # for pure native-script transactions).
+    # Spec ref: Alonzo formal spec, ``notAllowedSupplementalDatums``
+    # Haskell ref: ``validateNotAllowedSupplementalDatums`` in Alonzo.Rules.Utxow
+    if has_plutus_scripts:
+        errors.extend(
+            _not_allowed_supplemental_datums(tx_body, utxo_set, datums, script_hashes)
+        )
+
+    # --- Unspendable UTxO without datum hash ---
+    # Script-addressed outputs must include a datum hash.
+    # Spec ref: Alonzo formal spec, ``UnspendableUTxONoDatumHash``
+    # Haskell ref: ``validateOutputMissingDatumHash`` in Alonzo.Rules.Utxo
+    errors.extend(
+        _unspendable_utxo_no_datum_hash(tx_body, script_hashes)
+    )
+
+    # --- Missing script witnesses ---
+    # Every referenced Plutus script must be in the witness set.
+    # Spec ref: Alonzo formal spec, Section 10 (UTXOW)
+    # Haskell ref: ``validateMissingScripts`` in Alonzo.Rules.Utxow
+    errors.extend(
+        _missing_script_witnesses(tx_body, utxo_set, witnessed_script_hashes, script_hashes)
+    )
+
+    # --- Extra redeemers ---
+    # All redeemers must point to valid script purposes.
+    # Spec ref: Alonzo formal spec, ``extraRedeemers``
+    # Haskell ref: ``validateExtraRedeemers`` in Alonzo.Rules.Utxow
+    errors.extend(
+        _extra_redeemers(tx_body, utxo_set, redeemers, script_hashes)
     )
 
     # --- Datum witness completeness ---
