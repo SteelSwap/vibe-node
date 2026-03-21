@@ -721,28 +721,57 @@ async def _forge_loop(
     pool_keys = config.pool_keys
 
     # --- Initialise forge credentials ---
-    # Generate a fresh KES key pair (depth 6 = 2^6 = 64 KES periods).
-    # Sign an operational certificate binding pool cold key → KES VK.
-    kes_sk = kes_keygen(CARDANO_KES_DEPTH)
-    kes_vk = kes_derive_vk(kes_sk)
+    # Prefer deserialized KES key from cardano-cli skey file; fall back to
+    # fresh random keygen (for testing without real key files).
+    if pool_keys.kes_sk:
+        from vibe.cardano.crypto.kes_serialization import deserialize_kes_sk
+        try:
+            kes_sk = deserialize_kes_sk(pool_keys.kes_sk, CARDANO_KES_DEPTH)
+            kes_vk = kes_derive_vk(kes_sk)
+            logger.info("Loaded KES key from pool configuration (%d bytes)", len(pool_keys.kes_sk))
+        except Exception as exc:
+            logger.warning("Failed to deserialize KES key (%s), generating fresh", exc)
+            kes_sk = kes_keygen(CARDANO_KES_DEPTH)
+            kes_vk = kes_derive_vk(kes_sk)
+    else:
+        kes_sk = kes_keygen(CARDANO_KES_DEPTH)
+        kes_vk = kes_derive_vk(kes_sk)
 
-    # Sign opcert: cold_sk signs (kes_vk || cert_count=0 || kes_period_start=0)
-    ocert_payload = ocert_signed_payload(kes_vk, cert_count=0, kes_period_start=0)
-    cold_sk_ed = Ed25519PrivateKey.from_private_bytes(pool_keys.cold_sk)
-    cold_sig = cold_sk_ed.sign(ocert_payload)
-    ocert = OperationalCert(
-        kes_vk=kes_vk,
-        cert_count=0,
-        kes_period_start=0,
-        cold_sig=cold_sig,
+    # Load opcert from pool_keys if available, otherwise sign a fresh one.
+    if pool_keys.ocert:
+        import cbor2 as _cbor2
+        try:
+            ocert_data = _cbor2.loads(pool_keys.ocert)
+            # opcert = [[kes_vk, cert_count, kes_period, cold_sig], vrf_keyhash]
+            inner = ocert_data[0] if isinstance(ocert_data, list) else ocert_data
+            ocert = OperationalCert(
+                kes_vk=bytes(inner[0]),
+                cert_count=inner[1],
+                kes_period_start=inner[2],
+                cold_sig=bytes(inner[3]),
+            )
+            logger.info("Loaded operational certificate (cert_count=%d)", ocert.cert_count)
+        except Exception as exc:
+            logger.warning("Failed to parse opcert (%s), signing fresh", exc)
+            ocert_payload = ocert_signed_payload(kes_vk, cert_count=0, kes_period_start=0)
+            cold_sk_ed = Ed25519PrivateKey.from_private_bytes(pool_keys.cold_sk)
+            cold_sig = cold_sk_ed.sign(ocert_payload)
+            ocert = OperationalCert(kes_vk=kes_vk, cert_count=0, kes_period_start=0, cold_sig=cold_sig)
+    elif pool_keys.cold_sk:
+        ocert_payload = ocert_signed_payload(kes_vk, cert_count=0, kes_period_start=0)
+        cold_sk_ed = Ed25519PrivateKey.from_private_bytes(pool_keys.cold_sk)
+        cold_sig = cold_sk_ed.sign(ocert_payload)
+        ocert = OperationalCert(kes_vk=kes_vk, cert_count=0, kes_period_start=0, cold_sig=cold_sig)
+    else:
+        logger.error("No opcert or cold signing key — cannot forge blocks")
+        return
+
+    # Epoch nonce from NodeKernel (seeded from genesis hash) or fallback.
+    epoch_nonce = (
+        node_kernel.epoch_nonce.value
+        if node_kernel is not None
+        else hashlib.blake2b(config.network_magic.to_bytes(4, "big"), digest_size=32).digest()
     )
-
-    # For the devnet, epoch nonce starts as the genesis hash (blake2b-256 of
-    # the shelley-genesis.json content). In production this evolves each epoch.
-    # For simplicity, use a deterministic nonce derived from the network magic.
-    epoch_nonce = hashlib.blake2b(
-        config.network_magic.to_bytes(4, "big"), digest_size=32
-    ).digest()
 
     # Pool3 has 1/3 relative stake in the devnet genesis.
     # In production this comes from the stake distribution snapshot.
@@ -1201,6 +1230,8 @@ async def run_node(config: NodeConfig) -> None:
     Args:
         config: The full node configuration.
     """
+    import hashlib
+
     from vibe.cardano.storage import ChainDB, ImmutableDB, LedgerDB, VolatileDB
 
     from .kernel import NodeKernel
@@ -1248,6 +1279,10 @@ async def run_node(config: NodeConfig) -> None:
 
     # --- NodeKernel: shared state for protocol servers ---
     node_kernel = NodeKernel()
+    nonce_seed = config.genesis_hash or hashlib.blake2b(
+        config.network_magic.to_bytes(4, "big"), digest_size=32
+    ).digest()
+    node_kernel.init_nonce(nonce_seed, config.epoch_length)
 
     # --- Slot clock ---
     slot_config = SlotConfig(
