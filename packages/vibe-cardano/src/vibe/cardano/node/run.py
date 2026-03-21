@@ -772,6 +772,7 @@ async def _forge_loop(
     shutdown_event: asyncio.Event,
     chain_db: Any = None,
     node_kernel: Any = None,
+    mempool: Any = None,
 ) -> None:
     """Slot-by-slot leader check and block forging loop.
 
@@ -906,7 +907,10 @@ async def _forge_loop(
                 leader_proof=proof,
                 prev_block_number=prev_block_number,
                 prev_header_hash=prev_header_hash,
-                mempool_txs=[],  # Empty blocks for now
+                mempool_txs=[
+                    vtx.tx_cbor
+                    for vtx in (await mempool.get_txs_for_block(65536))
+                ] if mempool is not None else [],
                 kes_sk=kes_sk,
                 kes_period=0,
                 ocert=ocert,
@@ -965,6 +969,7 @@ async def _run_n2n_server(
     port: int,
     network_magic: int,
     node_kernel: Any,
+    mempool: Any,
     shutdown_event: asyncio.Event,
 ) -> None:
     """Run the TCP listener for inbound N2N peer connections.
@@ -1051,6 +1056,42 @@ async def _run_n2n_server(
                     name=f"bf-server-{peer_info}",
                 )
 
+            # Launch tx-submission server (pull txs from peer into mempool).
+            if mempool is not None:
+                from vibe.cardano.network.txsubmission_protocol import (
+                    run_tx_submission_server,
+                )
+
+                async def _on_tx_ids(txids: list[tuple[bytes, int]]) -> None:
+                    logger.debug(
+                        "N2N inbound %s: received %d tx IDs",
+                        peer_info, len(txids),
+                    )
+
+                async def _on_txs(txs: list[bytes]) -> None:
+                    for tx_cbor in txs:
+                        try:
+                            await mempool.add_tx(tx_cbor)
+                            logger.info(
+                                "N2N inbound %s: added tx to mempool (%d bytes)",
+                                peer_info, len(tx_cbor),
+                            )
+                        except Exception as exc:
+                            logger.debug(
+                                "N2N inbound %s: tx rejected: %s",
+                                peer_info, exc,
+                            )
+
+                asyncio.create_task(
+                    run_tx_submission_server(
+                        channels[TX_SUBMISSION_N2N_ID],
+                        on_tx_ids_received=_on_tx_ids,
+                        on_txs_received=_on_txs,
+                        stop_event=stop,
+                    ),
+                    name=f"txsub-server-{peer_info}",
+                )
+
             # Wait for mux to end (peer disconnect) or shutdown.
             done, _ = await asyncio.wait(
                 [mux_task, asyncio.create_task(shutdown_event.wait())],
@@ -1093,6 +1134,7 @@ async def _run_n2c_server(
     network_magic: int,
     chain_db: Any,
     ledger_db: Any,
+    mempool: Any,
     shutdown_event: asyncio.Event,
 ) -> None:
     """Run the Unix socket listener for N2C local client connections.
@@ -1167,18 +1209,19 @@ async def _run_n2c_server(
                 )
 
             # Launch local tx-submission server (protocol 6).
-            # Requires a validate_tx callback. Provide a stub that rejects
-            # all txs until the mempool is wired up.
-            async def _stub_validate_tx(era_id: int, tx_bytes: bytes) -> bytes | None:
-                logger.warning(
-                    "N2C local tx-submission: rejecting tx (mempool not wired)"
-                )
+            async def _validate_and_add_tx(era_id: int, tx_bytes: bytes) -> bytes | None:
+                if mempool is not None:
+                    try:
+                        await mempool.add_tx(tx_bytes)
+                        return None  # None = accepted
+                    except Exception as exc:
+                        return str(exc).encode()  # Error bytes = rejected
                 return b"mempool not available"
 
             asyncio.create_task(
                 run_local_tx_submission_server(
                     channels[LOCAL_TX_SUBMISSION_ID],
-                    validate_tx=_stub_validate_tx,
+                    validate_tx=_validate_and_add_tx,
                 ),
                 name="n2c-local-txsubmission",
             )
@@ -1198,26 +1241,42 @@ async def _run_n2c_server(
                 )
 
             # Launch local tx-monitor server (protocol 9).
-            # Requires mempool callbacks. Provide stubs until mempool is wired.
-            async def _stub_acquire_snapshot() -> int:
+            _monitor_snapshot = None
+            _monitor_idx = 0
+
+            async def _acquire_snapshot() -> int:
+                nonlocal _monitor_snapshot, _monitor_idx
+                if mempool is not None:
+                    _monitor_snapshot = await mempool.get_snapshot()
+                    _monitor_idx = 0
+                    return _monitor_snapshot.slot if _monitor_snapshot else 0
                 return 0
 
-            async def _stub_get_next_tx() -> tuple[int, bytes] | None:
+            async def _get_next_tx() -> tuple[int, bytes] | None:
+                nonlocal _monitor_idx
+                if _monitor_snapshot and _monitor_idx < len(_monitor_snapshot.tickets):
+                    ticket = _monitor_snapshot.tickets[_monitor_idx]
+                    _monitor_idx += 1
+                    return (ticket.validated_tx.tx_size, ticket.validated_tx.tx_cbor)
                 return None
 
-            async def _stub_has_tx(tx_id: bytes) -> bool:
+            async def _has_tx(tx_id: bytes) -> bool:
+                if mempool is not None:
+                    return await mempool.has_tx(tx_id)
                 return False
 
-            async def _stub_mempool_sizes() -> tuple[int, int, int]:
+            async def _mempool_sizes() -> tuple[int, int, int]:
+                if mempool is not None:
+                    return (mempool.size, mempool.total_size_bytes, mempool.capacity_bytes)
                 return (0, 0, 0)
 
             asyncio.create_task(
                 run_local_tx_monitor_server(
                     channels[LOCAL_TX_MONITOR_ID],
-                    acquire_snapshot=_stub_acquire_snapshot,
-                    get_next_tx=_stub_get_next_tx,
-                    has_tx_in_snapshot=_stub_has_tx,
-                    get_mempool_sizes=_stub_mempool_sizes,
+                    acquire_snapshot=_acquire_snapshot,
+                    get_next_tx=_get_next_tx,
+                    has_tx_in_snapshot=_has_tx,
+                    get_mempool_sizes=_mempool_sizes,
                 ),
                 name="n2c-local-txmonitor",
             )
@@ -1366,6 +1425,18 @@ async def run_node(config: NodeConfig) -> None:
     else:
         logger.info("ChainDB loaded: empty (starting from genesis)")
 
+    # --- Mempool ---
+    from vibe.cardano.mempool import Mempool, MempoolConfig
+    from vibe.cardano.mempool.validator import LedgerTxValidator
+
+    tx_validator = LedgerTxValidator(ledger_db)
+    mempool = Mempool(
+        config=MempoolConfig(),
+        validator=tx_validator,
+        current_slot=0,
+    )
+    logger.info("Mempool initialised (capacity=%d bytes)", mempool.capacity_bytes)
+
     # --- NodeKernel: shared state for protocol servers ---
     node_kernel = NodeKernel()
     nonce_seed = config.genesis_hash or hashlib.blake2b(
@@ -1397,7 +1468,7 @@ async def run_node(config: NodeConfig) -> None:
         asyncio.create_task(
             _run_n2n_server(
                 config.host, config.port, config.network_magic,
-                node_kernel, shutdown_event,
+                node_kernel, mempool, shutdown_event,
             ),
             name="n2n-server",
         )
@@ -1412,6 +1483,7 @@ async def run_node(config: NodeConfig) -> None:
                     config.network_magic,
                     chain_db,
                     ledger_db,
+                    mempool,
                     shutdown_event,
                 ),
                 name="n2c-server",
@@ -1425,7 +1497,7 @@ async def run_node(config: NodeConfig) -> None:
     if config.is_block_producer:
         tasks.append(
             asyncio.create_task(
-                _forge_loop(config, slot_clock, shutdown_event, chain_db, node_kernel),
+                _forge_loop(config, slot_clock, shutdown_event, chain_db, node_kernel, mempool),
                 name="forge-loop",
             )
         )
