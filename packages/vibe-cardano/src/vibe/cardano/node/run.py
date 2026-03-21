@@ -1011,13 +1011,21 @@ async def _forge_loop(
         if proof is None:
             continue
 
-        # Update prev_hash from latest chain tip so we build on the real chain
+        # Update prev_hash from latest chain tip so we build on the real chain.
+        # Don't forge until we're close to the tip (within 10 slots).
         if chain_db is not None:
             try:
                 tip = await chain_db.get_tip()
                 if tip is not None:
+                    tip_slot = tip[0]
+                    if slot - tip_slot > 10:
+                        # Still syncing — too far behind to forge
+                        continue
                     prev_header_hash = tip[1]
-                    prev_block_number = tip[0]
+                    prev_block_number = tip_slot
+                elif slot > 10:
+                    # No tip yet and we're past genesis — still syncing
+                    continue
             except Exception:
                 pass
 
