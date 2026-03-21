@@ -192,6 +192,60 @@ def kes_keygen(depth: int) -> KesSecretKey:
     )
 
 
+def kes_keygen_from_seed(seed: bytes, depth: int) -> KesSecretKey:
+    """Generate a deterministic KES key tree from a 32-byte seed.
+
+    Uses Blake2b-256 to derive child seeds at each level, matching the
+    Haskell node's approach of deterministic key derivation from a seed.
+
+    At depth 0: the seed is used directly as the Ed25519 private key.
+    At depth d: the seed is split into left_seed and right_seed via
+    Blake2b-256 with domain-separated personalization bytes.
+
+    Haskell ref: ``genKeyKES`` in ``Cardano.Crypto.KES.Sum`` uses
+        ``Seed`` from ``cardano-crypto-class`` which provides deterministic
+        key generation from an initial seed.
+
+    Args:
+        seed: 32-byte seed.
+        depth: Tree depth (0 = single Ed25519 key, 6 = Cardano mainnet).
+
+    Returns:
+        A deterministic ``KesSecretKey``.
+
+    Raises:
+        ValueError: If seed is not 32 bytes.
+    """
+    if len(seed) != 32:
+        raise ValueError(f"KES seed must be 32 bytes, got {len(seed)}")
+
+    if depth == 0:
+        sk = Ed25519PrivateKey.from_private_bytes(seed)
+        vk = _ed25519_vk_bytes(sk)
+        return KesSecretKey(depth=0, ed25519_sk=sk, ed25519_vk=vk)
+
+    # Derive left and right seeds deterministically via Blake2b-256
+    # with domain separation (personalization bytes).
+    left_seed = hashlib.blake2b(
+        seed, digest_size=HASH_SIZE, person=b"KES-L\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    ).digest()
+    right_seed = hashlib.blake2b(
+        seed, digest_size=HASH_SIZE, person=b"KES-R\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    ).digest()
+
+    left = kes_keygen_from_seed(left_seed, depth - 1)
+    right = kes_keygen_from_seed(right_seed, depth - 1)
+    left_vk = kes_derive_vk(left)
+    right_vk = kes_derive_vk(right)
+    return KesSecretKey(
+        depth=depth,
+        left=left,
+        right=right,
+        left_vk=left_vk,
+        right_vk=right_vk,
+    )
+
+
 def kes_derive_vk(sk: KesSecretKey) -> bytes:
     """Derive the 32-byte verification key from a KES secret key.
 
