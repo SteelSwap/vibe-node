@@ -85,6 +85,9 @@ class HeaderValidationFailure(Enum):
     PROTOCOL_VERSION_INVALID = auto()
     """Protocol version is not valid for the current era."""
 
+    CHECKPOINT_MISMATCH = auto()
+    """Header hash does not match the expected checkpoint hash for this slot."""
+
 
 @dataclass(frozen=True, slots=True)
 class HeaderValidationError:
@@ -349,3 +352,62 @@ def validate_header(
         )
 
     return errors
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint validation
+# ---------------------------------------------------------------------------
+
+#: Type alias for checkpoint map: slot number -> expected block header hash.
+Checkpoints = dict[int, bytes]
+
+
+def validate_checkpoint(
+    header: Any,
+    checkpoints: Checkpoints,
+) -> HeaderValidationError | None:
+    """Validate a header against known checkpoints.
+
+    Checkpoints are (slot, block_hash) pairs published as part of the node
+    configuration.  They provide a fast-track validation for well-known
+    historical blocks — if a header is at a checkpoint slot, its hash
+    must match exactly.  Headers at non-checkpoint slots are ignored
+    (return None).
+
+    This is a lightweight defense against long-range attacks and speeds
+    up initial sync by giving the node "trust anchors" in the chain.
+
+    Spec ref: The Haskell node does not have checkpoints in the
+    traditional sense — the equivalent is the genesis configuration +
+    the immutable tip.  This is a pragmatic addition following the
+    pattern used by Bitcoin Core and other node implementations.
+
+    Haskell ref: ``Ouroboros.Consensus.HeaderValidation`` —
+    ``validateHeader`` does not implement explicit checkpoints, but
+    the ledger snapshot mechanism serves a similar purpose.
+
+    Args:
+        header: Decoded block header with ``.slot`` and ``.header_cbor``.
+        checkpoints: Mapping from slot numbers to expected 32-byte
+            block header hashes.
+
+    Returns:
+        A HeaderValidationError if the header is at a checkpoint slot
+        but its hash does not match, or None if it passes (or the slot
+        is not a checkpoint).
+    """
+    expected_hash = checkpoints.get(header.slot)
+    if expected_hash is None:
+        # Not a checkpoint slot — nothing to check.
+        return None
+
+    actual_hash = _blake2b_256(header.header_cbor)
+    if actual_hash != expected_hash:
+        return HeaderValidationError(
+            HeaderValidationFailure.CHECKPOINT_MISMATCH,
+            f"Checkpoint mismatch at slot {header.slot}: "
+            f"expected {expected_hash.hex()[:16]}..., "
+            f"got {actual_hash.hex()[:16]}...",
+        )
+
+    return None
