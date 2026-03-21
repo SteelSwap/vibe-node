@@ -974,6 +974,246 @@ def expire_proposals(
 
 
 # ---------------------------------------------------------------------------
+# Governance action reordering
+# ---------------------------------------------------------------------------
+
+
+# Priority map for governance action types during enactment ordering.
+# Lower number = higher priority = processed first.
+#
+# Spec ref: Conway formal spec, Figure 7, ``actionPriority`` function.
+# Haskell ref: ``actionPriority`` in ``Cardano.Ledger.Conway.Rules.Gov``
+#
+# The ordering ensures that actions affecting the governance structure
+# (hard forks, parameter changes) are processed before actions that
+# depend on that structure (treasury withdrawals, info actions).
+GOV_ACTION_PRIORITY: dict[GovActionType, int] = {
+    GovActionType.NO_CONFIDENCE: 0,
+    GovActionType.UPDATE_COMMITTEE: 1,
+    GovActionType.NEW_CONSTITUTION: 2,
+    GovActionType.HARD_FORK_INITIATION: 3,
+    GovActionType.PARAMETER_CHANGE: 4,
+    GovActionType.TREASURY_WITHDRAWALS: 5,
+    GovActionType.INFO_ACTION: 6,
+}
+
+
+def reorder_gov_actions(
+    proposals: list[ProposalProcedure],
+) -> list[ProposalProcedure]:
+    """Reorder governance proposals by enactment priority.
+
+    The Conway spec requires that governance actions are processed in a
+    deterministic priority order during enactment, not in the order they
+    appear in the transaction. This ensures that structural changes
+    (NoConfidence, UpdateCommittee) take effect before dependent actions.
+
+    The sort is **stable**: proposals of the same action type maintain
+    their original (deposit) order.
+
+    Spec ref: Conway formal spec, Figure 7, ``reorderActions``.
+    Haskell ref: ``reorderActions`` in ``Cardano.Ledger.Conway.Rules.Gov``
+
+    Args:
+        proposals: List of proposals in transaction/deposit order.
+
+    Returns:
+        New list of proposals sorted by enactment priority, stable within
+        the same priority level.
+    """
+    return sorted(
+        proposals,
+        key=lambda p: GOV_ACTION_PRIORITY.get(
+            p.gov_action.action_type, 99
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Reference script size validation (Conway-era)
+# ---------------------------------------------------------------------------
+
+
+def validate_tx_ref_scripts_size(
+    ref_script_sizes: list[int],
+    max_ref_script_size: int = 204800,
+) -> list[str]:
+    """Validate that total reference script size does not exceed the limit.
+
+    In Conway (and late Babbage), the total serialized size of all reference
+    scripts used by a transaction must not exceed ``maxRefScriptSizePerTx``.
+    This function takes pre-computed sizes to avoid coupling to UTxO lookup.
+
+    Spec ref: Conway formal spec, ``TxRefScriptsSizeTooBig`` predicate failure.
+    Haskell ref: ``ConwayUtxoPredFailure`` ``TxRefScriptsSizeTooBig`` in
+        ``Cardano.Ledger.Conway.Rules.Utxo``
+
+    Args:
+        ref_script_sizes: List of individual reference script sizes in bytes.
+        max_ref_script_size: Maximum total bytes (default: 204800 = 200KB).
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    total = sum(ref_script_sizes)
+    if total > max_ref_script_size:
+        return [
+            f"TxRefScriptsSizeTooBig: total_ref_script_size={total}, "
+            f"max={max_ref_script_size}"
+        ]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Withdrawal delegation validation (Conway-specific)
+# ---------------------------------------------------------------------------
+
+
+def validate_withdrawal_delegation(
+    withdrawal_credential: bytes,
+    gov_state: GovernanceState,
+) -> list[str]:
+    """Validate that a reward withdrawal credential has delegated to a DRep.
+
+    Conway requires that any stake credential withdrawing rewards must have
+    delegated its voting power to a DRep (including AlwaysAbstain or
+    AlwaysNoConfidence). This prevents undelegated stake from withdrawing
+    without participating in governance.
+
+    Spec ref: Conway formal spec, ``UTXOW`` rule, withdrawal delegation check.
+    Haskell ref: ``ConwayUtxowPredFailure`` ``WithdrawalsNotInRewardsDELEGS``
+        and ``notDelegatedAddrs`` check in
+        ``Cardano.Ledger.Conway.Rules.Utxow``
+
+    Args:
+        withdrawal_credential: 28-byte stake credential hash.
+        gov_state: Current governance state with DRep delegations.
+
+    Returns:
+        List of error strings (empty = valid).
+    """
+    if withdrawal_credential not in gov_state.drep_delegations:
+        return [
+            f"WithdrawalNotDelegated: stake credential "
+            f"{withdrawal_credential.hex()[:16]}... has not delegated "
+            f"voting power to any DRep"
+        ]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# ApplyTx — Conway transaction application
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ConwayTx:
+    """Simplified Conway transaction for governance processing.
+
+    This is a minimal representation focusing on the governance-relevant
+    fields. Full transaction processing will integrate with the Babbage
+    UTXO rules.
+
+    Spec ref: Conway formal spec, ``ConwayTxBody`` governance fields.
+    Haskell ref: ``ConwayTxBody`` in ``Cardano.Ledger.Conway.TxBody``
+    """
+
+    proposals: list[ProposalProcedure] = None  # type: ignore[assignment]
+    """Governance proposals in this transaction."""
+
+    voting_procedures: VotingProcedures = None  # type: ignore[assignment]
+    """Votes cast in this transaction."""
+
+    certificates: list[ConwayCertificate] = None  # type: ignore[assignment]
+    """Governance certificates (DRep reg/dereg, delegation)."""
+
+    tx_id: bytes = b""
+    """Transaction ID (32 bytes)."""
+
+    def __post_init__(self) -> None:
+        if self.proposals is None:
+            self.proposals = []
+        if self.voting_procedures is None:
+            self.voting_procedures = {}
+        if self.certificates is None:
+            self.certificates = []
+
+
+def apply_conway_tx(
+    tx: ConwayTx,
+    gov_state: GovernanceState,
+    params: ConwayProtocolParams,
+    current_epoch: int,
+    registered_credentials: set[bytes] | None = None,
+) -> GovernanceState:
+    """Apply a Conway transaction's governance effects to the state.
+
+    Processes proposals, votes, and certificates in order, updating the
+    governance state. Proposals are validated and added to the active set.
+    Votes are validated and recorded. Certificates are dispatched to their
+    handlers.
+
+    Spec ref: Conway formal spec, ``GOV`` and ``GOVCERT`` transition rules.
+    Haskell ref: ``conwayGovTransition`` in
+        ``Cardano.Ledger.Conway.Rules.Gov``
+
+    Args:
+        tx: The Conway transaction to apply.
+        gov_state: Current governance state.
+        params: Conway protocol parameters.
+        current_epoch: Current epoch number.
+        registered_credentials: Set of registered stake credentials.
+
+    Returns:
+        New GovernanceState with the transaction's effects applied.
+
+    Raises:
+        ConwayValidationError: If proposals or votes fail validation.
+        ConwayGovernanceError: If certificates fail processing.
+    """
+    if registered_credentials is None:
+        registered_credentials = set()
+
+    new_state = deepcopy(gov_state)
+
+    # --- Validate and add proposals ---
+    if tx.proposals:
+        errors = validate_proposals(tx.proposals, params, new_state)
+        if errors:
+            raise ConwayValidationError(errors)
+
+        for i, proposal in enumerate(tx.proposals):
+            action_id = GovActionId(
+                tx_id=tx.tx_id,
+                gov_action_index=i,
+            )
+            new_state.proposals[action_id] = proposal
+            new_state.votes[action_id] = {}
+
+    # --- Validate and record votes ---
+    if tx.voting_procedures:
+        errors = validate_voting_procedures(
+            tx.voting_procedures, new_state, current_epoch, params,
+        )
+        if errors:
+            raise ConwayValidationError(errors)
+
+        for voter, votes in tx.voting_procedures.items():
+            for action_id, procedure in votes.items():
+                if action_id not in new_state.votes:
+                    new_state.votes[action_id] = {}
+                new_state.votes[action_id][voter] = procedure
+
+    # --- Process certificates ---
+    for cert in tx.certificates:
+        new_state = process_conway_certificate(
+            cert, new_state, params, registered_credentials,
+        )
+
+    return new_state
+
+
+# ---------------------------------------------------------------------------
 # Error type
 # ---------------------------------------------------------------------------
 
