@@ -35,11 +35,17 @@ KES_PERIOD=0
 
 # ─── Detect cardano-cli ──────────────────────────────────────────
 
+USE_DOCKER=false
 if command -v cardano-cli &>/dev/null; then
     CLI="cardano-cli"
+    CLI_KEYS_DIR="$KEYS_DIR"
+    CLI_GENESIS_DIR="$GENESIS_DIR"
 elif command -v docker &>/dev/null; then
     echo "cardano-cli not found, using Docker..."
-    CLI="docker run --rm -v $KEYS_DIR:/keys -v $GENESIS_DIR:/genesis -w /keys ghcr.io/intersectmbo/cardano-node:10.4.1 cardano-cli"
+    USE_DOCKER=true
+    CLI="docker run --rm --platform linux/amd64 -v $KEYS_DIR:/keys -v $GENESIS_DIR:/genesis -w /keys --entrypoint cardano-cli ghcr.io/intersectmbo/cardano-node:10.4.1"
+    CLI_KEYS_DIR="/keys"
+    CLI_GENESIS_DIR="/genesis"
 else
     echo "ERROR: Neither cardano-cli nor docker found on PATH"
     exit 1
@@ -62,12 +68,12 @@ mkdir -p "$KEYS_DIR/utxo"
 echo ""
 echo "--- Generating UTxO keys ---"
 $CLI latest address key-gen \
-    --verification-key-file "$KEYS_DIR/utxo/payment.vkey" \
-    --signing-key-file "$KEYS_DIR/utxo/payment.skey"
+    --verification-key-file "$CLI_KEYS_DIR/utxo/payment.vkey" \
+    --signing-key-file "$CLI_KEYS_DIR/utxo/payment.skey"
 
 $CLI latest stake-address key-gen \
-    --verification-key-file "$KEYS_DIR/utxo/stake.vkey" \
-    --signing-key-file "$KEYS_DIR/utxo/stake.skey"
+    --verification-key-file "$CLI_KEYS_DIR/utxo/stake.vkey" \
+    --signing-key-file "$CLI_KEYS_DIR/utxo/stake.skey"
 
 # ─── Per-pool key generation ─────────────────────────────────────
 
@@ -76,7 +82,7 @@ POOL_VKEYS=()
 STAKE_VKEY_HASHES=()
 
 for i in $(seq 1 $NUM_POOLS); do
-    POOL_DIR="$KEYS_DIR/pool${i}"
+    POOL_DIR="$CLI_KEYS_DIR/pool${i}"
     echo ""
     echo "--- Pool ${i}: Generating keys ---"
 
@@ -139,14 +145,14 @@ STAKE_JSON="{}"
 
 for i in $(seq 1 $NUM_POOLS); do
     idx=$((i - 1))
-    POOL_DIR="$KEYS_DIR/pool${i}"
+    POOL_DIR="$CLI_KEYS_DIR/pool${i}"
     POOL_ID="${POOL_IDS[$idx]}"
     STAKE_HASH="${STAKE_VKEY_HASHES[$idx]}"
 
     # Read VRF verification key hash
     VRF_HASH=$($CLI latest node key-hash-VRF \
         --verification-key-file "$POOL_DIR/vrf.vkey" 2>/dev/null || \
-        cat "$POOL_DIR/vrf.vkey" | python3 -c "import json,sys; print(json.load(sys.stdin).get('cborHex','')[:64])")
+        cat "$KEYS_DIR/pool${i}/vrf.vkey" | python3 -c "import json,sys; print(json.load(sys.stdin).get('cborHex','')[:64])")
 
     # Build pool entry
     POOLS_JSON=$(echo "$POOLS_JSON" | jq \
@@ -172,7 +178,7 @@ echo "--- Building initial fund addresses ---"
 
 FUNDS_JSON="{}"
 for i in $(seq 1 $NUM_POOLS); do
-    POOL_DIR="$KEYS_DIR/pool${i}"
+    POOL_DIR="$CLI_KEYS_DIR/pool${i}"
 
     # Build enterprise address for initial funds
     ADDR=$($CLI latest address build \
