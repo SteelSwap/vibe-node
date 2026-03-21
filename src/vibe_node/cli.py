@@ -125,6 +125,18 @@ def serve(
             typer.echo(f"Genesis: systemStart={system_start.isoformat()}, "
                        f"slotLength={slot_length}s, epochLength={epoch_length}")
 
+    # Parse initial stake distribution from genesis staking config.
+    # Maps pool_id (28 bytes) -> total delegated lovelace.
+    initial_pool_stakes: dict[bytes, int] = {}
+    if genesis_dir is not None:
+        genesis_path = Path(genesis_dir) / "shelley-genesis.json"
+        if genesis_path.exists():
+            with open(genesis_path) as f:
+                sg = json.load(f)
+            initial_pool_stakes = _parse_genesis_stake(sg)
+            if initial_pool_stakes:
+                typer.echo(f"Stake distribution: {len(initial_pool_stakes)} pools from genesis")
+
     # Parse peers
     peer_list: list[PeerAddress] = []
     if peers:
@@ -166,9 +178,55 @@ def serve(
         pool_keys=pool_keys,
         peers=peer_list,
         db_path=Path(db_path),
+        initial_pool_stakes=initial_pool_stakes,
     )
 
     asyncio.run(run_node(config))
+
+
+def _parse_genesis_stake(sg: dict) -> dict[bytes, int]:
+    """Compute initial pool stake distribution from shelley-genesis.json.
+
+    Combines ``initialFunds`` (address -> lovelace) with ``staking.stake``
+    (staking_credential -> pool_id) to sum the lovelace delegated to each pool.
+
+    Falls back to pool ``pledge`` values if initialFunds or stake delegations
+    are not present.
+
+    Returns:
+        Mapping of pool_id (28 bytes) -> total delegated lovelace.
+    """
+    staking = sg.get("staking", {})
+    pools_data = staking.get("pools", {})
+    stake_delegations = staking.get("stake", {})  # staker_hash -> pool_id_hex
+    initial_funds = sg.get("initialFunds", {})
+
+    pool_stakes: dict[bytes, int] = {}
+
+    if initial_funds and stake_delegations:
+        # Build staker -> pool mapping
+        staker_to_pool: dict[str, bytes] = {}
+        for staker_hex, pool_hex in stake_delegations.items():
+            staker_to_pool[staker_hex.lower()] = bytes.fromhex(pool_hex)
+
+        # Sum initialFunds per pool by extracting staking credential from address
+        for addr_hex, lovelace in initial_funds.items():
+            # Shelley base address: 1 byte header + 28 bytes payment + 28 bytes staking
+            # = 57 bytes = 114 hex chars
+            if len(addr_hex) >= 114:
+                # Staking credential is the last 28 bytes (56 hex chars)
+                staking_cred = addr_hex[-56:].lower()
+                pool_id = staker_to_pool.get(staking_cred)
+                if pool_id is not None:
+                    pool_stakes[pool_id] = pool_stakes.get(pool_id, 0) + lovelace
+
+    # Fallback: use pledge if no delegated funds were computed
+    if not pool_stakes and pools_data:
+        for pool_hex, pool_info in pools_data.items():
+            pool_id = bytes.fromhex(pool_hex)
+            pool_stakes[pool_id] = pool_info.get("pledge", 0)
+
+    return pool_stakes
 
 
 def _load_pool_keys(

@@ -863,9 +863,20 @@ async def _forge_loop(
         else hashlib.blake2b(config.network_magic.to_bytes(4, "big"), digest_size=32).digest()
     )
 
-    # Pool3 has 1/3 relative stake in the devnet genesis.
-    # In production this comes from the stake distribution snapshot.
-    relative_stake = 1.0 / 3.0
+    # Compute pool_id = Blake2b-224(cold_vk), the canonical pool identifier.
+    pool_id = hashlib.blake2b(pool_keys.cold_vk, digest_size=28).digest()
+
+    # Look up our pool's relative stake from the stake distribution.
+    # Falls back to 1/3 for backward-compat with devnet testing.
+    if node_kernel is not None and node_kernel.stake_distribution is not None:
+        relative_stake = node_kernel.stake_distribution.relative_stake(pool_id)
+        if relative_stake == 0.0:
+            logger.warning(
+                "Pool %s has zero stake in distribution — will never be elected",
+                pool_id.hex(),
+            )
+    else:
+        relative_stake = 1.0 / 3.0  # Fallback for testing without genesis staking
 
     # Track chain tip for prev_hash linkage.
     prev_block_number = 0
@@ -1443,6 +1454,10 @@ async def run_node(config: NodeConfig) -> None:
         config.network_magic.to_bytes(4, "big"), digest_size=32
     ).digest()
     node_kernel.init_nonce(nonce_seed, config.epoch_length)
+
+    # Initialise stake distribution from genesis if available.
+    if config.initial_pool_stakes:
+        node_kernel.init_stake_distribution(config.initial_pool_stakes)
 
     # --- Slot clock ---
     slot_config = SlotConfig(

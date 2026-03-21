@@ -34,6 +34,36 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class StakeDistribution:
+    """Snapshot of stake distribution for VRF leader election.
+
+    Maps pool IDs (Blake2b-224 of cold verification key, 28 bytes) to
+    their staked lovelace.  Used by the forge loop to compute the
+    ``relative_stake`` parameter for ``check_leadership``.
+
+    Haskell ref:
+        ``Ouroboros.Consensus.Shelley.Ledger.Ledger.ShelleyLedgerState``
+        The Haskell node pulls the stake distribution from the ledger
+        state's ``esSnapshots`` (epoch snapshots).
+
+    Spec ref:
+        Shelley formal spec, Section 11.3 -- stake distribution
+    """
+
+    pool_stakes: dict[bytes, int]  # pool_id (28 bytes) -> lovelace
+    total_stake: int
+
+    def relative_stake(self, pool_id: bytes) -> float:
+        """Return the fraction of total stake held by *pool_id*.
+
+        Returns 0.0 if pool_id is unknown or total_stake is zero.
+        """
+        if self.total_stake == 0:
+            return 0.0
+        return self.pool_stakes.get(pool_id, 0) / self.total_stake
+
+
+@dataclass
 class BlockEntry:
     """A block stored in the kernel's chain."""
 
@@ -69,6 +99,8 @@ class NodeKernel(ChainProvider, BlockProvider):
         self._eta_v: bytes = b"\x00" * 32
         self._current_epoch: int = 0
         self._epoch_length: int = 432000
+        # Stake distribution (None until initialised from genesis or epoch boundary)
+        self._stake_dist: StakeDistribution | None = None
 
     @property
     def tip(self) -> Tip | None:
@@ -106,6 +138,27 @@ class NodeKernel(ChainProvider, BlockProvider):
         self._eta_v = b"\x00" * 32
         self._current_epoch = new_epoch
         logger.info("Epoch nonce evolved: %d -> %d", new_epoch - 1, new_epoch)
+
+    # --- Stake distribution ---
+
+    def init_stake_distribution(self, pools: dict[bytes, int]) -> None:
+        """Set the stake distribution from genesis or an epoch boundary snapshot.
+
+        Args:
+            pools: Mapping of pool_id (28-byte Blake2b-224 of cold VK) to
+                staked lovelace.
+        """
+        total = sum(pools.values())
+        self._stake_dist = StakeDistribution(pool_stakes=pools, total_stake=total)
+        logger.info(
+            "Stake distribution initialised: %d pools, total_stake=%d lovelace",
+            len(pools), total,
+        )
+
+    @property
+    def stake_distribution(self) -> StakeDistribution | None:
+        """Current stake distribution, or None if not yet loaded."""
+        return self._stake_dist
 
     def add_block(
         self,

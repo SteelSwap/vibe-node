@@ -111,6 +111,7 @@ class NodeConfig:
     peers: list[PeerAddress] = field(default_factory=list)
     db_path: Path = field(default_factory=lambda: Path("./db"))
     genesis_hash: bytes = b""
+    initial_pool_stakes: dict[bytes, int] = field(default_factory=dict)
 
     @property
     def is_block_producer(self) -> bool:

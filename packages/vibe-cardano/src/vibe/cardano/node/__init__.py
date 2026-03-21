@@ -16,6 +16,7 @@ Haskell references:
 """
 
 from .config import NodeConfig, PeerAddress, PoolKeys
+from .kernel import StakeDistribution
 from .run import PeerManager, SlotClock, run_node
 
 __all__ = [
@@ -24,5 +25,6 @@ __all__ = [
     "PeerManager",
     "PoolKeys",
     "SlotClock",
+    "StakeDistribution",
     "run_node",
 ]
