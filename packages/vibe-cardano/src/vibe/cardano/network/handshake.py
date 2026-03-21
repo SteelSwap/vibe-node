@@ -288,6 +288,34 @@ def encode_propose_versions(versions: dict[int, NodeToNodeVersionData]) -> bytes
     return cbor2.dumps(msg)
 
 
+def encode_accept_version(accept: MsgAcceptVersion) -> bytes:
+    """Encode a ``MsgAcceptVersion`` message to CBOR bytes.
+
+    Wire format: ``[1, versionNumber, versionData]``
+    """
+    ver_data = _encode_version_data(accept.version_data)
+    msg = [_MSG_ACCEPT_VERSION, accept.version_number, ver_data]
+    return cbor2.dumps(msg)
+
+
+def encode_refuse(refuse: MsgRefuse) -> bytes:
+    """Encode a ``MsgRefuse`` message to CBOR bytes.
+
+    Wire format: ``[2, [reason_tag, ...]]``
+    """
+    reason = refuse.reason
+    if isinstance(reason, RefuseReasonVersionMismatch):
+        reason_term = [_REFUSE_VERSION_MISMATCH, reason.versions]
+    elif isinstance(reason, RefuseReasonDecodeError):
+        reason_term = [_REFUSE_DECODE_ERROR, reason.version, reason.message]
+    elif isinstance(reason, RefuseReasonRefused):
+        reason_term = [_REFUSE_REFUSED, reason.version, reason.message]
+    else:
+        raise ValueError(f"Unknown refuse reason: {reason!r}")
+    msg = [_MSG_REFUSE, reason_term]
+    return cbor2.dumps(msg)
+
+
 # ---------------------------------------------------------------------------
 # Public API — CBOR decoding
 # ---------------------------------------------------------------------------

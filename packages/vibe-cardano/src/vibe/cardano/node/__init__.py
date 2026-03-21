@@ -15,11 +15,12 @@ Haskell references:
     - Ouroboros.Network.Diffusion (run)
 """
 
-from .config import NodeConfig, PoolKeys
+from .config import NodeConfig, PeerAddress, PoolKeys
 from .run import PeerManager, SlotClock, run_node
 
 __all__ = [
     "NodeConfig",
+    "PeerAddress",
     "PeerManager",
     "PoolKeys",
     "SlotClock",

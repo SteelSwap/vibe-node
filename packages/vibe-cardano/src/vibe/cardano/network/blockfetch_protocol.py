@@ -73,6 +73,8 @@ __all__ = [
     "BlockFetchCodec",
     "BlockFetchClient",
     "run_block_fetch",
+    "run_block_fetch_server",
+    "BlockProvider",
     # Re-export message wrappers for convenience
     "BfMsgRequestRange",
     "BfMsgClientDone",
@@ -541,3 +543,112 @@ async def run_block_fetch(
                 await on_block_received(block_cbor)
 
     await client.done()
+
+
+# ---------------------------------------------------------------------------
+# Block provider interface (for the server)
+# ---------------------------------------------------------------------------
+
+
+class BlockProvider:
+    """Interface for providing block data to the block-fetch server.
+
+    Implementations can wrap ChainDB, an in-memory block store, or any
+    other source of CBOR-encoded blocks.
+
+    Haskell reference:
+        Ouroboros.Consensus.MiniProtocol.BlockFetch.Server
+    """
+
+    async def get_blocks(
+        self, point_from: PointOrOrigin, point_to: PointOrOrigin
+    ) -> list[bytes] | None:
+        """Get all blocks in the range [point_from, point_to] inclusive.
+
+        Returns a list of CBOR-encoded blocks, or None if the range
+        is not available (triggers NoBlocks response).
+        """
+        raise NotImplementedError
+
+
+# ---------------------------------------------------------------------------
+# Server-side block-fetch runner
+# ---------------------------------------------------------------------------
+
+
+async def run_block_fetch_server(
+    channel: object,
+    block_provider: BlockProvider,
+    *,
+    stop_event: asyncio.Event | None = None,
+) -> None:
+    """Run the server side of the block-fetch miniprotocol.
+
+    Receives MsgRequestRange from the client, fetches blocks from the
+    provider, and streams them back with StartBatch/Block.../BatchDone
+    or responds with NoBlocks if unavailable.
+
+    Haskell ref:
+        ``Ouroboros.Network.Protocol.BlockFetch.Server``
+
+    Parameters
+    ----------
+    channel : MiniProtocolChannel
+        The mux channel for block-fetch (responder direction).
+    block_provider : BlockProvider
+        Source of block data.
+    stop_event : asyncio.Event | None
+        If provided, the server exits when this event is set.
+    """
+    protocol = BlockFetchProtocol()
+    codec = BlockFetchCodec()
+    runner = ProtocolRunner(
+        role=PeerRole.Responder,
+        protocol=protocol,
+        codec=codec,
+        channel=channel,
+    )
+
+    logger.debug("Block-fetch server started")
+
+    while True:
+        if stop_event is not None and stop_event.is_set():
+            return
+
+        # In BFIdle, client has agency — wait for their message.
+        msg = await runner.recv_message()
+
+        if isinstance(msg, BfMsgRequestRange):
+            # Fetch blocks for the requested range.
+            blocks = await block_provider.get_blocks(
+                msg.point_from, msg.point_to
+            )
+
+            if blocks is None or len(blocks) == 0:
+                # No blocks available for this range.
+                await runner.send_message(BfMsgNoBlocks())
+                logger.debug(
+                    "Block-fetch server: NoBlocks for range %s -> %s",
+                    msg.point_from, msg.point_to,
+                )
+            else:
+                # Stream the blocks.
+                await runner.send_message(BfMsgStartBatch())
+                for block_cbor in blocks:
+                    await runner.send_message(BfMsgBlock(block_cbor=block_cbor))
+                await runner.send_message(BfMsgBatchDone())
+                logger.debug(
+                    "Block-fetch server: sent %d blocks for range %s -> %s",
+                    len(blocks), msg.point_from, msg.point_to,
+                )
+
+        elif isinstance(msg, BfMsgClientDone):
+            logger.debug("Block-fetch server: client sent Done")
+            return
+
+        else:
+            logger.warning(
+                "Block-fetch server: unexpected message %s",
+                type(msg).__name__,
+            )
+            return

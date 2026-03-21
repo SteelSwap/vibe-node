@@ -29,58 +29,44 @@
   "TestConwayHardForkAtEpoch": 0,
   "TestMaryHardForkAtEpoch": 0,
   "TestShelleyHardForkAtEpoch": 0,
-  "TraceBlockFetchClient": false,
-  "TraceBlockFetchDecisions": false,
-  "TraceBlockFetchProtocol": false,
-  "TraceBlockFetchProtocolSerialised": false,
-  "TraceBlockFetchServer": false,
-  "TraceChainDb": true,
-  "TraceChainSyncBlockServer": false,
-  "TraceChainSyncClient": false,
-  "TraceChainSyncHeaderServer": false,
-  "TraceChainSyncProtocol": false,
-  "TraceDNSResolver": false,
-  "TraceDNSSubscription": false,
-  "TraceErrorPolicy": true,
-  "TraceForge": true,
-  "TraceHandshake": false,
-  "TraceIpSubscription": false,
-  "TraceLocalChainSyncProtocol": false,
-  "TraceLocalErrorPolicy": true,
-  "TraceLocalHandshake": false,
-  "TraceLocalTxSubmissionProtocol": false,
-  "TraceLocalTxSubmissionServer": false,
-  "TraceMempool": true,
-  "TraceMux": false,
-  "TraceTxInbound": false,
-  "TraceTxOutbound": false,
-  "TraceTxSubmissionProtocol": false,
+  "UseTraceDispatcher": true,
+  "TraceOptions": {
+    "": {
+      "severity": "Info",
+      "detail": "DNormal",
+      "backends": ["Stdout HumanFormatColoured"]
+    },
+    "ChainDB": {
+      "severity": "Info",
+      "detail": "DNormal",
+      "backends": ["Stdout HumanFormatColoured"]
+    },
+    "Forge": {
+      "severity": "Info",
+      "detail": "DNormal",
+      "backends": ["Stdout HumanFormatColoured"]
+    },
+    "Mempool": {
+      "severity": "Info",
+      "detail": "DNormal",
+      "backends": ["Stdout HumanFormatColoured"]
+    },
+    "Net.ConnectionManager": {
+      "severity": "Info",
+      "detail": "DNormal",
+      "backends": ["Stdout HumanFormatColoured"]
+    },
+    "Net.PeerSelection": {
+      "severity": "Info",
+      "detail": "DNormal",
+      "backends": ["Stdout HumanFormatColoured"]
+    },
+    "Net.Server": {
+      "severity": "Info",
+      "detail": "DNormal",
+      "backends": ["Stdout HumanFormatColoured"]
+    }
+  },
   "TurnOnLogMetrics": false,
-  "TurnOnLogging": true,
-  "defaultBackends": ["KatipBK"],
-  "defaultScribes": [["StdoutSK", "stdout"]],
-  "hasEKG": 12788,
-  "hasPrometheus": ["0.0.0.0", 12798],
-  "minSeverity": "Info",
-  "options": {
-    "mapBackends": {},
-    "mapScribes": {},
-    "mapSubtrace": {
-      "cardano.node.metrics": { "subtrace": "Neutral" }
-    }
-  },
-  "rotation": {
-    "rpKeepFilesNum": 10,
-    "rpLogLimitBytes": 5000000,
-    "rpMaxAgeHours": 24
-  },
-  "setupBackends": ["KatipBK"],
-  "setupScribes": [
-    {
-      "scFormat": "ScText",
-      "scKind": "StdoutSK",
-      "scName": "stdout",
-      "scRotation": null
-    }
-  ]
+  "TurnOnLogging": true
 }

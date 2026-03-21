@@ -80,6 +80,7 @@ __all__ = [
     "TxSubmissionCodec",
     "TxSubmissionClient",
     "run_tx_submission_client",
+    "run_tx_submission_server",
     # Re-export message wrappers for convenience
     "TsMsgInit",
     "TsMsgRequestTxIds",
@@ -617,3 +618,114 @@ async def run_tx_submission_client(
         elif isinstance(request, TsMsgRequestTxs):
             txs = await on_request_txs(request.txids)
             await client.reply_txs(txs)
+
+
+# ---------------------------------------------------------------------------
+# Server-side tx-submission runner
+# ---------------------------------------------------------------------------
+
+# Callback types for the server
+OnTxIdsReceived = Callable[[list[tuple[bytes, int]]], Awaitable[None]]
+OnTxsReceived = Callable[[list[bytes]], Awaitable[None]]
+
+
+async def run_tx_submission_server(
+    channel: object,
+    on_tx_ids_received: OnTxIdsReceived,
+    on_txs_received: OnTxsReceived,
+    *,
+    max_tx_ids_to_request: int = 10,
+    stop_event: asyncio.Event | None = None,
+) -> None:
+    """Run the server side of the N2N tx-submission miniprotocol.
+
+    As the server, we drive the protocol by requesting tx IDs and then
+    requesting the full transactions. This is how we pull transactions
+    from peers into our mempool.
+
+    The protocol is "inverted agency" — the server sends requests in
+    StIdle, and the client replies.
+
+    Haskell ref:
+        ``Ouroboros.Network.Protocol.TxSubmission2.Server``
+
+    Parameters
+    ----------
+    channel : MiniProtocolChannel
+        The mux channel for tx-submission (responder direction).
+    on_tx_ids_received : OnTxIdsReceived
+        Async callback invoked with a list of (txid, size) pairs.
+    on_txs_received : OnTxsReceived
+        Async callback invoked with a list of CBOR-encoded transactions.
+    max_tx_ids_to_request : int
+        How many tx IDs to request at a time.
+    stop_event : asyncio.Event | None
+        If provided, the server exits when this event is set.
+    """
+    protocol = TxSubmissionProtocol()
+    codec = TxSubmissionCodec()
+    runner = ProtocolRunner(
+        role=PeerRole.Responder,
+        protocol=protocol,
+        codec=codec,
+        channel=channel,
+    )
+
+    logger.debug("Tx-submission server started")
+
+    # Wait for MsgInit from client
+    msg = await runner.recv_message()
+    if not isinstance(msg, TsMsgInit):
+        logger.warning("Tx-submission server: expected MsgInit, got %s", type(msg).__name__)
+        return
+
+    # Track acknowledged tx IDs
+    outstanding_tx_ids: list[tuple[bytes, int]] = []
+
+    while True:
+        if stop_event is not None and stop_event.is_set():
+            return
+
+        # Request tx IDs from the peer (blocking if we have none outstanding)
+        blocking = len(outstanding_tx_ids) == 0
+        ack_count = 0  # We ack all previously received IDs
+        await runner.send_message(
+            TsMsgRequestTxIds(
+                blocking=blocking,
+                ack_count=ack_count,
+                req_count=max_tx_ids_to_request,
+            )
+        )
+
+        # Receive reply
+        reply = await runner.recv_message()
+
+        if isinstance(reply, TsMsgDone):
+            logger.debug("Tx-submission server: client sent Done")
+            return
+
+        if isinstance(reply, TsMsgReplyTxIds):
+            if reply.txids:
+                await on_tx_ids_received(reply.txids)
+                outstanding_tx_ids.extend(reply.txids)
+
+                # Request the actual transactions
+                txids_to_fetch = [tid for tid, _ in outstanding_tx_ids]
+                if txids_to_fetch:
+                    await runner.send_message(TsMsgRequestTxs(txids=txids_to_fetch))
+                    tx_reply = await runner.recv_message()
+                    if isinstance(tx_reply, TsMsgReplyTxs):
+                        if tx_reply.txs:
+                            await on_txs_received(tx_reply.txs)
+                    outstanding_tx_ids.clear()
+            else:
+                # Empty reply to non-blocking request — peer has nothing.
+                # Brief sleep to avoid busy-wait.
+                await asyncio.sleep(1.0)
+
+        else:
+            logger.warning(
+                "Tx-submission server: unexpected reply %s",
+                type(reply).__name__,
+            )
+            return

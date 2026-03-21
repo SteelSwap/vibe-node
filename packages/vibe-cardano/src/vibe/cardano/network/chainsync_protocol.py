@@ -75,7 +75,9 @@ __all__ = [
     "ChainSyncProtocol",
     "ChainSyncCodec",
     "ChainSyncClient",
+    "ChainProvider",
     "run_chain_sync",
+    "run_chain_sync_server",
     # Re-export message wrappers for convenience
     "CsMsgRequestNext",
     "CsMsgAwaitReply",
@@ -675,3 +677,161 @@ async def run_chain_sync(
                 await on_roll_forward(response.header, response.tip)
             elif isinstance(response, CsMsgRollBackward):
                 await on_roll_backward(response.point, response.tip)
+
+
+# ---------------------------------------------------------------------------
+# Chain provider interface (for the server)
+# ---------------------------------------------------------------------------
+
+
+class ChainProvider:
+    """Interface for providing chain data to the chain-sync server.
+
+    The server calls these methods to answer client requests. Implementations
+    can wrap ChainDB, an in-memory chain, or any other block source.
+
+    Haskell reference:
+        Ouroboros.Consensus.MiniProtocol.ChainSync.Server (chainSyncServerForFollower)
+        The Haskell server uses a "follower" that tracks each client's read pointer.
+    """
+
+    async def get_tip(self) -> Tip:
+        """Return the current chain tip."""
+        raise NotImplementedError
+
+    async def find_intersect(
+        self, points: list[PointOrOrigin]
+    ) -> tuple[PointOrOrigin | None, Tip]:
+        """Find the best intersection point from the client's known points.
+
+        Returns (intersection_point, tip) where intersection_point is None
+        if no common point exists.
+        """
+        raise NotImplementedError
+
+    async def next_block(
+        self, client_point: PointOrOrigin
+    ) -> tuple[str, bytes | None, PointOrOrigin | None, Tip]:
+        """Get the next update after the client's current position.
+
+        Returns a tuple of (action, header, point, tip) where action is:
+        - "roll_forward": header and tip are set, point is the new position
+        - "roll_backward": point and tip are set (rollback target)
+        - "await": client is at tip, no new data
+
+        The server should block when "await" would be returned, until a
+        new block arrives or stop is requested.
+        """
+        raise NotImplementedError
+
+
+# ---------------------------------------------------------------------------
+# N2N chain-sync server
+# ---------------------------------------------------------------------------
+
+
+async def run_chain_sync_server(
+    channel: object,
+    chain_provider: ChainProvider,
+    *,
+    stop_event: asyncio.Event | None = None,
+) -> None:
+    """Run the server side of the N2N chain-sync protocol.
+
+    Responds to client MsgFindIntersect and MsgRequestNext messages by
+    querying the chain_provider for block data.
+
+    Haskell reference:
+        Ouroboros/Network/Protocol/ChainSync/Server.hs (chainSyncServerPeer)
+
+    Parameters
+    ----------
+    channel : MiniProtocolChannel
+        The mux channel for chain-sync (responder direction).
+    chain_provider : ChainProvider
+        Source of chain data (blocks, tip, intersection).
+    stop_event : asyncio.Event | None
+        If provided, the server exits when this event is set.
+    """
+    protocol = ChainSyncProtocol()
+    codec = ChainSyncCodec()
+    runner = ProtocolRunner(
+        role=PeerRole.Responder,
+        protocol=protocol,
+        codec=codec,
+        channel=channel,
+    )
+
+    client_point: PointOrOrigin = ORIGIN
+
+    logger.info("Chain-sync server started")
+
+    while True:
+        if stop_event is not None and stop_event.is_set():
+            return
+
+        # In StIdle, the client has agency — wait for their message.
+        msg = await runner.recv_message()
+
+        if isinstance(msg, CsMsgFindIntersect):
+            # Client wants to find intersection.
+            intersect, tip = await chain_provider.find_intersect(msg.points)
+            if intersect is not None:
+                client_point = intersect
+                await runner.send_message(
+                    CsMsgIntersectFound(point=intersect, tip=tip)
+                )
+            else:
+                await runner.send_message(CsMsgIntersectNotFound(tip=tip))
+
+        elif isinstance(msg, CsMsgRequestNext):
+            # Client wants the next block.
+            action, header, point, tip = await chain_provider.next_block(
+                client_point
+            )
+
+            if action == "roll_forward" and header is not None:
+                client_point = point  # type: ignore[assignment]
+                await runner.send_message(
+                    CsMsgRollForward(header=header, tip=tip)
+                )
+            elif action == "roll_backward" and point is not None:
+                client_point = point
+                await runner.send_message(
+                    CsMsgRollBackward(point=point, tip=tip)
+                )
+            elif action == "await":
+                # Send AwaitReply, then block until new data.
+                await runner.send_message(CsMsgAwaitReply())
+                # Now in StNext(MustReply) — must send roll_forward or
+                # roll_backward next. Wait for chain_provider to have data.
+                while True:
+                    if stop_event is not None and stop_event.is_set():
+                        return
+                    action2, header2, point2, tip2 = (
+                        await chain_provider.next_block(client_point)
+                    )
+                    if action2 == "roll_forward" and header2 is not None:
+                        client_point = point2  # type: ignore[assignment]
+                        await runner.send_message(
+                            CsMsgRollForward(header=header2, tip=tip2)
+                        )
+                        break
+                    elif action2 == "roll_backward" and point2 is not None:
+                        client_point = point2
+                        await runner.send_message(
+                            CsMsgRollBackward(point=point2, tip=tip2)
+                        )
+                        break
+                    # Still no data — brief sleep to avoid busy-wait.
+                    await asyncio.sleep(0.1)
+
+        elif isinstance(msg, CsMsgDone):
+            logger.info("Chain-sync server: client sent Done")
+            return
+
+        else:
+            logger.warning(
+                "Chain-sync server: unexpected message %s",
+                type(msg).__name__,
+            )

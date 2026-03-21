@@ -3,6 +3,7 @@
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -72,13 +73,144 @@ def ingest_callback(ctx: typer.Context) -> None:
 
 @app.command()
 def serve(
-    host: str = typer.Option("0.0.0.0", help="Host to bind to."),
-    port: int = typer.Option(3001, help="Port to listen on."),
+    host: str = typer.Option("0.0.0.0", envvar="VIBE_HOST", help="Host to bind to."),
+    port: int = typer.Option(3001, envvar="VIBE_NODE_PORT", help="Port to listen on."),
+    network_magic: int = typer.Option(764824073, envvar="VIBE_NETWORK_MAGIC", help="Network magic number."),
+    peers: str = typer.Option("", envvar="VIBE_PEERS", help="Comma-separated peer list (host:port,...)."),
+    genesis_dir: str = typer.Option(None, envvar="VIBE_GENESIS_DIR", help="Path to genesis files directory."),
+    db_path: str = typer.Option("./db", envvar="VIBE_DATA_DIR", help="Data directory for chain storage."),
+    socket_path: str = typer.Option(None, envvar="VIBE_SOCKET_PATH", help="Unix socket path for N2C."),
+    kes_key: str = typer.Option(None, envvar="VIBE_KES_KEY", help="Path to KES signing key file."),
+    vrf_key: str = typer.Option(None, envvar="VIBE_VRF_KEY", help="Path to VRF signing key file."),
+    vrf_vkey: str = typer.Option(None, envvar="VIBE_VRF_VKEY", help="Path to VRF verification key file."),
+    opcert: str = typer.Option(None, envvar="VIBE_OPCERT", help="Path to operational certificate file."),
+    cold_vkey: str = typer.Option(None, envvar="VIBE_COLD_VKEY", help="Path to cold verification key file."),
+    cold_skey: str = typer.Option(None, envvar="VIBE_COLD_SKEY", help="Path to cold signing key file."),
 ) -> None:
     """Start the Cardano node."""
+    import asyncio
+    import json
+    import logging
+    from datetime import datetime, timezone
+
+    from vibe.cardano.node import NodeConfig, PeerAddress, PoolKeys, run_node
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+
     typer.echo(f"vibe-node v{__version__}")
-    typer.echo(f"Starting node on {host}:{port} ...")
-    typer.echo("Not yet implemented — but the vibes are immaculate.")
+    typer.echo(f"Starting node on {host}:{port} (magic={network_magic})")
+
+    # Parse genesis parameters from shelley-genesis.json if available
+    system_start = datetime(2017, 9, 23, 21, 44, 51, tzinfo=timezone.utc)
+    slot_length = 1.0
+    epoch_length = 432000
+    security_param = 2160
+    active_slot_coeff = 0.05
+
+    if genesis_dir is not None:
+        genesis_path = Path(genesis_dir) / "shelley-genesis.json"
+        if genesis_path.exists():
+            with open(genesis_path) as f:
+                sg = json.load(f)
+            system_start = datetime.fromisoformat(sg["systemStart"])
+            if system_start.tzinfo is None:
+                system_start = system_start.replace(tzinfo=timezone.utc)
+            slot_length = sg.get("slotLength", slot_length)
+            epoch_length = sg.get("epochLength", epoch_length)
+            security_param = sg.get("securityParam", security_param)
+            active_slot_coeff = sg.get("activeSlotsCoeff", active_slot_coeff)
+            typer.echo(f"Genesis: systemStart={system_start.isoformat()}, "
+                       f"slotLength={slot_length}s, epochLength={epoch_length}")
+
+    # Parse peers
+    peer_list: list[PeerAddress] = []
+    if peers:
+        for p in peers.split(","):
+            p = p.strip()
+            if not p:
+                continue
+            if ":" in p:
+                h, pt = p.rsplit(":", 1)
+                peer_list.append(PeerAddress(host=h, port=int(pt)))
+            else:
+                peer_list.append(PeerAddress(host=p, port=3001))
+
+    typer.echo(f"Peers: {len(peer_list)} configured")
+
+    # Load pool keys for block production (optional)
+    pool_keys: PoolKeys | None = None
+    if vrf_key and cold_skey:
+        pool_keys = _load_pool_keys(
+            vrf_key_path=vrf_key,
+            vrf_vkey_path=vrf_vkey,
+            cold_vkey_path=cold_vkey,
+            cold_skey_path=cold_skey,
+        )
+        typer.echo("Block producer mode: pool keys loaded")
+    else:
+        typer.echo("Relay mode: no pool keys configured")
+
+    config = NodeConfig(
+        network_magic=network_magic,
+        slot_length=slot_length,
+        epoch_length=epoch_length,
+        security_param=security_param,
+        active_slot_coeff=active_slot_coeff,
+        system_start=system_start,
+        host=host,
+        port=port,
+        socket_path=socket_path,
+        pool_keys=pool_keys,
+        peers=peer_list,
+        db_path=Path(db_path),
+    )
+
+    asyncio.run(run_node(config))
+
+
+def _load_pool_keys(
+    vrf_key_path: str,
+    vrf_vkey_path: str | None,
+    cold_vkey_path: str | None,
+    cold_skey_path: str,
+) -> Any:
+    """Load pool key material from cardano-cli generated key files.
+
+    Reads the cborHex field from JSON key files and decodes the raw key bytes.
+    KES keys and opcert are generated at runtime from the cold key.
+    """
+    import json
+
+    from vibe.cardano.node import PoolKeys
+
+    def _read_key_bytes(path: str) -> bytes:
+        """Read raw key bytes from a cardano-cli JSON key file."""
+        with open(path) as f:
+            data = json.load(f)
+        cbor_hex = data["cborHex"]
+        # Strip the 4-char CBOR wrapper prefix (e.g. "5820" for 32-byte keys)
+        return bytes.fromhex(cbor_hex[4:])
+
+    vrf_sk = _read_key_bytes(vrf_key_path)
+    cold_sk = _read_key_bytes(cold_skey_path)
+
+    cold_vk = b""
+    if cold_vkey_path:
+        cold_vk = _read_key_bytes(cold_vkey_path)
+
+    vrf_vk = b""
+    if vrf_vkey_path:
+        vrf_vk = _read_key_bytes(vrf_vkey_path)
+
+    return PoolKeys(
+        cold_vk=cold_vk,
+        cold_sk=cold_sk,
+        vrf_sk=vrf_sk,
+        vrf_vk=vrf_vk,
+    )
 
 
 @db_app.command()

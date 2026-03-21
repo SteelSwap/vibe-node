@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from vibe.core.multiplexer import Bearer, Multiplexer
+from vibe.core.multiplexer import Bearer, MiniProtocolChannel, Multiplexer, MuxClosedError
 
 from vibe.cardano.consensus.slot_arithmetic import SlotConfig, slot_to_wall_clock, wall_clock_to_slot
 from vibe.cardano.network.handshake import HANDSHAKE_PROTOCOL_ID
@@ -173,7 +173,9 @@ class _PeerConnection:
     address: PeerAddress
     bearer: Bearer | None = None
     mux: Multiplexer | None = None
+    mux_task: asyncio.Task[None] | None = None
     task: asyncio.Task[None] | None = None
+    stop_event: asyncio.Event | None = None
     reconnect_delay: float = 1.0
     connected: bool = False
 
@@ -259,9 +261,10 @@ class PeerManager:
                 # Reset backoff on successful connection.
                 peer.reconnect_delay = 1.0
 
-                # Run the multiplexer -- blocks until disconnect.
-                if peer.mux is not None:
-                    await peer.mux.run()
+                # Mux is already running (started in _connect_peer after
+                # handshake). Await the mux task until disconnect.
+                if peer.mux_task is not None:
+                    await peer.mux_task
 
             except (ConnectionError, OSError) as exc:
                 logger.warning(
@@ -291,7 +294,23 @@ class PeerManager:
             peer.reconnect_delay = min(peer.reconnect_delay * 2, 60.0)
 
     async def _connect_peer(self, peer: _PeerConnection) -> None:
-        """Open TCP connection and set up multiplexer with N2N bundle."""
+        """Open TCP connection, set up multiplexer, and run N2N handshake.
+
+        The handshake must complete before any other miniprotocol can run.
+        We start the mux sender/receiver in the background (they handle
+        wire framing), run the handshake on channel 0, then return — the
+        caller continues with mux.run() which blocks until disconnect.
+
+        Haskell ref:
+            Ouroboros.Network.Protocol.Handshake.Client — client peer
+            The Haskell node runs the handshake as the first action on a
+            new connection before activating other miniprotocols.
+        """
+        from vibe.cardano.network.handshake_protocol import (
+            HandshakeError,
+            run_handshake_client,
+        )
+
         logger.info("Connecting to peer %s", peer.address)
         reader, writer = await asyncio.open_connection(
             peer.address.host, peer.address.port
@@ -300,23 +319,178 @@ class PeerManager:
         mux = Multiplexer(bearer, is_initiator=True)
 
         # Register N2N miniprotocol channels.
+        channels: dict[int, MiniProtocolChannel] = {}
         for proto_id in N2N_PROTOCOL_IDS:
-            mux.add_protocol(proto_id)
+            channels[proto_id] = mux.add_protocol(proto_id)
 
         peer.bearer = bearer
         peer.mux = mux
-        peer.connected = True
 
-        logger.info("Connected to peer %s", peer.address)
+        # The mux must be running for channels to work (sender/receiver
+        # loops handle the wire framing). Start it, run the handshake,
+        # then let the caller's mux.run() take over.
+        #
+        # We use a task for the mux and run the handshake concurrently.
+        # After handshake completes, we stop the mux task — the caller
+        # will call mux.run() again which restarts the loops.
+        #
+        # Actually, mux.run() can only be called once. So instead, we
+        # need to run the handshake as part of the mux lifetime. The
+        # approach: start the mux in a background task, do the handshake,
+        # then return. The peer_loop will NOT call mux.run() again —
+        # instead, we await the background mux task.
+
+        # Start mux sender/receiver loops in background.
+        mux_task = asyncio.create_task(mux.run(), name=f"mux-{peer.address}")
+
+        try:
+            # Run N2N handshake on channel 0.
+            hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
+            result = await run_handshake_client(
+                hs_channel, self._config.network_magic
+            )
+            peer.connected = True
+            logger.info(
+                "Handshake with %s: version %d, magic %d",
+                peer.address,
+                result.version_number,
+                result.version_data.network_magic,
+            )
+        except (HandshakeError, Exception) as exc:
+            # Handshake failed — tear down the mux and propagate.
+            await mux.close()
+            try:
+                await mux_task
+            except Exception:
+                pass
+            raise ConnectionError(
+                f"Handshake with {peer.address} failed: {exc}"
+            ) from exc
+
+        # --- Launch miniprotocol runners on their channels ---
+        # Each runs as a background task for the lifetime of the connection.
+        # The mux routes bytes between the bearer and these channel tasks.
+
+        from vibe.cardano.network.chainsync_protocol import run_chain_sync
+        from vibe.cardano.network.keepalive_protocol import run_keep_alive_client
+        from vibe.cardano.network.txsubmission_protocol import run_tx_submission_client
+
+        stop_event = asyncio.Event()
+        peer.stop_event = stop_event
+
+        async def _safe_run(coro, name: str) -> None:
+            """Run a miniprotocol coroutine, suppressing MuxClosedError on shutdown."""
+            try:
+                await coro
+            except MuxClosedError:
+                logger.debug("Peer %s: %s channel closed", peer.address, name)
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                logger.warning("Peer %s: %s error: %s", peer.address, name, exc)
+
+        # Chain-Sync (protocol 2): sync block headers from this peer.
+        _blocks_received = 0
+
+        async def _on_roll_forward(header: bytes, tip: object) -> None:
+            nonlocal _blocks_received
+            _blocks_received += 1
+            if _blocks_received % 50 == 1 or _blocks_received <= 5:
+                logger.info(
+                    "Peer %s: roll forward #%d (%d bytes, tip=%s)",
+                    peer.address, _blocks_received, len(header), tip,
+                )
+
+        async def _on_roll_backward(point: object, tip: object) -> None:
+            logger.info(
+                "Peer %s: roll backward to %s (tip=%s)",
+                peer.address, point, tip,
+            )
+
+        asyncio.create_task(
+            _safe_run(
+                run_chain_sync(
+                    channels[CHAIN_SYNC_N2N_ID],
+                    known_points=[],  # Start from Origin
+                    on_roll_forward=_on_roll_forward,
+                    on_roll_backward=_on_roll_backward,
+                    stop_event=stop_event,
+                ),
+                "chain-sync",
+            ),
+            name=f"chainsync-{peer.address}",
+        )
+
+        # Keep-Alive (protocol 8): periodic pings to keep connection alive.
+        asyncio.create_task(
+            _safe_run(
+                run_keep_alive_client(
+                    channels[KEEP_ALIVE_PROTOCOL_ID],
+                    stop_event=stop_event,
+                ),
+                "keep-alive",
+            ),
+            name=f"keepalive-{peer.address}",
+        )
+
+        # Tx-Submission (protocol 4): respond to server's tx requests.
+        # Server drives this protocol (pull-based). We provide empty
+        # responses until the mempool is wired in.
+        async def _on_request_tx_ids(
+            blocking: bool, ack_count: int, req_count: int
+        ) -> list[tuple[bytes, int]] | None:
+            if blocking:
+                # Block until we have txs — for now, wait for stop.
+                await stop_event.wait()
+                return None
+            return []
+
+        async def _on_request_txs(
+            txids: list[bytes],
+        ) -> list[bytes]:
+            return []
+
+        asyncio.create_task(
+            _safe_run(
+                run_tx_submission_client(
+                    channels[TX_SUBMISSION_N2N_ID],
+                    on_request_tx_ids=_on_request_tx_ids,
+                    on_request_txs=_on_request_txs,
+                    stop_event=stop_event,
+                ),
+                "tx-submission",
+            ),
+            name=f"txsub-{peer.address}",
+        )
+
+        # Block-Fetch (protocol 3) is demand-driven — it fetches specific
+        # block ranges discovered by chain-sync. We don't start it in a
+        # loop; instead it will be triggered when chain-sync discovers
+        # new headers that need full block bodies.
+        # TODO: Wire block-fetch to chain-sync header pipeline.
+
+        # Store the mux task — peer_loop will await it instead of mux.run().
+        peer.mux_task = mux_task
 
     async def _disconnect_peer(self, peer: _PeerConnection) -> None:
         """Tear down a peer's multiplexer and bearer."""
+        # Signal miniprotocol runners to stop.
+        if peer.stop_event is not None:
+            peer.stop_event.set()
+            peer.stop_event = None
         if peer.mux is not None:
             try:
                 await peer.mux.close()
             except Exception:
                 pass
             peer.mux = None
+        if peer.mux_task is not None and not peer.mux_task.done():
+            peer.mux_task.cancel()
+            try:
+                await peer.mux_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            peer.mux_task = None
         if peer.bearer is not None:
             try:
                 await peer.bearer.close()
@@ -396,11 +570,60 @@ async def _forge_loop(
     if config.pool_keys is None:
         return
 
+    import hashlib
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from vibe.cardano.crypto.kes import (
+        CARDANO_KES_DEPTH,
+        kes_derive_vk,
+        kes_keygen,
+    )
+    from vibe.cardano.crypto.ocert import OperationalCert, ocert_signed_payload
+    from vibe.cardano.forge.block import forge_block
     from vibe.cardano.forge.leader import check_leadership
 
     pool_keys = config.pool_keys
 
-    logger.info("Forge loop started — checking leadership each slot")
+    # --- Initialise forge credentials ---
+    # Generate a fresh KES key pair (depth 6 = 2^6 = 64 KES periods).
+    # Sign an operational certificate binding pool cold key → KES VK.
+    kes_sk = kes_keygen(CARDANO_KES_DEPTH)
+    kes_vk = kes_derive_vk(kes_sk)
+
+    # Sign opcert: cold_sk signs (kes_vk || cert_count=0 || kes_period_start=0)
+    ocert_payload = ocert_signed_payload(kes_vk, cert_count=0, kes_period_start=0)
+    cold_sk_ed = Ed25519PrivateKey.from_private_bytes(pool_keys.cold_sk)
+    cold_sig = cold_sk_ed.sign(ocert_payload)
+    ocert = OperationalCert(
+        kes_vk=kes_vk,
+        cert_count=0,
+        kes_period_start=0,
+        cold_sig=cold_sig,
+    )
+
+    # For the devnet, epoch nonce starts as the genesis hash (blake2b-256 of
+    # the shelley-genesis.json content). In production this evolves each epoch.
+    # For simplicity, use a deterministic nonce derived from the network magic.
+    epoch_nonce = hashlib.blake2b(
+        config.network_magic.to_bytes(4, "big"), digest_size=32
+    ).digest()
+
+    # Pool3 has 1/3 relative stake in the devnet genesis.
+    # In production this comes from the stake distribution snapshot.
+    relative_stake = 1.0 / 3.0
+
+    # Track chain tip for prev_hash linkage.
+    prev_block_number = 0
+    prev_header_hash: bytes | None = None
+    blocks_forged = 0
+
+    logger.info(
+        "Forge loop started — pool VRF vk=%s, KES vk=%s, stake=%.2f%%",
+        pool_keys.vrf_vk.hex()[:16],
+        kes_vk.hex()[:16],
+        relative_stake * 100,
+    )
 
     while not shutdown_event.is_set():
         try:
@@ -411,20 +634,48 @@ async def _forge_loop(
         if shutdown_event.is_set():
             return
 
-        # Leader check requires the epoch nonce and relative stake.
-        # For now we use placeholder values -- these will be wired to
-        # the real PraosState and stake distribution in integration.
-        #
-        # The forge loop structure is correct: wait for slot -> check
-        # leadership -> forge if elected.  The actual VRF check and
-        # block construction are delegated to the forge package.
-        logger.debug("Slot %d: checking leadership", slot)
+        # VRF leader check
+        proof = check_leadership(
+            slot=slot,
+            vrf_sk=pool_keys.vrf_sk,
+            pool_vrf_vk=pool_keys.vrf_vk,
+            relative_stake=relative_stake,
+            active_slot_coeff=config.active_slot_coeff,
+            epoch_nonce=epoch_nonce,
+        )
 
-        # TODO(M5.8): Wire epoch_nonce from PraosState
-        # TODO(M5.8): Wire relative_stake from stake distribution
-        # TODO(M5.8): Wire mempool.get_txs_for_block() for block body
-        # TODO(M5.8): Wire ChainDB.add_block() for storage
-        # TODO(M5.8): Announce new block via chain-sync to peers
+        if proof is None:
+            continue
+
+        # Elected! Forge the block.
+        try:
+            forged = forge_block(
+                leader_proof=proof,
+                prev_block_number=prev_block_number,
+                prev_header_hash=prev_header_hash,
+                mempool_txs=[],  # Empty blocks for now
+                kes_sk=kes_sk,
+                kes_period=0,
+                ocert=ocert,
+                pool_vk=pool_keys.cold_vk,
+                vrf_vk=pool_keys.vrf_vk,
+            )
+
+            blocks_forged += 1
+            prev_block_number = forged.block.block_number
+            prev_header_hash = forged.block.block_hash
+
+            logger.info(
+                "FORGED BLOCK %d at slot %d (%d bytes, hash=%s) "
+                "[%d total]",
+                forged.block.block_number,
+                forged.block.slot,
+                len(forged.cbor),
+                forged.block.block_hash.hex()[:16],
+                blocks_forged,
+            )
+        except Exception as exc:
+            logger.error("Failed to forge block at slot %d: %s", slot, exc)
 
 
 # ---------------------------------------------------------------------------
