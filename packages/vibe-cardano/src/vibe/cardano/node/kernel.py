@@ -82,6 +82,14 @@ class NodeKernel(ChainProvider, BlockProvider):
     def epoch_nonce(self) -> EpochNonce:
         return self._epoch_nonce
 
+    @property
+    def current_epoch(self) -> int:
+        return self._current_epoch
+
+    @property
+    def epoch_length(self) -> int:
+        return self._epoch_length
+
     def init_nonce(self, genesis_hash: bytes, epoch_length: int) -> None:
         """Seed the epoch nonce from the genesis hash."""
         self._epoch_nonce = EpochNonce(value=genesis_hash)

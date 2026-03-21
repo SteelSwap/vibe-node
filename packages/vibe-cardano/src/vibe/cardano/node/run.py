@@ -617,6 +617,24 @@ class PeerManager:
                                 block_cbor=block_cbor,
                             )
 
+                            # --- Epoch boundary detection & nonce evolution ---
+                            epoch_length = node_kernel.epoch_length
+                            if epoch_length > 0:
+                                new_epoch = slot // epoch_length
+                                # Accumulate VRF output for nonce evolution
+                                if header.vrf_output is not None:
+                                    epoch_start = new_epoch * epoch_length
+                                    node_kernel.on_block_vrf_output(
+                                        slot, epoch_start, header.vrf_output,
+                                    )
+                                # Detect epoch boundary crossing
+                                if new_epoch > node_kernel.current_epoch:
+                                    node_kernel.on_epoch_boundary(new_epoch)
+                                    logger.info(
+                                        "Epoch boundary: %d -> %d at slot %d",
+                                        new_epoch - 1, new_epoch, slot,
+                                    )
+
                         _blocks_stored += 1
                         if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
                             logger.info(
