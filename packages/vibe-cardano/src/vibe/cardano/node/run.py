@@ -882,8 +882,10 @@ async def _forge_loop(
 
     # Compute pool ID (Blake2b-224 of cold VK) for stake lookup.
     pool_id = hashlib.blake2b(pool_keys.cold_vk, digest_size=28).digest()
-    if node_kernel is not None and node_kernel.stake_distribution is not None:
-        relative_stake = node_kernel.stake_distribution.relative_stake(pool_id)
+    if node_kernel is not None and node_kernel.stake_distribution:
+        pool_stake = node_kernel.stake_distribution.get(pool_id, 0)
+        total_stake = sum(node_kernel.stake_distribution.values())
+        relative_stake = pool_stake / total_stake if total_stake > 0 else 0.0
         logger.info("Pool stake from distribution: %.4f%%", relative_stake * 100)
     else:
         relative_stake = 1.0 / 3.0  # Fallback for testing
@@ -1493,6 +1495,22 @@ async def run_node(config: NodeConfig) -> None:
             logger.info("ChainDB has data, skipping Mithril import")
 
     tip = await chain_db.get_tip()
+    # Try to restore ledger state from latest snapshot
+    snapshot_dir = db_path / "ledger-snapshots"
+    if snapshot_dir.exists():
+        snapshots = sorted(snapshot_dir.glob("*.arrow"), reverse=True)
+        if snapshots:
+            try:
+                from vibe.cardano.storage.ledger import SnapshotHandle
+                handle = SnapshotHandle(
+                    snapshot_id="restore",
+                    metadata={"path": str(snapshots[0])},
+                )
+                await ledger_db.restore(handle)
+                logger.info("Restored ledger from snapshot: %d UTxOs", ledger_db.utxo_count)
+            except Exception as exc:
+                logger.warning("Snapshot restore failed: %s", exc)
+
     if tip is not None:
         logger.info("ChainDB loaded: tip at slot %d (hash=%s)", tip[0], tip[1].hex()[:16])
     else:
@@ -1517,7 +1535,7 @@ async def run_node(config: NodeConfig) -> None:
     ).digest()
     node_kernel.init_nonce(nonce_seed, config.epoch_length)
     if config.initial_pool_stakes:
-        node_kernel.init_stake_distribution(config.initial_pool_stakes)
+        node_kernel.update_stake_distribution(config.initial_pool_stakes)
 
     # --- Slot clock ---
     slot_config = SlotConfig(
@@ -1576,6 +1594,34 @@ async def run_node(config: NodeConfig) -> None:
                 name="forge-loop",
             )
         )
+
+    # Periodic ledger snapshots for crash recovery
+    async def _snapshot_loop() -> None:
+        interval = getattr(config, 'snapshot_interval_slots', 2000)
+        interval_secs = interval * config.slot_length
+        last_slot = 0
+        while not shutdown_event.is_set():
+            try:
+                await asyncio.sleep(interval_secs)
+            except asyncio.CancelledError:
+                return
+            if shutdown_event.is_set():
+                return
+            current = slot_clock.current_slot()
+            if current - last_slot >= interval:
+                try:
+                    handle = await ledger_db.snapshot()
+                    last_slot = current
+                    logger.info(
+                        "Ledger snapshot at slot %d: %d UTxOs",
+                        current, ledger_db.utxo_count,
+                    )
+                except Exception as exc:
+                    logger.warning("Snapshot failed: %s", exc)
+
+    tasks.append(
+        asyncio.create_task(_snapshot_loop(), name="snapshot-loop")
+    )
 
     logger.info("Node started — waiting for shutdown signal")
 
