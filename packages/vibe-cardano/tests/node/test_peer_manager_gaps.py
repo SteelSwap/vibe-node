@@ -255,11 +255,14 @@ class TestAllValidTransitions:
 
     @pytest.mark.parametrize(
         "from_state,to_state",
-        [
-            (src, dst)
-            for src, dsts in VALID_TRANSITIONS.items()
-            for dst in dsts
-        ],
+        sorted(
+            [
+                (src, dst)
+                for src, dsts in VALID_TRANSITIONS.items()
+                for dst in dsts
+            ],
+            key=lambda x: (x[0].value, x[1].value),
+        ),
     )
     def test_valid_transition_succeeds(
         self, from_state: PeerState, to_state: PeerState
@@ -274,12 +277,15 @@ class TestAllInvalidTransitions:
 
     @pytest.mark.parametrize(
         "from_state,to_state",
-        [
-            (src, dst)
-            for src in PeerState
-            for dst in PeerState
-            if dst not in VALID_TRANSITIONS.get(src, set()) and src != dst
-        ],
+        sorted(
+            [
+                (src, dst)
+                for src in PeerState
+                for dst in PeerState
+                if dst not in VALID_TRANSITIONS.get(src, set()) and src != dst
+            ],
+            key=lambda x: (x[0].value, x[1].value),
+        ),
     )
     def test_invalid_transition_raises(
         self, from_state: PeerState, to_state: PeerState
