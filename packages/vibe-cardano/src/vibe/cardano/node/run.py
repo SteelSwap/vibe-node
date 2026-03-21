@@ -954,8 +954,19 @@ async def _forge_loop(
     _current_kes_period = current_kes_period
 
     # Track chain tip for prev_hash linkage.
+    # Read from ChainDB or NodeKernel so we build on the received chain.
     prev_block_number = 0
     prev_header_hash: bytes | None = None
+    if chain_db is not None:
+        try:
+            tip = await chain_db.get_tip()
+            if tip is not None:
+                prev_header_hash = tip[1]  # (slot, hash)
+                # Approximate block number from slot
+                prev_block_number = tip[0]  # Use slot as proxy
+                logger.info("Forge: building on chain tip slot=%d", tip[0])
+        except Exception:
+            pass
     blocks_forged = 0
 
     logger.info(
@@ -999,6 +1010,16 @@ async def _forge_loop(
 
         if proof is None:
             continue
+
+        # Update prev_hash from latest chain tip so we build on the real chain
+        if chain_db is not None:
+            try:
+                tip = await chain_db.get_tip()
+                if tip is not None:
+                    prev_header_hash = tip[1]
+                    prev_block_number = tip[0]
+            except Exception:
+                pass
 
         # Elected! Forge the block.
         try:
