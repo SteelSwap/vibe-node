@@ -67,6 +67,7 @@ TEST_PARAMS = ShelleyProtocolParams(
     min_utxo_value=1000000,
     key_deposit=2000000,
     pool_deposit=500000000,
+    network_id=0,  # testnet — matches _make_address() which uses Network.TESTNET
 )
 
 

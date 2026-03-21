@@ -69,8 +69,9 @@ def _make_tx_id(n: int) -> TransactionId:
 
 def _make_shelley_address() -> Address:
     """Create a minimal Shelley testnet address for testing."""
-    # Use a fixed payment key hash for deterministic tests
-    payment_hash = b"\xab" * 28
+    from pycardano import VerificationKeyHash
+
+    payment_hash = VerificationKeyHash(b"\xab" * 28)
     return Address(payment_part=payment_hash, network=Network.TESTNET)
 
 
