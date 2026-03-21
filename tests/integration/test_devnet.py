@@ -117,15 +117,17 @@ class TestDockerCompose:
             assert "devnet" in networks
 
     def test_haskell_nodes_have_key_mounts(self, devnet_compose: dict) -> None:
-        """Haskell nodes must mount pool key directories."""
+        """Haskell nodes must have pool key paths configured."""
         for name in ["haskell-node-1", "haskell-node-2"]:
             service = devnet_compose["services"][name]
+            # Keys can be in command args or environment variables
+            env = service.get("environment", {})
             command = service.get("command", [])
-            # Check that command references KES and VRF keys
-            command_str = " ".join(str(c) for c in command)
-            assert "kes.skey" in command_str
-            assert "vrf.skey" in command_str
-            assert "opcert.cert" in command_str
+            combined = " ".join(str(c) for c in command)
+            combined += " " + " ".join(str(v) for v in env.values())
+            assert "kes.skey" in combined
+            assert "vrf.skey" in combined
+            assert "opcert.cert" in combined
 
 
 # ─── Genesis File Tests ──────────────────────────────────────────
@@ -360,9 +362,13 @@ class TestScripts:
     def test_generate_keys_does_not_contain_keys(self) -> None:
         """Script must not contain actual key material."""
         content = (SCRIPTS_DIR / "generate-keys.sh").read_text()
-        # Should not contain base64/hex key patterns
-        assert "5820" not in content  # CBOR key prefix
+        # Should not contain PEM key blocks (actual key material)
         assert "-----BEGIN" not in content  # PEM format
+        # Lines containing "5820" should only be in comments, not as key data
+        for line in content.splitlines():
+            stripped = line.strip()
+            if "5820" in stripped and not stripped.startswith("#"):
+                assert False, f"Non-comment line contains CBOR prefix: {stripped}"
 
     def test_monitor_tips_exists(self) -> None:
         """Tip monitoring script must exist."""

@@ -59,20 +59,19 @@ echo "Using CLI: $CLI"
 # This is equivalent to what cardano-cli does internally.
 extract_key_hash() {
     local vkey_file="$1"
-    # The cborHex in vkey files is CBOR-wrapped: 5820<32-byte-key>
-    # We need the blake2b-224 (28 bytes = 56 hex chars) of the raw key bytes
-    local cbor_hex
-    cbor_hex=$(python3 -c "
-import json, hashlib, sys
+    local digest_size="${2:-28}"  # default 28 bytes (blake2b-224), VRF uses 32 (blake2b-256)
+    local key_hash
+    key_hash=$(python3 -c "
+import json, hashlib
 with open('$vkey_file') as f:
     data = json.load(f)
 cbor_hex = data['cborHex']
 # Strip CBOR tag: first 4 hex chars (2 bytes) are the CBOR wrapper (5820)
 raw_key = bytes.fromhex(cbor_hex[4:])
-h = hashlib.blake2b(raw_key, digest_size=28)
+h = hashlib.blake2b(raw_key, digest_size=$digest_size)
 print(h.hexdigest())
 ")
-    echo "$cbor_hex"
+    echo "$key_hash"
 }
 
 # ─── Clean and create directories ────────────────────────────────
@@ -177,7 +176,7 @@ for i in $(seq 1 $NUM_POOLS); do
     echo "  Pool ID (cold key hash): $POOL_ID"
 
     # Get VRF key hash
-    VRF_HASH=$(extract_key_hash "$KEYS_DIR/pool${i}/vrf.vkey")
+    VRF_HASH=$(extract_key_hash "$KEYS_DIR/pool${i}/vrf.vkey" 32)  # VRF uses blake2b-256
     POOL_VRF_HASHES+=("$VRF_HASH")
     echo "  VRF key hash: $VRF_HASH"
 
@@ -221,6 +220,8 @@ for i in $(seq 1 $NUM_POOLS); do
     VRF_HASH="${POOL_VRF_HASHES[$idx]}"
 
     # Build pool entry
+    # "publicKey" is a legacy misnomer — it's actually the pool ID (cold key hash).
+    # See cardano-ledger StakePoolParams: (obj .: "poolId") <|> (obj .: "publicKey")
     POOLS_JSON=$(echo "$POOLS_JSON" | jq \
         --arg pid "$POOL_ID" \
         --arg vrf "$VRF_HASH" \
@@ -228,7 +229,7 @@ for i in $(seq 1 $NUM_POOLS); do
         --argjson cost 0 \
         --argjson pledge "$POOL_PLEDGE" \
         --argjson margin 0 \
-        '. + { ($pid): { "publicKey": $vrf, "cost": $cost, "margin": $margin, "pledge": $pledge, "metadata": null, "owners": [$reward], "relays": [], "rewardAccount": { "network": "Testnet", "credential": { "keyHash": $reward } } } }')
+        '. + { ($pid): { "publicKey": $pid, "vrf": $vrf, "cost": $cost, "margin": $margin, "pledge": $pledge, "metadata": null, "owners": [$reward], "relays": [], "rewardAccount": { "network": "Testnet", "credential": { "keyHash": $reward } } } }')
 
     # Map stake key to pool
     STAKE_JSON=$(echo "$STAKE_JSON" | jq \

@@ -45,8 +45,8 @@ class PoolKeys:
         ocert: Serialised operational certificate (CBOR bytes).
     """
 
-    cold_vk: bytes
-    cold_sk: bytes | None = None
+    cold_vk: bytes = b""
+    cold_sk: bytes = b""
     kes_sk: bytes = b""
     kes_vk: bytes = b""
     vrf_sk: bytes = b""

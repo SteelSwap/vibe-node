@@ -56,6 +56,7 @@ __all__ = [
     "MsgAcceptVersionMsg",
     "MsgRefuseMsg",
     "run_handshake_client",
+    "run_handshake_server",
 ]
 
 
@@ -333,3 +334,98 @@ async def run_handshake_client(
         raise HandshakeRefusedError(response)
     else:
         raise HandshakeError(f"Unexpected handshake response: {response!r}")
+
+
+# ---------------------------------------------------------------------------
+# Server-side handshake runner
+# ---------------------------------------------------------------------------
+
+
+async def run_handshake_server(
+    channel: Channel,
+    network_magic: int,
+    *,
+    timeout: float = HANDSHAKE_TIMEOUT_S,
+) -> MsgAcceptVersion:
+    """Run the server side of the handshake miniprotocol.
+
+    Receives MsgProposeVersions from the client, negotiates a common
+    version, and responds with MsgAcceptVersion or MsgRefuse.
+
+    Haskell ref:
+        ``Ouroboros.Network.Protocol.Handshake.Server``
+        ``pureHandshake`` in ``Ouroboros.Network.Protocol.Handshake.Direct``
+
+    Args:
+        channel: Async byte-level channel (wraps multiplexer sub-channel).
+        network_magic: Our network magic for version negotiation.
+        timeout: Maximum time for the handshake (default: 10 s per spec).
+
+    Returns:
+        ``MsgAcceptVersion`` with the negotiated version and parameters.
+
+    Raises:
+        HandshakeRefusedError: If no common version exists.
+        HandshakeTimeoutError: If the handshake exceeds the timeout.
+        HandshakeError: For unexpected protocol errors.
+    """
+    # Build our version table
+    server_versions = build_version_table(network_magic)
+
+    try:
+        async with asyncio.timeout(timeout):
+            # Receive client's proposal
+            propose_bytes = await channel.recv()
+    except TimeoutError:
+        raise HandshakeTimeoutError(
+            f"Handshake server timed out after {timeout}s"
+        ) from None
+
+    # Decode the proposal
+    import cbor2
+    proposal = cbor2.loads(propose_bytes)
+    # proposal = [0, {version: version_data, ...}]
+    if not isinstance(proposal, list) or len(proposal) < 2 or proposal[0] != 0:
+        raise HandshakeError(f"Invalid MsgProposeVersions: {proposal!r}")
+
+    version_map = proposal[1]
+    from .handshake import PeerSharing
+
+    client_versions: dict[int, NodeToNodeVersionData] = {}
+    for ver_num, ver_data in version_map.items():
+        if isinstance(ver_data, list) and len(ver_data) >= 4:
+            client_versions[ver_num] = NodeToNodeVersionData(
+                network_magic=ver_data[0],
+                initiator_only_diffusion_mode=bool(ver_data[1]),
+                peer_sharing=PeerSharing(ver_data[2]),
+                query=bool(ver_data[3]),
+            )
+
+    # Negotiate
+    result = negotiate_version(client_versions, server_versions)
+
+    if result is not None:
+        # Accept — encode and send
+        from .handshake import encode_accept_version
+        accept_bytes = encode_accept_version(result)
+        try:
+            async with asyncio.timeout(timeout):
+                await channel.send(accept_bytes)
+        except TimeoutError:
+            raise HandshakeTimeoutError(
+                f"Handshake server send timed out after {timeout}s"
+            ) from None
+        return result
+    else:
+        # Refuse — version mismatch
+        from .handshake import encode_refuse
+        refuse = MsgRefuse(reason=RefuseReasonVersionMismatch(
+            versions=list(server_versions.keys())
+        ))
+        refuse_bytes = encode_refuse(refuse)
+        try:
+            async with asyncio.timeout(timeout):
+                await channel.send(refuse_bytes)
+        except TimeoutError:
+            pass
+        raise HandshakeRefusedError(refuse)

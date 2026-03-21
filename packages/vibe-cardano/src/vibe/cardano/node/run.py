@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from vibe.core.multiplexer import Bearer, Multiplexer
+from vibe.core.multiplexer import Bearer, MiniProtocolChannel, Multiplexer, MuxClosedError
 
 from vibe.cardano.consensus.slot_arithmetic import SlotConfig, slot_to_wall_clock, wall_clock_to_slot
 from vibe.cardano.network.handshake import HANDSHAKE_PROTOCOL_ID
@@ -173,7 +173,9 @@ class _PeerConnection:
     address: PeerAddress
     bearer: Bearer | None = None
     mux: Multiplexer | None = None
+    mux_task: asyncio.Task[None] | None = None
     task: asyncio.Task[None] | None = None
+    stop_event: asyncio.Event | None = None
     reconnect_delay: float = 1.0
     connected: bool = False
 
@@ -196,12 +198,14 @@ class PeerManager:
 
     Args:
         config: Node configuration (for network_magic and peer list).
+        chain_db: ChainDB instance for storing received blocks.
     """
 
-    __slots__ = ("_config", "_peers", "_stopped", "_tasks")
+    __slots__ = ("_config", "_chain_db", "_peers", "_stopped", "_tasks")
 
-    def __init__(self, config: NodeConfig) -> None:
+    def __init__(self, config: NodeConfig, chain_db: Any = None) -> None:
         self._config = config
+        self._chain_db = chain_db
         self._peers: dict[str, _PeerConnection] = {}
         self._stopped = False
         self._tasks: list[asyncio.Task[None]] = []
@@ -259,9 +263,10 @@ class PeerManager:
                 # Reset backoff on successful connection.
                 peer.reconnect_delay = 1.0
 
-                # Run the multiplexer -- blocks until disconnect.
-                if peer.mux is not None:
-                    await peer.mux.run()
+                # Mux is already running (started in _connect_peer after
+                # handshake). Await the mux task until disconnect.
+                if peer.mux_task is not None:
+                    await peer.mux_task
 
             except (ConnectionError, OSError) as exc:
                 logger.warning(
@@ -291,7 +296,23 @@ class PeerManager:
             peer.reconnect_delay = min(peer.reconnect_delay * 2, 60.0)
 
     async def _connect_peer(self, peer: _PeerConnection) -> None:
-        """Open TCP connection and set up multiplexer with N2N bundle."""
+        """Open TCP connection, set up multiplexer, and run N2N handshake.
+
+        The handshake must complete before any other miniprotocol can run.
+        We start the mux sender/receiver in the background (they handle
+        wire framing), run the handshake on channel 0, then return — the
+        caller continues with mux.run() which blocks until disconnect.
+
+        Haskell ref:
+            Ouroboros.Network.Protocol.Handshake.Client — client peer
+            The Haskell node runs the handshake as the first action on a
+            new connection before activating other miniprotocols.
+        """
+        from vibe.cardano.network.handshake_protocol import (
+            HandshakeError,
+            run_handshake_client,
+        )
+
         logger.info("Connecting to peer %s", peer.address)
         reader, writer = await asyncio.open_connection(
             peer.address.host, peer.address.port
@@ -300,23 +321,309 @@ class PeerManager:
         mux = Multiplexer(bearer, is_initiator=True)
 
         # Register N2N miniprotocol channels.
+        channels: dict[int, MiniProtocolChannel] = {}
         for proto_id in N2N_PROTOCOL_IDS:
-            mux.add_protocol(proto_id)
+            channels[proto_id] = mux.add_protocol(proto_id)
 
         peer.bearer = bearer
         peer.mux = mux
-        peer.connected = True
 
-        logger.info("Connected to peer %s", peer.address)
+        # The mux must be running for channels to work (sender/receiver
+        # loops handle the wire framing). Start it, run the handshake,
+        # then let the caller's mux.run() take over.
+        #
+        # We use a task for the mux and run the handshake concurrently.
+        # After handshake completes, we stop the mux task — the caller
+        # will call mux.run() again which restarts the loops.
+        #
+        # Actually, mux.run() can only be called once. So instead, we
+        # need to run the handshake as part of the mux lifetime. The
+        # approach: start the mux in a background task, do the handshake,
+        # then return. The peer_loop will NOT call mux.run() again —
+        # instead, we await the background mux task.
+
+        # Start mux sender/receiver loops in background.
+        mux_task = asyncio.create_task(mux.run(), name=f"mux-{peer.address}")
+
+        try:
+            # Run N2N handshake on channel 0.
+            hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
+            result = await run_handshake_client(
+                hs_channel, self._config.network_magic
+            )
+            peer.connected = True
+            logger.info(
+                "Handshake with %s: version %d, magic %d",
+                peer.address,
+                result.version_number,
+                result.version_data.network_magic,
+            )
+        except (HandshakeError, Exception) as exc:
+            # Handshake failed — tear down the mux and propagate.
+            await mux.close()
+            try:
+                await mux_task
+            except Exception:
+                pass
+            raise ConnectionError(
+                f"Handshake with {peer.address} failed: {exc}"
+            ) from exc
+
+        # --- Launch miniprotocol runners on their channels ---
+        # Each runs as a background task for the lifetime of the connection.
+        # The mux routes bytes between the bearer and these channel tasks.
+
+        from vibe.cardano.network.chainsync_protocol import run_chain_sync
+        from vibe.cardano.network.keepalive_protocol import run_keep_alive_client
+        from vibe.cardano.network.txsubmission_protocol import run_tx_submission_client
+
+        stop_event = asyncio.Event()
+        peer.stop_event = stop_event
+
+        async def _safe_run(coro, name: str) -> None:
+            """Run a miniprotocol coroutine, suppressing MuxClosedError on shutdown."""
+            try:
+                await coro
+            except MuxClosedError:
+                logger.debug("Peer %s: %s channel closed", peer.address, name)
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                logger.warning("Peer %s: %s error: %s", peer.address, name, exc)
+
+        # --- Sync pipeline: chain-sync → block-fetch → store ---
+        # Chain-sync receives headers, extracts Point(slot, hash),
+        # queues them for block-fetch. Block-fetch downloads full
+        # block bodies and stores them in ChainDB.
+
+        import hashlib
+
+        import cbor2
+
+        from vibe.cardano.network.blockfetch_protocol import run_block_fetch
+        from vibe.cardano.network.chainsync import Point
+
+        # Queue of points discovered by chain-sync, consumed by block-fetch.
+        fetch_queue: asyncio.Queue[Point] = asyncio.Queue(maxsize=1000)
+        chain_db = self._chain_db
+        _headers_received = 0
+
+        async def _on_roll_forward(header: object, tip: object) -> None:
+            nonlocal _headers_received
+            _headers_received += 1
+
+            # header = [era_tag, CBORTag(24, header_cbor)]
+            # Extract slot and block hash from the wrapped header.
+            try:
+                if isinstance(header, (list, tuple)) and len(header) >= 2:
+                    wrapped = header[1]  # CBORTag(24, inner_bytes)
+                    header_bytes = wrapped.value if hasattr(wrapped, "value") else wrapped
+                    inner = cbor2.loads(header_bytes)
+                    hdr_body = inner[0]  # [block_number, slot, prev_hash, ...]
+                    slot = hdr_body[1]
+                    block_hash = hashlib.blake2b(
+                        header_bytes, digest_size=32
+                    ).digest()
+                    point = Point(slot=slot, hash=block_hash)
+
+                    # Queue for block-fetch
+                    try:
+                        fetch_queue.put_nowait(point)
+                    except asyncio.QueueFull:
+                        pass  # Drop if queue full — backpressure
+
+                    if _headers_received % 100 == 1 or _headers_received <= 5:
+                        logger.info(
+                            "Peer %s: header #%d slot=%d hash=%s (tip=%s)",
+                            peer.address,
+                            _headers_received,
+                            slot,
+                            block_hash.hex()[:16],
+                            tip,
+                        )
+                else:
+                    if _headers_received % 100 == 1:
+                        logger.debug(
+                            "Peer %s: header #%d (unparsed, tip=%s)",
+                            peer.address, _headers_received, tip,
+                        )
+            except Exception as exc:
+                logger.debug("Peer %s: header parse error: %s", peer.address, exc)
+
+        async def _on_roll_backward(point: object, tip: object) -> None:
+            logger.info(
+                "Peer %s: roll backward to %s (tip=%s)",
+                peer.address, point, tip,
+            )
+            # TODO: ChainDB rollback to point
+
+        asyncio.create_task(
+            _safe_run(
+                run_chain_sync(
+                    channels[CHAIN_SYNC_N2N_ID],
+                    known_points=[],  # Start from Origin
+                    on_roll_forward=_on_roll_forward,
+                    on_roll_backward=_on_roll_backward,
+                    stop_event=stop_event,
+                ),
+                "chain-sync",
+            ),
+            name=f"chainsync-{peer.address}",
+        )
+
+        # Block-fetch worker: batches points from the queue into ranges,
+        # fetches full block bodies, and stores them in ChainDB.
+        async def _block_fetch_worker() -> None:
+            bf_channel = channels[BLOCK_FETCH_N2N_ID]
+            _blocks_stored = 0
+
+            while not stop_event.is_set():
+                # Collect a batch of points (up to 100, or whatever's available)
+                batch: list[Point] = []
+                try:
+                    # Wait for at least one point
+                    point = await asyncio.wait_for(
+                        fetch_queue.get(), timeout=1.0
+                    )
+                    batch.append(point)
+                    # Drain up to 99 more without blocking
+                    while len(batch) < 100:
+                        try:
+                            batch.append(fetch_queue.get_nowait())
+                        except asyncio.QueueEmpty:
+                            break
+                except TimeoutError:
+                    continue
+
+                if not batch or stop_event.is_set():
+                    continue
+
+                # Build range: (first_point, last_point)
+                ranges = [(batch[0], batch[-1])]
+
+                async def _on_block(block_cbor: bytes) -> None:
+                    nonlocal _blocks_stored
+                    if chain_db is not None:
+                        try:
+                            # Parse minimal info from block CBOR for storage
+                            block_data = cbor2.loads(block_cbor)
+                            # block = [header, tx_bodies, tx_witnesses, aux]
+                            hdr = block_data[0]  # [header_body, kes_sig]
+                            hdr_body = hdr[0]
+                            block_number = hdr_body[0]
+                            slot = hdr_body[1]
+                            prev_hash = hdr_body[2] or b"\x00" * 32
+                            # Re-encode header for hash
+                            hdr_cbor = cbor2.dumps(hdr)
+                            block_hash = hashlib.blake2b(
+                                hdr_cbor, digest_size=32
+                            ).digest()
+
+                            await chain_db.add_block(
+                                slot=slot,
+                                block_hash=block_hash,
+                                predecessor_hash=prev_hash,
+                                block_number=block_number,
+                                cbor_bytes=block_cbor,
+                            )
+                            _blocks_stored += 1
+                            if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
+                                logger.info(
+                                    "Peer %s: stored block #%d slot=%d hash=%s "
+                                    "[%d total]",
+                                    peer.address,
+                                    block_number,
+                                    slot,
+                                    block_hash.hex()[:16],
+                                    _blocks_stored,
+                                )
+                        except Exception as exc:
+                            logger.debug(
+                                "Peer %s: block store error: %s",
+                                peer.address, exc,
+                            )
+
+                try:
+                    await run_block_fetch(
+                        bf_channel,
+                        ranges=ranges,
+                        on_block_received=_on_block,
+                        stop_event=stop_event,
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "Peer %s: block-fetch error: %s", peer.address, exc
+                    )
+
+        asyncio.create_task(
+            _safe_run(_block_fetch_worker(), "block-fetch"),
+            name=f"blockfetch-{peer.address}",
+        )
+
+        # Keep-Alive (protocol 8): periodic pings to keep connection alive.
+        asyncio.create_task(
+            _safe_run(
+                run_keep_alive_client(
+                    channels[KEEP_ALIVE_PROTOCOL_ID],
+                    stop_event=stop_event,
+                ),
+                "keep-alive",
+            ),
+            name=f"keepalive-{peer.address}",
+        )
+
+        # Tx-Submission (protocol 4): respond to server's tx requests.
+        # Server drives this protocol (pull-based). We provide empty
+        # responses until the mempool is wired in.
+        async def _on_request_tx_ids(
+            blocking: bool, ack_count: int, req_count: int
+        ) -> list[tuple[bytes, int]] | None:
+            if blocking:
+                # Block until we have txs — for now, wait for stop.
+                await stop_event.wait()
+                return None
+            return []
+
+        async def _on_request_txs(
+            txids: list[bytes],
+        ) -> list[bytes]:
+            return []
+
+        asyncio.create_task(
+            _safe_run(
+                run_tx_submission_client(
+                    channels[TX_SUBMISSION_N2N_ID],
+                    on_request_tx_ids=_on_request_tx_ids,
+                    on_request_txs=_on_request_txs,
+                    stop_event=stop_event,
+                ),
+                "tx-submission",
+            ),
+            name=f"txsub-{peer.address}",
+        )
+
+        # Store the mux task — peer_loop will await it instead of mux.run().
+        peer.mux_task = mux_task
 
     async def _disconnect_peer(self, peer: _PeerConnection) -> None:
         """Tear down a peer's multiplexer and bearer."""
+        # Signal miniprotocol runners to stop.
+        if peer.stop_event is not None:
+            peer.stop_event.set()
+            peer.stop_event = None
         if peer.mux is not None:
             try:
                 await peer.mux.close()
             except Exception:
                 pass
             peer.mux = None
+        if peer.mux_task is not None and not peer.mux_task.done():
+            peer.mux_task.cancel()
+            try:
+                await peer.mux_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            peer.mux_task = None
         if peer.bearer is not None:
             try:
                 await peer.bearer.close()
@@ -374,6 +681,8 @@ async def _forge_loop(
     config: NodeConfig,
     slot_clock: SlotClock,
     shutdown_event: asyncio.Event,
+    chain_db: Any = None,
+    node_kernel: Any = None,
 ) -> None:
     """Slot-by-slot leader check and block forging loop.
 
@@ -396,11 +705,60 @@ async def _forge_loop(
     if config.pool_keys is None:
         return
 
+    import hashlib
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from vibe.cardano.crypto.kes import (
+        CARDANO_KES_DEPTH,
+        kes_derive_vk,
+        kes_keygen,
+    )
+    from vibe.cardano.crypto.ocert import OperationalCert, ocert_signed_payload
+    from vibe.cardano.forge.block import forge_block
     from vibe.cardano.forge.leader import check_leadership
 
     pool_keys = config.pool_keys
 
-    logger.info("Forge loop started — checking leadership each slot")
+    # --- Initialise forge credentials ---
+    # Generate a fresh KES key pair (depth 6 = 2^6 = 64 KES periods).
+    # Sign an operational certificate binding pool cold key → KES VK.
+    kes_sk = kes_keygen(CARDANO_KES_DEPTH)
+    kes_vk = kes_derive_vk(kes_sk)
+
+    # Sign opcert: cold_sk signs (kes_vk || cert_count=0 || kes_period_start=0)
+    ocert_payload = ocert_signed_payload(kes_vk, cert_count=0, kes_period_start=0)
+    cold_sk_ed = Ed25519PrivateKey.from_private_bytes(pool_keys.cold_sk)
+    cold_sig = cold_sk_ed.sign(ocert_payload)
+    ocert = OperationalCert(
+        kes_vk=kes_vk,
+        cert_count=0,
+        kes_period_start=0,
+        cold_sig=cold_sig,
+    )
+
+    # For the devnet, epoch nonce starts as the genesis hash (blake2b-256 of
+    # the shelley-genesis.json content). In production this evolves each epoch.
+    # For simplicity, use a deterministic nonce derived from the network magic.
+    epoch_nonce = hashlib.blake2b(
+        config.network_magic.to_bytes(4, "big"), digest_size=32
+    ).digest()
+
+    # Pool3 has 1/3 relative stake in the devnet genesis.
+    # In production this comes from the stake distribution snapshot.
+    relative_stake = 1.0 / 3.0
+
+    # Track chain tip for prev_hash linkage.
+    prev_block_number = 0
+    prev_header_hash: bytes | None = None
+    blocks_forged = 0
+
+    logger.info(
+        "Forge loop started — pool VRF vk=%s, KES vk=%s, stake=%.2f%%",
+        pool_keys.vrf_vk.hex()[:16],
+        kes_vk.hex()[:16],
+        relative_stake * 100,
+    )
 
     while not shutdown_event.is_set():
         try:
@@ -411,20 +769,72 @@ async def _forge_loop(
         if shutdown_event.is_set():
             return
 
-        # Leader check requires the epoch nonce and relative stake.
-        # For now we use placeholder values -- these will be wired to
-        # the real PraosState and stake distribution in integration.
-        #
-        # The forge loop structure is correct: wait for slot -> check
-        # leadership -> forge if elected.  The actual VRF check and
-        # block construction are delegated to the forge package.
-        logger.debug("Slot %d: checking leadership", slot)
+        # VRF leader check
+        proof = check_leadership(
+            slot=slot,
+            vrf_sk=pool_keys.vrf_sk,
+            pool_vrf_vk=pool_keys.vrf_vk,
+            relative_stake=relative_stake,
+            active_slot_coeff=config.active_slot_coeff,
+            epoch_nonce=epoch_nonce,
+        )
 
-        # TODO(M5.8): Wire epoch_nonce from PraosState
-        # TODO(M5.8): Wire relative_stake from stake distribution
-        # TODO(M5.8): Wire mempool.get_txs_for_block() for block body
-        # TODO(M5.8): Wire ChainDB.add_block() for storage
-        # TODO(M5.8): Announce new block via chain-sync to peers
+        if proof is None:
+            continue
+
+        # Elected! Forge the block.
+        try:
+            forged = forge_block(
+                leader_proof=proof,
+                prev_block_number=prev_block_number,
+                prev_header_hash=prev_header_hash,
+                mempool_txs=[],  # Empty blocks for now
+                kes_sk=kes_sk,
+                kes_period=0,
+                ocert=ocert,
+                pool_vk=pool_keys.cold_vk,
+                vrf_vk=pool_keys.vrf_vk,
+            )
+
+            blocks_forged += 1
+            prev_block_number = forged.block.block_number
+            prev_header_hash = forged.block.block_hash
+
+            # Store in ChainDB
+            if chain_db is not None:
+                try:
+                    await chain_db.add_block(
+                        slot=forged.block.slot,
+                        block_hash=forged.block.block_hash,
+                        predecessor_hash=prev_header_hash if prev_block_number > 1 else b"\x00" * 32,
+                        block_number=forged.block.block_number,
+                        cbor_bytes=forged.cbor,
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to store forged block: %s", exc)
+
+            # Add to NodeKernel so chain-sync/block-fetch servers
+            # can serve this block to connected peers.
+            if node_kernel is not None:
+                node_kernel.add_block(
+                    slot=forged.block.slot,
+                    block_hash=forged.block.block_hash,
+                    block_number=forged.block.block_number,
+                    header_cbor=forged.block.header_cbor,
+                    block_cbor=forged.cbor,
+                )
+
+            logger.info(
+                "FORGED BLOCK %d at slot %d (%d bytes, hash=%s) "
+                "[%d total]",
+                forged.block.block_number,
+                forged.block.slot,
+                len(forged.cbor),
+                forged.block.block_hash.hex()[:16],
+                blocks_forged,
+            )
+        except Exception as exc:
+            logger.error("Failed to forge block at slot %d: %s", slot, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -435,14 +845,17 @@ async def _forge_loop(
 async def _run_n2n_server(
     host: str,
     port: int,
+    network_magic: int,
+    node_kernel: Any,
     shutdown_event: asyncio.Event,
 ) -> None:
     """Run the TCP listener for inbound N2N peer connections.
 
     For each incoming connection:
-    1. Wrap in a Bearer
-    2. Set up N2N mux with miniprotocol bundle
-    3. Run the mux (blocks until disconnect)
+    1. Wrap in a Bearer + Multiplexer
+    2. Run handshake responder on channel 0
+    3. Launch chain-sync server, keep-alive server, block-fetch server
+    4. Run until disconnect or shutdown
 
     Haskell ref:
         ``Ouroboros.Network.Server2.run`` -- the server side of the
@@ -451,9 +864,18 @@ async def _run_n2n_server(
     Args:
         host: Bind address.
         port: Bind port.
+        network_magic: Network magic for handshake negotiation.
         shutdown_event: Set when the node is shutting down.
     """
-    mux_tasks: list[asyncio.Task[None]] = []
+    from vibe.cardano.network.blockfetch_protocol import run_block_fetch_server
+    from vibe.cardano.network.chainsync_protocol import run_chain_sync_server
+    from vibe.cardano.network.handshake_protocol import (
+        HandshakeError,
+        run_handshake_server,
+    )
+    from vibe.cardano.network.keepalive_protocol import run_keep_alive_server
+
+    conn_tasks: list[asyncio.Task[None]] = []
 
     async def handle_connection(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -462,21 +884,80 @@ async def _run_n2n_server(
         logger.info("N2N inbound connection from %s", peer_info)
 
         bearer = Bearer(reader, writer)
-        mux = _setup_n2n_mux(bearer, is_initiator=False)
+        mux = Multiplexer(bearer, is_initiator=False)
+
+        # Register N2N miniprotocol channels.
+        channels: dict[int, MiniProtocolChannel] = {}
+        for proto_id in N2N_PROTOCOL_IDS:
+            channels[proto_id] = mux.add_protocol(proto_id)
+
+        # Start the mux in background.
+        mux_task = asyncio.create_task(mux.run(), name=f"mux-inbound-{peer_info}")
+        stop = asyncio.Event()
 
         try:
-            await mux.run()
+            # Run handshake responder on channel 0.
+            hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
+            result = await run_handshake_server(hs_channel, network_magic)
+            logger.info(
+                "N2N inbound %s: handshake accepted v%d",
+                peer_info, result.version_number,
+            )
+
+            # Launch keep-alive server (echo pings back).
+            asyncio.create_task(
+                run_keep_alive_server(
+                    channels[KEEP_ALIVE_PROTOCOL_ID], stop_event=stop,
+                ),
+                name=f"ka-server-{peer_info}",
+            )
+
+            # Launch chain-sync server (serve our headers to the peer).
+            if node_kernel is not None:
+                asyncio.create_task(
+                    run_chain_sync_server(
+                        channels[CHAIN_SYNC_N2N_ID],
+                        chain_provider=node_kernel,
+                        stop_event=stop,
+                    ),
+                    name=f"cs-server-{peer_info}",
+                )
+
+                # Launch block-fetch server (serve full blocks to the peer).
+                asyncio.create_task(
+                    run_block_fetch_server(
+                        channels[BLOCK_FETCH_N2N_ID],
+                        block_provider=node_kernel,
+                        stop_event=stop,
+                    ),
+                    name=f"bf-server-{peer_info}",
+                )
+
+            # Wait for mux to end (peer disconnect) or shutdown.
+            done, _ = await asyncio.wait(
+                [mux_task, asyncio.create_task(shutdown_event.wait())],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+        except (HandshakeError, ConnectionError, MuxClosedError) as exc:
+            logger.debug("N2N inbound %s: %s", peer_info, exc)
         except Exception as exc:
-            logger.debug("N2N connection from %s ended: %s", peer_info, exc)
+            logger.debug("N2N inbound %s ended: %s", peer_info, exc)
         finally:
+            stop.set()
             await mux.close()
+            if not mux_task.done():
+                mux_task.cancel()
+                try:
+                    await mux_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     try:
         server = await asyncio.start_server(handle_connection, host, port)
         addrs = [s.getsockname() for s in server.sockets]
         logger.info("N2N server listening on %s", addrs)
 
-        # Wait for shutdown signal.
         await shutdown_event.wait()
     except asyncio.CancelledError:
         pass
@@ -484,8 +965,7 @@ async def _run_n2n_server(
         if "server" in locals():
             server.close()
             await server.wait_closed()
-        # Cancel any active connection tasks.
-        for task in mux_tasks:
+        for task in conn_tasks:
             if not task.done():
                 task.cancel()
 
@@ -577,14 +1057,15 @@ async def run_node(config: NodeConfig) -> None:
     This is the Python equivalent of ``Ouroboros.Consensus.Node.run`` from
     the Haskell node.  It:
 
-    1. Creates the slot clock from genesis parameters
-    2. Initialises the PeerManager with configured peers
-    3. Starts the N2N TCP server for inbound connections
-    4. Starts the N2C Unix socket server (if configured)
-    5. Connects to outbound peers
-    6. Runs the forge loop (if block-producing)
-    7. Waits for shutdown signal (SIGTERM/SIGINT)
-    8. Tears down all connections and servers gracefully
+    1. Initialises storage (ChainDB = ImmutableDB + VolatileDB + LedgerDB)
+    2. Creates the slot clock from genesis parameters
+    3. Initialises the PeerManager with configured peers
+    4. Starts the N2N TCP server for inbound connections
+    5. Starts the N2C Unix socket server (if configured)
+    6. Connects to outbound peers
+    7. Runs the forge loop (if block-producing)
+    8. Waits for shutdown signal (SIGTERM/SIGINT)
+    9. Tears down all connections and servers gracefully
 
     Haskell ref:
         ``Ouroboros.Consensus.Node.run``
@@ -593,6 +1074,10 @@ async def run_node(config: NodeConfig) -> None:
     Args:
         config: The full node configuration.
     """
+    from vibe.cardano.storage import ChainDB, ImmutableDB, LedgerDB, VolatileDB
+
+    from .kernel import NodeKernel
+
     logger.info(
         "Starting vibe-node (network_magic=%d, host=%s:%d, "
         "block_producer=%s, peers=%d)",
@@ -608,6 +1093,35 @@ async def run_node(config: NodeConfig) -> None:
     loop = asyncio.get_running_loop()
     _install_signal_handlers(shutdown_event, loop)
 
+    # --- Storage ---
+    db_path = config.db_path
+    db_path.mkdir(parents=True, exist_ok=True)
+
+    immutable_db = ImmutableDB(
+        base_dir=db_path / "immutable",
+        epoch_size=config.epoch_length,
+    )
+    volatile_db = VolatileDB(db_dir=db_path / "volatile")
+    ledger_db = LedgerDB(
+        k=config.security_param,
+        snapshot_dir=db_path / "ledger-snapshots",
+    )
+    chain_db = ChainDB(
+        immutable_db=immutable_db,
+        volatile_db=volatile_db,
+        ledger_db=ledger_db,
+        k=config.security_param,
+    )
+
+    tip = await chain_db.get_tip()
+    if tip is not None:
+        logger.info("ChainDB loaded: tip at slot %d (hash=%s)", tip[0], tip[1].hex()[:16])
+    else:
+        logger.info("ChainDB loaded: empty (starting from genesis)")
+
+    # --- NodeKernel: shared state for protocol servers ---
+    node_kernel = NodeKernel()
+
     # --- Slot clock ---
     slot_config = SlotConfig(
         system_start=config.system_start,
@@ -620,7 +1134,7 @@ async def run_node(config: NodeConfig) -> None:
     logger.info("Current slot: %d", current_slot)
 
     # --- Peer manager ---
-    peer_manager = PeerManager(config)
+    peer_manager = PeerManager(config, chain_db=chain_db)
     for peer_addr in config.peers:
         peer_manager.add_peer(peer_addr)
 
@@ -630,7 +1144,10 @@ async def run_node(config: NodeConfig) -> None:
     # N2N TCP server
     tasks.append(
         asyncio.create_task(
-            _run_n2n_server(config.host, config.port, shutdown_event),
+            _run_n2n_server(
+                config.host, config.port, config.network_magic,
+                node_kernel, shutdown_event,
+            ),
             name="n2n-server",
         )
     )
@@ -651,7 +1168,7 @@ async def run_node(config: NodeConfig) -> None:
     if config.is_block_producer:
         tasks.append(
             asyncio.create_task(
-                _forge_loop(config, slot_clock, shutdown_event),
+                _forge_loop(config, slot_clock, shutdown_event, chain_db, node_kernel),
                 name="forge-loop",
             )
         )
@@ -678,4 +1195,6 @@ async def run_node(config: NodeConfig) -> None:
             except (asyncio.CancelledError, Exception):
                 pass
 
+    # Close storage
+    chain_db.close()
     logger.info("Node stopped")

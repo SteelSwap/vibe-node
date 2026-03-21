@@ -58,6 +58,7 @@ __all__ = [
     "KaMsgKeepAliveResponse",
     "KaMsgDone",
     "run_keep_alive_client",
+    "run_keep_alive_server",
 ]
 
 logger = logging.getLogger(__name__)
@@ -405,3 +406,63 @@ async def run_keep_alive_client(
             await asyncio.sleep(interval)
 
     await client.done()
+
+
+# ---------------------------------------------------------------------------
+# Server-side keep-alive runner
+# ---------------------------------------------------------------------------
+
+
+async def run_keep_alive_server(
+    channel: object,
+    *,
+    stop_event: asyncio.Event | None = None,
+) -> None:
+    """Run the server side of the keep-alive miniprotocol.
+
+    Receives MsgKeepAlive pings from the client and echoes the cookie
+    back as MsgKeepAliveResponse. Runs until the client sends MsgDone
+    or the stop_event is set.
+
+    Haskell ref:
+        ``Ouroboros.Network.Protocol.KeepAlive.Server``
+
+    Parameters
+    ----------
+    channel : MiniProtocolChannel
+        The mux channel for keep-alive (responder direction).
+    stop_event : asyncio.Event | None
+        If provided, the server exits when this event is set.
+    """
+    protocol = KeepAliveProtocol()
+    codec = KeepAliveCodec()
+    runner = ProtocolRunner(
+        role=PeerRole.Responder,
+        protocol=protocol,
+        codec=codec,
+        channel=channel,
+    )
+
+    logger.debug("Keep-alive server started")
+
+    while True:
+        if stop_event is not None and stop_event.is_set():
+            return
+
+        msg = await runner.recv_message()
+
+        if isinstance(msg, KaMsgKeepAlive):
+            # Echo the cookie back
+            await runner.send_message(KaMsgKeepAliveResponse(cookie=msg.cookie))
+            logger.debug("Keep-alive server: echoed cookie %d", msg.cookie)
+
+        elif isinstance(msg, KaMsgDone):
+            logger.debug("Keep-alive server: client sent Done")
+            return
+
+        else:
+            logger.warning(
+                "Keep-alive server: unexpected message %s",
+                type(msg).__name__,
+            )
+            return

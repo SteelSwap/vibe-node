@@ -56,24 +56,16 @@ services:
         condition: service_completed_successfully
     environment:
       CARDANO_NODE_SOCKET_PATH: /ipc/node.socket
-    command:
-      - run
-      - --topology
-      - /topology/haskell-node-1.json
-      - --database-path
-      - /data/db
-      - --socket-path
-      - /ipc/node.socket
-      - --port
-      - "3001"
-      - --config
-      - /config/config.json
-      - --shelley-kes-key
-      - /keys/pool1/kes.skey
-      - --shelley-vrf-key
-      - /keys/pool1/vrf.skey
-      - --shelley-operational-certificate
-      - /keys/pool1/opcert.cert
+      CARDANO_BLOCK_PRODUCER: "true"
+      CARDANO_TOPOLOGY: /topology/haskell-node-1.json
+      CARDANO_DATABASE_PATH: /data/db
+      CARDANO_SOCKET_PATH: /ipc/node.socket
+      CARDANO_PORT: "3001"
+      CARDANO_CONFIG: /config/config.json
+      CARDANO_SHELLEY_KES_KEY: /keys/pool1/kes.skey
+      CARDANO_SHELLEY_VRF_KEY: /keys/pool1/vrf.skey
+      CARDANO_SHELLEY_OPERATIONAL_CERTIFICATE: /keys/pool1/opcert.cert
+    command: ["run"]
     volumes:
       - ./topology:/topology:ro
       - ./keys:/keys:ro
@@ -103,24 +95,16 @@ services:
         condition: service_completed_successfully
     environment:
       CARDANO_NODE_SOCKET_PATH: /ipc/node.socket
-    command:
-      - run
-      - --topology
-      - /topology/haskell-node-2.json
-      - --database-path
-      - /data/db
-      - --socket-path
-      - /ipc/node.socket
-      - --port
-      - "3001"
-      - --config
-      - /config/config.json
-      - --shelley-kes-key
-      - /keys/pool2/kes.skey
-      - --shelley-vrf-key
-      - /keys/pool2/vrf.skey
-      - --shelley-operational-certificate
-      - /keys/pool2/opcert.cert
+      CARDANO_BLOCK_PRODUCER: "true"
+      CARDANO_TOPOLOGY: /topology/haskell-node-2.json
+      CARDANO_DATABASE_PATH: /data/db
+      CARDANO_SOCKET_PATH: /ipc/node.socket
+      CARDANO_PORT: "3001"
+      CARDANO_CONFIG: /config/config.json
+      CARDANO_SHELLEY_KES_KEY: /keys/pool2/kes.skey
+      CARDANO_SHELLEY_VRF_KEY: /keys/pool2/vrf.skey
+      CARDANO_SHELLEY_OPERATIONAL_CERTIFICATE: /keys/pool2/opcert.cert
+    command: ["run"]
     volumes:
       - ./topology:/topology:ro
       - ./keys:/keys:ro
@@ -157,6 +141,12 @@ services:
       VIBE_PEERS: "haskell-node-1:3001,haskell-node-2:3001"
       VIBE_GENESIS_DIR: "/genesis"
       VIBE_DATA_DIR: "/data"
+      VIBE_KES_KEY: "/keys/kes.skey"
+      VIBE_VRF_KEY: "/keys/vrf.skey"
+      VIBE_VRF_VKEY: "/keys/vrf.vkey"
+      VIBE_OPCERT: "/keys/opcert.cert"
+      VIBE_COLD_VKEY: "/keys/cold.vkey"
+      VIBE_COLD_SKEY: "/keys/cold.skey"
     volumes:
       - devnet-genesis:/genesis:ro
       - ./keys/pool3:/keys:ro
