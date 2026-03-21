@@ -16,19 +16,15 @@ dependencies = [
 ]
 
 [build-system]
-requires = [
-    "scikit-build-core>=0.10",
-    "pybind11>=2.13",
-]
-build-backend = "scikit_build_core.build"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.scikit-build]
-cmake.version = ">=3.18"
-build-dir = "build/{wheel_tag}"
-wheel.install-dir = "vibe/cardano/crypto"
-wheel.packages = ["src/vibe"]
-cmake.build-type = "Release"
-minimum-version = "build-system.requires"
+[tool.hatch.build.targets.wheel]
+packages = ["src/vibe"]
 
-[tool.scikit-build.cmake.define]
-CMAKE_BUILD_TYPE = "Release"
+# ---------------------------------------------------------------------------
+# Native VRF extension (built separately via scripts/build-vrf.sh or CI)
+# ---------------------------------------------------------------------------
+# The _vrf_native pybind11 extension wraps the IOG libsodium fork for
+# ECVRF-ED25519-SHA512-Elligator2. Built via CMake in CI (see tests.yml)
+# or locally via ./scripts/build-vrf.sh. Not part of the wheel build.
