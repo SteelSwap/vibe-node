@@ -160,6 +160,9 @@ class BlockHeader:
     # The raw CBOR bytes of the full header (header_body + body_signature),
     # retained for hash computation.
     header_cbor: bytes
+    # VRF output bytes from the header (nonce_vrf for Shelley-Alonzo,
+    # vrf_result for Babbage+).  None for Byron or if not decoded.
+    vrf_output: Optional[bytes] = None
 
     @property
     def hash(self) -> bytes:
@@ -242,10 +245,19 @@ def _decode_header_body_shelley(
     prev_hash = items[2]  # bytes or None
     issuer_vkey = items[3]
     # items[4] = vrf_vkey (skipped for now)
-    # items[5] = nonce_vrf (skipped for now)
+    # items[5] = nonce_vrf: $vrf_cert = [output, proof]
     # items[6] = leader_vrf (skipped for now)
     block_body_size = items[7]
     block_body_hash = items[8]
+
+    # Extract VRF output from nonce_vrf cert for nonce evolution.
+    # Shelley nonce_vrf is items[5] = [vrf_output_bytes, vrf_proof_bytes]
+    vrf_output: Optional[bytes] = None
+    nonce_vrf = items[5]
+    if isinstance(nonce_vrf, (list, tuple)) and len(nonce_vrf) >= 1:
+        candidate = nonce_vrf[0]
+        if isinstance(candidate, bytes):
+            vrf_output = candidate
 
     op_cert = OperationalCert(
         hot_vkey=items[9],
@@ -267,6 +279,7 @@ def _decode_header_body_shelley(
         operational_cert=op_cert,
         era=era,
         header_cbor=header_cbor,
+        vrf_output=vrf_output,
     )
 
 
@@ -298,9 +311,18 @@ def _decode_header_body_babbage(
     prev_hash = items[2]
     issuer_vkey = items[3]
     # items[4] = vrf_vkey (skipped for now)
-    # items[5] = vrf_result (skipped for now)
+    # items[5] = vrf_result: $vrf_cert = [vrf_output, vrf_proof]
     block_body_size = items[6]
     block_body_hash = items[7]
+
+    # Extract VRF output from vrf_result cert for nonce evolution.
+    # Babbage vrf_result is items[5] = [vrf_output_bytes, vrf_proof_bytes]
+    vrf_output: Optional[bytes] = None
+    vrf_result = items[5]
+    if isinstance(vrf_result, (list, tuple)) and len(vrf_result) >= 1:
+        candidate = vrf_result[0]
+        if isinstance(candidate, bytes):
+            vrf_output = candidate
 
     op_cert = OperationalCert(
         hot_vkey=items[8],
@@ -322,6 +344,7 @@ def _decode_header_body_babbage(
         operational_cert=op_cert,
         era=era,
         header_cbor=header_cbor,
+        vrf_output=vrf_output,
     )
 
 

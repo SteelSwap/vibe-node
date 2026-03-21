@@ -78,54 +78,6 @@ class TestStakeDistribution:
 # ---------------------------------------------------------------------------
 
 
-class TestNodeKernelStakeDistribution:
-    """Test NodeKernel's stake distribution methods."""
-
-    def test_stake_distribution_initially_none(self) -> None:
-        kernel = NodeKernel()
-        assert kernel.stake_distribution is None
-
-    def test_init_stake_distribution(self) -> None:
-        kernel = NodeKernel()
-        pools = {
-            b"\x01" * 28: 1_000_000_000_000,
-            b"\x02" * 28: 1_000_000_000_000,
-            b"\x03" * 28: 1_000_000_000_000,
-        }
-        kernel.init_stake_distribution(pools)
-
-        dist = kernel.stake_distribution
-        assert dist is not None
-        assert dist.total_stake == 3_000_000_000_000
-        assert len(dist.pool_stakes) == 3
-        for pid in pools:
-            assert abs(dist.relative_stake(pid) - 1.0 / 3.0) < 1e-12
-
-    def test_init_stake_distribution_overwrites(self) -> None:
-        kernel = NodeKernel()
-        kernel.init_stake_distribution({b"\x01" * 28: 100})
-
-        # Overwrite with different distribution
-        kernel.init_stake_distribution({b"\x02" * 28: 200})
-
-        dist = kernel.stake_distribution
-        assert dist is not None
-        assert dist.total_stake == 200
-        assert dist.relative_stake(b"\x01" * 28) == 0.0
-        assert dist.relative_stake(b"\x02" * 28) == 1.0
-
-    def test_init_empty_pools(self) -> None:
-        kernel = NodeKernel()
-        kernel.init_stake_distribution({})
-        dist = kernel.stake_distribution
-        assert dist is not None
-        assert dist.total_stake == 0
-
-
-# ---------------------------------------------------------------------------
-# Genesis staking parser tests
-# ---------------------------------------------------------------------------
-
 
 class TestParseGenesisStake:
     """Test the CLI's _parse_genesis_stake helper."""

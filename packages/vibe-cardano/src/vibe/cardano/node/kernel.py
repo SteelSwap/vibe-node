@@ -26,6 +26,11 @@ from vibe.cardano.consensus.nonce import (
     evolve_nonce,
     is_in_stability_window,
 )
+from vibe.cardano.ledger.delegation import (
+    DelegationState,
+    apply_block_certs,
+    compute_pool_stake_distribution,
+)
 from vibe.cardano.network.chainsync import Point, Tip, ORIGIN, PointOrOrigin
 from vibe.cardano.network.chainsync_protocol import ChainProvider
 from vibe.cardano.network.blockfetch_protocol import BlockProvider
@@ -37,11 +42,10 @@ logger = logging.getLogger(__name__)
 class StakeDistribution:
     """Snapshot of stake distribution for VRF leader election."""
 
-    pool_stakes: dict[bytes, int]  # pool_id (28 bytes) -> lovelace
+    pool_stakes: dict[bytes, int]
     total_stake: int
 
     def relative_stake(self, pool_id: bytes) -> float:
-        """Return the fraction of total stake held by pool_id."""
         if self.total_stake == 0:
             return 0.0
         return self.pool_stakes.get(pool_id, 0) / self.total_stake
@@ -83,7 +87,10 @@ class NodeKernel(ChainProvider, BlockProvider):
         self._eta_v: bytes = b"\x00" * 32
         self._current_epoch: int = 0
         self._epoch_length: int = 432000
-        self._stake_dist: StakeDistribution | None = None
+        # Delegation state tracking
+        self._delegation_state: DelegationState = DelegationState()
+        # Per-pool stake distribution (pool_key_hash -> total lovelace)
+        self._stake_distribution: dict[bytes, int] = {}
 
     @property
     def tip(self) -> Tip | None:
@@ -97,6 +104,65 @@ class NodeKernel(ChainProvider, BlockProvider):
     def epoch_nonce(self) -> EpochNonce:
         return self._epoch_nonce
 
+    @property
+    def delegation_state(self) -> DelegationState:
+        return self._delegation_state
+
+    @property
+    def stake_distribution(self) -> dict[bytes, int]:
+        return self._stake_distribution
+
+    @property
+    def current_epoch(self) -> int:
+        return self._current_epoch
+
+    @property
+    def epoch_length(self) -> int:
+        return self._epoch_length
+
+    def apply_delegation_certs(
+        self, transactions: list[Any], current_epoch: int
+    ) -> None:
+        """Apply delegation certificates from a block's transactions.
+
+        Called by the sync pipeline after each block is processed.
+        Updates the internal delegation state with any certificate
+        changes (registrations, delegations, pool updates, retirements).
+
+        Args:
+            transactions: List of transaction objects from the block.
+            current_epoch: Current epoch number.
+        """
+        self._delegation_state = apply_block_certs(
+            self._delegation_state, transactions, current_epoch,
+        )
+
+    def update_stake_distribution(
+        self, utxo_stakes: dict[bytes, int]
+    ) -> dict[bytes, int]:
+        """Recompute the per-pool stake distribution.
+
+        Called at epoch boundaries. Combines the current delegation state
+        with UTxO stake balances to produce the stake snapshot for leader
+        election (used with a 2-epoch lag per the Shelley spec).
+
+        Args:
+            utxo_stakes: Mapping from stake_credential_hash -> total
+                lovelace in the UTxO set for that credential.
+
+        Returns:
+            The new per-pool stake distribution.
+        """
+        self._stake_distribution = compute_pool_stake_distribution(
+            self._delegation_state, utxo_stakes,
+        )
+        logger.info(
+            "Stake distribution updated: %d pools, total stake=%d",
+            len(self._stake_distribution),
+            sum(self._stake_distribution.values()),
+        )
+        return self._stake_distribution
+
     def init_nonce(self, genesis_hash: bytes, epoch_length: int) -> None:
         """Seed the epoch nonce from the genesis hash."""
         self._epoch_nonce = EpochNonce(value=genesis_hash)
@@ -106,16 +172,6 @@ class NodeKernel(ChainProvider, BlockProvider):
             "Epoch nonce initialised: %s (epoch_length=%d)",
             genesis_hash.hex()[:16], epoch_length,
         )
-
-    @property
-    def stake_distribution(self) -> StakeDistribution | None:
-        return self._stake_dist
-
-    def init_stake_distribution(self, pools: dict[bytes, int]) -> None:
-        """Set stake distribution from genesis or epoch boundary."""
-        total = sum(pools.values())
-        self._stake_dist = StakeDistribution(pool_stakes=pools, total_stake=total)
-        logger.info("Stake distribution: %d pools, %d total lovelace", len(pools), total)
 
     def on_block_vrf_output(self, slot: int, epoch_start_slot: int, vrf_output: bytes) -> None:
         """Accumulate VRF output from a block within the stability window."""
