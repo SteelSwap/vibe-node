@@ -230,7 +230,28 @@ class PipelinedChainSyncClient:
                 logger.info("Pipelined chain-sync: stop requested")
                 return
 
-            response = await pipeline.collect_response()
+            # Race collect_response against stop_event so we don't block
+            # forever when the server has no more data.
+            if stop_event is not None:
+                collect_task = asyncio.ensure_future(pipeline.collect_response())
+                stop_task = asyncio.ensure_future(stop_event.wait())
+                done, pending = await asyncio.wait(
+                    {collect_task, stop_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for p in pending:
+                    p.cancel()
+                    try:
+                        await p
+                    except asyncio.CancelledError:
+                        pass
+                if stop_task in done:
+                    # Stop was requested while waiting for a response
+                    logger.info("Pipelined chain-sync: stop during collect")
+                    return
+                response = collect_task.result()
+            else:
+                response = await pipeline.collect_response()
 
             if isinstance(response, CsMsgRollForward):
                 await on_roll_forward(response.header, response.tip)
