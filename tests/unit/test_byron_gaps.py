@@ -222,11 +222,11 @@ class TestByronDelegationCertificate:
         from nacl.signing import SigningKey
 
         # Issuer (genesis key) creates a delegation certificate
-        issuer_sk = SigningKey.seed()
+        issuer_sk = SigningKey.generate()
         issuer_vk = issuer_sk.verify_key
 
         # The payload: hash of (delegate_vk || epoch_number)
-        delegate_sk = SigningKey.seed()
+        delegate_sk = SigningKey.generate()
         delegate_vk = delegate_sk.verify_key
         epoch = 42
         payload = hashlib.blake2b(
@@ -245,8 +245,8 @@ class TestByronDelegationCertificate:
         from nacl.exceptions import BadSignatureError
         from nacl.signing import SigningKey
 
-        issuer_sk = SigningKey.seed()
-        wrong_vk = SigningKey.seed().verify_key
+        issuer_sk = SigningKey.generate()
+        wrong_vk = SigningKey.generate().verify_key
 
         payload = b"delegation-payload"
         signed = issuer_sk.sign(payload)
