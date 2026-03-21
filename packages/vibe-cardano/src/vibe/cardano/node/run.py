@@ -198,12 +198,14 @@ class PeerManager:
 
     Args:
         config: Node configuration (for network_magic and peer list).
+        chain_db: ChainDB instance for storing received blocks.
     """
 
-    __slots__ = ("_config", "_peers", "_stopped", "_tasks")
+    __slots__ = ("_config", "_chain_db", "_peers", "_stopped", "_tasks")
 
-    def __init__(self, config: NodeConfig) -> None:
+    def __init__(self, config: NodeConfig, chain_db: Any = None) -> None:
         self._config = config
+        self._chain_db = chain_db
         self._peers: dict[str, _PeerConnection] = {}
         self._stopped = False
         self._tasks: list[asyncio.Task[None]] = []
@@ -548,6 +550,7 @@ async def _forge_loop(
     config: NodeConfig,
     slot_clock: SlotClock,
     shutdown_event: asyncio.Event,
+    chain_db: Any = None,
 ) -> None:
     """Slot-by-slot leader check and block forging loop.
 
@@ -664,6 +667,19 @@ async def _forge_loop(
             blocks_forged += 1
             prev_block_number = forged.block.block_number
             prev_header_hash = forged.block.block_hash
+
+            # Store in ChainDB
+            if chain_db is not None:
+                try:
+                    await chain_db.add_block(
+                        slot=forged.block.slot,
+                        block_hash=forged.block.block_hash,
+                        predecessor_hash=prev_header_hash if prev_block_number > 1 else b"\x00" * 32,
+                        block_number=forged.block.block_number,
+                        cbor_bytes=forged.cbor,
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to store forged block: %s", exc)
 
             logger.info(
                 "FORGED BLOCK %d at slot %d (%d bytes, hash=%s) "
@@ -828,14 +844,15 @@ async def run_node(config: NodeConfig) -> None:
     This is the Python equivalent of ``Ouroboros.Consensus.Node.run`` from
     the Haskell node.  It:
 
-    1. Creates the slot clock from genesis parameters
-    2. Initialises the PeerManager with configured peers
-    3. Starts the N2N TCP server for inbound connections
-    4. Starts the N2C Unix socket server (if configured)
-    5. Connects to outbound peers
-    6. Runs the forge loop (if block-producing)
-    7. Waits for shutdown signal (SIGTERM/SIGINT)
-    8. Tears down all connections and servers gracefully
+    1. Initialises storage (ChainDB = ImmutableDB + VolatileDB + LedgerDB)
+    2. Creates the slot clock from genesis parameters
+    3. Initialises the PeerManager with configured peers
+    4. Starts the N2N TCP server for inbound connections
+    5. Starts the N2C Unix socket server (if configured)
+    6. Connects to outbound peers
+    7. Runs the forge loop (if block-producing)
+    8. Waits for shutdown signal (SIGTERM/SIGINT)
+    9. Tears down all connections and servers gracefully
 
     Haskell ref:
         ``Ouroboros.Consensus.Node.run``
@@ -844,6 +861,8 @@ async def run_node(config: NodeConfig) -> None:
     Args:
         config: The full node configuration.
     """
+    from vibe.cardano.storage import ChainDB, ImmutableDB, LedgerDB, VolatileDB
+
     logger.info(
         "Starting vibe-node (network_magic=%d, host=%s:%d, "
         "block_producer=%s, peers=%d)",
@@ -859,6 +878,32 @@ async def run_node(config: NodeConfig) -> None:
     loop = asyncio.get_running_loop()
     _install_signal_handlers(shutdown_event, loop)
 
+    # --- Storage ---
+    db_path = config.db_path
+    db_path.mkdir(parents=True, exist_ok=True)
+
+    immutable_db = ImmutableDB(
+        base_dir=db_path / "immutable",
+        epoch_size=config.epoch_length,
+    )
+    volatile_db = VolatileDB(db_dir=db_path / "volatile")
+    ledger_db = LedgerDB(
+        k=config.security_param,
+        snapshot_dir=db_path / "ledger-snapshots",
+    )
+    chain_db = ChainDB(
+        immutable_db=immutable_db,
+        volatile_db=volatile_db,
+        ledger_db=ledger_db,
+        k=config.security_param,
+    )
+
+    tip = await chain_db.get_tip()
+    if tip is not None:
+        logger.info("ChainDB loaded: tip at slot %d (hash=%s)", tip[0], tip[1].hex()[:16])
+    else:
+        logger.info("ChainDB loaded: empty (starting from genesis)")
+
     # --- Slot clock ---
     slot_config = SlotConfig(
         system_start=config.system_start,
@@ -871,7 +916,7 @@ async def run_node(config: NodeConfig) -> None:
     logger.info("Current slot: %d", current_slot)
 
     # --- Peer manager ---
-    peer_manager = PeerManager(config)
+    peer_manager = PeerManager(config, chain_db=chain_db)
     for peer_addr in config.peers:
         peer_manager.add_peer(peer_addr)
 
@@ -902,7 +947,7 @@ async def run_node(config: NodeConfig) -> None:
     if config.is_block_producer:
         tasks.append(
             asyncio.create_task(
-                _forge_loop(config, slot_clock, shutdown_event),
+                _forge_loop(config, slot_clock, shutdown_event, chain_db),
                 name="forge-loop",
             )
         )
@@ -929,4 +974,6 @@ async def run_node(config: NodeConfig) -> None:
             except (asyncio.CancelledError, Exception):
                 pass
 
+    # Close storage
+    chain_db.close()
     logger.info("Node stopped")
