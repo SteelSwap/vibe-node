@@ -825,6 +825,7 @@ class TestMultipleScriptLanguages:
             )
         ]
         datums = [cbor2.dumps(99)]
+        datum_hash = hashlib.blake2b(datums[0], digest_size=32).digest()
         cost_models: dict[Language, dict[str, int]] = {
             Language.PLUTUS_V1: {"a": 1}
         }
@@ -837,7 +838,10 @@ class TestMultipleScriptLanguages:
 
         tx_body = TransactionBody(
             inputs=[txin],
-            outputs=[TransactionOutput(addr, 8_000_000)],
+            outputs=[TransactionOutput(
+                addr, 8_000_000,
+                datum_hash=DatumHash(datum_hash),
+            )],
             fee=2_000_000,
             collateral=[coll_txin],
             validity_start=10,
