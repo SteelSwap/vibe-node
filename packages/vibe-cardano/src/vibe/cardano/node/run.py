@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from vibe.core.multiplexer import Bearer, MiniProtocolChannel, Multiplexer, MuxClosedError
+from vibe.core.multiplexer import Bearer, BearerClosedError, MiniProtocolChannel, Multiplexer, MuxClosedError
 
 from vibe.cardano.consensus.slot_arithmetic import SlotConfig, slot_to_wall_clock, wall_clock_to_slot
 from vibe.cardano.network.handshake import HANDSHAKE_PROTOCOL_ID
@@ -1085,10 +1085,25 @@ async def _run_n2n_server(
                 peer_info, result.version_number,
             )
 
+            # Helper: wrap server coroutines so MuxClosedError on
+            # peer disconnect doesn't produce "Task exception never retrieved"
+            async def _safe_server(coro, name: str) -> None:
+                try:
+                    await coro
+                except (MuxClosedError, BearerClosedError):
+                    logger.debug("N2N inbound %s: %s disconnected", peer_info, name)
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    logger.debug("N2N inbound %s: %s error: %s", peer_info, name, exc)
+
             # Launch keep-alive server (echo pings back).
             asyncio.create_task(
-                run_keep_alive_server(
-                    channels[KEEP_ALIVE_PROTOCOL_ID], stop_event=stop,
+                _safe_server(
+                    run_keep_alive_server(
+                        channels[KEEP_ALIVE_PROTOCOL_ID], stop_event=stop,
+                    ),
+                    "keep-alive",
                 ),
                 name=f"ka-server-{peer_info}",
             )
@@ -1096,20 +1111,26 @@ async def _run_n2n_server(
             # Launch chain-sync server (serve our headers to the peer).
             if node_kernel is not None:
                 asyncio.create_task(
-                    run_chain_sync_server(
-                        channels[CHAIN_SYNC_N2N_ID],
-                        chain_provider=node_kernel,
-                        stop_event=stop,
+                    _safe_server(
+                        run_chain_sync_server(
+                            channels[CHAIN_SYNC_N2N_ID],
+                            chain_provider=node_kernel,
+                            stop_event=stop,
+                        ),
+                        "chain-sync",
                     ),
                     name=f"cs-server-{peer_info}",
                 )
 
                 # Launch block-fetch server (serve full blocks to the peer).
                 asyncio.create_task(
-                    run_block_fetch_server(
-                        channels[BLOCK_FETCH_N2N_ID],
-                        block_provider=node_kernel,
-                        stop_event=stop,
+                    _safe_server(
+                        run_block_fetch_server(
+                            channels[BLOCK_FETCH_N2N_ID],
+                            block_provider=node_kernel,
+                            stop_event=stop,
+                        ),
+                        "block-fetch",
                     ),
                     name=f"bf-server-{peer_info}",
                 )
@@ -1141,11 +1162,14 @@ async def _run_n2n_server(
                             )
 
                 asyncio.create_task(
-                    run_tx_submission_server(
-                        channels[TX_SUBMISSION_N2N_ID],
-                        on_tx_ids_received=_on_tx_ids,
-                        on_txs_received=_on_txs,
-                        stop_event=stop,
+                    _safe_server(
+                        run_tx_submission_server(
+                            channels[TX_SUBMISSION_N2N_ID],
+                            on_tx_ids_received=_on_tx_ids,
+                            on_txs_received=_on_txs,
+                            stop_event=stop,
+                        ),
+                        "tx-submission",
                     ),
                     name=f"txsub-server-{peer_info}",
                 )
