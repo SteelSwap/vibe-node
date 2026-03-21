@@ -1536,6 +1536,8 @@ async def run_node(config: NodeConfig) -> None:
     node_kernel.init_nonce(nonce_seed, config.epoch_length)
     if config.initial_pool_stakes:
         node_kernel.update_stake_distribution(config.initial_pool_stakes)
+    if config.protocol_params:
+        node_kernel.init_protocol_params(config.protocol_params)
 
     # --- Slot clock ---
     slot_config = SlotConfig(

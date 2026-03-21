@@ -89,6 +89,9 @@ class NodeKernel(ChainProvider, BlockProvider):
         self._epoch_length: int = 432000
         # Delegation state tracking
         self._delegation_state: DelegationState = DelegationState()
+        # Protocol parameters
+        self._protocol_params: dict[str, Any] = {}
+        self._pending_param_updates: list[dict[str, Any]] = []
         # Per-pool stake distribution (pool_key_hash -> total lovelace)
         self._stake_distribution: dict[bytes, int] = {}
 
@@ -162,6 +165,24 @@ class NodeKernel(ChainProvider, BlockProvider):
             sum(self._stake_distribution.values()),
         )
         return self._stake_distribution
+
+    @property
+    def protocol_params(self) -> dict[str, Any]:
+        return self._protocol_params
+
+    def init_protocol_params(self, params: dict[str, Any]) -> None:
+        self._protocol_params = dict(params)
+
+    def queue_param_update(self, update: dict[str, Any]) -> None:
+        self._pending_param_updates.append(update)
+
+    def apply_pending_updates(self) -> None:
+        for update in self._pending_param_updates:
+            self._protocol_params.update(update)
+        count = len(self._pending_param_updates)
+        self._pending_param_updates.clear()
+        if count:
+            logger.info("Applied %d protocol parameter updates", count)
 
     def init_nonce(self, genesis_hash: bytes, epoch_length: int) -> None:
         """Seed the epoch nonce from the genesis hash."""
