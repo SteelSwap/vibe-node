@@ -5,8 +5,8 @@
 [![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](https://www.python.org/downloads/)
 [![Built with AI](https://img.shields.io/badge/built%20with-AI%20%28vibe%20coded%29-ff6d00.svg)]()
 [![Cardano](https://img.shields.io/badge/Cardano-node-0033AD.svg)](https://cardano.org)
-[![Tests](https://img.shields.io/badge/tests-1%2C617%20passing-brightgreen.svg)]()
-[![Version](https://img.shields.io/badge/version-v0.3.0-blue.svg)](https://github.com/SteelSwap/vibe-node/releases/tag/v0.3.0)
+[![Tests](https://img.shields.io/badge/tests-3%2C415%20passing-brightgreen.svg)]()
+[![Version](https://img.shields.io/badge/version-v0.4.0-blue.svg)](https://github.com/SteelSwap/vibe-node/releases/tag/v0.4.0)
 
 A vibe-coded, spec-compliant Cardano node written in Python.
 
@@ -20,8 +20,8 @@ This is not just a node — it's a public education in vibe coding with extreme 
 
 ## Current Status
 
-> **Phase 4 — Ledger & Consensus: IN PROGRESS** (Wave 1 complete, Wave 2 next).
-> vibe-node syncs the chain, decodes all eras, validates Byron-Mary, and has Alonzo ledger + Plutus evaluation + VRF/KES crypto + all N2N miniprotocols.
+> **Phase 4 — Ledger & Consensus: COMPLETE.** 3,415 tests passing.
+> vibe-node validates the chain: full Alonzo-Conway ledger, Plutus V1/V2/V3 evaluation, Ouroboros Praos consensus, VRF/KES crypto, all N2N miniprotocols, Hard Fork Combinator, and 3-node devnet infrastructure.
 
 ### What the node can do
 
@@ -49,7 +49,7 @@ This is not just a node — it's a public education in vibe coding with extreme 
 | **Phase 1** — Research & Analysis | Complete | 2,046 rules, 1,567 gaps, architecture blueprint |
 | **Phase 2** — Serialization & Networking | Complete | CBOR decoders, multiplexer, handshake, chain-sync — 643 tests |
 | **Phase 3** — Chain Sync & Storage | Complete | Block-fetch, Arrow+Dict storage, Byron-Mary ledger, Mithril, crash recovery — 1,264 tests |
-| **Phase 4** — Ledger & Consensus | **In Progress** | VRF/KES, Alonzo ledger, Plutus, tx-submission, keep-alive — 465 new tests |
+| **Phase 4** — Ledger & Consensus | Complete | VRF/KES, Alonzo-Conway ledger, Plutus, Praos consensus, HFC, devnet — 3,415 total tests |
 
 ### Benchmarks (Real Preprod)
 

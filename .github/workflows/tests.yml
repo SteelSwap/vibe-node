@@ -22,11 +22,31 @@ jobs:
       - name: Install Python 3.14
         run: uv python install 3.14
 
+      - name: Pin Python 3.14 for this project
+        run: uv python pin 3.14
+
       - name: Install system dependencies (libsodium build)
         run: sudo apt-get update && sudo apt-get install -y build-essential autoconf automake libtool cmake
 
-      - name: Install dependencies + build VRF native extension
+      - name: Install dependencies
         run: uv sync --dev
+
+      - name: Build VRF native extension
+        run: |
+          cd packages/vibe-cardano
+          uv pip install pybind11 cmake
+          echo "Python version: $(uv run python --version)"
+          PYBIND11_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())")
+          PYTHON_EXE=$(uv run python -c "import sys; print(sys.executable)")
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_DIR" -DPYTHON_EXECUTABLE="$PYTHON_EXE"
+          cmake --build build -j$(nproc)
+          # Find where Python resolves the crypto package and copy .so there
+          CRYPTO_DIR=$(uv run python -c "import vibe.cardano.crypto; import os; print(os.path.dirname(vibe.cardano.crypto.__file__))")
+          echo "Crypto package at: $CRYPTO_DIR"
+          cp build/_vrf_native*.so "$CRYPTO_DIR/"
+          ls -la "$CRYPTO_DIR"/_vrf_native*
+          # Verify it loads
+          uv run python -c "from vibe.cardano.crypto.vrf import HAS_VRF_NATIVE; print(f'HAS_VRF_NATIVE={HAS_VRF_NATIVE}'); assert HAS_VRF_NATIVE, 'VRF native extension not loaded'"
 
       - name: Run tests
         run: uv run pytest -n auto -v --tb=short -p no:sugar -p no:benchmark --timeout=60
