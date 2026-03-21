@@ -107,9 +107,9 @@ class TestNodeConfig:
         assert sample_pool_keys.cold_sk is not None
 
     def test_pool_keys_optional_cold_sk(self) -> None:
-        """cold_sk is optional (pre-generated OCert case)."""
+        """cold_sk defaults to empty bytes (pre-generated OCert case)."""
         keys = PoolKeys(cold_vk=b"\x00" * 32)
-        assert keys.cold_sk is None
+        assert keys.cold_sk == b""
 
     def test_config_is_block_producer(self, sample_config: NodeConfig) -> None:
         """Node with pool_keys is a block producer."""
@@ -354,7 +354,16 @@ class TestForgeLoop:
         """Forge loop exits when shutdown_event is set."""
         from vibe.cardano.node.run import _forge_loop
 
-        keys = PoolKeys(cold_vk=b"\x01" * 32)
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        cold_sk_obj = Ed25519PrivateKey.generate()
+        cold_sk_bytes = cold_sk_obj.private_bytes_raw()
+        cold_vk_bytes = cold_sk_obj.public_key().public_bytes_raw()
+        keys = PoolKeys(
+            cold_vk=cold_vk_bytes,
+            cold_sk=cold_sk_bytes,
+            vrf_sk=b"\x05" * 64,
+            vrf_vk=b"\x06" * 32,
+        )
         config = NodeConfig(
             network_magic=2,
             pool_keys=keys,
