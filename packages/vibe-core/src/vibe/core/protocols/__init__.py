@@ -16,11 +16,15 @@ Codec, CodecError
 ProtocolRunner
     Drives a protocol state machine over a mux channel,
     from :mod:`~vibe.core.protocols.runner`.
+PipelinedRunner
+    Sends multiple requests without waiting for responses,
+    from :mod:`~vibe.core.protocols.pipelining`.
 """
 
 from .agency import Agency, Message, PeerRole, Protocol, ProtocolError
 from .codec import Codec, CodecError
 from .peer import Peer
+from .pipelining import PipelinedRunner
 from .runner import ProtocolRunner
 
 __all__ = [
@@ -30,6 +34,7 @@ __all__ = [
     "Message",
     "Peer",
     "PeerRole",
+    "PipelinedRunner",
     "Protocol",
     "ProtocolError",
     "ProtocolRunner",
