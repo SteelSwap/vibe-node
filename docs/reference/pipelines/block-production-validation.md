@@ -9,10 +9,16 @@ This document traces the complete lifecycle of a Cardano block — from VRF lead
 ```mermaid
 flowchart TB
     subgraph Production ["Block Production (Forge Node)"]
-        A[Slot Clock Tick] --> B{checkIsLeader}
+        A[Slot Clock Tick] --> AA{mkCurrentBlockContext}
+        AA -->|"Chain empty or tip in future"| A
+        AA -->|"Got prev point + block number"| AB[Get LedgerState at prev point]
+        AB --> AC{Ledger View Forecast}
+        AC -->|"Too far behind tip → SKIP"| A
+        AC -->|"Within forecast window"| B{checkIsLeader}
         B -->|Not Leader| A
-        B -->|Leader| C[Select Txs from Mempool]
-        C --> D[Build Block Body]
+        B -->|Leader| C[Tick LedgerState to current slot]
+        C --> CC[Get Mempool Snapshot]
+        CC --> D[Build Block Body from Txs]
         D --> E[Build Header Body]
         E --> F[KES Sign Header]
         F --> G[Assemble Block]
@@ -44,7 +50,36 @@ flowchart TB
 
 ---
 
-## 1. Leader Election
+## 1. Sync Gate (Must Be Caught Up Before Forging)
+
+The Haskell forge loop does **not** have an explicit "am I synced?" check. Instead, it uses an implicit gate via the ledger view forecast.
+
+```mermaid
+flowchart LR
+    A[Current Slot] --> B[Read ChainDB tip]
+    B --> C["gap = currentSlot - tipSlot"]
+    C --> D{"gap < 3k/f slots?"}
+    D -->|Yes: within forecast window| E[Proceed to leader check]
+    D -->|"No: too far behind"| F["TraceNoLedgerView → skip slot"]
+```
+
+**Haskell source:** `Ouroboros.Consensus.NodeKernel.forkBlockForging` (line 608-627)
+
+At each slot, the forge loop:
+
+1. **`mkCurrentBlockContext`** (line 574) — reads `ChainDB.getCurrentChain` to find the tip. If the chain is empty or the tip's slot is >= currentSlot, the forge exits early (`TraceSlotIsImmutable` or `TraceBlockFromFuture`).
+
+2. **`getReadOnlyForkerAtPoint`** (line 594) — gets a ledger state snapshot at the previous block's point. If the chain switched and that point is no longer on it, gives up (`TraceNoLedgerState`).
+
+3. **`ledgerViewForecastAt`** (line 608-627) — computes the protocol-level ledger view for the current slot. The forecast has a limited window: at most `3k/f` slots from the tip. On mainnet (`k=2160, f=0.05`): ~129,600 slots (~36 hours). On our devnet (`k=10, f=0.1`): ~300 slots (~60 seconds). **If the node is further behind than this, the forecast fails and the forge loop skips the slot** with `TraceNoLedgerView`.
+
+This means the node naturally stops forging when it's far behind the chain tip, and resumes when it catches up. There is no explicit GSM check in the forge path — the GSM (`PreSyncing` / `Syncing` / `CaughtUp`) is used by the diffusion layer for peer selection, not by the forge loop.
+
+**Implication for vibe-node:** Our forge loop must read `prev_hash` and `block_number` from ChainDB's current chain — NOT from an isolated counter. And we must skip forging when ChainDB's tip is more than `3k/f` slots behind the current wall-clock slot.
+
+---
+
+## 2. Leader Election
 
 At each slot boundary, the node checks whether it is elected to produce a block.
 
@@ -78,7 +113,7 @@ This is the Praos `φ(sigma)` function — the probability that a pool with rela
 
 ---
 
-## 2. Block Forging
+## 3. Block Forging
 
 Once elected, the node constructs a block from the current ledger state and mempool.
 
@@ -149,7 +184,7 @@ Where `header = [headerBody, kesSignature]` — the full header including the KE
 
 ---
 
-## 3. Block Diffusion
+## 4. Block Diffusion
 
 After forging, the block must reach other nodes via the network layer.
 
@@ -186,7 +221,7 @@ sequenceDiagram
 
 ---
 
-## 4. Block Validation (Receiving Node)
+## 5. Block Validation (Receiving Node)
 
 When a block arrives from a peer, it goes through a multi-stage validation pipeline.
 
@@ -228,7 +263,7 @@ flowchart TB
 
 **Haskell source:** `Ouroboros.Consensus.Storage.ChainDB.Impl.ChainSel`
 
-### 4a. Header Validation
+### 5a. Header Validation
 
 Basic structural checks before fetching the full block body:
 
@@ -236,7 +271,7 @@ Basic structural checks before fetching the full block body:
 2. **Block number progression** — must be exactly previous + 1
 3. **Protocol envelope** — header size within limits, VRF/KES field sizes correct
 
-### 4b. Protocol State Transition (PRTCL Rule)
+### 5b. Protocol State Transition (PRTCL Rule)
 
 Verifies the consensus-layer fields in the header:
 
@@ -248,7 +283,7 @@ Verifies the consensus-layer fields in the header:
 
 **Haskell source:** `Cardano.Protocol.TPraos.Rules.Prtcl`
 
-### 4c. Block Body Validation (BBODY Rule)
+### 5c. Block Body Validation (BBODY Rule)
 
 Full ledger validation of all transactions in the block:
 
@@ -263,7 +298,7 @@ Full ledger validation of all transactions in the block:
 
 ---
 
-## 5. Chain Selection
+## 6. Chain Selection
 
 When multiple valid chains exist (forks), the node selects the best one.
 
