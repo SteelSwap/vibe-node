@@ -570,3 +570,243 @@ async def test_txseq_split_by_size():
     prefix_all, suffix_all = pool.split_by_size(10000)
     assert len(prefix_all) == 4
     assert len(suffix_all) == 0
+
+
+# ---------------------------------------------------------------------------
+# 8. Timeout evicts old txs (Haskell parity gap)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mempool_timeout_evicts_old_txs():
+    """Transactions older than the configured timeout are evicted.
+
+    Verifies that evict_expired removes exactly those txs added before
+    the timeout threshold, while retaining fresher ones.
+
+    Haskell reference:
+        The Haskell node uses TTL-based expiry via re-validation. Our
+        evict_expired is a vibe-node extension that provides explicit
+        slot-based timeout eviction for safety.
+    """
+    validator = MockValidator()
+    config = MempoolConfig(capacity_bytes=50000, tx_timeout_slots=50)
+    pool = Mempool(config=config, validator=validator, current_slot=10)
+
+    # Add 3 txs at slot 10.
+    tx_a = make_tx(100, 200)
+    tx_b = make_tx(101, 300)
+    await pool.add_tx(tx_a)
+    await pool.add_tx(tx_b)
+
+    # Advance slot and add a third tx at slot 40.
+    pool._current_slot = 40
+    tx_c = make_tx(102, 150)
+    await pool.add_tx(tx_c)
+    pool._added_at_slot[_compute_tx_id(tx_c)] = 40
+
+    # At slot 60: txs from slot 10 are 50 slots old (>= timeout).
+    # tx_c from slot 40 is only 20 slots old (< timeout).
+    evicted = await pool.evict_expired(current_slot=60)
+
+    assert len(evicted) == 2  # tx_a and tx_b evicted
+    assert pool.size == 1  # tx_c remains
+    assert pool.total_size_bytes == 150
+
+
+# ---------------------------------------------------------------------------
+# 9. TX_REMOVED event fires on remove (Haskell parity gap)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mempool_trace_removed_callback():
+    """Removing a transaction fires the TX_REMOVED event callback.
+
+    Haskell reference:
+        TraceMempoolRemoveTxs in
+        Ouroboros.Consensus.Mempool.Impl.Common
+    """
+    validator = MockValidator()
+    config = MempoolConfig(capacity_bytes=10000)
+    pool = Mempool(config=config, validator=validator, current_slot=0)
+
+    events: list[tuple[str, dict]] = []
+    pool.on_event(lambda et, d: events.append((et, d)))
+
+    tx = make_tx(1, 100)
+    vtx = await pool.add_tx(tx)
+
+    # Remove the tx.
+    removed = await pool.remove_txs({vtx.tx_id})
+    assert removed == 1
+
+    # Check for TX_REMOVED event.
+    removed_events = [(e, d) for e, d in events if e == MempoolEvent.TX_REMOVED]
+    assert len(removed_events) == 1
+    assert removed_events[0][1]["tx_id"] == vtx.tx_id
+
+
+# ---------------------------------------------------------------------------
+# 10. Golden payload — known CBOR produces expected state (Haskell parity gap)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mempool_golden_payload():
+    """A known tx CBOR produces a deterministic mempool state.
+
+    This is a golden test: given a fixed CBOR payload, the mempool
+    should produce a specific tx_id (Blake2b-256), size, and ticket_no.
+    Deterministic behavior is essential for cross-node conformance.
+
+    Haskell reference:
+        Golden tests in Test.Consensus.Mempool (Haskell test suite)
+    """
+    validator = MockValidator()
+    config = MempoolConfig(capacity_bytes=10000)
+    pool = Mempool(config=config, validator=validator, current_slot=42)
+
+    # Fixed 64-byte "transaction" CBOR.
+    golden_cbor = bytes(range(64))
+    expected_id = _compute_tx_id(golden_cbor)
+
+    vtx = await pool.add_tx(golden_cbor)
+
+    assert vtx.tx_id == expected_id
+    assert vtx.tx_size == 64
+    assert vtx.tx_cbor == golden_cbor
+
+    snap = await pool.get_snapshot()
+    assert snap.slot == 42
+    assert len(snap.tickets) == 1
+    assert snap.tickets[0].ticket_no == 0
+    assert snap.tickets[0].validated_tx.tx_id == expected_id
+    assert snap.total_size_bytes == 64
+
+
+# ---------------------------------------------------------------------------
+# 11. Init with ledger state — mempool initializes from slot (Haskell gap)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mempool_init_with_ledger_state():
+    """Mempool initializes from a given ledger slot.
+
+    The mempool must be constructable with a non-zero current_slot,
+    representing initialization from a ledger state mid-chain (e.g.,
+    after loading a Mithril snapshot).
+
+    Haskell reference:
+        Ouroboros.Consensus.Mempool.Impl.Common.openMempool
+        initializes the mempool at the current ledger tip.
+    """
+    validator = MockValidator()
+    config = MempoolConfig(capacity_bytes=10000)
+    initial_slot = 12345
+
+    pool = Mempool(config=config, validator=validator, current_slot=initial_slot)
+
+    assert pool.current_slot == initial_slot
+    assert pool.size == 0
+    assert pool.total_size_bytes == 0
+
+    # Adding a tx should work and record the correct slot.
+    tx = make_tx(1, 100)
+    vtx = await pool.add_tx(tx)
+    assert vtx.tx_id in pool._added_at_slot
+    assert pool._added_at_slot[vtx.tx_id] == initial_slot
+
+
+# ---------------------------------------------------------------------------
+# 12. Config capacity is the real limit (Haskell parity gap)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mempool_config_capacity_respected():
+    """The mempool capacity_bytes from config is the enforced limit.
+
+    Verifies that the capacity isn't a soft limit — once total bytes
+    reach capacity, the next add_tx must raise MempoolCapacityError.
+
+    Haskell reference:
+        Ouroboros.Consensus.Mempool.Impl.Common.implTryAddTx
+        checks ``txsSize + txSize > capacity`` before adding.
+    """
+    validator = MockValidator()
+    config = MempoolConfig(capacity_bytes=500)
+    pool = Mempool(config=config, validator=validator, current_slot=0)
+
+    # Fill to exactly capacity.
+    tx1 = make_tx(1, 250)
+    tx2 = make_tx(2, 250)
+    await pool.add_tx(tx1)
+    await pool.add_tx(tx2)
+    assert pool.total_size_bytes == 500
+    assert pool.available_bytes == 0
+
+    # Even a 1-byte tx should be rejected.
+    with pytest.raises(MempoolCapacityError) as exc_info:
+        await pool.add_tx(make_tx(3, 1))
+    assert exc_info.value.capacity == 500
+    assert exc_info.value.available == 0
+    assert exc_info.value.needed == 1
+
+
+# ---------------------------------------------------------------------------
+# 13. split_by_size matches spec exactly (Haskell parity gap)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_txseq_split_matches_spec():
+    """split_by_size matches the Haskell TxSeq.splitAfterTxSize spec.
+
+    The Haskell splitAfterTxSize returns the longest prefix whose
+    cumulative measure is <= the given bound. Verify this property
+    with multiple size boundaries.
+
+    Haskell reference:
+        Ouroboros.Consensus.Mempool.TxSeq.splitAfterTxSize
+    """
+    validator = MockValidator()
+    config = MempoolConfig(capacity_bytes=50000)
+    pool = Mempool(config=config, validator=validator, current_slot=0)
+
+    # Add txs of known sizes: 100, 200, 300, 400, 500 = 1500 total.
+    sizes = [100, 200, 300, 400, 500]
+    for i, size in enumerate(sizes):
+        await pool.add_tx(make_tx(i, size))
+
+    # Split at each cumulative boundary and verify.
+    # max_size=99: nothing fits (first tx is 100).
+    prefix, suffix = pool.split_by_size(99)
+    assert [t.validated_tx.tx_size for t in prefix] == []
+    assert len(suffix) == 5
+
+    # max_size=100: exactly first tx fits.
+    prefix, suffix = pool.split_by_size(100)
+    assert [t.validated_tx.tx_size for t in prefix] == [100]
+    assert len(suffix) == 4
+
+    # max_size=300: first two fit (100+200=300).
+    prefix, suffix = pool.split_by_size(300)
+    assert [t.validated_tx.tx_size for t in prefix] == [100, 200]
+    assert len(suffix) == 3
+
+    # max_size=599: first two fit, third doesn't (100+200+300=600 > 599).
+    prefix, suffix = pool.split_by_size(599)
+    assert [t.validated_tx.tx_size for t in prefix] == [100, 200]
+    assert len(suffix) == 3
+
+    # max_size=600: first three fit (100+200+300=600).
+    prefix, suffix = pool.split_by_size(600)
+    assert [t.validated_tx.tx_size for t in prefix] == [100, 200, 300]
+    assert len(suffix) == 2
+
+    # max_size=1500: everything fits.
+    prefix, suffix = pool.split_by_size(1500)
+    assert [t.validated_tx.tx_size for t in prefix] == sizes
+    assert len(suffix) == 0
