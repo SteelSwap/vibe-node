@@ -50,6 +50,7 @@ from vibe.cardano.ledger.conway_types import (
     DRep,
     DRepDeregistration,
     DRepRegistration,
+    DRepType,
     DRepUpdate,
     GovAction,
     GovActionId,
@@ -281,7 +282,6 @@ def process_deleg_vote(
         )
 
     # For key/script DReps, the DRep must be registered
-    from vibe.cardano.ledger.conway_types import DRepType
     if cert.drep.drep_type in (DRepType.KEY_HASH, DRepType.SCRIPT_HASH):
         if cert.drep.credential not in gov_state.dreps:
             raise ConwayGovernanceError(
@@ -408,6 +408,79 @@ def validate_voting_procedures(
 
 
 # ---------------------------------------------------------------------------
+# Default SPO vote logic
+# ---------------------------------------------------------------------------
+
+
+class DefaultVote:
+    """Possible default votes for non-voting SPOs.
+
+    Spec ref: Conway formal spec, Section 6 — default SPO vote logic.
+    Haskell ref: ``spoAcceptedRatio`` in ``Cardano.Ledger.Conway.Rules.Ratify``
+    """
+
+    YES = "yes"
+    NO = "no"
+    ABSTAIN = "abstain"
+
+
+def default_stake_pool_vote(
+    pool_id: bytes,
+    action_type: GovActionType,
+    protocol_version_major: int,
+    reward_account_delegations: dict[bytes, DRep],
+) -> str:
+    """Determine the default vote for a non-voting stake pool.
+
+    Follows the Haskell ``spoAcceptedRatio`` logic from ``Ratify.hs``:
+
+    1. HardForkInitiation: non-voters always abstain (any PV).
+    2. Bootstrap phase (PV < 10): non-voters abstain.
+    3. PV >= 10: check the pool's reward account DRep delegation:
+       - AlwaysAbstain -> abstain
+       - AlwaysNoConfidence + NoConfidence action -> yes
+       - AlwaysNoConfidence + other action -> no
+       - Otherwise (no delegation or key/script DRep) -> no
+
+    Spec ref: Conway formal spec, Section 6 (default SPO vote).
+    Haskell ref: ``spoAcceptedRatio`` in
+        ``Cardano.Ledger.Conway.Rules.Ratify``
+
+    Args:
+        pool_id: 28-byte pool key hash.
+        action_type: The governance action type being voted on.
+        protocol_version_major: Current major protocol version.
+        reward_account_delegations: Pool reward account credential -> DRep.
+
+    Returns:
+        One of DefaultVote.YES, DefaultVote.NO, DefaultVote.ABSTAIN.
+    """
+    # HardForkInitiation: non-voters always abstain
+    if action_type == GovActionType.HARD_FORK_INITIATION:
+        return DefaultVote.ABSTAIN
+
+    # Bootstrap phase (PV < 10): non-voters abstain
+    if protocol_version_major < 10:
+        return DefaultVote.ABSTAIN
+
+    # PV >= 10: check reward account delegation
+    drep = reward_account_delegations.get(pool_id)
+    if drep is None:
+        return DefaultVote.NO
+
+    if drep.drep_type == DRepType.ALWAYS_ABSTAIN:
+        return DefaultVote.ABSTAIN
+
+    if drep.drep_type == DRepType.ALWAYS_NO_CONFIDENCE:
+        if action_type == GovActionType.NO_CONFIDENCE:
+            return DefaultVote.YES
+        return DefaultVote.NO
+
+    # Key/script DRep delegation — default is No
+    return DefaultVote.NO
+
+
+# ---------------------------------------------------------------------------
 # Ratification
 # ---------------------------------------------------------------------------
 
@@ -530,31 +603,72 @@ def check_ratification(
 
     # --- SPO threshold (stake-weighted) ---
     # Spec ref: Conway formal spec, Section 6 — SPO votes weighted by pool stake.
-    # Haskell ref: ``ratifyAction`` SPO stake calculation in
+    # Haskell ref: ``spoAcceptedRatio`` in
     #     ``Cardano.Ledger.Conway.Rules.Ratify``
+    #
+    # CONSENSUS-CRITICAL: We must iterate ALL pools in the stake distribution,
+    # not just those that voted. Non-voting pools get a default vote based on
+    # protocol version and their reward account's DRep delegation.
+    #
+    # ratio = yesStake / (totalActiveStake - abstainStake)
     if thresholds.spo_threshold is not None:
         spo_yes_stake = 0
+        spo_abstain_stake = 0
         spo_total_stake = 0
 
         if gov_state.pool_stake:
-            # Stake-weighted mode
+            # Build lookup: pool_id -> Vote for pools that voted explicitly
+            explicit_votes: dict[bytes, Vote] = {}
+            for voter, procedure in action_votes.items():
+                if voter.role == VoterRole.STAKE_POOL:
+                    explicit_votes[voter.credential] = procedure.vote
+
+            pv_major = gov_state.current_protocol_version[0]
+
+            # Iterate ALL pools in the stake distribution
             for pool_id, stake in gov_state.pool_stake.items():
                 spo_total_stake += stake
-            for voter, procedure in action_votes.items():
-                if voter.role == VoterRole.STAKE_POOL:
-                    stake = gov_state.pool_stake.get(voter.credential, 0)
-                    if procedure.vote == Vote.YES:
+
+                if pool_id in explicit_votes:
+                    # Pool voted explicitly
+                    vote = explicit_votes[pool_id]
+                    if vote == Vote.YES:
                         spo_yes_stake += stake
+                    elif vote == Vote.ABSTAIN:
+                        spo_abstain_stake += stake
+                    # Vote.NO: stays in denominator, nothing to add
+                else:
+                    # Pool did NOT vote — apply default vote logic
+                    dv = default_stake_pool_vote(
+                        pool_id,
+                        action_type,
+                        pv_major,
+                        gov_state.reward_account_delegations,
+                    )
+                    if dv == DefaultVote.YES:
+                        spo_yes_stake += stake
+                    elif dv == DefaultVote.ABSTAIN:
+                        spo_abstain_stake += stake
+                    # DefaultVote.NO: stays in denominator
+
+            # Effective denominator excludes abstainers
+            effective_denominator = spo_total_stake - spo_abstain_stake
         else:
-            # Fallback: count-based
+            # Fallback: count-based (for backwards-compatible tests without stake)
+            effective_denominator = 0
             for voter, procedure in action_votes.items():
                 if voter.role == VoterRole.STAKE_POOL:
-                    spo_total_stake += 1
+                    if procedure.vote == Vote.ABSTAIN:
+                        continue
+                    effective_denominator += 1
                     if procedure.vote == Vote.YES:
                         spo_yes_stake += 1
 
-        if spo_total_stake > 0 and not _threshold_met(
-            spo_yes_stake, spo_total_stake, thresholds.spo_threshold
+        # When denominator is 0 (all abstain), ratio is 0 -> threshold not met.
+        # _threshold_met already returns False when total_count == 0, so we
+        # can always call it.
+        if not _threshold_met(
+            spo_yes_stake, effective_denominator, thresholds.spo_threshold
         ):
             return False
 

@@ -499,6 +499,16 @@ class GovernanceState:
     Used for HardForkInitiation validation.
     """
 
+    reward_account_delegations: dict[bytes, DRep] = field(default_factory=dict)
+    """Pool reward account credential -> DRep delegation.
+
+    Maps each pool's reward account credential to its DRep delegation target.
+    Used for computing default SPO votes when a pool hasn't voted explicitly.
+
+    Spec ref: Conway formal spec, Section 6 (default SPO vote via reward addr delegation).
+    Haskell ref: ``spoAcceptedRatio`` in ``Cardano.Ledger.Conway.Rules.Ratify``
+    """
+
 
 # ---------------------------------------------------------------------------
 # Ratification thresholds
