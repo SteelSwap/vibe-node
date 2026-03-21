@@ -486,180 +486,186 @@ class PeerManager:
         # Block-fetch worker: batches points from the queue into ranges,
         # fetches full block bodies, and stores them in ChainDB.
         async def _block_fetch_worker() -> None:
+            from vibe.cardano.network.blockfetch_protocol import run_block_fetch_continuous
+
             bf_channel = channels[BLOCK_FETCH_N2N_ID]
             _blocks_stored = 0
 
-            while not stop_event.is_set():
-                # Collect a batch of points (up to 100, or whatever's available)
-                batch: list[Point] = []
-                try:
-                    # Wait for at least one point
-                    point = await asyncio.wait_for(
-                        fetch_queue.get(), timeout=1.0
-                    )
-                    batch.append(point)
-                    # Drain up to 99 more without blocking
-                    while len(batch) < 100:
-                        try:
-                            batch.append(fetch_queue.get_nowait())
-                        except asyncio.QueueEmpty:
-                            break
-                except TimeoutError:
-                    continue
+            # Use a queue for block-fetch ranges. The chain-sync
+            # _on_roll_forward fills fetch_queue with Points; we
+            # convert to (from, to) range tuples for block-fetch.
+            range_queue: asyncio.Queue[tuple] = asyncio.Queue()
 
-                if not batch or stop_event.is_set():
-                    continue
-
-                # Build range: (first_point, last_point)
-                ranges = [(batch[0], batch[-1])]
-
-                async def _on_block(block_cbor: bytes) -> None:
-                    nonlocal _blocks_stored
-
-                    from vibe.cardano.serialization.block import (
-                        decode_block_header,
-                        detect_era,
-                    )
-                    from vibe.cardano.serialization.transaction import (
-                        decode_block_body,
-                    )
-                    from vibe.cardano.consensus.hfc import validate_block
-
+            # Background task: drain fetch_queue Points into ranges
+            async def _range_builder() -> None:
+                while not stop_event.is_set():
+                    batch: list[Point] = []
                     try:
-                        # --- Parse block ---
-                        header = decode_block_header(block_cbor)
-                        slot = header.slot
-                        block_number = header.block_number
-                        block_hash = header.hash
-                        prev_hash = header.prev_hash or b"\x00" * 32
-                        era = header.era
+                        point = await asyncio.wait_for(
+                            fetch_queue.get(), timeout=1.0
+                        )
+                        batch.append(point)
+                        while len(batch) < 100:
+                            try:
+                                batch.append(fetch_queue.get_nowait())
+                            except asyncio.QueueEmpty:
+                                break
+                    except TimeoutError:
+                        continue
+                    if batch:
+                        await range_queue.put((batch[0], batch[-1]))
 
-                        # --- Validate block transactions ---
-                        body = decode_block_body(block_cbor)
-                        if body.transactions:
-                            errors = validate_block(
-                                era=era,
-                                block=body.transactions,
-                                ledger_state=(
-                                    chain_db.ledger_db if chain_db else None
-                                ),
-                                protocol_params=self._config.protocol_params,
-                                current_slot=slot,
-                            )
-                            if errors:
-                                if self._config.permissive_validation:
-                                    logger.warning(
-                                        "Peer %s: block #%d slot=%d has %d "
-                                        "validation errors (permissive): %s",
-                                        peer.address, block_number, slot,
-                                        len(errors), errors[:3],
-                                    )
-                                else:
-                                    logger.warning(
-                                        "Peer %s: REJECTING block #%d "
-                                        "slot=%d: %d errors: %s",
-                                        peer.address, block_number, slot,
-                                        len(errors), errors[:3],
-                                    )
-                                    return  # Don't store invalid blocks
+            builder_task = asyncio.create_task(_range_builder())
 
-                        # --- Apply ledger state (UTxO mutations) ---
-                        if chain_db is not None and chain_db.ledger_db is not None:
-                            consumed: list[bytes] = []
-                            created: list[tuple[bytes, dict]] = []
-                            for tx in body.transactions:
-                                if not tx.valid:
-                                    continue
-                                tb = tx.body
-                                # Extract consumed inputs
-                                inputs = getattr(tb, "inputs", None)
-                                if inputs:
-                                    for inp in inputs:
-                                        tx_id = getattr(inp, "transaction_id", None)
-                                        tx_idx = getattr(inp, "index", None)
-                                        if tx_id is not None and tx_idx is not None:
-                                            payload = getattr(tx_id, "payload", tx_id)
-                                            if isinstance(payload, bytes) and len(payload) == 32:
-                                                key = payload + tx_idx.to_bytes(2, "big")
-                                                consumed.append(key)
-                                # Extract created outputs
-                                outputs = getattr(tb, "outputs", None)
-                                if outputs:
-                                    for idx, out in enumerate(outputs):
-                                        key = tx.tx_hash + idx.to_bytes(2, "big")
-                                        addr = str(getattr(out, "address", ""))
-                                        amount = getattr(out, "amount", 0)
-                                        if isinstance(amount, int):
-                                            value = amount
-                                        else:
-                                            value = getattr(amount, "coin", 0) or 0
-                                        datum_hash = getattr(out, "datum_hash", b"") or b""
-                                        if hasattr(datum_hash, "payload"):
-                                            datum_hash = datum_hash.payload
-                                        created.append((key, {
-                                            "tx_hash": tx.tx_hash,
-                                            "tx_index": idx,
-                                            "address": addr,
-                                            "value": int(value),
-                                            "datum_hash": datum_hash if isinstance(datum_hash, bytes) else b"",
-                                        }))
-                            if consumed or created:
-                                try:
-                                    chain_db.ledger_db.apply_block(
-                                        consumed, created, block_slot=slot,
-                                    )
-                                except Exception as exc:
-                                    logger.debug(
-                                        "Peer %s: ledger apply error: %s",
-                                        peer.address, exc,
-                                    )
+            async def _on_block(block_cbor: bytes) -> None:
+                nonlocal _blocks_stored
 
-                        # --- Store in ChainDB ---
-                        if chain_db is not None:
-                            await chain_db.add_block(
-                                slot=slot,
-                                block_hash=block_hash,
-                                predecessor_hash=prev_hash,
-                                block_number=block_number,
-                                cbor_bytes=block_cbor,
-                            )
+                from vibe.cardano.serialization.block import (
+                    decode_block_header,
+                    detect_era,
+                )
+                from vibe.cardano.serialization.transaction import (
+                    decode_block_body,
+                )
+                from vibe.cardano.consensus.hfc import validate_block
 
-                        # --- Add to NodeKernel for serving to peers ---
-                        if node_kernel is not None:
-                            node_kernel.add_block(
-                                slot=slot,
-                                block_hash=block_hash,
-                                block_number=block_number,
-                                header_cbor=header.header_cbor,
-                                block_cbor=block_cbor,
-                            )
+                try:
+                    # --- Parse block ---
+                    header = decode_block_header(block_cbor)
+                    slot = header.slot
+                    block_number = header.block_number
+                    block_hash = header.hash
+                    prev_hash = header.prev_hash or b"\x00" * 32
+                    era = header.era
 
-                        _blocks_stored += 1
-                        if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
-                            logger.info(
-                                "Peer %s: stored block #%d slot=%d era=%s "
-                                "txs=%d hash=%s [%d total]",
-                                peer.address, block_number, slot,
-                                era.name, body.tx_count,
-                                block_hash.hex()[:16], _blocks_stored,
-                            )
-                    except Exception as exc:
-                        logger.debug(
-                            "Peer %s: block process error: %s",
-                            peer.address, exc,
+                    # --- Validate block transactions ---
+                    body = decode_block_body(block_cbor)
+                    if body.transactions:
+                        errors = validate_block(
+                            era=era,
+                            block=body.transactions,
+                            ledger_state=(
+                                chain_db.ledger_db if chain_db else None
+                            ),
+                            protocol_params=self._config.protocol_params,
+                            current_slot=slot,
+                        )
+                        if errors:
+                            if self._config.permissive_validation:
+                                logger.warning(
+                                    "Peer %s: block #%d slot=%d has %d "
+                                    "validation errors (permissive): %s",
+                                    peer.address, block_number, slot,
+                                    len(errors), errors[:3],
+                                )
+                            else:
+                                logger.warning(
+                                    "Peer %s: REJECTING block #%d "
+                                    "slot=%d: %d errors: %s",
+                                    peer.address, block_number, slot,
+                                    len(errors), errors[:3],
+                                )
+                                return  # Don't store invalid blocks
+
+                    # --- Apply ledger state (UTxO mutations) ---
+                    if chain_db is not None and chain_db.ledger_db is not None:
+                        consumed: list[bytes] = []
+                        created: list[tuple[bytes, dict]] = []
+                        for tx in body.transactions:
+                            if not tx.valid:
+                                continue
+                            tb = tx.body
+                            # Extract consumed inputs
+                            inputs = getattr(tb, "inputs", None)
+                            if inputs:
+                                for inp in inputs:
+                                    tx_id = getattr(inp, "transaction_id", None)
+                                    tx_idx = getattr(inp, "index", None)
+                                    if tx_id is not None and tx_idx is not None:
+                                        payload = getattr(tx_id, "payload", tx_id)
+                                        if isinstance(payload, bytes) and len(payload) == 32:
+                                            key = payload + tx_idx.to_bytes(2, "big")
+                                            consumed.append(key)
+                            # Extract created outputs
+                            outputs = getattr(tb, "outputs", None)
+                            if outputs:
+                                for idx, out in enumerate(outputs):
+                                    key = tx.tx_hash + idx.to_bytes(2, "big")
+                                    addr = str(getattr(out, "address", ""))
+                                    amount = getattr(out, "amount", 0)
+                                    if isinstance(amount, int):
+                                        value = amount
+                                    else:
+                                        value = getattr(amount, "coin", 0) or 0
+                                    datum_hash = getattr(out, "datum_hash", b"") or b""
+                                    if hasattr(datum_hash, "payload"):
+                                        datum_hash = datum_hash.payload
+                                    created.append((key, {
+                                        "tx_hash": tx.tx_hash,
+                                        "tx_index": idx,
+                                        "address": addr,
+                                        "value": int(value),
+                                        "datum_hash": datum_hash if isinstance(datum_hash, bytes) else b"",
+                                    }))
+                        if consumed or created:
+                            try:
+                                chain_db.ledger_db.apply_block(
+                                    consumed, created, block_slot=slot,
+                                )
+                            except Exception as exc:
+                                logger.debug(
+                                    "Peer %s: ledger apply error: %s",
+                                    peer.address, exc,
+                                )
+
+                    # --- Store in ChainDB ---
+                    if chain_db is not None:
+                        await chain_db.add_block(
+                            slot=slot,
+                            block_hash=block_hash,
+                            predecessor_hash=prev_hash,
+                            block_number=block_number,
+                            cbor_bytes=block_cbor,
                         )
 
-                try:
-                    await run_block_fetch(
-                        bf_channel,
-                        ranges=ranges,
-                        on_block_received=_on_block,
-                        stop_event=stop_event,
-                    )
+                    # --- Add to NodeKernel for serving to peers ---
+                    if node_kernel is not None:
+                        node_kernel.add_block(
+                            slot=slot,
+                            block_hash=block_hash,
+                            block_number=block_number,
+                            header_cbor=header.header_cbor,
+                            block_cbor=block_cbor,
+                        )
+
+                    _blocks_stored += 1
+                    if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
+                        logger.info(
+                            "Peer %s: stored block #%d slot=%d era=%s "
+                            "txs=%d hash=%s [%d total]",
+                            peer.address, block_number, slot,
+                            era.name, body.tx_count,
+                            block_hash.hex()[:16], _blocks_stored,
+                        )
                 except Exception as exc:
                     logger.debug(
-                        "Peer %s: block-fetch error: %s", peer.address, exc
+                        "Peer %s: block process error: %s",
+                        peer.address, exc,
                     )
+
+            try:
+                await run_block_fetch_continuous(
+                    bf_channel,
+                    range_queue=range_queue,
+                    on_block_received=_on_block,
+                    stop_event=stop_event,
+                )
+            except Exception as exc:
+                logger.debug(
+                    "Peer %s: block-fetch error: %s", peer.address, exc
+                )
+            finally:
+                builder_task.cancel()
 
         asyncio.create_task(
             _safe_run(_block_fetch_worker(), "block-fetch"),
