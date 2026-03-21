@@ -201,7 +201,7 @@ class PeerManager:
         chain_db: ChainDB instance for storing received blocks.
     """
 
-    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks")
+    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks", "_known_points")
 
     def __init__(self, config: NodeConfig, chain_db: Any = None, node_kernel: Any = None) -> None:
         self._config = config
@@ -210,6 +210,16 @@ class PeerManager:
         self._peers: dict[str, _PeerConnection] = {}
         self._stopped = False
         self._tasks: list[asyncio.Task[None]] = []
+        self._known_points: list[Any] = []
+
+    @property
+    def known_points(self) -> list[Any]:
+        """Known chain points for chain-sync intersection (from snapshot or chain tip)."""
+        return self._known_points
+
+    def set_known_points(self, points: list[Any]) -> None:
+        """Set known points for chain-sync to start from (instead of Origin)."""
+        self._known_points = points
 
     @property
     def connected_count(self) -> int:
@@ -870,9 +880,35 @@ async def _forge_loop(
         else hashlib.blake2b(config.network_magic.to_bytes(4, "big"), digest_size=32).digest()
     )
 
-    # Pool3 has 1/3 relative stake in the devnet genesis.
-    # In production this comes from the stake distribution snapshot.
-    relative_stake = 1.0 / 3.0
+    # Compute pool ID (Blake2b-224 of cold VK) for stake lookup.
+    pool_id = hashlib.blake2b(pool_keys.cold_vk, digest_size=28).digest()
+    if node_kernel is not None and node_kernel.stake_distribution is not None:
+        relative_stake = node_kernel.stake_distribution.relative_stake(pool_id)
+        logger.info("Pool stake from distribution: %.4f%%", relative_stake * 100)
+    else:
+        relative_stake = 1.0 / 3.0  # Fallback for testing
+
+    # --- KES key evolution to current period ---
+    from vibe.cardano.crypto.kes import kes_update
+    from vibe.cardano.crypto.ocert import slot_to_kes_period
+
+    slots_per_kes = config.slots_per_kes_period
+    current_kes_period = slot_to_kes_period(
+        slot_clock.current_slot(), slots_per_kes_period=slots_per_kes
+    ) - ocert.kes_period_start
+
+    if current_kes_period < 0:
+        current_kes_period = 0
+    if current_kes_period > 0:
+        for p in range(current_kes_period):
+            evolved = kes_update(kes_sk, p)
+            if evolved is None:
+                logger.error("KES key expired at period %d", p)
+                return
+            kes_sk = evolved
+        logger.info("KES key evolved to period %d", current_kes_period)
+
+    _current_kes_period = current_kes_period
 
     # Track chain tip for prev_hash linkage.
     prev_block_number = 0
@@ -880,10 +916,11 @@ async def _forge_loop(
     blocks_forged = 0
 
     logger.info(
-        "Forge loop started — pool VRF vk=%s, KES vk=%s, stake=%.2f%%",
+        "Forge loop started — pool VRF vk=%s, KES vk=%s, stake=%.2f%%, kes_period=%d",
         pool_keys.vrf_vk.hex()[:16],
         kes_vk.hex()[:16],
         relative_stake * 100,
+        _current_kes_period,
     )
 
     while not shutdown_event.is_set():
@@ -891,6 +928,18 @@ async def _forge_loop(
             slot = await slot_clock.wait_for_next_slot()
         except asyncio.CancelledError:
             return
+
+        # Evolve KES key if period has advanced
+        new_kes_period = slot_to_kes_period(slot, slots_per_kes_period=slots_per_kes) - ocert.kes_period_start
+        if new_kes_period > _current_kes_period:
+            for p in range(_current_kes_period, new_kes_period):
+                evolved = kes_update(kes_sk, p)
+                if evolved is None:
+                    logger.error("KES key expired at period %d", p)
+                    return
+                kes_sk = evolved
+            _current_kes_period = new_kes_period
+            logger.info("KES key evolved to period %d", _current_kes_period)
 
         if shutdown_event.is_set():
             return
@@ -919,7 +968,7 @@ async def _forge_loop(
                     for vtx in (await mempool.get_txs_for_block(65536))
                 ] if mempool is not None else [],
                 kes_sk=kes_sk,
-                kes_period=0,
+                kes_period=_current_kes_period,
                 ocert=ocert,
                 pool_vk=pool_keys.cold_vk,
                 vrf_vk=pool_keys.vrf_vk,
@@ -1426,6 +1475,23 @@ async def run_node(config: NodeConfig) -> None:
         k=config.security_param,
     )
 
+    # --- Mithril snapshot import (if configured and chain is empty) ---
+    if config.mithril_snapshot_path is not None:
+        tip = await chain_db.get_tip()
+        if tip is None:
+            logger.info("Importing Mithril snapshot from %s", config.mithril_snapshot_path)
+            try:
+                from vibe.cardano.sync import import_mithril_snapshot
+                await import_mithril_snapshot(
+                    snapshot_dir=config.mithril_snapshot_path,
+                    immutable_db=immutable_db,
+                )
+                logger.info("Mithril snapshot import complete")
+            except Exception as exc:
+                logger.warning("Mithril import failed: %s", exc)
+        else:
+            logger.info("ChainDB has data, skipping Mithril import")
+
     tip = await chain_db.get_tip()
     if tip is not None:
         logger.info("ChainDB loaded: tip at slot %d (hash=%s)", tip[0], tip[1].hex()[:16])
@@ -1450,6 +1516,8 @@ async def run_node(config: NodeConfig) -> None:
         config.network_magic.to_bytes(4, "big"), digest_size=32
     ).digest()
     node_kernel.init_nonce(nonce_seed, config.epoch_length)
+    if config.initial_pool_stakes:
+        node_kernel.init_stake_distribution(config.initial_pool_stakes)
 
     # --- Slot clock ---
     slot_config = SlotConfig(

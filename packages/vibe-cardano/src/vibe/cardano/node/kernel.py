@@ -34,6 +34,20 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class StakeDistribution:
+    """Snapshot of stake distribution for VRF leader election."""
+
+    pool_stakes: dict[bytes, int]  # pool_id (28 bytes) -> lovelace
+    total_stake: int
+
+    def relative_stake(self, pool_id: bytes) -> float:
+        """Return the fraction of total stake held by pool_id."""
+        if self.total_stake == 0:
+            return 0.0
+        return self.pool_stakes.get(pool_id, 0) / self.total_stake
+
+
+@dataclass
 class BlockEntry:
     """A block stored in the kernel's chain."""
 
@@ -69,6 +83,7 @@ class NodeKernel(ChainProvider, BlockProvider):
         self._eta_v: bytes = b"\x00" * 32
         self._current_epoch: int = 0
         self._epoch_length: int = 432000
+        self._stake_dist: StakeDistribution | None = None
 
     @property
     def tip(self) -> Tip | None:
@@ -91,6 +106,16 @@ class NodeKernel(ChainProvider, BlockProvider):
             "Epoch nonce initialised: %s (epoch_length=%d)",
             genesis_hash.hex()[:16], epoch_length,
         )
+
+    @property
+    def stake_distribution(self) -> StakeDistribution | None:
+        return self._stake_dist
+
+    def init_stake_distribution(self, pools: dict[bytes, int]) -> None:
+        """Set stake distribution from genesis or epoch boundary."""
+        total = sum(pools.values())
+        self._stake_dist = StakeDistribution(pool_stakes=pools, total_stake=total)
+        logger.info("Stake distribution: %d pools, %d total lovelace", len(pools), total)
 
     def on_block_vrf_output(self, slot: int, epoch_start_slot: int, vrf_output: bytes) -> None:
         """Accumulate VRF output from a block within the stability window."""

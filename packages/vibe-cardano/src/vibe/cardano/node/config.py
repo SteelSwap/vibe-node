@@ -114,6 +114,8 @@ class NodeConfig:
     protocol_params: dict[str, Any] | None = None
     permissive_validation: bool = False
     slots_per_kes_period: int = 129600
+    initial_pool_stakes: dict[bytes, int] = field(default_factory=dict)
+    mithril_snapshot_path: Path | None = None
 
     @property
     def is_block_producer(self) -> bool:
@@ -160,4 +162,10 @@ class NodeConfig:
             pool_keys=pool_keys,
             peers=peers,
             db_path=Path(d.get("db_path", "./db")),
+            genesis_hash=d.get("genesis_hash", b""),
+            protocol_params=d.get("protocol_params"),
+            permissive_validation=d.get("permissive_validation", False),
+            slots_per_kes_period=d.get("slots_per_kes_period", 129600),
+            initial_pool_stakes=d.get("initial_pool_stakes", {}),
+            mithril_snapshot_path=Path(d["mithril_snapshot_path"]) if d.get("mithril_snapshot_path") else None,
         )
