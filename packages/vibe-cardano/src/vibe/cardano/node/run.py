@@ -833,14 +833,16 @@ async def _forge_loop(
 async def _run_n2n_server(
     host: str,
     port: int,
+    network_magic: int,
     shutdown_event: asyncio.Event,
 ) -> None:
     """Run the TCP listener for inbound N2N peer connections.
 
     For each incoming connection:
-    1. Wrap in a Bearer
-    2. Set up N2N mux with miniprotocol bundle
-    3. Run the mux (blocks until disconnect)
+    1. Wrap in a Bearer + Multiplexer
+    2. Run handshake responder on channel 0
+    3. Launch chain-sync server, keep-alive server, block-fetch server
+    4. Run until disconnect or shutdown
 
     Haskell ref:
         ``Ouroboros.Network.Server2.run`` -- the server side of the
@@ -849,9 +851,16 @@ async def _run_n2n_server(
     Args:
         host: Bind address.
         port: Bind port.
+        network_magic: Network magic for handshake negotiation.
         shutdown_event: Set when the node is shutting down.
     """
-    mux_tasks: list[asyncio.Task[None]] = []
+    from vibe.cardano.network.handshake_protocol import (
+        HandshakeError,
+        run_handshake_server,
+    )
+    from vibe.cardano.network.keepalive_protocol import run_keep_alive_server
+
+    conn_tasks: list[asyncio.Task[None]] = []
 
     async def handle_connection(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -860,21 +869,62 @@ async def _run_n2n_server(
         logger.info("N2N inbound connection from %s", peer_info)
 
         bearer = Bearer(reader, writer)
-        mux = _setup_n2n_mux(bearer, is_initiator=False)
+        mux = Multiplexer(bearer, is_initiator=False)
+
+        # Register N2N miniprotocol channels.
+        channels: dict[int, MiniProtocolChannel] = {}
+        for proto_id in N2N_PROTOCOL_IDS:
+            channels[proto_id] = mux.add_protocol(proto_id)
+
+        # Start the mux in background.
+        mux_task = asyncio.create_task(mux.run(), name=f"mux-inbound-{peer_info}")
+        stop = asyncio.Event()
 
         try:
-            await mux.run()
+            # Run handshake responder on channel 0.
+            hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
+            result = await run_handshake_server(hs_channel, network_magic)
+            logger.info(
+                "N2N inbound %s: handshake accepted v%d",
+                peer_info, result.version_number,
+            )
+
+            # Launch keep-alive server (echo pings back).
+            asyncio.create_task(
+                run_keep_alive_server(
+                    channels[KEEP_ALIVE_PROTOCOL_ID], stop_event=stop,
+                ),
+                name=f"ka-server-{peer_info}",
+            )
+
+            # TODO(M5.17): Launch chain-sync server + block-fetch server
+            # once ChainProvider/BlockProvider are wired to ChainDB.
+
+            # Wait for mux to end (peer disconnect) or shutdown.
+            done, _ = await asyncio.wait(
+                [mux_task, asyncio.create_task(shutdown_event.wait())],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+        except (HandshakeError, ConnectionError, MuxClosedError) as exc:
+            logger.debug("N2N inbound %s: %s", peer_info, exc)
         except Exception as exc:
-            logger.debug("N2N connection from %s ended: %s", peer_info, exc)
+            logger.debug("N2N inbound %s ended: %s", peer_info, exc)
         finally:
+            stop.set()
             await mux.close()
+            if not mux_task.done():
+                mux_task.cancel()
+                try:
+                    await mux_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     try:
         server = await asyncio.start_server(handle_connection, host, port)
         addrs = [s.getsockname() for s in server.sockets]
         logger.info("N2N server listening on %s", addrs)
 
-        # Wait for shutdown signal.
         await shutdown_event.wait()
     except asyncio.CancelledError:
         pass
@@ -882,8 +932,7 @@ async def _run_n2n_server(
         if "server" in locals():
             server.close()
             await server.wait_closed()
-        # Cancel any active connection tasks.
-        for task in mux_tasks:
+        for task in conn_tasks:
             if not task.done():
                 task.cancel()
 
@@ -1057,7 +1106,9 @@ async def run_node(config: NodeConfig) -> None:
     # N2N TCP server
     tasks.append(
         asyncio.create_task(
-            _run_n2n_server(config.host, config.port, shutdown_event),
+            _run_n2n_server(
+                config.host, config.port, config.network_magic, shutdown_event,
+            ),
             name="n2n-server",
         )
     )
