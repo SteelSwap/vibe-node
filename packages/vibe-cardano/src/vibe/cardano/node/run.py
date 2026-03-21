@@ -505,26 +505,99 @@ class PeerManager:
 
                 async def _on_block(block_cbor: bytes) -> None:
                     nonlocal _blocks_stored
+
+                    from vibe.cardano.serialization.block import (
+                        decode_block_header,
+                        detect_era,
+                    )
+                    from vibe.cardano.serialization.transaction import (
+                        decode_block_body,
+                    )
+                    from vibe.cardano.consensus.hfc import validate_block
+
                     try:
-                        # Parse block header for storage metadata.
-                        block_data = cbor2.loads(block_cbor)
-                        hdr = block_data[0]  # [header_body, kes_sig]
-                        hdr_body = hdr[0]
-                        block_number = hdr_body[0]
-                        slot = hdr_body[1]
-                        prev_hash = hdr_body[2] or b"\x00" * 32
-                        hdr_cbor = cbor2.dumps(hdr)
-                        block_hash = hashlib.blake2b(
-                            hdr_cbor, digest_size=32
-                        ).digest()
+                        # --- Parse block ---
+                        header = decode_block_header(block_cbor)
+                        slot = header.slot
+                        block_number = header.block_number
+                        block_hash = header.hash
+                        prev_hash = header.prev_hash or b"\x00" * 32
+                        era = header.era
 
-                        # TODO(M5.20): Full block validation through
-                        # era-aware validate_block() once the block
-                        # deserialization pipeline is wired. For now
-                        # we store all received blocks (the Haskell
-                        # node already validated them).
+                        # --- Validate block transactions ---
+                        body = decode_block_body(block_cbor)
+                        if body.transactions:
+                            errors = validate_block(
+                                era=era,
+                                block=body.transactions,
+                                ledger_state=(
+                                    chain_db.ledger_db if chain_db else None
+                                ),
+                                protocol_params=None,  # Use defaults
+                                current_slot=slot,
+                            )
+                            if errors:
+                                logger.warning(
+                                    "Peer %s: block #%d slot=%d has %d "
+                                    "validation errors: %s",
+                                    peer.address, block_number, slot,
+                                    len(errors), errors[:3],
+                                )
+                                # Still store — Haskell already validated.
+                                # Log for diagnostics during integration.
 
-                        # Store in ChainDB.
+                        # --- Apply ledger state (UTxO mutations) ---
+                        if chain_db is not None and chain_db.ledger_db is not None:
+                            consumed: list[bytes] = []
+                            created: list[tuple[bytes, dict]] = []
+                            for tx in body.transactions:
+                                if not tx.valid:
+                                    continue
+                                tb = tx.body
+                                # Extract consumed inputs
+                                inputs = getattr(tb, "inputs", None)
+                                if inputs:
+                                    for inp in inputs:
+                                        tx_id = getattr(inp, "transaction_id", None)
+                                        tx_idx = getattr(inp, "index", None)
+                                        if tx_id is not None and tx_idx is not None:
+                                            payload = getattr(tx_id, "payload", tx_id)
+                                            if isinstance(payload, bytes) and len(payload) == 32:
+                                                key = payload + tx_idx.to_bytes(2, "big")
+                                                consumed.append(key)
+                                # Extract created outputs
+                                outputs = getattr(tb, "outputs", None)
+                                if outputs:
+                                    for idx, out in enumerate(outputs):
+                                        key = tx.tx_hash + idx.to_bytes(2, "big")
+                                        addr = str(getattr(out, "address", ""))
+                                        amount = getattr(out, "amount", 0)
+                                        if isinstance(amount, int):
+                                            value = amount
+                                        else:
+                                            value = getattr(amount, "coin", 0) or 0
+                                        datum_hash = getattr(out, "datum_hash", b"") or b""
+                                        if hasattr(datum_hash, "payload"):
+                                            datum_hash = datum_hash.payload
+                                        created.append((key, {
+                                            "tx_hash": tx.tx_hash,
+                                            "tx_index": idx,
+                                            "address": addr,
+                                            "value": int(value),
+                                            "datum_hash": datum_hash if isinstance(datum_hash, bytes) else b"",
+                                        }))
+                            if consumed or created:
+                                try:
+                                    chain_db.ledger_db.apply_block(
+                                        consumed, created, block_slot=slot,
+                                    )
+                                except Exception as exc:
+                                    logger.debug(
+                                        "Peer %s: ledger apply error: %s",
+                                        peer.address, exc,
+                                    )
+
+                        # --- Store in ChainDB ---
                         if chain_db is not None:
                             await chain_db.add_block(
                                 slot=slot,
@@ -534,27 +607,28 @@ class PeerManager:
                                 cbor_bytes=block_cbor,
                             )
 
-                        # Add to NodeKernel for serving to peers.
+                        # --- Add to NodeKernel for serving to peers ---
                         if node_kernel is not None:
                             node_kernel.add_block(
                                 slot=slot,
                                 block_hash=block_hash,
                                 block_number=block_number,
-                                header_cbor=hdr_cbor,
+                                header_cbor=header.header_cbor,
                                 block_cbor=block_cbor,
                             )
 
                         _blocks_stored += 1
                         if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
                             logger.info(
-                                "Peer %s: stored block #%d slot=%d hash=%s "
-                                "[%d total]",
+                                "Peer %s: stored block #%d slot=%d era=%s "
+                                "txs=%d hash=%s [%d total]",
                                 peer.address, block_number, slot,
+                                era.name, body.tx_count,
                                 block_hash.hex()[:16], _blocks_stored,
                             )
                     except Exception as exc:
                         logger.debug(
-                            "Peer %s: block store error: %s",
+                            "Peer %s: block process error: %s",
                             peer.address, exc,
                         )
 
