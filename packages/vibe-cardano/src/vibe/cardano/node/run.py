@@ -519,6 +519,10 @@ class PeerManager:
 
             async def _on_block(block_cbor: bytes) -> None:
                 nonlocal _blocks_stored
+                logger.info(
+                    "BLOCK-FETCH: received %d bytes, hex[:8]=%s",
+                    len(block_cbor), block_cbor[:4].hex() if block_cbor else "empty",
+                )
 
                 from vibe.cardano.serialization.block import (
                     decode_block_header,
@@ -530,16 +534,47 @@ class PeerManager:
                 from vibe.cardano.consensus.hfc import validate_block
 
                 try:
-                    # --- Parse block ---
-                    header = decode_block_header(block_cbor)
-                    slot = header.slot
-                    block_number = header.block_number
-                    block_hash = header.hash
-                    prev_hash = header.prev_hash or b"\x00" * 32
-                    era = header.era
+                    # --- Parse block from block-fetch wire format ---
+                    # Block-fetch delivers CBORTag(24, raw_bytes) or re-encoded
+                    # CBOR. We need to get to the block array [header, ...].
+                    decoded = cbor2.loads(block_cbor)
+
+                    # Unwrap tag-24 if present
+                    if hasattr(decoded, 'tag') and decoded.tag == 24:
+                        inner = decoded.value
+                        if isinstance(inner, bytes):
+                            decoded = cbor2.loads(inner)
+                        else:
+                            decoded = inner
+
+                    # Block-fetch format: [era_int, block_body]
+                    # where block_body = [header, tx_bodies, tx_witnesses, aux, invalid_txs]
+                    if isinstance(decoded, list) and len(decoded) >= 2 and isinstance(decoded[0], int):
+                        era_tag = decoded[0]
+                        block_body = decoded[1]
+                    elif hasattr(decoded, 'tag'):
+                        era_tag = decoded.tag
+                        block_body = decoded.value
+                    else:
+                        raise ValueError(f"Unexpected block format: {type(decoded)}")
+
+                    # block_body = [header, tx_bodies, tx_witnesses, aux, ...]
+                    hdr = block_body[0]  # [header_body, kes_sig]
+                    hdr_body = hdr[0]
+                    block_number = hdr_body[0]
+                    slot = hdr_body[1]
+                    prev_hash = hdr_body[2] or b"\x00" * 32
+                    hdr_cbor = cbor2.dumps(hdr)
+                    block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
+
+                    # Build raw_block for storage (era-tagged CBOR)
+                    raw_block = cbor2.dumps(cbor2.CBORTag(era_tag, block_body))
+
+                    from vibe.cardano.serialization.block import Era
+                    era = Era(era_tag)
 
                     # --- Validate block transactions ---
-                    body = decode_block_body(block_cbor)
+                    body = decode_block_body(raw_block)
                     if body.transactions:
                         errors = validate_block(
                             era=era,
@@ -625,7 +660,7 @@ class PeerManager:
                             block_hash=block_hash,
                             predecessor_hash=prev_hash,
                             block_number=block_number,
-                            cbor_bytes=block_cbor,
+                            cbor_bytes=raw_block,
                         )
 
                     # --- Add to NodeKernel for serving to peers ---
@@ -634,8 +669,8 @@ class PeerManager:
                             slot=slot,
                             block_hash=block_hash,
                             block_number=block_number,
-                            header_cbor=header.header_cbor,
-                            block_cbor=block_cbor,
+                            header_cbor=hdr_cbor,
+                            block_cbor=raw_block,
                         )
 
                     _blocks_stored += 1
@@ -644,13 +679,13 @@ class PeerManager:
                             "Peer %s: stored block #%d slot=%d era=%s "
                             "txs=%d hash=%s [%d total]",
                             peer.address, block_number, slot,
-                            era.name, body.tx_count,
+                            era.name, len(block_body[1]) if len(block_body) > 1 and isinstance(block_body[1], list) else 0,
                             block_hash.hex()[:16], _blocks_stored,
                         )
                 except Exception as exc:
-                    logger.debug(
+                    logger.error(
                         "Peer %s: block process error: %s",
-                        peer.address, exc,
+                        peer.address, exc, exc_info=True,
                     )
 
             try:
