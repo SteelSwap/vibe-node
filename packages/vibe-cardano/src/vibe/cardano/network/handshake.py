@@ -48,6 +48,16 @@ PREVIEW_NETWORK_MAGIC: int = 2
 N2N_V14: int = 14
 N2N_V15: int = 15
 
+# Current node-to-client protocol versions supported by the Haskell node.
+# Reference: ``NodeToClientVersion`` data type in
+# ``ouroboros-network-api/src/Ouroboros/Network/NodeToClient/Version.hs``
+# N2C versions use a 2-element version data: [networkMagic, query].
+N2C_V16: int = 16
+N2C_V17: int = 17
+N2C_V18: int = 18
+N2C_V19: int = 19
+N2C_V20: int = 20
+
 # CBOR message tags (first element of the outer list).
 _MSG_PROPOSE_VERSIONS: int = 0
 _MSG_ACCEPT_VERSION: int = 1
@@ -101,6 +111,22 @@ class NodeToNodeVersionData:
 
     query: bool = False
     """Query flag — when True the initiator only wants to query, not sync."""
+
+
+@dataclass(frozen=True, slots=True)
+class NodeToClientVersionData:
+    """Parameters carried alongside each proposed N2C version number.
+
+    Encoding: ``[networkMagic, query]``
+    Reference: ``nodeToClientCodecCBORTerm`` in
+    ``Ouroboros.Network.NodeToClient.Version``
+    """
+
+    network_magic: int
+    """Network discriminator (e.g. 764824073 for mainnet)."""
+
+    query: bool = False
+    """Query flag — when True the client only wants to query, not sync."""
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +284,97 @@ def build_version_table(
         query=query,
     )
     return {N2N_V14: vd, N2N_V15: vd}
+
+
+def build_n2c_version_table(
+    network_magic: int,
+    *,
+    query: bool = False,
+) -> dict[int, NodeToClientVersionData]:
+    """Build a version table with current N2C versions (V16--V20).
+
+    This is the table a server advertises for node-to-client handshake.
+
+    Reference: ``nodeToClientVersions`` in
+    ``Ouroboros.Network.NodeToClient.Version``
+
+    Args:
+        network_magic: The network discriminator (e.g. ``MAINNET_NETWORK_MAGIC``).
+        query: Whether this is a query-only connection.
+
+    Returns:
+        A dict mapping version numbers to ``NodeToClientVersionData``.
+    """
+    vd = NodeToClientVersionData(
+        network_magic=network_magic,
+        query=query,
+    )
+    return {
+        N2C_V16: vd,
+        N2C_V17: vd,
+        N2C_V18: vd,
+        N2C_V19: vd,
+        N2C_V20: vd,
+    }
+
+
+def _encode_n2c_version_data(vd: NodeToClientVersionData) -> list:
+    """Encode ``NodeToClientVersionData`` to a CBOR-serialisable list.
+
+    Reference: ``encodeTerm`` inside ``nodeToClientCodecCBORTerm``.
+    """
+    return [vd.network_magic, vd.query]
+
+
+def _decode_n2c_version_data(term: list) -> NodeToClientVersionData:
+    """Decode a CBOR list back to ``NodeToClientVersionData``.
+
+    Reference: ``decodeTerm`` inside ``nodeToClientCodecCBORTerm``.
+
+    Raises:
+        ValueError: If the term structure is invalid.
+    """
+    if not isinstance(term, list) or len(term) != 2:
+        raise ValueError(f"Expected list of 2 elements for N2C version data, got: {term!r}")
+
+    network_magic = term[0]
+    if not isinstance(network_magic, int) or network_magic < 0 or network_magic > 0xFFFFFFFF:
+        raise ValueError(f"networkMagic out of bound: {network_magic}")
+
+    query = term[1]
+    if not isinstance(query, bool):
+        raise ValueError(f"Expected bool for query, got: {query!r}")
+
+    return NodeToClientVersionData(
+        network_magic=network_magic,
+        query=query,
+    )
+
+
+def encode_n2c_propose_versions(versions: dict[int, NodeToClientVersionData]) -> bytes:
+    """Encode a ``MsgProposeVersions`` message for N2C to CBOR bytes.
+
+    Wire format: ``[0, {versionNumber: versionData, ...}]``
+
+    Args:
+        versions: Mapping from version number to N2C version data.
+
+    Returns:
+        CBOR-encoded bytes ready for multiplexer framing.
+    """
+    version_map = {k: _encode_n2c_version_data(v) for k, v in sorted(versions.items())}
+    msg = [_MSG_PROPOSE_VERSIONS, version_map]
+    return cbor2.dumps(msg)
+
+
+def encode_n2c_accept_version(version_number: int, version_data: NodeToClientVersionData) -> bytes:
+    """Encode a ``MsgAcceptVersion`` message for N2C to CBOR bytes.
+
+    Wire format: ``[1, versionNumber, versionData]``
+    """
+    ver_data = _encode_n2c_version_data(version_data)
+    msg = [_MSG_ACCEPT_VERSION, version_number, ver_data]
+    return cbor2.dumps(msg)
 
 
 # ---------------------------------------------------------------------------

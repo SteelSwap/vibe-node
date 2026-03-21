@@ -972,9 +972,18 @@ async def _run_n2n_server(
 
 async def _run_n2c_server(
     socket_path: str,
+    network_magic: int,
+    chain_db: Any,
+    ledger_db: Any,
     shutdown_event: asyncio.Event,
 ) -> None:
     """Run the Unix socket listener for N2C local client connections.
+
+    For each incoming connection:
+    1. Wrap in a Bearer + Multiplexer
+    2. Run N2C handshake responder on channel 0
+    3. Launch all 4 N2C miniprotocol servers on their channels
+    4. Run until disconnect or shutdown
 
     Haskell ref:
         ``Ouroboros.Network.Snocket.localSnocket`` -- the local (Unix
@@ -982,8 +991,21 @@ async def _run_n2c_server(
 
     Args:
         socket_path: Path to the Unix domain socket.
+        network_magic: Network magic for handshake negotiation.
+        chain_db: The ChainDB instance (for local chain-sync).
+        ledger_db: The LedgerDB instance (for local state-query).
         shutdown_event: Set when the node is shutting down.
     """
+    from vibe.cardano.network.handshake_protocol import (
+        HandshakeError,
+        run_handshake_server_n2c,
+    )
+    from vibe.cardano.network.local_chainsync_protocol import create_local_chainsync_server
+    from vibe.cardano.network.local_statequery_protocol import run_local_state_query_server
+    from vibe.cardano.network.local_txmonitor_protocol import run_local_tx_monitor_server
+    from vibe.cardano.network.local_txsubmission_protocol import run_local_tx_submission_server
+
+    conn_tasks: list[asyncio.Task[None]] = []
 
     async def handle_connection(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -991,14 +1013,116 @@ async def _run_n2c_server(
         logger.info("N2C client connected via %s", socket_path)
 
         bearer = Bearer(reader, writer)
-        mux = _setup_n2c_mux(bearer)
+        mux = Multiplexer(bearer, is_initiator=False)
+
+        # Register N2C miniprotocol channels.
+        channels: dict[int, MiniProtocolChannel] = {}
+        for proto_id in N2C_PROTOCOL_IDS:
+            channels[proto_id] = mux.add_protocol(proto_id)
+
+        # Start the mux in background.
+        mux_task = asyncio.create_task(mux.run(), name="mux-n2c")
+        stop = asyncio.Event()
 
         try:
-            await mux.run()
+            # Run N2C handshake responder on channel 0.
+            hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
+            hs_result = await run_handshake_server_n2c(hs_channel, network_magic)
+            logger.info(
+                "N2C handshake accepted v%d (query=%s)",
+                hs_result.version_number,
+                hs_result.version_data.query,
+            )
+
+            # Launch local chain-sync server (protocol 5).
+            if chain_db is not None:
+                cs_server = create_local_chainsync_server(
+                    channels[CHAIN_SYNC_N2C_ID], chain_db,
+                )
+                asyncio.create_task(
+                    cs_server.run(),
+                    name="n2c-local-chainsync",
+                )
+            else:
+                logger.warning(
+                    "N2C local chain-sync: skipped (no ChainDB available)"
+                )
+
+            # Launch local tx-submission server (protocol 6).
+            # Requires a validate_tx callback. Provide a stub that rejects
+            # all txs until the mempool is wired up.
+            async def _stub_validate_tx(era_id: int, tx_bytes: bytes) -> bytes | None:
+                logger.warning(
+                    "N2C local tx-submission: rejecting tx (mempool not wired)"
+                )
+                return b"mempool not available"
+
+            asyncio.create_task(
+                run_local_tx_submission_server(
+                    channels[LOCAL_TX_SUBMISSION_ID],
+                    validate_tx=_stub_validate_tx,
+                ),
+                name="n2c-local-txsubmission",
+            )
+
+            # Launch local state-query server (protocol 7).
+            if ledger_db is not None:
+                asyncio.create_task(
+                    run_local_state_query_server(
+                        channels[LOCAL_STATE_QUERY_PROTOCOL_ID],
+                        ledgerdb=ledger_db,
+                    ),
+                    name="n2c-local-statequery",
+                )
+            else:
+                logger.warning(
+                    "N2C local state-query: skipped (no LedgerDB available)"
+                )
+
+            # Launch local tx-monitor server (protocol 9).
+            # Requires mempool callbacks. Provide stubs until mempool is wired.
+            async def _stub_acquire_snapshot() -> int:
+                return 0
+
+            async def _stub_get_next_tx() -> tuple[int, bytes] | None:
+                return None
+
+            async def _stub_has_tx(tx_id: bytes) -> bool:
+                return False
+
+            async def _stub_mempool_sizes() -> tuple[int, int, int]:
+                return (0, 0, 0)
+
+            asyncio.create_task(
+                run_local_tx_monitor_server(
+                    channels[LOCAL_TX_MONITOR_ID],
+                    acquire_snapshot=_stub_acquire_snapshot,
+                    get_next_tx=_stub_get_next_tx,
+                    has_tx_in_snapshot=_stub_has_tx,
+                    get_mempool_sizes=_stub_mempool_sizes,
+                ),
+                name="n2c-local-txmonitor",
+            )
+
+            # Wait for mux to end (client disconnect) or shutdown.
+            done, _ = await asyncio.wait(
+                [mux_task, asyncio.create_task(shutdown_event.wait())],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+        except (HandshakeError, ConnectionError, MuxClosedError) as exc:
+            logger.debug("N2C connection ended: %s", exc)
         except Exception as exc:
             logger.debug("N2C connection ended: %s", exc)
         finally:
+            stop.set()
             await mux.close()
+            if not mux_task.done():
+                mux_task.cancel()
+                try:
+                    await mux_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
     try:
         server = await asyncio.start_unix_server(handle_connection, socket_path)
@@ -1011,6 +1135,9 @@ async def _run_n2c_server(
         if "server" in locals():
             server.close()
             await server.wait_closed()
+        for task in conn_tasks:
+            if not task.done():
+                task.cancel()
 
 
 # ---------------------------------------------------------------------------
@@ -1156,7 +1283,13 @@ async def run_node(config: NodeConfig) -> None:
     if config.socket_path is not None:
         tasks.append(
             asyncio.create_task(
-                _run_n2c_server(config.socket_path, shutdown_event),
+                _run_n2c_server(
+                    config.socket_path,
+                    config.network_magic,
+                    chain_db,
+                    ledger_db,
+                    shutdown_event,
+                ),
                 name="n2c-server",
             )
         )
