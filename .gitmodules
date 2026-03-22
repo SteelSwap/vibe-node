@@ -25,3 +25,6 @@
 [submodule "vendor/uplc"]
 	path = vendor/uplc
 	url = https://github.com/theeldermillenial/uplc.git
+[submodule "vendor/cbor2"]
+	path = vendor/cbor2
+	url = https://github.com/theeldermillenial/cbor2.git
