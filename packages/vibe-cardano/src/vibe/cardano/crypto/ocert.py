@@ -25,7 +25,6 @@ Haskell references:
 
 from __future__ import annotations
 
-import hashlib
 import struct
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -34,7 +33,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from .kes import (
     CARDANO_KES_DEPTH,
-    ED25519_VK_SIZE,
     kes_verify_block_signature,
 )
 

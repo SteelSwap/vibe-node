@@ -47,7 +47,6 @@ from vibe.core.protocols.codec import Codec, CodecError
 from vibe.core.protocols.runner import ProtocolRunner
 
 from vibe.cardano.network.local_statequery import (
-    LOCAL_STATE_QUERY_PROTOCOL_ID,
     AcquireFailureReason,
     MsgAcquire,
     MsgAcquired,
@@ -60,9 +59,7 @@ from vibe.cardano.network.local_statequery import (
     Point,
     Query,
     QueryType,
-    decode_client_message,
     decode_message,
-    decode_server_message,
     encode_acquire,
     encode_acquired,
     encode_done,

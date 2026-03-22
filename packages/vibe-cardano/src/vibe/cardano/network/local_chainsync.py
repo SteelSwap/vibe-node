@@ -41,23 +41,16 @@ import cbor2pure as cbor2
 
 from vibe.cardano.network.chainsync import (
     # Message ID constants — same for N2N and N2C
-    MSG_REQUEST_NEXT,
     MSG_AWAIT_REPLY,
     MSG_ROLL_FORWARD,
     MSG_ROLL_BACKWARD,
-    MSG_FIND_INTERSECT,
     MSG_INTERSECT_FOUND,
     MSG_INTERSECT_NOT_FOUND,
-    MSG_DONE,
     CHAIN_SYNC_N2C_ID,
     # Domain types — shared between N2N and N2C
-    Origin,
-    ORIGIN,
     Point,
-    PointOrOrigin,
     Tip,
     # Point/tip encoding helpers — wire format is identical
-    _encode_point,
     _decode_point,
     _encode_tip,
     _decode_tip,

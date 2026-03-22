@@ -9,8 +9,6 @@ Public API
 ----------
 Agency, PeerRole, Message, Protocol, ProtocolError
     Core abstractions from :mod:`~vibe.core.protocols.agency`.
-Peer
-    Runtime protocol executor from :mod:`~vibe.core.protocols.peer`.
 Codec, CodecError
     Message serialization abstraction from :mod:`~vibe.core.protocols.codec`.
 ProtocolRunner
@@ -23,7 +21,6 @@ PipelinedRunner
 
 from .agency import Agency, Message, PeerRole, Protocol, ProtocolError
 from .codec import Codec, CodecError
-from .peer import Peer
 from .pipelining import PipelinedRunner
 from .runner import ProtocolRunner
 
@@ -32,7 +29,6 @@ __all__ = [
     "Codec",
     "CodecError",
     "Message",
-    "Peer",
     "PeerRole",
     "PipelinedRunner",
     "Protocol",

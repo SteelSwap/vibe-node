@@ -31,9 +31,9 @@ from __future__ import annotations
 import asyncio
 import enum
 from dataclasses import dataclass
-from typing import Protocol as TypingProtocol, Union
+from typing import Protocol as TypingProtocol
 
-from vibe.core.protocols import Agency, Message, Protocol, ProtocolError
+from vibe.core.protocols import Agency, Message, Protocol
 
 from .handshake import (
     HANDSHAKE_TIMEOUT_S,

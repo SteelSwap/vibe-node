@@ -46,7 +46,6 @@ from .kes_serialization import (
     serialize_kes_sk,
 )
 from .ocert import (
-    MAX_KES_EVOLUTIONS as OCERT_MAX_KES_EVO,
     SLOTS_PER_KES_PERIOD,
     OCertError,
     OCertFailure,

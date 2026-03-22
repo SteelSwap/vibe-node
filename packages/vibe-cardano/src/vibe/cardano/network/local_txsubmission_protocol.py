@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import enum
 import logging
-from typing import Awaitable, Callable, Protocol as TypingProtocol
+from typing import Awaitable, Callable
 
 from vibe.core.protocols.agency import (
     Agency,

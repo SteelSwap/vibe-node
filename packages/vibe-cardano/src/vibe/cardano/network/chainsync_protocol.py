@@ -32,7 +32,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
-from typing import Callable, Awaitable, Union
+from typing import Callable, Awaitable
 
 from vibe.core.protocols.agency import (
     Agency,
@@ -53,7 +53,6 @@ from vibe.cardano.network.chainsync import (
     MsgIntersectFound,
     MsgIntersectNotFound,
     MsgDone,
-    Point,
     Origin,
     ORIGIN,
     Tip,
