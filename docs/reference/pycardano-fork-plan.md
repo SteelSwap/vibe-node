@@ -56,12 +56,15 @@
 
 ## Fork Priority
 
-Only Issue #1 (Conway fields) justifies a fork. Issues #2-5 are architectural mismatches best handled in our code. Issue #6 is nice-to-have.
+**UPDATE (2026-03-22):** pycardano v0.19.2 already has all Conway fields (voting_procedures key 19, proposal_procedures key 20, current_treasury_value key 21, donation key 22) with full type support in `pycardano/governance.py`. **No fork needed for Issue #1.** Our `try/except` fallback workarounds are stale and should be removed (M6.1 work item 1.6).
+
+Issues #2-5 are architectural mismatches best handled in our code. Issue #6 (type stubs) is nice-to-have but doesn't justify a fork.
 
 ## Fork Steps
 
-1. Fork https://github.com/Python-Cardano/pycardano to SteelSwap/pycardano
-2. Add Conway-era fields to `TransactionBody` (voting_procedures, proposal_procedures, treasury_value, donation)
+~~1. Fork https://github.com/Python-Cardano/pycardano to SteelSwap/pycardano~~
+~~2. Add Conway-era fields to `TransactionBody` (voting_procedures, proposal_procedures, treasury_value, donation)~~
+**No fork needed.** Just remove stale workarounds from our code.
 3. Verify existing tests pass
 4. Add Conway round-trip tests
 5. Fix type stubs
