@@ -1487,6 +1487,47 @@ async def _run_n2c_server(
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Periodic ledger snapshots
+# ---------------------------------------------------------------------------
+
+
+async def _snapshot_loop(
+    ledger_db: Any,
+    slot_clock: Any,
+    interval_slots: int,
+    shutdown_event: asyncio.Event,
+) -> None:
+    """Periodically snapshot the ledger for crash recovery.
+
+    Takes a snapshot every ``interval_slots`` slots of progress.
+    Failures are logged but do not crash the loop.
+    """
+    interval_secs = interval_slots * getattr(
+        getattr(slot_clock, "slot_config", None), "slot_length", 1.0
+    )
+    last_slot = 0
+    while not shutdown_event.is_set():
+        try:
+            await asyncio.sleep(interval_secs)
+        except asyncio.CancelledError:
+            return
+        if shutdown_event.is_set():
+            return
+        current = slot_clock.current_slot() if callable(getattr(slot_clock, "current_slot", None)) else 0
+        if current - last_slot >= interval_slots:
+            try:
+                await ledger_db.snapshot()
+                last_slot = current
+                logger.info(
+                    "Ledger snapshot at slot %d: %d UTxOs",
+                    current, getattr(ledger_db, "utxo_count", 0),
+                )
+            except Exception as exc:
+                logger.warning("Snapshot failed: %s", exc)
+
+
+# ---------------------------------------------------------------------------
 # Signal handling
 # ---------------------------------------------------------------------------
 
@@ -1709,31 +1750,12 @@ async def run_node(config: NodeConfig) -> None:
         )
 
     # Periodic ledger snapshots for crash recovery
-    async def _snapshot_loop() -> None:
-        interval = getattr(config, 'snapshot_interval_slots', 2000)
-        interval_secs = interval * config.slot_length
-        last_slot = 0
-        while not shutdown_event.is_set():
-            try:
-                await asyncio.sleep(interval_secs)
-            except asyncio.CancelledError:
-                return
-            if shutdown_event.is_set():
-                return
-            current = slot_clock.current_slot()
-            if current - last_slot >= interval:
-                try:
-                    handle = await ledger_db.snapshot()
-                    last_slot = current
-                    logger.info(
-                        "Ledger snapshot at slot %d: %d UTxOs",
-                        current, ledger_db.utxo_count,
-                    )
-                except Exception as exc:
-                    logger.warning("Snapshot failed: %s", exc)
-
+    snapshot_interval = getattr(config, 'snapshot_interval_slots', 2000)
     tasks.append(
-        asyncio.create_task(_snapshot_loop(), name="snapshot-loop")
+        asyncio.create_task(
+            _snapshot_loop(ledger_db, slot_clock, snapshot_interval, shutdown_event),
+            name="snapshot-loop",
+        )
     )
 
     logger.info("Node started — waiting for shutdown signal")
