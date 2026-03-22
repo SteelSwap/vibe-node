@@ -293,8 +293,8 @@ def _decode_header_body_babbage(
 
     # Babbage/Conway: opcert is nested [kes_vk, n, c0, sig] at index 8
     # Shelley-Mary: opcert is 4 inline fields at indices 8-11
-    if len(items) == 10:
-        # Babbage/Conway 10-field format
+    if len(items) == 10 and isinstance(items[8], (list, tuple)):
+        # Babbage/Conway 10-field format with nested sub-arrays
         opcert_data = items[8]  # [kes_vk, n, c0, sig]
         protver_data = items[9]  # [major, minor]
         op_cert = OperationalCert(
@@ -304,7 +304,8 @@ def _decode_header_body_babbage(
             sigma=opcert_data[3],
         )
         proto_ver = ProtocolVersion(major=protver_data[0], minor=protver_data[1])
-    else:
+    elif len(items) >= 14:
+        # Shelley-Mary 14-field format with inline opcert + protver
         # Shelley-Mary 14-field format
         op_cert = OperationalCert(
             hot_vkey=items[8],
@@ -313,6 +314,11 @@ def _decode_header_body_babbage(
             sigma=items[11],
         )
         proto_ver = ProtocolVersion(major=items[12], minor=items[13])
+    else:
+        raise ValueError(
+            f"header_body has {len(items)} items but opcert at index 8 "
+            f"is not a nested array — cannot determine format"
+        )
 
     return BlockHeader(
         slot=slot,

@@ -430,9 +430,9 @@ class TestErrorHandling:
 
     def test_short_header_body_babbage(self):
         """Babbage header_body with too few fields raises ValueError."""
-        short_body = list(range(10))  # need 14
+        short_body = list(range(5))  # need at least 10
         cbor_bytes = _wrap_block(Era.BABBAGE, short_body)
-        with pytest.raises(ValueError, match="expected >= 14 items"):
+        with pytest.raises(ValueError, match="expected >= 10 items"):
             decode_block_header(cbor_bytes)
 
 
