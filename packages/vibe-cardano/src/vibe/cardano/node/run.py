@@ -178,6 +178,7 @@ class _PeerConnection:
     stop_event: asyncio.Event | None = None
     reconnect_delay: float = 1.0
     connected: bool = False
+    protocol_tasks: list[asyncio.Task[None]] = field(default_factory=list)
 
 
 class PeerManager:
@@ -267,12 +268,22 @@ class PeerManager:
 
         Implements exponential backoff on connection failures:
         1s -> 2s -> 4s -> ... -> 60s (capped).
+
+        On successful connection the backoff resets to 1s. MuxClosedError
+        and BearerClosedError are treated as normal disconnects (INFO),
+        not unexpected errors.
+
+        Haskell ref:
+            Ouroboros.Network.Diffusion.P2P -- the P2P governor backs
+            off on connection failure with an exponential delay.
         """
+        _reconnect_count = 0
         while not self._stopped:
             try:
                 await self._connect_peer(peer)
                 # Reset backoff on successful connection.
                 peer.reconnect_delay = 1.0
+                _reconnect_count = 0
 
                 # Mux is already running (started in _connect_peer after
                 # handshake). Await the mux task until disconnect.
@@ -1091,14 +1102,22 @@ async def _forge_loop(
                     is_forged=True,
                 )
 
+            tx_count = len(forged.block.transactions) if hasattr(forged.block, "transactions") else 0
             logger.info(
-                "FORGED BLOCK %d at slot %d (%d bytes, hash=%s) "
-                "[%d total]",
+                "Forged block #%d at slot %d (%d txs, %d bytes)",
                 forged.block.block_number,
                 forged.block.slot,
+                tx_count,
                 len(forged.cbor),
-                forged.block.block_hash.hex()[:16],
-                blocks_forged,
+                extra={
+                    "event": "forge.block",
+                    "block_number": forged.block.block_number,
+                    "slot": forged.block.slot,
+                    "tx_count": tx_count,
+                    "size_bytes": len(forged.cbor),
+                    "hash": forged.block.block_hash.hex()[:16],
+                    "blocks_forged": blocks_forged,
+                },
             )
         except Exception as exc:
             logger.error("Failed to forge block at slot %d: %s", slot, exc)
@@ -1149,7 +1168,11 @@ async def _run_n2n_server(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         peer_info = writer.get_extra_info("peername")
-        logger.info("N2N inbound connection from %s", peer_info)
+        logger.info(
+            "Peer %s connected (inbound)",
+            peer_info,
+            extra={"event": "peer.inbound", "peer": str(peer_info)},
+        )
 
         bearer = Bearer(reader, writer)
         mux = Multiplexer(bearer, is_initiator=False)
@@ -1168,8 +1191,14 @@ async def _run_n2n_server(
             hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
             result = await run_handshake_server(hs_channel, network_magic)
             logger.info(
-                "N2N inbound %s: handshake accepted v%d",
+                "Peer %s handshake accepted (inbound, v%d)",
                 peer_info, result.version_number,
+                extra={
+                    "event": "peer.handshake",
+                    "peer": str(peer_info),
+                    "direction": "inbound",
+                    "version": result.version_number,
+                },
             )
 
             # Helper: wrap server coroutines so MuxClosedError on
@@ -1238,7 +1267,7 @@ async def _run_n2n_server(
                     for tx_cbor in txs:
                         try:
                             await mempool.add_tx(tx_cbor)
-                            logger.info(
+                            logger.debug(
                                 "N2N inbound %s: added tx to mempool (%d bytes)",
                                 peer_info, len(tx_cbor),
                             )
@@ -1284,7 +1313,11 @@ async def _run_n2n_server(
     try:
         server = await asyncio.start_server(handle_connection, host, port)
         addrs = [s.getsockname() for s in server.sockets]
-        logger.info("N2N server listening on %s", addrs)
+        logger.info(
+            "N2N server listening on %s",
+            addrs,
+            extra={"event": "server.n2n.listening", "addresses": str(addrs)},
+        )
 
         await shutdown_event.wait()
     except asyncio.CancelledError:
@@ -1339,7 +1372,11 @@ async def _run_n2c_server(
     async def handle_connection(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
-        logger.info("N2C client connected via %s", socket_path)
+        logger.info(
+            "N2C client connected via %s",
+            socket_path,
+            extra={"event": "n2c.connected", "socket": socket_path},
+        )
 
         bearer = Bearer(reader, writer)
         mux = Multiplexer(bearer, is_initiator=False)
@@ -1358,9 +1395,14 @@ async def _run_n2c_server(
             hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
             hs_result = await run_handshake_server_n2c(hs_channel, network_magic)
             logger.info(
-                "N2C handshake accepted v%d (query=%s)",
+                "N2C handshake accepted (v%d, query=%s)",
                 hs_result.version_number,
                 hs_result.version_data.query,
+                extra={
+                    "event": "n2c.handshake",
+                    "version": hs_result.version_number,
+                    "query": hs_result.version_data.query,
+                },
             )
 
             # Launch local chain-sync server (protocol 5).
@@ -1472,7 +1514,11 @@ async def _run_n2c_server(
 
     try:
         server = await asyncio.start_unix_server(handle_connection, socket_path)
-        logger.info("N2C server listening on %s", socket_path)
+        logger.info(
+            "N2C server listening on %s",
+            socket_path,
+            extra={"event": "server.n2c.listening", "socket": socket_path},
+        )
 
         await shutdown_event.wait()
     except asyncio.CancelledError:
@@ -1519,9 +1565,15 @@ async def _snapshot_loop(
             try:
                 await ledger_db.snapshot()
                 last_slot = current
+                utxo_count = getattr(ledger_db, "utxo_count", 0)
                 logger.info(
-                    "Ledger snapshot at slot %d: %d UTxOs",
-                    current, getattr(ledger_db, "utxo_count", 0),
+                    "Ledger snapshot at slot %d (%d UTxOs)",
+                    current, utxo_count,
+                    extra={
+                        "event": "ledger.snapshot",
+                        "slot": current,
+                        "utxo_count": utxo_count,
+                    },
                 )
             except Exception as exc:
                 logger.warning("Snapshot failed: %s", exc)
@@ -1549,7 +1601,11 @@ def _install_signal_handlers(
     """
 
     def _signal_handler(sig: signal.Signals) -> None:
-        logger.info("Received signal %s — initiating graceful shutdown", sig.name)
+        logger.info(
+            "Received %s — shutting down",
+            sig.name,
+            extra={"event": "node.signal", "signal": sig.name},
+        )
         shutdown_event.set()
 
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -1595,13 +1651,20 @@ async def run_node(config: NodeConfig) -> None:
     from .kernel import NodeKernel
 
     logger.info(
-        "Starting vibe-node (network_magic=%d, host=%s:%d, "
-        "block_producer=%s, peers=%d)",
+        "Starting vibe-node (magic=%d, %s:%d, producer=%s, %d peers)",
         config.network_magic,
         config.host,
         config.port,
         config.is_block_producer,
         len(config.peers),
+        extra={
+            "event": "node.starting",
+            "network_magic": config.network_magic,
+            "host": config.host,
+            "port": config.port,
+            "block_producer": config.is_block_producer,
+            "peer_count": len(config.peers),
+        },
     )
 
     # --- Shutdown event and signal handlers ---
@@ -1633,18 +1696,28 @@ async def run_node(config: NodeConfig) -> None:
     if config.mithril_snapshot_path is not None:
         tip = await chain_db.get_tip()
         if tip is None:
-            logger.info("Importing Mithril snapshot from %s", config.mithril_snapshot_path)
+            logger.info(
+                "Importing Mithril snapshot from %s",
+                config.mithril_snapshot_path,
+                extra={"event": "mithril.import.start", "path": str(config.mithril_snapshot_path)},
+            )
             try:
                 from vibe.cardano.sync import import_mithril_snapshot
                 await import_mithril_snapshot(
                     snapshot_dir=config.mithril_snapshot_path,
                     immutable_db=immutable_db,
                 )
-                logger.info("Mithril snapshot import complete")
+                logger.info(
+                    "Mithril snapshot import complete",
+                    extra={"event": "mithril.import.done"},
+                )
             except Exception as exc:
                 logger.warning("Mithril import failed: %s", exc)
         else:
-            logger.info("ChainDB has data, skipping Mithril import")
+            logger.info(
+                "ChainDB has data, skipping Mithril import",
+                extra={"event": "mithril.import.skip"},
+            )
 
     tip = await chain_db.get_tip()
     # Try to restore ledger state from latest snapshot
@@ -1659,14 +1732,25 @@ async def run_node(config: NodeConfig) -> None:
                     metadata={"path": str(snapshots[0])},
                 )
                 await ledger_db.restore(handle)
-                logger.info("Restored ledger from snapshot: %d UTxOs", ledger_db.utxo_count)
+                logger.info(
+                    "Ledger restored from snapshot (%d UTxOs)",
+                    ledger_db.utxo_count,
+                    extra={"event": "ledger.restored", "utxo_count": ledger_db.utxo_count},
+                )
             except Exception as exc:
                 logger.warning("Snapshot restore failed: %s", exc)
 
     if tip is not None:
-        logger.info("ChainDB loaded: tip at slot %d (hash=%s)", tip[0], tip[1].hex()[:16])
+        logger.info(
+            "ChainDB loaded: tip at slot %d (hash=%s)",
+            tip[0], tip[1].hex()[:16],
+            extra={"event": "chaindb.loaded", "slot": tip[0], "hash": tip[1].hex()[:16]},
+        )
     else:
-        logger.info("ChainDB loaded: empty (starting from genesis)")
+        logger.info(
+            "ChainDB loaded: empty (starting from genesis)",
+            extra={"event": "chaindb.loaded", "slot": 0, "empty": True},
+        )
 
     # --- Mempool ---
     from vibe.cardano.mempool import Mempool, MempoolConfig
@@ -1678,7 +1762,11 @@ async def run_node(config: NodeConfig) -> None:
         validator=tx_validator,
         current_slot=0,
     )
-    logger.info("Mempool initialised (capacity=%d bytes)", mempool.capacity_bytes)
+    logger.info(
+        "Mempool initialised (capacity=%d bytes)",
+        mempool.capacity_bytes,
+        extra={"event": "mempool.init", "capacity_bytes": mempool.capacity_bytes},
+    )
 
     # --- NodeKernel: shared state for protocol servers ---
     node_kernel = NodeKernel()
@@ -1700,7 +1788,11 @@ async def run_node(config: NodeConfig) -> None:
     slot_clock = SlotClock(slot_config)
 
     current_slot = slot_clock.current_slot()
-    logger.info("Current slot: %d", current_slot)
+    logger.info(
+        "Current slot: %d",
+        current_slot,
+        extra={"event": "node.slot", "slot": current_slot},
+    )
 
     # --- Peer manager ---
     peer_manager = PeerManager(config, chain_db=chain_db, node_kernel=node_kernel)
@@ -1758,7 +1850,10 @@ async def run_node(config: NodeConfig) -> None:
         )
     )
 
-    logger.info("Node started — waiting for shutdown signal")
+    logger.info(
+        "Node started — waiting for shutdown signal",
+        extra={"event": "node.started"},
+    )
 
     # --- Wait for shutdown ---
     try:
@@ -1767,7 +1862,7 @@ async def run_node(config: NodeConfig) -> None:
         pass
 
     # --- Graceful shutdown ---
-    logger.info("Shutting down...")
+    logger.info("Shutting down...", extra={"event": "node.shutdown"})
 
     slot_clock.stop()
     await peer_manager.stop()
@@ -1782,4 +1877,4 @@ async def run_node(config: NodeConfig) -> None:
 
     # Close storage
     chain_db.close()
-    logger.info("Node stopped")
+    logger.info("Node stopped", extra={"event": "node.stopped"})
