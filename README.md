@@ -8,7 +8,7 @@
 [![Tests](https://img.shields.io/badge/tests-4%2C290%20passing-brightgreen.svg)]()
 [![Version](https://img.shields.io/badge/version-v0.6.0-blue.svg)]()
 
-A vibe-coded, spec-compliant Cardano node written in Python.
+A vibe-coded, spec-compliant Cardano node written in Python. **v0.6.0: The vibes are valid.**
 
 ---
 
