@@ -21,6 +21,7 @@ PipelinedRunner
 
 from .agency import Agency, Message, PeerRole, Protocol, ProtocolError
 from .codec import Codec, CodecError
+from .peer import Peer
 from .pipelining import PipelinedRunner
 from .runner import ProtocolRunner
 
@@ -29,6 +30,7 @@ __all__ = [
     "Codec",
     "CodecError",
     "Message",
+    "Peer",
     "PeerRole",
     "PipelinedRunner",
     "Protocol",
