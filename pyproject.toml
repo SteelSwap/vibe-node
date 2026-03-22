@@ -28,6 +28,7 @@ vibe-core = { workspace = true }
 vibe-cardano = { workspace = true }
 vibe-tools = { workspace = true }
 cbor2pure = { git = "https://github.com/theeldermillenial/cbor2", branch = "fix/cbor2pure-indefinite-roundtrip" }
+uplc = { git = "https://github.com/theeldermillenial/uplc", branch = "fix/haskell-string-escapes" }
 
 [tool.bumpversion]
 current_version = "0.5.0"
