@@ -122,11 +122,18 @@ def _get_uplc_cost_models(
 # ---------------------------------------------------------------------------
 
 
-def deserialize_script(script_bytes: bytes) -> Program:
+def deserialize_script(
+    script_bytes: bytes,
+    *,
+    version: PlutusVersion | None = None,
+) -> Program:
     """Deserialize a Plutus script from its on-chain byte representation.
 
     On-chain Plutus scripts are double-CBOR-wrapped flat-encoded UPLC programs.
     The outer CBOR wrapping is a bytestring containing the inner CBOR+flat data.
+
+    PlutusV3 uses strict deserialization: trailing bytes after the flat-encoded
+    program cause rejection. PlutusV1/V2 are lenient (trailing bytes ignored).
 
     Spec ref: Alonzo ledger formal spec, ``deserialiseScript``.
     Haskell ref: ``deserialiseScript`` in ``Cardano.Ledger.Plutus.Language``
@@ -134,24 +141,27 @@ def deserialize_script(script_bytes: bytes) -> Program:
     Args:
         script_bytes: The raw script bytes (outer CBOR bytestring wrapping
             a flat-encoded UPLC program).
+        version: Plutus version. If V3, strict mode rejects trailing bytes.
 
     Returns:
         Parsed uplc Program AST.
 
     Raises:
-        ValueError: If deserialization fails.
+        ValueError: If deserialization fails or V3 has trailing bytes.
     """
     import cbor2pure as cbor2
+
+    strict = version == PlutusVersion.V3
 
     try:
         # On-chain scripts are double-CBOR-wrapped:
         # outer CBOR decode yields a bytestring, which is the flat-encoded program.
         inner_bytes = cbor2.loads(script_bytes)
         if isinstance(inner_bytes, bytes):
-            return unflatten(inner_bytes)
+            return unflatten(inner_bytes, strict=strict)
         else:
             # Single-wrapped -- try direct unflatten
-            return unflatten(script_bytes)
+            return unflatten(script_bytes, strict=strict)
     except Exception as e:
         raise ValueError(f"Failed to deserialize Plutus script: {e}") from e
 
@@ -376,7 +386,7 @@ def evaluate_script(
     """
     # --- 1. Deserialize the script ---
     try:
-        program = deserialize_script(script_bytes)
+        program = deserialize_script(script_bytes, version=version)
     except (ValueError, Exception) as e:
         _LOGGER.warning("Script deserialization failed: %s", e)
         return EvalResult(
