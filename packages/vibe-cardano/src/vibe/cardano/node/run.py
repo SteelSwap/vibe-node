@@ -669,7 +669,11 @@ class PeerManager:
                             slot=slot,
                             block_hash=block_hash,
                             block_number=block_number,
-                            header_cbor=[era_tag, cbor2.CBORTag(24, hdr_cbor)],
+                            # HFC N-ary sum index: Byron=0, Shelley=1, ..., Conway=6
+                            # CBOR era tags: Byron_Main=0, Byron_EBB=1, Shelley=2, ..., Conway=7
+                            # Mapping: cbor_tag >= 2 → hfc_index = cbor_tag - 1
+                            #          cbor_tag 0 or 1 → hfc_index = 0 (Byron)
+                            header_cbor=[max(0, era_tag - 1) if era_tag >= 2 else 0, cbor2.CBORTag(24, hdr_cbor)],
                             block_cbor=raw_block,
                         )
 
@@ -1080,7 +1084,7 @@ async def _forge_loop(
                     slot=forged.block.slot,
                     block_hash=forged.block.block_hash,
                     block_number=forged.block.block_number,
-                    header_cbor=[7, cbor2.CBORTag(24, forged.block.header_cbor)],  # 7=Conway era wrapping
+                    header_cbor=[6, cbor2.CBORTag(24, forged.block.header_cbor)],  # HFC index 6=Conway
                     block_cbor=forged.cbor,
                 )
 
