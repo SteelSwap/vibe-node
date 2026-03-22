@@ -519,11 +519,6 @@ class PeerManager:
 
             async def _on_block(block_cbor: bytes) -> None:
                 nonlocal _blocks_stored
-                logger.info(
-                    "BLOCK-FETCH: received %d bytes, hex[:8]=%s",
-                    len(block_cbor), block_cbor[:4].hex() if block_cbor else "empty",
-                )
-
                 from vibe.cardano.serialization.block import (
                     decode_block_header,
                     detect_era,
@@ -1092,8 +1087,7 @@ async def _forge_loop(
                 )
 
             logger.info(
-                "FORGED BLOCK %d at slot %d (%d bytes, hash=%s) "
-                "[%d total]",
+                "Forged block #%d at slot %d (%d bytes, hash=%s) [%d total]",
                 forged.block.block_number,
                 forged.block.slot,
                 len(forged.cbor),

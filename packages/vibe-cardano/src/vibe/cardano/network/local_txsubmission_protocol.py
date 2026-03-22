@@ -407,7 +407,7 @@ async def run_local_tx_submission_server(
         client_msg = await server.recv_client_message()
 
         if isinstance(client_msg, LtsMsgDone):
-            logger.info("Local tx-submission: client sent MsgDone, terminating")
+            logger.debug("Local tx-submission: client sent MsgDone, terminating")
             return
 
         if isinstance(client_msg, LtsMsgSubmitTx):

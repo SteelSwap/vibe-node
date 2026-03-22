@@ -764,7 +764,7 @@ async def run_chain_sync_server(
 
     client_point: PointOrOrigin = ORIGIN
 
-    logger.info("Chain-sync server started")
+    logger.debug("Chain-sync server started")
 
     while True:
         if stop_event is not None and stop_event.is_set():
@@ -835,14 +835,14 @@ async def run_chain_sync_server(
                     # Client disconnected or channel closed while we were
                     # waiting for new blocks. This is expected — the client
                     # may send MsgDone (closing the channel) at any time.
-                    logger.info(
+                    logger.debug(
                         "Chain-sync server: client disconnected during "
                         "await: %s", exc,
                     )
                     return
 
         elif isinstance(msg, CsMsgDone):
-            logger.info("Chain-sync server: client sent Done")
+            logger.debug("Chain-sync server: client sent Done")
             return
 
         else:

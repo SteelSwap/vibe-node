@@ -382,7 +382,7 @@ async def run_keep_alive_client(
 
     while True:
         if stop_event is not None and stop_event.is_set():
-            logger.info("Keep-alive stop requested, sending MsgDone")
+            logger.debug("Keep-alive stop requested, sending MsgDone")
             break
 
         cookie = random.randint(COOKIE_MIN, COOKIE_MAX)
@@ -397,7 +397,7 @@ async def run_keep_alive_client(
         if stop_event is not None:
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=interval)
-                logger.info("Keep-alive stop requested during wait")
+                logger.debug("Keep-alive stop requested during wait")
                 break
             except TimeoutError:
                 # Normal — interval elapsed without stop, send next ping.
