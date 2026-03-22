@@ -85,8 +85,33 @@ All 13 bitwise builtins implemented but conformance coverage unknown due to the 
 
 | Severity | Count | Consensus Impact |
 |----------|-------|-----------------|
-| CRITICAL | 2 | Budget divergence, V3 validation divergence |
-| HIGH | 6 | Script failures, incorrect evaluation |
-| MEDIUM | 5 | Test coverage gaps, fragile code |
-| LOW | 1 | Masked bug |
-| FIXED | 1 | String escapes |
+| CRITICAL | 0 | ~~Budget divergence, V3 validation divergence~~ FIXED |
+| HIGH | 3 | Duplicate map keys, BLS dependency, builtin version enforcement |
+| MEDIUM | 2 | Bitwise conformance, V3 ScriptPurpose |
+| LOW | 0 | ~~Masked bug~~ FIXED |
+| FIXED | 9 | String escapes, V3 trailing bytes, cost model wiring, SECP256k1 checks, zero-cost builtins, budget detection, file extension, conformance cap |
+
+## Fixed This Session (9 total)
+
+| Gap | Fix |
+|-----|-----|
+| String escape sequences | Custom `_decode_haskell_string()` in uplc parser |
+| V3 trailing bytes rejection | `unflatten(strict=True)` + version-aware `deserialize_script()` |
+| Cost model params not wired | `_get_uplc_cost_models()` accepts + applies on-chain params |
+| SECP256k1 length checks | Validate pubkey/sig/msg sizes before crypto calls |
+| Zero-cost unknown builtins | `RuntimeError` instead of `Budget(0,0)` |
+| Budget exhaustion detection | Check consumed units directly, not string matching |
+| File extension bug | `.json` not `json` |
+| Conformance test cap | Removed 100-case limit, runs all cases |
+| V1 trailing bytes xfail | Now a proper PASS for V3 strict mode |
+
+## Remaining Open Gaps
+
+### HIGH
+- **#3 Duplicate map keys** — `PlutusMap` uses frozendict, loses duplicates (uplc #35)
+- **#7 BLS12-381 optional** — `pyblst` should be hard dependency for V3
+- **#9 Builtin version enforcement** — uplc doesn't restrict builtins per Plutus version
+
+### MEDIUM
+- **#8 Bitwise conformance** — need to verify all 13 CIP-0122 builtins pass full suite
+- **#15 V3 ScriptPurpose** — Conway adds Voting/Proposing constructors
