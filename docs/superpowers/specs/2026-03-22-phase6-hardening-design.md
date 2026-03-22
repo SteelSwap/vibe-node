@@ -182,7 +182,14 @@ Specific extraction candidates to evaluate:
 
 **Components:**
 
-- **Structured logging:** Replace ad-hoc `logger.info()` with structured fields (slot, block_number, peer, latency). JSON format option for log aggregation.
+- **Logging audit & overhaul:**
+    - Full codebase review of every `logger.debug()`, `logger.info()`, `logger.warning()`, `logger.error()` call
+    - Remove stale debug logs from Phase 5 development (hex dumps, "BLOCK-FETCH: received X bytes", temporary diagnostic output)
+    - Ensure debug-level logs are guarded with `if logger.isEnabledFor(logging.DEBUG)` when they involve string formatting or object serialization — no performance penalty when debug is off
+    - INFO messages should mirror Haskell node log events but be human-readable: `Forged block #42 at slot 1000 (0 txs, 848 bytes)` not `[2026-03-22 01:07:00][Node.Forge](Info) {"kind":"TraceForgedBlock","slot":1000,"blockNo":42}`
+    - Target log events to match (at INFO level): forge stats, chain-sync progress, block validation results, peer connect/disconnect, tip changes, epoch transitions, KES evolution, mempool activity
+    - Structured fields via Python's `extra` dict for machine parsing, but keep the format string human-readable for terminal output
+    - JSON format option via env var (`VIBE_LOG_FORMAT=json`) for log aggregation pipelines
 - **Prometheus metrics:** Expose `/metrics` endpoint with:
   - `vibe_node_tip_slot` (gauge)
   - `vibe_node_blocks_synced_total` (counter)
