@@ -489,11 +489,7 @@ class Mempool:
             self._total_size = new_total_size
 
             if removed_ids:
-                logger.info(
-                    "Mempool: sync removed %d txs, remaining=%d",
-                    len(removed_ids),
-                    len(self._tickets),
-                )
+                logger.info("Mempool sync: removed %d txs, %d remaining", len(removed_ids), len(self._tickets), extra={"event": "mempool.sync", "removed": len(removed_ids), "remaining": len(self._tickets)})
 
             return removed_ids
 
@@ -551,11 +547,7 @@ class Mempool:
             self._tickets = new_tickets
 
             if evicted:
-                logger.info(
-                    "Mempool: evicted %d expired txs, remaining=%d",
-                    len(evicted),
-                    len(self._tickets),
-                )
+                logger.info("Mempool eviction: %d expired txs, %d remaining", len(evicted), len(self._tickets), extra={"event": "mempool.eviction", "evicted": len(evicted), "remaining": len(self._tickets)})
 
             return evicted
 

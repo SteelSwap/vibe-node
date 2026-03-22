@@ -127,12 +127,8 @@ def write_snapshot(
     meta_path.write_text(json.dumps(metadata, indent=2))
     _fsync_file(meta_path)
 
-    logger.info(
-        "Wrote snapshot at slot %d: %d UTxOs, %d bytes",
-        slot_label,
-        ledger_db.utxo_count,
-        arrow_path.stat().st_size,
-    )
+    snapshot_size = arrow_path.stat().st_size
+    logger.info("Ledger snapshot written at slot %d (%d UTxOs, %d bytes)", slot_label, ledger_db.utxo_count, snapshot_size, extra={"event": "ledger.snapshot.write", "slot": slot_label, "utxo_count": ledger_db.utxo_count, "size_bytes": snapshot_size})
 
     return arrow_path
 
@@ -309,21 +305,19 @@ def recover(
         snapshot was found.
     """
     if not snapshot_dir.is_dir():
-        logger.info("No snapshot directory found at %s", snapshot_dir)
+        logger.info("No snapshot directory found at %s", snapshot_dir, extra={"event": "recovery.no_dir", "path": str(snapshot_dir)})
         return -1
 
-    # Find the latest snapshot.
-    snapshot_files = sorted(snapshot_dir.glob("snapshot-*.arrow"))
+    # Find the latest snapshot by slot number (not lexicographic order).
+    snapshot_files = list(snapshot_dir.glob("snapshot-*.arrow"))
     if not snapshot_files:
-        logger.info("No snapshots found in %s", snapshot_dir)
+        logger.info("No snapshots found in %s", snapshot_dir, extra={"event": "recovery.no_snapshots", "path": str(snapshot_dir)})
         return -1
 
-    latest_snapshot = snapshot_files[-1]
+    latest_snapshot = max(snapshot_files, key=_slot_from_snapshot_path)
     snapshot_slot = _slot_from_snapshot_path(latest_snapshot)
 
-    logger.info(
-        "Loading snapshot from %s (slot %d)", latest_snapshot, snapshot_slot
-    )
+    logger.info("Loading snapshot at slot %d", snapshot_slot, extra={"event": "recovery.loading", "slot": snapshot_slot, "path": str(latest_snapshot)})
 
     # Load the Arrow IPC snapshot.
     with pa.OSFile(str(latest_snapshot), "rb") as source:
@@ -340,11 +334,7 @@ def recover(
     ledger_db._diffs.clear()
     ledger_db._free_rows.clear()
 
-    logger.info(
-        "Snapshot loaded: %d UTxOs at slot %d",
-        ledger_db.utxo_count,
-        snapshot_slot,
-    )
+    logger.info("Snapshot loaded: %d UTxOs at slot %d", ledger_db.utxo_count, snapshot_slot, extra={"event": "recovery.loaded", "utxo_count": ledger_db.utxo_count, "slot": snapshot_slot})
 
     # Replay diffs from the log.
     log_path = snapshot_dir / "diff-replay.log"
@@ -369,12 +359,7 @@ def recover(
         replayed += 1
 
     if replayed > 0:
-        logger.info(
-            "Replayed %d diffs (snapshot slot %d -> tip slot %d)",
-            replayed,
-            snapshot_slot,
-            tip_slot,
-        )
+        logger.info("Replayed %d diffs (slot %d -> %d)", replayed, snapshot_slot, tip_slot, extra={"event": "recovery.replayed", "diff_count": replayed, "from_slot": snapshot_slot, "to_slot": tip_slot})
 
     # Truncate the diff log — we've recovered, so start fresh.
     if log_path.exists():

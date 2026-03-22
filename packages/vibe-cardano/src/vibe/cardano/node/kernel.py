@@ -160,11 +160,8 @@ class NodeKernel(ChainProvider, BlockProvider):
         self._stake_distribution = compute_pool_stake_distribution(
             self._delegation_state, utxo_stakes,
         )
-        logger.info(
-            "Stake distribution updated: %d pools, total stake=%d",
-            len(self._stake_distribution),
-            sum(self._stake_distribution.values()),
-        )
+        total = sum(self._stake_distribution.values())
+        logger.info("Stake distribution updated: %d pools, total stake=%d", len(self._stake_distribution), total, extra={"event": "stake.updated", "pool_count": len(self._stake_distribution), "total_stake": total})
         return self._stake_distribution
 
     @property
@@ -183,17 +180,14 @@ class NodeKernel(ChainProvider, BlockProvider):
         count = len(self._pending_param_updates)
         self._pending_param_updates.clear()
         if count:
-            logger.info("Applied %d protocol parameter updates", count)
+            logger.info("Applied %d protocol parameter updates", count, extra={"event": "params.updated", "update_count": count})
 
     def init_nonce(self, genesis_hash: bytes, epoch_length: int) -> None:
         """Seed the epoch nonce from the genesis hash."""
         self._epoch_nonce = EpochNonce(value=genesis_hash)
         self._eta_v = genesis_hash
         self._epoch_length = epoch_length
-        logger.info(
-            "Epoch nonce initialised: %s (epoch_length=%d)",
-            genesis_hash.hex()[:16], epoch_length,
-        )
+        logger.info("Epoch nonce initialised (epoch_length=%d)", epoch_length, extra={"event": "nonce.init", "nonce": genesis_hash.hex()[:16], "epoch_length": epoch_length})
 
     def on_block_vrf_output(self, slot: int, epoch_start_slot: int, vrf_output: bytes) -> None:
         """Accumulate VRF output from a block within the stability window."""
@@ -208,7 +202,7 @@ class NodeKernel(ChainProvider, BlockProvider):
         self._epoch_nonce = evolve_nonce(old_nonce, self._eta_v, extra_entropy)
         self._eta_v = b"\x00" * 32
         self._current_epoch = new_epoch
-        logger.info("Epoch nonce evolved: %d -> %d", new_epoch - 1, new_epoch)
+        logger.info("Epoch transition %d -> %d", new_epoch - 1, new_epoch, extra={"event": "epoch.transition", "from_epoch": new_epoch - 1, "to_epoch": new_epoch})
 
     def add_block(
         self,
@@ -274,11 +268,7 @@ class NodeKernel(ChainProvider, BlockProvider):
                     idx = len(self._chain)
                     self._chain.append(entry)
                     self._hash_index[block_hash] = idx
-                    logger.info(
-                        "NodeKernel: switched fork, removed %d blocks, "
-                        "new tip block #%d slot=%d",
-                        len(removed), block_number, slot,
-                    )
+                    logger.info("Chain fork switch: removed %d blocks, new tip block #%d at slot %d", len(removed), block_number, slot, extra={"event": "chain.fork", "removed_blocks": len(removed), "block_number": block_number, "slot": slot})
                 else:
                     # Predecessor not in chain — just append (received
                     # blocks from a valid chain may arrive after pruning).
@@ -298,11 +288,7 @@ class NodeKernel(ChainProvider, BlockProvider):
                     idx = len(self._chain)
                     self._chain.append(entry)
                     self._hash_index[block_hash] = idx
-                    logger.info(
-                        "NodeKernel: fork switch at height %d, "
-                        "replaced %d blocks",
-                        block_number, len(removed),
-                    )
+                    logger.info("Chain fork switch at height %d, replaced %d blocks", block_number, len(removed), extra={"event": "chain.fork", "block_number": block_number, "removed_blocks": len(removed)})
                 else:
                     return
             else:

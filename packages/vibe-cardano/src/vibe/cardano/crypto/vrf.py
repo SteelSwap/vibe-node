@@ -69,7 +69,7 @@ try:
     )
 
     HAS_VRF_NATIVE = True
-    logger.info("_vrf_native pybind11 extension loaded — native VRF available")
+    logger.info("Native VRF extension loaded", extra={"event": "vrf.native_loaded"})
 except ImportError:
     _native_keypair = None
     _native_prove = None

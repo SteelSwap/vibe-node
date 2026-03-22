@@ -527,7 +527,7 @@ async def run_block_fetch(
 
     for point_from, point_to in ranges:
         if stop_event is not None and stop_event.is_set():
-            logger.info("Block-fetch stop requested, sending ClientDone")
+            logger.debug("Block-fetch stop requested, sending ClientDone")
             break
 
         blocks = await client.request_range(point_from, point_to)
