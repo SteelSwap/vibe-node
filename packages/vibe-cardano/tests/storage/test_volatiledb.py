@@ -84,3 +84,171 @@ async def test_volatiledb_max_blocks_per_file(tmp_path: Path) -> None:
 
     remaining_files = list(db_dir.glob("*.block"))
     assert len(remaining_files) == 2  # blocks at slots 4, 5
+
+
+# ---------------------------------------------------------------------------
+# Additional Haskell-parity tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_add_and_get_block() -> None:
+    """Add a block to an in-memory VolatileDB and retrieve it by hash.
+
+    Haskell reference:
+        Ouroboros.Consensus.Storage.VolatileDB.Impl.putBlock / getBlockComponent
+    """
+    db = VolatileDB(db_dir=None)
+    bh = _block_hash(42)
+    cbor = b"round-trip-payload"
+
+    await db.add_block(
+        block_hash=bh,
+        slot=10,
+        predecessor_hash=_genesis_hash(),
+        block_number=1,
+        cbor_bytes=cbor,
+    )
+
+    result = await db.get_block(bh)
+    assert result == cbor
+    assert db.block_count == 1
+
+
+@pytest.mark.asyncio
+async def test_add_duplicate_block() -> None:
+    """Adding the same block hash twice is idempotent -- second write overwrites.
+
+    Haskell reference:
+        The Haskell VolatileDB's putBlock silently overwrites if the same
+        block hash already exists.
+    """
+    db = VolatileDB(db_dir=None)
+    bh = _block_hash(1)
+    genesis = _genesis_hash()
+
+    await db.add_block(
+        block_hash=bh,
+        slot=1,
+        predecessor_hash=genesis,
+        block_number=1,
+        cbor_bytes=b"first",
+    )
+    await db.add_block(
+        block_hash=bh,
+        slot=1,
+        predecessor_hash=genesis,
+        block_number=1,
+        cbor_bytes=b"second",
+    )
+
+    # The second write should have overwritten
+    result = await db.get_block(bh)
+    assert result == b"second"
+    # Block count stays at 1 (same key)
+    assert db.block_count == 1
+
+
+@pytest.mark.asyncio
+async def test_get_block_not_found() -> None:
+    """Querying a nonexistent hash returns None.
+
+    Haskell reference:
+        Ouroboros.Consensus.Storage.VolatileDB.Impl.getBlockComponent
+        returns Nothing for missing blocks.
+    """
+    db = VolatileDB(db_dir=None)
+    result = await db.get_block(_block_hash(999))
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_predecessor() -> None:
+    """The successor map correctly tracks predecessor relationships.
+
+    Haskell reference:
+        Ouroboros.Consensus.Storage.VolatileDB.Impl.filterByPredecessor
+    """
+    db = VolatileDB(db_dir=None)
+    genesis = _genesis_hash()
+
+    bh1 = _block_hash(1)
+    bh2 = _block_hash(2)
+    bh3 = _block_hash(3)
+
+    # Chain: genesis -> bh1 -> bh2
+    # Fork:  genesis -> bh3
+    await db.add_block(
+        block_hash=bh1, slot=1, predecessor_hash=genesis,
+        block_number=1, cbor_bytes=b"b1",
+    )
+    await db.add_block(
+        block_hash=bh2, slot=2, predecessor_hash=bh1,
+        block_number=2, cbor_bytes=b"b2",
+    )
+    await db.add_block(
+        block_hash=bh3, slot=1, predecessor_hash=genesis,
+        block_number=1, cbor_bytes=b"b3",
+    )
+
+    # Genesis has two successors
+    successors = await db.get_successors(genesis)
+    assert set(successors) == {bh1, bh3}
+
+    # bh1 has one successor
+    successors_of_bh1 = await db.get_successors(bh1)
+    assert successors_of_bh1 == [bh2]
+
+    # bh2 has no successors
+    successors_of_bh2 = await db.get_successors(bh2)
+    assert successors_of_bh2 == []
+
+    # Block info tracks the predecessor hash
+    info = await db.get_block_info(bh2)
+    assert info is not None
+    assert info.predecessor_hash == bh1
+
+
+@pytest.mark.asyncio
+async def test_gc_removes_old_blocks() -> None:
+    """GC removes blocks at or below the immutable tip slot.
+
+    Haskell reference:
+        Ouroboros.Consensus.Storage.VolatileDB.Impl.garbageCollect
+        Removes all blocks with slot <= immutableTipSlot.
+    """
+    db = VolatileDB(db_dir=None)
+    genesis = _genesis_hash()
+
+    prev = genesis
+    for i in range(1, 11):
+        bh = _block_hash(i)
+        await db.add_block(
+            block_hash=bh,
+            slot=i,
+            predecessor_hash=prev,
+            block_number=i,
+            cbor_bytes=f"block-{i}".encode(),
+        )
+        prev = bh
+
+    assert db.block_count == 10
+
+    # GC everything at or below slot 7
+    removed = await db.gc(immutable_tip_slot=7)
+    assert removed == 7
+    assert db.block_count == 3
+
+    # Blocks 1-7 are gone
+    for i in range(1, 8):
+        assert await db.get_block(_block_hash(i)) is None
+
+    # Blocks 8-10 survive
+    for i in range(8, 11):
+        result = await db.get_block(_block_hash(i))
+        assert result is not None
+        assert result == f"block-{i}".encode()
+
+    # Max slot should reflect surviving blocks
+    max_slot = await db.get_max_slot()
+    assert max_slot == 10
