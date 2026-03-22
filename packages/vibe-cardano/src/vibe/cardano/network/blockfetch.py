@@ -32,7 +32,6 @@ import cbor2pure as cbor2
 from vibe.cardano.network.chainsync import (
     Point,
     Origin,
-    ORIGIN,
     PointOrOrigin,
     _encode_point,
     _decode_point,

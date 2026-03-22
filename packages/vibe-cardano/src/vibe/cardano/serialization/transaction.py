@@ -31,7 +31,6 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass, field
-from enum import IntEnum
 from typing import Optional
 
 import cbor2pure as _cbor2
@@ -40,25 +39,9 @@ from pycardano.metadata import AuxiliaryData
 from pycardano.transaction import Transaction, TransactionBody
 from pycardano.witness import TransactionWitnessSet
 
+from vibe.cardano.serialization.block import Era
+
 logger = logging.getLogger(__name__)
-
-
-class Era(IntEnum):
-    """Cardano era tags as used by the hard-fork combinator.
-
-    Duplicated from block.py for standalone use until the header decoder
-    is merged. Once PR #27 merges, this should be imported from
-    vibe.cardano.serialization.block instead.
-    """
-
-    BYRON_MAIN = 0
-    BYRON_EBB = 1
-    SHELLEY = 2
-    ALLEGRA = 3
-    MARY = 4
-    ALONZO = 5
-    BABBAGE = 6
-    CONWAY = 7
 
 
 @dataclass(frozen=True, slots=True)

@@ -9,8 +9,6 @@ Public API
 ----------
 Agency, PeerRole, Message, Protocol, ProtocolError
     Core abstractions from :mod:`~vibe.core.protocols.agency`.
-Peer
-    Runtime protocol executor from :mod:`~vibe.core.protocols.peer`.
 Codec, CodecError
     Message serialization abstraction from :mod:`~vibe.core.protocols.codec`.
 ProtocolRunner

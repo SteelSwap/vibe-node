@@ -45,9 +45,6 @@ from vibe.core.protocols.codec import Codec, CodecError
 from vibe.core.protocols.runner import ProtocolRunner
 
 from vibe.cardano.network.chainsync import (
-    Point,
-    Origin,
-    ORIGIN,
     PointOrOrigin,
 )
 from vibe.cardano.network.blockfetch import (

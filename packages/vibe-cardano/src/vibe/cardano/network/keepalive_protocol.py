@@ -37,13 +37,10 @@ from vibe.core.protocols.runner import ProtocolRunner
 from vibe.cardano.network.keepalive import (
     COOKIE_MAX,
     COOKIE_MIN,
-    KEEP_ALIVE_PROTOCOL_ID,
     MsgDone,
     MsgKeepAlive,
     MsgKeepAliveResponse,
-    decode_client_message,
     decode_message,
-    decode_server_message,
     encode_done,
     encode_keep_alive,
     encode_keep_alive_response,

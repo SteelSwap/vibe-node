@@ -28,10 +28,9 @@ Spec reference:
 
 from __future__ import annotations
 
-import asyncio
 import enum
 import logging
-from typing import Protocol as TypingProtocol, runtime_checkable, Union
+from typing import Protocol as TypingProtocol, runtime_checkable
 
 from vibe.core.protocols.agency import (
     Agency,
@@ -52,7 +51,6 @@ from vibe.cardano.network.chainsync import (
     MsgIntersectNotFound,
     MsgDone,
     Point,
-    Origin,
     ORIGIN,
     Tip,
     PointOrOrigin,
