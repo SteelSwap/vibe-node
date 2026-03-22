@@ -51,9 +51,6 @@ _SINGLE_VRF_ERAS = frozenset({Era.BABBAGE, Era.CONWAY})
 
 
 
-def _dumps(obj: object) -> bytes:
-    """Encode to CBOR bytes."""
-    return cbor2.dumps(obj)
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,7 +376,7 @@ def decode_block_header(cbor_bytes: bytes) -> BlockHeader:
 
     # Re-encode the header to get its canonical CBOR bytes for hashing.
     # This is what the Haskell node does: hash of the serialized header.
-    header_cbor = _dumps(header_array)
+    header_cbor = cbor2.dumps(header_array)
 
     header_body = header_array[0]
     # header_array[1] = body_signature (KES signature, preserved in header_cbor)
@@ -419,7 +416,7 @@ def decode_block_header_raw(header_cbor: bytes, era: Era) -> BlockHeader:
             f"Byron header decoding not yet supported (era tag {era.value})"
         )
 
-    header_array = _loads(header_cbor)
+    header_array = cbor2.loads(header_cbor)
 
     if not isinstance(header_array, list) or len(header_array) != 2:
         raise ValueError(

@@ -25,7 +25,6 @@ from vibe.cardano.serialization.transaction import (
     Era,
     decode_block_body,
     decode_block_transactions,
-    _strip_tag,
     _tx_hash,
     _try_decode_tx_body,
     _try_decode_witness_set,
@@ -170,39 +169,50 @@ def _make_block_cbor(
 
 
 # ---------------------------------------------------------------------------
-# Tests: _strip_tag
+# Tests: raw_tags CBOR tag decoding (replaces removed _strip_tag tests)
 # ---------------------------------------------------------------------------
 
 
-class TestStripTag:
-    def test_strip_tag_0(self):
-        payload = cbor2.dumps([1, 2, 3])
-        tagged = bytes([0xC0]) + payload
-        tag, rest = _strip_tag(tagged)
-        assert tag == 0
-        assert rest == payload
+class TestRawTagDecoding:
+    """Verify raw_tags=True correctly extracts CBOR era tags.
 
-    def test_strip_tag_7(self):
-        payload = cbor2.dumps("hello")
-        tagged = bytes([0xC7]) + payload
-        tag, rest = _strip_tag(tagged)
-        assert tag == 7
-        assert rest == payload
+    Uses cbor2pure (our fork with raw_tags support), not cbor2.
+    """
 
-    def test_strip_tag_24_plus(self):
-        payload = cbor2.dumps(42)
-        tagged = bytes([0xD8, 30]) + payload
-        tag, rest = _strip_tag(tagged)
-        assert tag == 30
-        assert rest == payload
+    def test_tag_0_raw(self):
+        import cbor2pure
 
-    def test_strip_tag_empty_raises(self):
-        with pytest.raises(ValueError, match="Empty CBOR"):
-            _strip_tag(b"")
+        payload = [1, 2, 3]
+        tagged = cbor2pure.dumps(cbor2pure.CBORTag(0, payload))
+        decoded = cbor2pure.loads(tagged, raw_tags=True)
+        assert decoded.tag == 0
+        assert decoded.value == payload
 
-    def test_strip_tag_not_tag_raises(self):
-        with pytest.raises(ValueError, match="major type"):
-            _strip_tag(b"\x01")  # positive integer, not a tag
+    def test_tag_7_raw(self):
+        import cbor2pure
+
+        payload = "hello"
+        tagged = cbor2pure.dumps(cbor2pure.CBORTag(7, payload))
+        decoded = cbor2pure.loads(tagged, raw_tags=True)
+        assert decoded.tag == 7
+        assert decoded.value == payload
+
+    def test_tag_30_raw(self):
+        import cbor2pure
+
+        payload = 42
+        tagged = cbor2pure.dumps(cbor2pure.CBORTag(30, payload))
+        decoded = cbor2pure.loads(tagged, raw_tags=True)
+        assert decoded.tag == 30
+        assert decoded.value == payload
+
+    def test_non_tag_returns_plain_value(self):
+        """Non-tagged data returns plain value, not CBORTag."""
+        import cbor2pure
+
+        decoded = cbor2pure.loads(b"\x01", raw_tags=True)
+        assert not isinstance(decoded, cbor2pure.CBORTag)
+        assert decoded == 1
 
 
 # ---------------------------------------------------------------------------
