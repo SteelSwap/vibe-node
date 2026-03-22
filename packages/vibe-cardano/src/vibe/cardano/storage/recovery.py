@@ -312,13 +312,13 @@ def recover(
         logger.info("No snapshot directory found at %s", snapshot_dir)
         return -1
 
-    # Find the latest snapshot.
-    snapshot_files = sorted(snapshot_dir.glob("snapshot-*.arrow"))
+    # Find the latest snapshot by slot number (not lexicographic order).
+    snapshot_files = list(snapshot_dir.glob("snapshot-*.arrow"))
     if not snapshot_files:
         logger.info("No snapshots found in %s", snapshot_dir)
         return -1
 
-    latest_snapshot = snapshot_files[-1]
+    latest_snapshot = max(snapshot_files, key=_slot_from_snapshot_path)
     snapshot_slot = _slot_from_snapshot_path(latest_snapshot)
 
     logger.info(
