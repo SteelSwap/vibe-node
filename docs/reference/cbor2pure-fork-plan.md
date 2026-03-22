@@ -24,7 +24,6 @@ cbor2.loads(raw, tag_hook=lambda d, t: t)  # ALSO TypeError — hook never calle
 ```python
 def decode_semantic(self, subtype: int) -> Any:
     tagnum = self._decode_length(subtype)
-    # If tag_hook is set, skip semantic decoders — let the hook handle all tags
     if not self._tag_hook:
         if semantic_decoder := semantic_decoders.get(tagnum):
             return semantic_decoder(self)
@@ -38,24 +37,20 @@ def decode_semantic(self, subtype: int) -> Any:
     return self.set_shareable(tag)
 ```
 
-**Impact:** This fix would let us remove `_strip_tag()` from `serialization/block.py` and `serialization/transaction.py` (workarounds 1.1-1.3 in the dependency audit).
+**Impact:** Eliminates `_strip_tag()` workarounds in block.py and transaction.py.
 
 ## Bug #2: No indefinite-length list/map encoding API (MINOR)
 
-**File:** `cbor2pure/_encoder.py`
+**Problem:** No API to encode indefinite-length CBOR arrays. Haskell uses indefinite-length for tx-submission.
 
-**Problem:** No API to encode indefinite-length CBOR arrays. Haskell node uses indefinite-length for tx-submission messages. We use definite-length which Haskell accepts but is technically non-conformant.
-
-**Fix:** Add `dumps(..., indefinite_length=True)` option or an `IndefiniteList` wrapper type.
-
-**Impact:** Would let us remove the definite-length workaround in `network/txsubmission.py:188-202`.
+**Impact:** Would fix definite-length workaround in `network/txsubmission.py:188-202`.
 
 ## Fork Steps
 
 1. Fork https://github.com/agronholm/cbor2 to SteelSwap/cbor2
-2. Apply Bug #1 fix to `cbor2/_decoder.py` (affects both cbor2 and cbor2pure)
+2. Apply Bug #1 fix
 3. Add test for tag_hook with semantic tags
 4. Open upstream PR
-5. Update vibe-node pyproject.toml: `cbor2pure = {git = "https://github.com/SteelSwap/cbor2", branch = "main", subdirectory = "..."}`
-6. Remove `_strip_tag()` workarounds from our code
+5. Update vibe-node pyproject.toml to point to fork
+6. Remove `_strip_tag()` workarounds
 7. Run full test suite

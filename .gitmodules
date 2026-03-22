@@ -19,3 +19,12 @@
 [submodule "vendor/libsodium-iog"]
 	path = vendor/libsodium-iog
 	url = https://github.com/input-output-hk/libsodium
+[submodule "vendor/pycardano"]
+	path = vendor/pycardano
+	url = https://github.com/theeldermillenial/pycardano.git
+[submodule "vendor/uplc"]
+	path = vendor/uplc
+	url = https://github.com/theeldermillenial/uplc.git
+[submodule "vendor/cbor2"]
+	path = vendor/cbor2
+	url = https://github.com/theeldermillenial/cbor2.git
