@@ -19,3 +19,6 @@
 [submodule "vendor/libsodium-iog"]
 	path = vendor/libsodium-iog
 	url = https://github.com/input-output-hk/libsodium
+[submodule "vendor/pycardano"]
+	path = vendor/pycardano
+	url = https://github.com/theeldermillenial/pycardano.git
