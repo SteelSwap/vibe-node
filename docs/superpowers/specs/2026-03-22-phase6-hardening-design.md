@@ -22,7 +22,7 @@ Phase 5 delivered a node that forges blocks accepted by Haskell. But the journey
 |-----------|-------------|--------|
 | **cbor2pure** | Pure Python CBOR library (NOT cbor2 which has broken C bindings). We use cbor2pure exclusively — `import cbor2pure as cbor2` across all 32+ files. Audit for edge cases, optimize hot paths. | Fork to SteelSwap, fix any issues found, open upstream PRs |
 | **uplc** | string-04 conformance failure (escape sequences); CEK machine edge cases | Fork to SteelSwap, fix string parsing, run full conformance suite |
-| **pycardano** | Uses cbor2 internally (not cbor2pure); some type stubs missing | Fork to SteelSwap, patch cbor2 → cbor2pure, fix type issues |
+| **pycardano** | Uses cbor2pure by default (via `pycardano.cbor` shim that checks `CBOR_C_EXTENSION` env var). Deeply integrated — 13 files, 32 import sites for tx types, certs, addresses. Some type stubs missing. | Fork to SteelSwap, audit for correctness issues, fix type stubs, open upstream PRs |
 | **cryptography** | No known issues, but audit KES/VRF usage for correctness | Audit: compare outputs against Haskell for known test vectors. No fork unless issues found |
 
 **Process per dependency:**
