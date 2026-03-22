@@ -669,7 +669,7 @@ class PeerManager:
                             slot=slot,
                             block_hash=block_hash,
                             block_number=block_number,
-                            header_cbor=hdr_cbor,
+                            header_cbor=[era_tag, cbor2.CBORTag(24, hdr_cbor)],
                             block_cbor=raw_block,
                         )
 
@@ -856,6 +856,8 @@ async def _forge_loop(
     import hashlib
 
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    import cbor2pure as cbor2
 
     from vibe.cardano.crypto.kes import (
         CARDANO_KES_DEPTH,
@@ -1078,7 +1080,7 @@ async def _forge_loop(
                     slot=forged.block.slot,
                     block_hash=forged.block.block_hash,
                     block_number=forged.block.block_number,
-                    header_cbor=forged.block.header_cbor,
+                    header_cbor=[7, cbor2.CBORTag(24, forged.block.header_cbor)],  # 7=Conway era wrapping
                     block_cbor=forged.cbor,
                 )
 

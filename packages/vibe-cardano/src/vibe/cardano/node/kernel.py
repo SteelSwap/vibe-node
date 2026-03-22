@@ -58,7 +58,7 @@ class BlockEntry:
     slot: int
     block_hash: bytes
     block_number: int
-    header_cbor: bytes  # Wrapped header for chain-sync
+    header_cbor: Any  # Wrapped header for chain-sync: [era_tag, CBORTag(24, bytes)]
     block_cbor: bytes  # Full block for block-fetch
 
 
