@@ -66,7 +66,7 @@ def main() -> None:
             active_slot_coeff = sg.get("activeSlotsCoeff", active_slot_coeff)
             slots_per_kes_period = sg.get("slotsPerKESPeriod", 129600)
             protocol_params = sg.get("protocolParams", None)
-            genesis_bytes = json.dumps(sg, sort_keys=True, separators=(',', ':')).encode()
+            genesis_bytes = genesis_path.read_bytes()  # Hash raw file bytes, not re-encoded JSON
             import hashlib
             genesis_hash = hashlib.blake2b(genesis_bytes, digest_size=32).digest()
             # Parse initial stake distribution
