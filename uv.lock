@@ -3317,7 +3317,7 @@ wheels = [
 [[package]]
 name = "uplc"
 version = "1.3.2"
-source = { git = "https://github.com/theeldermillenial/uplc?branch=fix%2Fhaskell-string-escapes#6e17c314bce8097673e37a04498c933f1533ba44" }
+source = { git = "https://github.com/theeldermillenial/uplc?branch=fix%2Fhaskell-string-escapes#8cee51cf5345c4cc41d67f06247a58c30d929a39" }
 dependencies = [
     { name = "bitarray" },
     { name = "bitstring" },

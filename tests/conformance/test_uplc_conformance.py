@@ -115,7 +115,7 @@ def _discover_test_cases(limit: int = 0) -> list[UplcTestCase]:
 
 # Discover test cases at module load time for parametrize
 _ALL_CASES = _discover_test_cases()
-_TEST_CASES = _ALL_CASES[:100] if len(_ALL_CASES) > 100 else _ALL_CASES
+_TEST_CASES = _ALL_CASES  # Run all conformance cases (was capped at 100)
 
 
 # ---------------------------------------------------------------------------

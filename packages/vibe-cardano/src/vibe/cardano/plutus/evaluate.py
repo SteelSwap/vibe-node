@@ -89,32 +89,48 @@ class EvalResult:
 
 def _get_uplc_cost_models(
     version: PlutusVersion,
+    cost_model: dict[str, int] | list[int] | None = None,
 ) -> tuple[CekMachineCostModel, BuiltinCostModel]:
-    """Get the default uplc cost models for a given Plutus version.
+    """Get uplc cost models for a given Plutus version.
 
-    When we have actual on-chain cost model parameters (CostModel), we would
-    apply them here. For now, we use uplc's built-in defaults which track
-    the current mainnet parameters.
+    If ``cost_model`` is provided (from on-chain protocol parameters),
+    it overrides the default builtin cost model. Otherwise, uses uplc's
+    built-in defaults which track the current mainnet parameters.
 
-    TODO(VNODE-XXX): Apply CostModel parameter vector to override uplc defaults
-    when the ledger provides specific cost model params from protocol parameters.
+    Args:
+        version: Plutus version (V1, V2, V3).
+        cost_model: Optional on-chain cost model parameters. Can be a
+            dict of parameter names to values, or a list of parameter
+            values in canonical order.
     """
     match version:
         case PlutusVersion.V1:
-            return (
-                default_cek_machine_cost_model_plutus_v1(),
-                default_builtin_cost_model_plutus_v1(),
-            )
+            cek = default_cek_machine_cost_model_plutus_v1()
+            builtin = default_builtin_cost_model_plutus_v1()
         case PlutusVersion.V2:
-            return (
-                default_cek_machine_cost_model_plutus_v2(),
-                default_builtin_cost_model_plutus_v2(),
-            )
+            cek = default_cek_machine_cost_model_plutus_v2()
+            builtin = default_builtin_cost_model_plutus_v2()
         case PlutusVersion.V3:
-            return (
-                default_cek_machine_cost_model_plutus_v3(),
-                default_builtin_cost_model_plutus_v3(),
+            cek = default_cek_machine_cost_model_plutus_v3()
+            builtin = default_builtin_cost_model_plutus_v3()
+
+    if cost_model is not None:
+        try:
+            from uplc.cost_model import updated_builtin_cost_model_from_network_config
+            builtin = updated_builtin_cost_model_from_network_config(
+                builtin, cost_model
             )
+            _LOGGER.debug(
+                "Applied on-chain cost model override for Plutus %s",
+                version.name,
+            )
+        except Exception as exc:
+            _LOGGER.warning(
+                "Failed to apply on-chain cost model for Plutus %s: %s",
+                version.name, exc,
+            )
+
+    return cek, builtin
 
 
 # ---------------------------------------------------------------------------
@@ -409,11 +425,9 @@ def evaluate_script(
 
     # --- 3. Set up the CEK machine budget and cost models ---
     budget = Budget(cpu=ex_units.steps, memory=ex_units.mem)
-    cek_cost_model, builtin_cost_model = _get_uplc_cost_models(version)
-
-    # TODO(VNODE-XXX): When cost_model is provided, apply its parameter
-    # vector to override the default builtin cost model. The uplc package
-    # supports updated_builtin_cost_model_from_network_config() for this.
+    cek_cost_model, builtin_cost_model = _get_uplc_cost_models(
+        version, cost_model=cost_model
+    )
 
     # --- 4. Run the CEK machine ---
     try:
@@ -442,13 +456,14 @@ def evaluate_script(
     if isinstance(result.result, Exception):
         error_msg = str(result.result)
 
-        # Check if it was a budget exhaustion
-        if "Exhausted budget" in error_msg:
+        # Check budget exhaustion via consumed units (more robust than
+        # string matching against "Exhausted budget" which is fragile)
+        if consumed.mem > ex_units.mem or consumed.steps > ex_units.steps:
             return EvalResult(
                 success=False,
                 ex_units_consumed=consumed,
                 logs=logs,
-                error=f"ExUnits budget exceeded: {error_msg}",
+                error=f"ExUnits budget exceeded: consumed {consumed}, limit {ex_units}",
             )
 
         return EvalResult(
