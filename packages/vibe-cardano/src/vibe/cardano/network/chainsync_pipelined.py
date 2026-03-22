@@ -241,7 +241,7 @@ class PipelinedChainSyncClient:
                             await on_roll_backward(response.point, response.tip)
                     except asyncio.QueueEmpty:
                         break
-                logger.info("Pipelined chain-sync: stop requested, drained remaining")
+                logger.debug("Pipelined chain-sync: stop requested, drained remaining")
                 return
 
             # Use a short timeout so we can check stop_event periodically.
@@ -259,12 +259,7 @@ class PipelinedChainSyncClient:
                 # Drain the pipeline — all subsequent in-flight responses
                 # reference chain state that no longer exists.
                 drained = await pipeline.drain()
-                logger.info(
-                    "Pipelined chain-sync: rollback to %s, "
-                    "drained %d in-flight responses",
-                    response.point,
-                    len(drained),
-                )
+                logger.info("Chain rollback to %s (drained %d in-flight)", response.point, len(drained), extra={"event": "chainsync.rollback", "point": str(response.point), "drained": len(drained)})
                 await on_roll_backward(response.point, response.tip)
 
             elif isinstance(response, CsMsgAwaitReply):
@@ -280,11 +275,7 @@ class PipelinedChainSyncClient:
                     await on_roll_forward(follow_up.header, follow_up.tip)
                 elif isinstance(follow_up, CsMsgRollBackward):
                     drained = await pipeline.drain()
-                    logger.info(
-                        "Pipelined chain-sync: rollback after await, "
-                        "drained %d in-flight",
-                        len(drained),
-                    )
+                    logger.info("Chain rollback after await (drained %d in-flight)", len(drained), extra={"event": "chainsync.rollback", "drained": len(drained)})
                     await on_roll_backward(follow_up.point, follow_up.tip)
 
             else:
@@ -345,13 +336,7 @@ async def run_pipelined_chain_sync(
             "known points do not overlap with the producer's chain."
         )
 
-    logger.info(
-        "Pipelined chain-sync intersection found: %s "
-        "(server tip: block %d, pipeline depth: %d)",
-        intersection,
-        tip.block_number,
-        max_in_flight,
-    )
+    logger.info("Chain-sync intersection at %s (server tip: block #%d, depth=%d)", intersection, tip.block_number, max_in_flight, extra={"event": "chainsync.intersect", "point": str(intersection), "tip_block": tip.block_number, "pipeline_depth": max_in_flight})
 
     # Step 2: Pipelined sync loop.
     await client.run_pipelined_sync(

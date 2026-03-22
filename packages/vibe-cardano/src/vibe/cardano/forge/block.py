@@ -360,9 +360,8 @@ def forge_block(
     full_block = [header_array] + cbor2.loads(body_cbor)
     full_block_cbor = cbor2.dumps(full_block)
 
-    logger.info(
-        "Forged block %d at slot %d: %d txs, %d bytes header, "
-        "%d bytes body, hash %s",
+    logger.debug(
+        "forge_block: block #%d slot=%d txs=%d header=%d body=%d hash=%s",
         block_number,
         slot,
         num_txs,

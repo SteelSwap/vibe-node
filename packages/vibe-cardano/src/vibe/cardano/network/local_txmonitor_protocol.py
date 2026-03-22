@@ -699,7 +699,7 @@ async def run_local_tx_monitor_server(
         client_msg = await server.recv_client_message()
 
         if isinstance(client_msg, LtmMsgDone):
-            logger.info("Local tx-monitor: client sent MsgDone, terminating")
+            logger.debug("Local tx-monitor: client sent MsgDone, terminating")
             return
 
         elif isinstance(client_msg, (LtmMsgAcquire, LtmMsgAwaitAcquireIdle,

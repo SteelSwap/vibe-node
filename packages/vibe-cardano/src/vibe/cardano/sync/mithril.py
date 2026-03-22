@@ -332,12 +332,12 @@ def _decode_ledger_snapshot(
     # with the slot number, e.g., ``<slot>`` or ``<slot>_<hash>``.
     snapshot_files = sorted(ledger_dir.glob("*"))
     if not snapshot_files:
-        logger.info("No ledger snapshot files found in %s", ledger_dir)
+        logger.info("No ledger snapshot files found in %s", ledger_dir, extra={"event": "mithril.ledger.empty", "path": str(ledger_dir)})
         return None
 
     # Take the most recent (largest filename = highest slot).
     snapshot_file = snapshot_files[-1]
-    logger.info("Attempting ledger snapshot decode from %s", snapshot_file)
+    logger.info("Decoding ledger snapshot from %s", snapshot_file, extra={"event": "mithril.ledger.decode", "path": str(snapshot_file)})
 
     try:
         raw = snapshot_file.read_bytes()
@@ -536,7 +536,7 @@ async def import_mithril_snapshot(
     block_count = 0
     skipped = 0
 
-    logger.info("Importing blocks from %s", immutable_dir)
+    logger.info("Importing blocks from %s", immutable_dir, extra={"event": "mithril.blocks.start", "path": str(immutable_dir)})
 
     for slot, block_hash, cbor_bytes in parse_immutable_chunks(immutable_dir):
         # Skip blocks that are already in our DB (idempotent import).
@@ -558,9 +558,7 @@ async def import_mithril_snapshot(
         block_count += 1
 
         if block_count % 10_000 == 0:
-            logger.info(
-                "Imported %d blocks (tip slot: %d)", block_count, slot
-            )
+            logger.info("Imported %d blocks (tip slot %d)", block_count, slot, extra={"event": "mithril.blocks.progress", "block_count": block_count, "slot": slot})
 
     if tip_slot is None or tip_hash is None:
         raise ValueError(
@@ -568,13 +566,7 @@ async def import_mithril_snapshot(
             f"(skipped {skipped} already-imported blocks)"
         )
 
-    logger.info(
-        "Imported %d blocks (skipped %d). Tip: slot %d, hash %s",
-        block_count,
-        skipped,
-        tip_slot,
-        tip_hash.hex()[:16],
-    )
+    logger.info("Import complete: %d blocks (skipped %d), tip at slot %d", block_count, skipped, tip_slot, extra={"event": "mithril.blocks.done", "block_count": block_count, "skipped": skipped, "tip_slot": tip_slot, "tip_hash": tip_hash.hex()[:16]})
 
     # Phase 2: Try to import the ledger state.
     if ledger_dir.is_dir():
@@ -591,15 +583,10 @@ async def import_mithril_snapshot(
                 entries.append((key, row))
 
             ledger_db._bulk_insert(entries)
-            logger.info(
-                "Loaded %d UTxOs from ledger snapshot", len(entries)
-            )
+            logger.info("Loaded %d UTxOs from ledger snapshot", len(entries), extra={"event": "mithril.utxo.loaded", "utxo_count": len(entries)})
         else:
-            logger.info(
-                "Could not decode ledger snapshot — UTxO set must be "
-                "built by replaying blocks from the ImmutableDB"
-            )
+            logger.info("Could not decode ledger snapshot — UTxO set must be built by replaying blocks", extra={"event": "mithril.utxo.decode_failed"})
     else:
-        logger.info("No ledger directory in snapshot — skipping UTxO import")
+        logger.info("No ledger directory in snapshot — skipping UTxO import", extra={"event": "mithril.utxo.skip"})
 
     return tip_slot, tip_hash
