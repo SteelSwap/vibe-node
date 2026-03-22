@@ -54,14 +54,29 @@ Phase 5 delivered a node that forges blocks accepted by Haskell. But the journey
 - Dead imports, unused functions, vestigial code from earlier phases
 - Overly large files (especially `run.py` at 1700+ lines) — split by responsibility. Target structure determined during audit, but likely candidates: `startup.py`, `peer_manager.py`, `sync_loop.py`, `forge_loop.py`, `inbound_server.py`
 
+**Reusability review:**
+
+During deduplication, verify that the monorepo package boundaries are correct:
+
+- **vibe-core** must remain protocol-agnostic with ZERO Cardano-specific code. It provides: multiplexer, typed protocol framework, pipelining, bearer abstraction, codec interfaces, storage interfaces. These are generic building blocks for any binary protocol node. Use Python `Protocol` types for interfaces, not base class inheritance.
+- **vibe-cardano** contains all Cardano-specific logic. Code that's currently in vibe-cardano but is actually generic (e.g., binary codec patterns, append-only storage, snapshot/recovery patterns, connection management) should be extracted to vibe-core.
+- **vibe-tools** is dev infrastructure only — no runtime code leaks.
+
+Specific extraction candidates to evaluate:
+- Codec framework (CBOR encode/decode patterns → generic codec interface in vibe-core)
+- Storage abstractions (append-only + mutable + snapshot patterns → storage interface in vibe-core)
+- Connection/peer management (reconnect logic, backoff, health tracking → vibe-core)
+- Consensus interfaces (thin Protocol types for leader election, chain selection → vibe-core)
+
 **Process:**
 1. Generate a full duplication report (function-level similarity analysis)
 2. For each duplicate pair: decide which is canonical, merge the best parts, delete the other
 3. For scattered logic: consolidate into single-responsibility modules
 4. For large files: split along natural boundaries
-5. Run full test suite after each consolidation to catch regressions
+5. Review every module against vibe-core vs vibe-cardano boundary — extract generics
+6. Run full test suite after each consolidation to catch regressions
 
-**Deliverable:** Every file has one clear responsibility. No parallel implementations. `run.py` split into focused modules.
+**Deliverable:** Every file has one clear responsibility. No parallel implementations. `run.py` split into focused modules. vibe-core contains all protocol-agnostic abstractions with clean interfaces.
 
 ---
 
