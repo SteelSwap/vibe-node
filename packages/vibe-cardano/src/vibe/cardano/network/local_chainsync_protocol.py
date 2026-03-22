@@ -657,7 +657,7 @@ class LocalChainSyncServer:
                 await self.handle_request_next()
 
             elif isinstance(msg, LcsMsgDone):
-                logger.info("Local chain-sync client sent Done, terminating")
+                logger.debug("Local chain-sync client sent Done, terminating")
                 return
 
             else:

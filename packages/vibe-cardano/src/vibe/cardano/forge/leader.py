@@ -193,12 +193,7 @@ def check_leadership(
 
     # Check the Praos leader threshold
     if certified_nat_max_check(output, relative_stake, active_slot_coeff):
-        logger.info(
-            "Slot %d: elected as leader (stake=%.6f, f=%.4f)",
-            slot,
-            relative_stake,
-            active_slot_coeff,
-        )
+        logger.info("Elected leader for slot %d (stake=%.4f%%, f=%.4f)", slot, relative_stake * 100, active_slot_coeff, extra={"event": "forge.elected", "slot": slot, "relative_stake": relative_stake, "active_slot_coeff": active_slot_coeff})
         return LeaderProof(
             vrf_proof=proof,
             vrf_output=output,

@@ -530,7 +530,7 @@ class LocalStateQueryServer:
                 if isinstance(msg, LsqMsgAcquire):
                     await self._handle_acquire(msg.point)
                 elif isinstance(msg, LsqMsgDone):
-                    logger.info("Local state-query: client sent MsgDone")
+                    logger.debug("Local state-query: client sent MsgDone")
                     return
                 else:
                     raise ProtocolError(

@@ -591,7 +591,7 @@ async def run_tx_submission_client(
     # Step 2: Main loop -- respond to server requests
     while not client.is_done:
         if stop_event is not None and stop_event.is_set():
-            logger.info("Tx-submission stop requested")
+            logger.debug("Tx-submission stop requested")
             # We can only send MsgDone from StTxIds after a blocking request.
             # If we're in StIdle, we need to wait for a blocking request first.
             # For now, just break and let the connection close.
@@ -607,7 +607,7 @@ async def run_tx_submission_client(
                 # Client wants to terminate -- only valid for blocking requests
                 if request.blocking:
                     await client.done()
-                    logger.info("Tx-submission: sent MsgDone, protocol complete")
+                    logger.debug("Tx-submission: sent MsgDone, protocol complete")
                     return
                 else:
                     # Non-blocking: reply with empty list instead

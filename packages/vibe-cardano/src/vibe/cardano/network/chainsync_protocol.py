@@ -645,17 +645,13 @@ async def run_chain_sync(
             "known points do not overlap with the producer's chain."
         )
 
-    logger.info(
-        "Chain-sync intersection found: %s (server tip: block %d)",
-        intersection,
-        tip.block_number,
-    )
+    logger.info("Chain-sync intersection at %s (server tip: block #%d)", intersection, tip.block_number, extra={"event": "chainsync.intersect", "point": str(intersection), "tip_block": tip.block_number})
 
     # Step 2: Sync loop
     while True:
         # Check stop condition
         if stop_event is not None and stop_event.is_set():
-            logger.info("Chain-sync stop requested, sending Done")
+            logger.debug("Chain-sync stop requested, sending Done")
             await client.done()
             return
 
@@ -764,7 +760,7 @@ async def run_chain_sync_server(
 
     client_point: PointOrOrigin = ORIGIN
 
-    logger.info("Chain-sync server started")
+    logger.debug("Chain-sync server started")
 
     while True:
         if stop_event is not None and stop_event.is_set():
@@ -835,14 +831,14 @@ async def run_chain_sync_server(
                     # Client disconnected or channel closed while we were
                     # waiting for new blocks. This is expected — the client
                     # may send MsgDone (closing the channel) at any time.
-                    logger.info(
+                    logger.debug(
                         "Chain-sync server: client disconnected during "
                         "await: %s", exc,
                     )
                     return
 
         elif isinstance(msg, CsMsgDone):
-            logger.info("Chain-sync server: client sent Done")
+            logger.debug("Chain-sync server: client sent Done")
             return
 
         else:
