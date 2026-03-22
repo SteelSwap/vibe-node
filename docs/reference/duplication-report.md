@@ -138,25 +138,29 @@ Files sorted by line count, production code only:
 
 ## 4. Dead Code
 
-### Confirmed Dead: Unreferenced Modules
+### Removed (M6.2)
 
-| File | Lines | Evidence |
-|------|-------|---------|
-| `node/security.py` | Unknown | Not imported anywhere in the codebase |
-| `node/memory_tracker.py` | Unknown | Not imported anywhere in the codebase |
-| `node/resource_limits.py` | ~50+ | Only imports from `storage.volatile` — but is never imported by anything else. **Wait** — need to verify it's not used at runtime via config. Likely dead. |
-| `node/logging_config.py` | Unknown | Not imported anywhere in the codebase |
-| `node/metrics.py` | Unknown | Not imported anywhere in the codebase |
-| `serialization/eval_pycardano.py` | 1176 | Not imported by any production code — this is a standalone evaluation/testing tool |
-| `plutus/context.py` | Unknown | Not imported anywhere in the codebase |
+| File | Lines | Reason |
+|------|-------|--------|
+| `vibe.core.protocols.peer` | 170 | Queue-based Peer class superseded by ProtocolRunner; never imported |
 | `network/blockfetch_pipelined.py` | ~200 | Not imported by any production code |
 | `network/chainsync_pipelined.py` | ~200 | Not imported by any production code |
+| Test files for pipelined variants | ~400 | Tests for removed dead code |
+| 15 unused imports across 10 files | -- | Union, Point, Origin, ORIGIN, hashlib, asyncio, TypingProtocol, decode_client/server_message, protocol IDs, OCERT_MAX_KES_EVO |
 
-**Note:** `eval_pycardano.py`, `blockfetch_pipelined.py`, and `chainsync_pipelined.py` may be intentionally staged for future use. The `node/` utility modules (`security.py`, `memory_tracker.py`, `logging_config.py`, `metrics.py`) appear to be scaffolding that was never wired in.
+### Intentionally Retained (M6.5/M6.6 staging)
 
-### Confirmed Dead: `vibe.core.protocols.peer`
+These modules are not yet wired into production code but have their own tests and are intentionally staged for future milestones:
 
-`vibe/core/protocols/peer.py` is not imported by anything in either `vibe-core` or `vibe-cardano`.
+| File | Purpose |
+|------|---------|
+| `node/security.py` | Connection security (M6.5/M6.6) |
+| `node/memory_tracker.py` | RSS monitoring and leak detection (M6.5/M6.6) |
+| `node/resource_limits.py` | FD/memory limit enforcement (M6.5/M6.6) |
+| `node/logging_config.py` | Structured JSON logging (M6.5/M6.6) |
+| `node/metrics.py` | Prometheus-style metrics (M6.5/M6.6) |
+| `serialization/eval_pycardano.py` | Standalone evaluation/testing tool |
+| `plutus/context.py` | Plutus ScriptContext building (Plutus evaluation) |
 
 ### Era Enum Redundancy (Not Dead, But Duplicated)
 
@@ -174,7 +178,7 @@ The three `Era(IntEnum)` definitions are all used — but they should be one def
 | `protocols/codec.py` | ~80 | No — mentions CBOR in docs but interface is `bytes` in/out |
 | `protocols/runner.py` | ~250 | **Mild leak** — imports `cbor2pure` for CBOR frame splitting (line 233). The CBOR-aware message boundary detection is Ouroboros-specific. |
 | `protocols/pipelining.py` | ~200 | No — generic pipeline with backpressure |
-| `protocols/peer.py` | ~50 | No — generic (also dead code) |
+| ~~`protocols/peer.py`~~ | ~~50~~ | Removed in M6.2 (dead code) |
 | `multiplexer/bearer.py` | ~100 | No — generic TCP bearer |
 | `multiplexer/mux.py` | ~350 | No — generic multiplexer |
 | `multiplexer/segment.py` | ~80 | No — generic segment framing |
@@ -188,6 +192,8 @@ The three `Era(IntEnum)` definitions are all used — but they should be one def
 **Recommendation:** Either:
 - Accept this as pragmatic (the runner IS designed for Ouroboros protocols)
 - Or push the CBOR-aware splitting into the codec layer where each protocol's Codec handles multi-message segments
+
+**M6.2 assessment:** The import is a lazy inline import (not at module top level), so it does not create a hard dependency at import time. The `Codec` protocol in `codec.py` already defines a generic `bytes -> Message` interface. The clean fix would be to extend the `Codec` protocol with a `split_messages(data: bytes) -> list[bytes]` method that each miniprotocol codec implements, moving the CBOR-aware splitting out of the runner. This is Phase 7 scope -- the current pragmatic approach works and the violation is contained to a single lazy import.
 
 ### Code That Should Move to vibe-core
 
@@ -206,8 +212,8 @@ No significant generic code was found trapped in vibe-cardano. The boundary is c
 ### Medium Priority (do in M6.2 if time permits)
 
 4. **Split `consensus/hfc.py`** (1138 lines) — Extract era-transition translation to its own module
-5. **Delete confirmed dead code** — `node/security.py`, `node/memory_tracker.py`, `node/logging_config.py`, `node/metrics.py`, `protocols/peer.py` (after confirming they're truly unused)
-6. **Audit pipelined variants** — Decide if `blockfetch_pipelined.py` and `chainsync_pipelined.py` are keep-for-later or dead
+5. ~~**Delete confirmed dead code**~~ — DONE: removed `protocols/peer.py`, pipelined variants, 15 unused imports. Retained M6.5/M6.6 staging modules.
+6. ~~**Audit pipelined variants**~~ — DONE: removed as dead code (not imported by any production code)
 
 ### Low Priority (future work)
 
