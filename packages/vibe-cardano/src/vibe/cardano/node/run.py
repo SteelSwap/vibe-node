@@ -460,7 +460,7 @@ class PeerManager:
                             peer.address, _headers_received, tip,
                         )
             except Exception as exc:
-                logger.debug("Peer %s: header parse error: %s", peer.address, exc)
+                logger.warning("Peer %s: header parse error: %s", peer.address, exc)
 
         async def _on_roll_backward(point: object, tip: object) -> None:
             logger.info(
@@ -648,9 +648,9 @@ class PeerManager:
                                     consumed, created, block_slot=slot,
                                 )
                             except Exception as exc:
-                                logger.debug(
-                                    "Peer %s: ledger apply error: %s",
-                                    peer.address, exc,
+                                logger.warning(
+                                    "Peer %s: ledger apply error at slot %d: %s",
+                                    peer.address, slot, exc,
                                 )
 
                     # --- Store in ChainDB ---
@@ -701,7 +701,7 @@ class PeerManager:
                     stop_event=stop_event,
                 )
             except Exception as exc:
-                logger.debug(
+                logger.warning(
                     "Peer %s: block-fetch error: %s", peer.address, exc
                 )
             finally:
@@ -971,8 +971,8 @@ async def _forge_loop(
                 prev_header_hash = tip[1]  # (slot, hash, block_number)
                 prev_block_number = tip[2]  # Real block number
                 logger.info("Forge: building on chain tip slot=%d block=%d", tip[0], tip[2])
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Forge: failed to read chain tip at startup: %s", exc)
     blocks_forged = 0
 
     logger.info(
@@ -1031,8 +1031,9 @@ async def _forge_loop(
                     prev_block_number = tip_block_number  # Real block number, not slot
                 elif slot > 10:
                     continue
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Forge: failed to read chain tip at slot %d: %s", slot, exc)
+                continue  # Skip this slot — don't forge with stale state
 
         # Re-read epoch nonce from kernel (evolves at epoch boundaries)
         if node_kernel is not None:
@@ -1076,7 +1077,7 @@ async def _forge_loop(
                         cbor_bytes=forged.cbor,
                     )
                 except Exception as exc:
-                    logger.warning("Failed to store forged block: %s", exc)
+                    logger.error("Failed to store forged block #%d: %s", forged.block.block_number, exc)
 
             # Add to NodeKernel so chain-sync/block-fetch servers
             # can serve this block to connected peers.
