@@ -1,6 +1,6 @@
 # Phase 5 — Block Production & Haskell Acceptance
 
-**Status: COMPLETE** — vibe-node forges blocks accepted by Haskell cardano-nodes. v0.6.0.
+**Status: COMPLETE** — vibe-node forges blocks accepted by Haskell cardano-nodes. v0.5.0.
 
 Phase 5 transformed vibe-node from a passive chain follower into an active block producer. The milestone was achieved when Haskell nodes in a 3-node private devnet validated and adopted blocks forged by vibe-node — passing VRF proof verification, KES signature checks, header envelope validation, and chain selection.
 

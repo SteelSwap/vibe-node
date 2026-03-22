@@ -6,9 +6,9 @@
 [![Built with AI](https://img.shields.io/badge/built%20with-AI%20%28vibe%20coded%29-ff6d00.svg)]()
 [![Cardano](https://img.shields.io/badge/Cardano-node-0033AD.svg)](https://cardano.org)
 [![Tests](https://img.shields.io/badge/tests-4%2C290%20passing-brightgreen.svg)]()
-[![Version](https://img.shields.io/badge/version-v0.6.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-v0.5.0-blue.svg)]()
 
-A vibe-coded, spec-compliant Cardano node written in Python. **v0.6.0: The vibes are valid.**
+A vibe-coded, spec-compliant Cardano node written in Python. **v0.5.0: The vibes are valid.**
 
 ---
 
