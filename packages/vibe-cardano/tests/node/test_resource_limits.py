@@ -57,28 +57,18 @@ class TestMemoryMonitor:
     def test_memory_monitor_warns_at_threshold(self, caplog: pytest.LogCaptureFixture) -> None:
         """MemoryMonitor logs a warning when RSS >= soft_limit."""
         monitor = MemoryMonitor(soft_limit=1000, gc_threshold=0.80)
-
-        # Simulate RSS at exactly the soft limit
-        with patch(
-            "vibe.cardano.node.resource_limits.resource.getrusage",
-            return_value=_mock_rusage(1000),
-        ):
+        with patch.object(MemoryMonitor, "_get_rss_bytes", return_value=1000):
             rss = monitor.check()
 
         assert rss == 1000
-        # Should have the warning (1000 >= 1000)
         assert any("memory pressure is HIGH" in r.message for r in caplog.records)
 
     def test_memory_monitor_triggers_gc(self) -> None:
         """MemoryMonitor calls gc.collect() when RSS >= gc_threshold * soft_limit."""
         monitor = MemoryMonitor(soft_limit=1000, gc_threshold=0.80)
 
-        # RSS at 850 bytes -- above 80% of 1000
         with (
-            patch(
-                "vibe.cardano.node.resource_limits.resource.getrusage",
-                return_value=_mock_rusage(850),
-            ),
+            patch.object(MemoryMonitor, "_get_rss_bytes", return_value=850),
             patch("vibe.cardano.node.resource_limits.gc.collect", return_value=42) as mock_gc,
         ):
             rss = monitor.check()
@@ -90,12 +80,8 @@ class TestMemoryMonitor:
         """MemoryMonitor does NOT trigger gc when RSS is below gc_threshold."""
         monitor = MemoryMonitor(soft_limit=1000, gc_threshold=0.80)
 
-        # RSS at 700 -- below 80% of 1000 (=800)
         with (
-            patch(
-                "vibe.cardano.node.resource_limits.resource.getrusage",
-                return_value=_mock_rusage(700),
-            ),
+            patch.object(MemoryMonitor, "_get_rss_bytes", return_value=700),
             patch("vibe.cardano.node.resource_limits.gc.collect") as mock_gc,
         ):
             rss = monitor.check()
@@ -108,11 +94,7 @@ class TestMemoryMonitor:
     ) -> None:
         """No warning logged when RSS < soft_limit."""
         monitor = MemoryMonitor(soft_limit=1000, gc_threshold=0.80)
-
-        with patch(
-            "vibe.cardano.node.resource_limits.resource.getrusage",
-            return_value=_mock_rusage(500),
-        ):
+        with patch.object(MemoryMonitor, "_get_rss_bytes", return_value=500):
             monitor.check()
 
         assert not any("memory pressure is HIGH" in r.message for r in caplog.records)
