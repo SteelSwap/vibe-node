@@ -49,43 +49,6 @@ _TWO_VRF_ERAS = frozenset({Era.SHELLEY, Era.ALLEGRA, Era.MARY, Era.ALONZO})
 _SINGLE_VRF_ERAS = frozenset({Era.BABBAGE, Era.CONWAY})
 
 
-def _strip_tag(cbor_bytes: bytes) -> tuple[int, bytes]:
-    """Strip the CBOR tag prefix and return (tag_number, payload_bytes).
-
-    cbor2's C extension validates semantic tags 0-5 (datetime, bignum,
-    decimal fraction, etc.) before any tag_hook can intercept them. Since
-    Cardano uses tags 0-7 for era identification (not semantic meaning),
-    we strip the tag manually and decode only the payload.
-
-    CBOR tag encoding (RFC 7049, major type 6):
-      0xC0..0xD7: tag 0..23 in 1 byte
-      0xD8 XX:    tag 24..255 in 2 bytes
-    """
-    if len(cbor_bytes) < 1:
-        raise ValueError("Empty CBOR bytes")
-
-    initial = cbor_bytes[0]
-    major_type = initial >> 5
-    additional = initial & 0x1F
-
-    if major_type != 6:
-        raise ValueError(
-            f"Expected CBOR tag (major type 6), got major type {major_type}"
-        )
-
-    if additional <= 23:
-        return additional, cbor_bytes[1:]
-    elif additional == 24:
-        if len(cbor_bytes) < 2:
-            raise ValueError("Truncated CBOR tag")
-        return cbor_bytes[1], cbor_bytes[2:]
-    else:
-        raise ValueError(f"Unexpected additional info {additional} for tag")
-
-
-def _loads(data: bytes) -> object:
-    """Decode CBOR bytes (no tag handling — use _strip_tag first for tagged data)."""
-    return cbor2.loads(data)
 
 
 def _dumps(obj: object) -> bytes:
@@ -193,11 +156,13 @@ def detect_era(cbor_bytes: bytes) -> Era:
     Raises:
         ValueError: If the outer CBOR structure is not a valid era tag.
     """
-    tag_number, _ = _strip_tag(cbor_bytes)
+    decoded = cbor2.loads(cbor_bytes, raw_tags=True)
+    if not isinstance(decoded, cbor2.CBORTag):
+        raise ValueError(f"Expected CBOR tag, got {type(decoded).__name__}")
     try:
-        return Era(tag_number)
+        return Era(decoded.tag)
     except ValueError:
-        raise ValueError(f"Unknown era tag: {tag_number}") from None
+        raise ValueError(f"Unknown era tag: {decoded.tag}") from None
 
 
 def block_hash(header_cbor: bytes) -> bytes:
@@ -351,18 +316,18 @@ def _decode_header_body_babbage(
 def _decode_tagged_block(cbor_bytes: bytes) -> tuple[Era, object]:
     """Decode a tagged block, returning (era, block_payload).
 
-    Strips the CBOR era tag manually, then decodes only the payload.
-    This avoids cbor2's C extension interpreting tags 0-5 as semantic
-    types (datetime, bignum, decimal fraction).
+    Uses raw_tags=True so CBOR tags 0-7 are returned as CBORTag objects
+    instead of being interpreted as semantic types (datetime, bignum, etc.).
     """
-    tag_number, payload_bytes = _strip_tag(cbor_bytes)
+    decoded = cbor2.loads(cbor_bytes, raw_tags=True)
+    if not isinstance(decoded, cbor2.CBORTag):
+        raise ValueError(f"Expected CBOR tag, got {type(decoded).__name__}")
     try:
-        era = Era(tag_number)
+        era = Era(decoded.tag)
     except ValueError:
-        raise ValueError(f"Unknown era tag: {tag_number}") from None
+        raise ValueError(f"Unknown era tag: {decoded.tag}") from None
 
-    block_payload = _loads(payload_bytes)
-    return era, block_payload
+    return era, decoded.value
 
 
 def decode_block_header(cbor_bytes: bytes) -> BlockHeader:

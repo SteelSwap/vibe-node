@@ -103,38 +103,6 @@ class DecodedBlockBody:
     tx_count: int
 
 
-def _strip_tag(cbor_bytes: bytes) -> tuple[int, bytes]:
-    """Strip CBOR tag prefix, return (tag_number, payload_bytes).
-
-    Same logic as block.py — duplicated here for standalone use.
-    cbor2's C extension validates semantic tags 0-5 before tag_hook
-    can intercept, so we strip manually.
-    """
-    if len(cbor_bytes) < 1:
-        raise ValueError("Empty CBOR bytes")
-
-    initial = cbor_bytes[0]
-    major_type = initial >> 5
-    additional = initial & 0x1F
-
-    if major_type != 6:
-        raise ValueError(
-            f"Expected CBOR tag (major type 6), got major type {major_type}"
-        )
-
-    if additional <= 23:
-        return additional, cbor_bytes[1:]
-    elif additional == 24:
-        if len(cbor_bytes) < 2:
-            raise ValueError("Truncated CBOR tag")
-        return cbor_bytes[1], cbor_bytes[2:]
-    else:
-        raise ValueError(f"Unexpected additional info {additional} for tag")
-
-
-def _cbor_loads(data: bytes) -> object:
-    """Decode CBOR bytes without tag handling."""
-    return _cbor2.loads(data)
 
 
 def _cbor_dumps(obj: object) -> bytes:
@@ -251,18 +219,20 @@ def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
         NotImplementedError: For Byron-era blocks.
         ValueError: For malformed CBOR or unexpected structure.
     """
-    tag_number, payload_bytes = _strip_tag(cbor_bytes)
+    decoded = _cbor2.loads(cbor_bytes, raw_tags=True)
+    if not isinstance(decoded, _cbor2.CBORTag):
+        raise ValueError(f"Expected CBOR tag, got {type(decoded).__name__}")
     try:
-        era = Era(tag_number)
+        era = Era(decoded.tag)
     except ValueError:
-        raise ValueError(f"Unknown era tag: {tag_number}") from None
+        raise ValueError(f"Unknown era tag: {decoded.tag}") from None
 
     if era in (Era.BYRON_MAIN, Era.BYRON_EBB):
         raise NotImplementedError(
             f"Byron block decoding not yet supported (era tag {era.value})"
         )
 
-    block_array = _cbor_loads(payload_bytes)
+    block_array = decoded.value
 
     if not isinstance(block_array, list) or len(block_array) < 4:
         raise ValueError(
