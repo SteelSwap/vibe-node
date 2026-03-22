@@ -438,7 +438,7 @@ wheels = [
 [[package]]
 name = "cbor2pure"
 version = "5.8.1"
-source = { git = "https://github.com/theeldermillenial/cbor2?branch=fix%2Fcbor2pure-raw-tags#43479241cb4c9da2e5f31a9988a2d309e74a1228" }
+source = { git = "https://github.com/theeldermillenial/cbor2?branch=fix%2Fcbor2pure-indefinite-roundtrip#f59150a37af8dead546388b2a8e50d47944f6213" }
 dependencies = [
     { name = "cbor2" },
 ]
@@ -3377,7 +3377,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cbor2pure", git = "https://github.com/theeldermillenial/cbor2?branch=fix%2Fcbor2pure-raw-tags" },
+    { name = "cbor2pure", git = "https://github.com/theeldermillenial/cbor2?branch=fix%2Fcbor2pure-indefinite-roundtrip" },
     { name = "cryptography", specifier = ">=44.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pyarrow", specifier = ">=19.0.0" },
@@ -3430,7 +3430,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "bump-my-version", specifier = ">=1.2.7" },
-    { name = "cbor2pure", git = "https://github.com/theeldermillenial/cbor2?branch=fix%2Fcbor2pure-raw-tags" },
+    { name = "cbor2pure", git = "https://github.com/theeldermillenial/cbor2?branch=fix%2Fcbor2pure-indefinite-roundtrip" },
     { name = "hypothesis", specifier = ">=6.130.0" },
     { name = "lancedb", specifier = ">=0.30.0" },
     { name = "mkdocs-material", specifier = ">=9.7.5" },
