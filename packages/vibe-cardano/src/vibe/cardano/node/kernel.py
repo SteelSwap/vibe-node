@@ -51,7 +51,7 @@ class StakeDistribution:
         return self.pool_stakes.get(pool_id, 0) / self.total_stake
 
 
-@dataclass
+@dataclass(slots=True)
 class BlockEntry:
     """A block stored in the kernel's chain."""
 
