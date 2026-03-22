@@ -446,18 +446,32 @@ class PeerManager:
             _headers_received += 1
 
             # header = [era_tag, CBORTag(24, header_cbor)]
-            # Extract slot and block hash from the wrapped header.
+            # Use the serialization layer to decode header fields.
+            from vibe.cardano.serialization.block import (
+                Era,
+                block_hash as compute_block_hash,
+                decode_block_header_raw,
+            )
+
             try:
                 if isinstance(header, (list, tuple)) and len(header) >= 2:
+                    era_tag = header[0]
                     wrapped = header[1]  # CBORTag(24, inner_bytes)
                     header_bytes = wrapped.value if hasattr(wrapped, "value") else wrapped
-                    inner = cbor2.loads(header_bytes)
-                    hdr_body = inner[0]  # [block_number, slot, prev_hash, ...]
-                    slot = hdr_body[1]
-                    block_hash = hashlib.blake2b(
-                        header_bytes, digest_size=32
-                    ).digest()
-                    point = Point(slot=slot, hash=block_hash)
+
+                    try:
+                        era = Era(era_tag)
+                        hdr = decode_block_header_raw(header_bytes, era)
+                        slot = hdr.slot
+                        blk_hash = hdr.hash
+                    except (NotImplementedError, ValueError):
+                        # Byron or unrecognised era — fall back to inline
+                        inner = cbor2.loads(header_bytes)
+                        hdr_body = inner[0]
+                        slot = hdr_body[1]
+                        blk_hash = compute_block_hash(header_bytes)
+
+                    point = Point(slot=slot, hash=blk_hash)
 
                     # Queue for block-fetch
                     try:
@@ -466,7 +480,7 @@ class PeerManager:
                         pass  # Drop if queue full — backpressure
 
                     if _headers_received % 100 == 1 or _headers_received <= 5:
-                        logger.info("Chain-sync header #%d at slot %d from %s", _headers_received, slot, peer.address, extra={"event": "chainsync.header", "peer": str(peer.address), "header_num": _headers_received, "slot": slot, "hash": block_hash.hex()[:16]})
+                        logger.info("Chain-sync header #%d at slot %d from %s", _headers_received, slot, peer.address, extra={"event": "chainsync.header", "peer": str(peer.address), "header_num": _headers_received, "slot": slot, "hash": blk_hash.hex()[:16]})
                 else:
                     if _headers_received % 100 == 1:
                         logger.debug(
@@ -531,8 +545,8 @@ class PeerManager:
             async def _on_block(block_cbor: bytes) -> None:
                 nonlocal _blocks_stored
                 from vibe.cardano.serialization.block import (
+                    Era,
                     decode_block_header,
-                    detect_era,
                 )
                 from vibe.cardano.serialization.transaction import (
                     decode_block_body,
@@ -564,20 +578,28 @@ class PeerManager:
                     else:
                         raise ValueError(f"Unexpected block format: {type(decoded)}")
 
-                    # block_body = [header, tx_bodies, tx_witnesses, aux, ...]
-                    hdr = block_body[0]  # [header_body, kes_sig]
-                    hdr_body = hdr[0]
-                    block_number = hdr_body[0]
-                    slot = hdr_body[1]
-                    prev_hash = hdr_body[2] or b"\x00" * 32
-                    hdr_cbor = cbor2.dumps(hdr)
-                    block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
-
                     # Build raw_block for storage (era-tagged CBOR)
                     raw_block = cbor2.dumps(cbor2.CBORTag(era_tag, block_body))
 
-                    from vibe.cardano.serialization.block import Era
+                    # Use the serialization layer to decode header fields
+                    # instead of manually extracting from the CBOR array.
                     era = Era(era_tag)
+                    try:
+                        hdr = decode_block_header(raw_block)
+                        slot = hdr.slot
+                        block_number = hdr.block_number
+                        prev_hash = hdr.prev_hash or b"\x00" * 32
+                        block_hash = hdr.hash
+                        hdr_cbor = hdr.header_cbor
+                    except NotImplementedError:
+                        # Byron blocks — fall back to inline extraction
+                        hdr_arr = block_body[0]
+                        hdr_body_arr = hdr_arr[0]
+                        block_number = hdr_body_arr[0]
+                        slot = hdr_body_arr[1]
+                        prev_hash = hdr_body_arr[2] or b"\x00" * 32
+                        hdr_cbor = cbor2.dumps(hdr_arr)
+                        block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
 
                     # --- Validate block transactions ---
                     body = decode_block_body(raw_block)
