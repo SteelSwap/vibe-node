@@ -1038,7 +1038,7 @@ def _validate_metadata_hash(
     """
     import hashlib as _hashlib
 
-    import cbor2 as _cbor2
+    import cbor2pure as _cbor2
 
     errors: list[str] = []
 

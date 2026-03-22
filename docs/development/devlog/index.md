@@ -6,6 +6,17 @@ Each entry is organized by phase, with specific module and work item details.
 
 ---
 
+## Phase 5: Block Production & Haskell Acceptance
+
+- **[Phase 5 — Block Production & Haskell Acceptance](phase5.md)** (M5.1–M5.33)
+    - Block forging (VRF leader election, KES-signed headers, operational certificates)
+    - Mempool with tx validation, capacity enforcement, block selection
+    - All N2N server protocols (chain-sync, block-fetch, tx-submission, keep-alive)
+    - All N2C miniprotocols (local chain-sync, local tx-submission, local state-query, local tx-monitor)
+    - **Haskell block acceptance** — forged blocks pass VRF, KES, header format, and chain validation
+    - 9 critical bugs found and fixed via systematic Haskell comparison
+    - 4,290+ tests, 3-node devnet with bidirectional block production
+
 ## Phase 4: Ledger & Consensus
 
 - **[Phase 4 — Ledger & Consensus](phase4.md)** (M4.1–M4.12)

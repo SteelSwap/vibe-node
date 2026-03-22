@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Optional
 
-import cbor2 as _cbor2
+import cbor2pure as _cbor2
 
 from pycardano.metadata import AuxiliaryData
 from pycardano.transaction import Transaction, TransactionBody

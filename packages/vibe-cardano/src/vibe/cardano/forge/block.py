@@ -31,7 +31,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-import cbor2
+import cbor2pure as cbor2
 
 from vibe.cardano.crypto.kes import (
     CARDANO_KES_DEPTH,
@@ -233,14 +233,10 @@ def _build_header_body(
         list(vrf_result),  # [vrf_output, vrf_proof]
         body_size,
         body_hash,
-        # Operational cert (4 inline fields)
-        ocert.kes_vk,
-        ocert.cert_count,
-        ocert.kes_period_start,
-        ocert.cold_sig,
-        # Protocol version (2 inline fields)
-        protocol_version[0],
-        protocol_version[1],
+        # Operational cert (nested array in Babbage/Conway format)
+        [ocert.kes_vk, ocert.cert_count, ocert.kes_period_start, ocert.cold_sig],
+        # Protocol version (nested array in Babbage/Conway format)
+        [protocol_version[0], protocol_version[1]],
     ]
 
 

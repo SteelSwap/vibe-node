@@ -406,7 +406,7 @@ class CostModel:
         Returns:
             CBOR-encoded parameter list (without the language key).
         """
-        import cbor2
+        import cbor2pure as cbor2
 
         # The cost model is serialized as a CBOR array of integers.
         # This is the "flat" encoding used in hashScriptIntegrity.
@@ -450,7 +450,7 @@ def serialize_cost_models_for_integrity(cost_models: CostModels) -> bytes:
     Returns:
         CBOR-encoded cost models map.
     """
-    import cbor2
+    import cbor2pure as cbor2
 
     # Build CBOR map: { language_id (int) => [params] }
     # Must be sorted by key for deterministic encoding.

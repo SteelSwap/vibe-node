@@ -805,26 +805,41 @@ async def run_chain_sync_server(
                 await runner.send_message(CsMsgAwaitReply())
                 # Now in StNext(MustReply) — must send roll_forward or
                 # roll_backward next. Wait for chain_provider to have data.
-                while True:
-                    if stop_event is not None and stop_event.is_set():
-                        return
-                    action2, header2, point2, tip2 = (
-                        await chain_provider.next_block(client_point)
+                #
+                # While we poll for new blocks, the client may disconnect
+                # (MsgDone from StIdle is not valid here per the FSM, but
+                # the channel may close). We catch exceptions to exit
+                # gracefully rather than crashing.
+                try:
+                    while True:
+                        if stop_event is not None and stop_event.is_set():
+                            return
+                        action2, header2, point2, tip2 = (
+                            await chain_provider.next_block(client_point)
+                        )
+                        if action2 == "roll_forward" and header2 is not None:
+                            client_point = point2  # type: ignore[assignment]
+                            await runner.send_message(
+                                CsMsgRollForward(header=header2, tip=tip2)
+                            )
+                            break
+                        elif action2 == "roll_backward" and point2 is not None:
+                            client_point = point2
+                            await runner.send_message(
+                                CsMsgRollBackward(point=point2, tip=tip2)
+                            )
+                            break
+                        # Still no data — brief sleep to avoid busy-wait.
+                        await asyncio.sleep(0.1)
+                except (asyncio.CancelledError, Exception) as exc:
+                    # Client disconnected or channel closed while we were
+                    # waiting for new blocks. This is expected — the client
+                    # may send MsgDone (closing the channel) at any time.
+                    logger.info(
+                        "Chain-sync server: client disconnected during "
+                        "await: %s", exc,
                     )
-                    if action2 == "roll_forward" and header2 is not None:
-                        client_point = point2  # type: ignore[assignment]
-                        await runner.send_message(
-                            CsMsgRollForward(header=header2, tip=tip2)
-                        )
-                        break
-                    elif action2 == "roll_backward" and point2 is not None:
-                        client_point = point2
-                        await runner.send_message(
-                            CsMsgRollBackward(point=point2, tip=tip2)
-                        )
-                        break
-                    # Still no data — brief sleep to avoid busy-wait.
-                    await asyncio.sleep(0.1)
+                    return
 
         elif isinstance(msg, CsMsgDone):
             logger.info("Chain-sync server: client sent Done")

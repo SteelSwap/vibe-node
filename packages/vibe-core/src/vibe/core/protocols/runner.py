@@ -30,6 +30,7 @@ Spec reference:
 
 from __future__ import annotations
 
+import io
 import logging
 from typing import Generic
 
@@ -74,7 +75,7 @@ class ProtocolRunner(Generic[St]):
         directly instead of interpreting a free monad.
     """
 
-    __slots__ = ("_role", "_protocol", "_codec", "_channel", "_state")
+    __slots__ = ("_role", "_protocol", "_codec", "_channel", "_state", "_recv_buf")
 
     def __init__(
         self,
@@ -88,6 +89,7 @@ class ProtocolRunner(Generic[St]):
         self._codec = codec
         self._channel = channel
         self._state: St = protocol.initial_state()
+        self._recv_buf: bytes = b""  # Buffer for multi-message segments
 
     @property
     def state(self) -> St:
@@ -217,12 +219,32 @@ class ProtocolRunner(Generic[St]):
                 f"{self._state!r} — should send, not receive"
             )
 
-        # Read bytes from the channel.
-        data = await self._channel.recv()
+        # Read bytes from the channel, prepending any buffered data.
+        if self._recv_buf:
+            data = self._recv_buf
+            self._recv_buf = b""
+        else:
+            data = await self._channel.recv()
 
-        # Decode message.
+        # Decode the first CBOR message from the data. If the segment
+        # contains multiple CBOR items (common in block-fetch where
+        # StartBatch + Block arrive in one TCP segment), we decode the
+        # first and buffer the rest for the next recv_message call.
+        import cbor2pure as _cbor2
+
         try:
-            message = self._codec.decode(data)
+            # Decode the first CBOR item and find its byte boundary.
+            # A mux segment may contain multiple CBOR messages (e.g.,
+            # block-fetch StartBatch + Block + BatchDone in one segment).
+            # We decode only the first, buffer the rest.
+            decoder = _cbor2.CBORDecoder(io.BytesIO(data))
+            decoder.decode()  # consume first item
+            consumed = decoder.fp.tell()
+            remainder = data[consumed:]
+            if remainder:
+                self._recv_buf = remainder
+            single_cbor = data[:consumed]
+            message = self._codec.decode(single_cbor)
         except CodecError:
             raise
         except Exception as exc:

@@ -37,7 +37,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Union
 
-import cbor2
+import cbor2pure as cbor2
 
 from vibe.cardano.network.chainsync import (
     # Message ID constants — same for N2N and N2C

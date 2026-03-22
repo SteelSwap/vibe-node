@@ -389,7 +389,7 @@ async def run_handshake_server(
         ) from None
 
     # Decode the proposal
-    import cbor2
+    import cbor2pure as cbor2
     proposal = cbor2.loads(propose_bytes)
     # proposal = [0, {version: version_data, ...}]
     if not isinstance(proposal, list) or len(proposal) < 2 or proposal[0] != 0:
@@ -478,7 +478,7 @@ async def run_handshake_server_n2c(
         HandshakeTimeoutError: If the handshake exceeds the timeout.
         HandshakeError: For unexpected protocol errors.
     """
-    import cbor2
+    import cbor2pure as cbor2
 
     # Build our N2C version table
     server_versions = build_n2c_version_table(network_magic)

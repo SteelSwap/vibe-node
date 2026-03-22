@@ -26,11 +26,29 @@ from vibe.cardano.consensus.nonce import (
     evolve_nonce,
     is_in_stability_window,
 )
+from vibe.cardano.ledger.delegation import (
+    DelegationState,
+    apply_block_certs,
+    compute_pool_stake_distribution,
+)
 from vibe.cardano.network.chainsync import Point, Tip, ORIGIN, PointOrOrigin
 from vibe.cardano.network.chainsync_protocol import ChainProvider
 from vibe.cardano.network.blockfetch_protocol import BlockProvider
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class StakeDistribution:
+    """Snapshot of stake distribution for VRF leader election."""
+
+    pool_stakes: dict[bytes, int]
+    total_stake: int
+
+    def relative_stake(self, pool_id: bytes) -> float:
+        if self.total_stake == 0:
+            return 0.0
+        return self.pool_stakes.get(pool_id, 0) / self.total_stake
 
 
 @dataclass
@@ -40,7 +58,8 @@ class BlockEntry:
     slot: int
     block_hash: bytes
     block_number: int
-    header_cbor: bytes  # Wrapped header for chain-sync
+    predecessor_hash: bytes  # 32-byte hash of predecessor block
+    header_cbor: Any  # Wrapped header for chain-sync: [era_tag, CBORTag(24, bytes)]
     block_cbor: bytes  # Full block for block-fetch
 
 
@@ -69,6 +88,13 @@ class NodeKernel(ChainProvider, BlockProvider):
         self._eta_v: bytes = b"\x00" * 32
         self._current_epoch: int = 0
         self._epoch_length: int = 432000
+        # Delegation state tracking
+        self._delegation_state: DelegationState = DelegationState()
+        # Protocol parameters
+        self._protocol_params: dict[str, Any] = {}
+        self._pending_param_updates: list[dict[str, Any]] = []
+        # Per-pool stake distribution (pool_key_hash -> total lovelace)
+        self._stake_distribution: dict[bytes, int] = {}
 
     @property
     def tip(self) -> Tip | None:
@@ -81,6 +107,83 @@ class NodeKernel(ChainProvider, BlockProvider):
     @property
     def epoch_nonce(self) -> EpochNonce:
         return self._epoch_nonce
+
+    @property
+    def delegation_state(self) -> DelegationState:
+        return self._delegation_state
+
+    @property
+    def stake_distribution(self) -> dict[bytes, int]:
+        return self._stake_distribution
+
+    @property
+    def current_epoch(self) -> int:
+        return self._current_epoch
+
+    @property
+    def epoch_length(self) -> int:
+        return self._epoch_length
+
+    def apply_delegation_certs(
+        self, transactions: list[Any], current_epoch: int
+    ) -> None:
+        """Apply delegation certificates from a block's transactions.
+
+        Called by the sync pipeline after each block is processed.
+        Updates the internal delegation state with any certificate
+        changes (registrations, delegations, pool updates, retirements).
+
+        Args:
+            transactions: List of transaction objects from the block.
+            current_epoch: Current epoch number.
+        """
+        self._delegation_state = apply_block_certs(
+            self._delegation_state, transactions, current_epoch,
+        )
+
+    def update_stake_distribution(
+        self, utxo_stakes: dict[bytes, int]
+    ) -> dict[bytes, int]:
+        """Recompute the per-pool stake distribution.
+
+        Called at epoch boundaries. Combines the current delegation state
+        with UTxO stake balances to produce the stake snapshot for leader
+        election (used with a 2-epoch lag per the Shelley spec).
+
+        Args:
+            utxo_stakes: Mapping from stake_credential_hash -> total
+                lovelace in the UTxO set for that credential.
+
+        Returns:
+            The new per-pool stake distribution.
+        """
+        self._stake_distribution = compute_pool_stake_distribution(
+            self._delegation_state, utxo_stakes,
+        )
+        logger.info(
+            "Stake distribution updated: %d pools, total stake=%d",
+            len(self._stake_distribution),
+            sum(self._stake_distribution.values()),
+        )
+        return self._stake_distribution
+
+    @property
+    def protocol_params(self) -> dict[str, Any]:
+        return self._protocol_params
+
+    def init_protocol_params(self, params: dict[str, Any]) -> None:
+        self._protocol_params = dict(params)
+
+    def queue_param_update(self, update: dict[str, Any]) -> None:
+        self._pending_param_updates.append(update)
+
+    def apply_pending_updates(self) -> None:
+        for update in self._pending_param_updates:
+            self._protocol_params.update(update)
+        count = len(self._pending_param_updates)
+        self._pending_param_updates.clear()
+        if count:
+            logger.info("Applied %d protocol parameter updates", count)
 
     def init_nonce(self, genesis_hash: bytes, epoch_length: int) -> None:
         """Seed the epoch nonce from the genesis hash."""
@@ -114,18 +217,99 @@ class NodeKernel(ChainProvider, BlockProvider):
         block_number: int,
         header_cbor: bytes,
         block_cbor: bytes,
+        predecessor_hash: bytes = b"\x00" * 32,
+        is_forged: bool = False,
     ) -> None:
-        """Add a block to the chain and notify waiting servers."""
+        """Add a block to the chain.
+
+        For received blocks (from chain-sync): always accept if
+        block_number > tip. These come from a valid Haskell chain.
+
+        For forged blocks: only accept if they extend the current tip
+        (predecessor matches tip hash). If a received block arrives at
+        the same height, it takes precedence (our forged block is
+        replaced via fork switching).
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.ChainDB.Impl.ChainSel
+        """
         entry = BlockEntry(
             slot=slot,
             block_hash=block_hash,
             block_number=block_number,
+            predecessor_hash=predecessor_hash,
             header_cbor=header_cbor,
             block_cbor=block_cbor,
         )
-        idx = len(self._chain)
-        self._chain.append(entry)
-        self._hash_index[block_hash] = idx
+
+        if is_forged:
+            # Forged blocks: must extend current tip.
+            if self._chain and predecessor_hash != self._chain[-1].block_hash:
+                logger.debug(
+                    "NodeKernel: skipping forged block #%d slot=%d "
+                    "(doesn't extend tip)",
+                    block_number, slot,
+                )
+                return
+
+        if not self._chain:
+            # First block.
+            self._chain.append(entry)
+            self._hash_index[block_hash] = 0
+        elif block_number > self._chain[-1].block_number:
+            # Better than current tip.
+            if predecessor_hash == self._chain[-1].block_hash:
+                # Extends current tip — normal append.
+                idx = len(self._chain)
+                self._chain.append(entry)
+                self._hash_index[block_hash] = idx
+            else:
+                # Fork — find fork point and switch.
+                fork_idx = self._hash_index.get(predecessor_hash)
+                if fork_idx is not None:
+                    removed = self._chain[fork_idx + 1:]
+                    for r in removed:
+                        self._hash_index.pop(r.block_hash, None)
+                    self._chain = self._chain[:fork_idx + 1]
+                    idx = len(self._chain)
+                    self._chain.append(entry)
+                    self._hash_index[block_hash] = idx
+                    logger.info(
+                        "NodeKernel: switched fork, removed %d blocks, "
+                        "new tip block #%d slot=%d",
+                        len(removed), block_number, slot,
+                    )
+                else:
+                    # Predecessor not in chain — just append (received
+                    # blocks from a valid chain may arrive after pruning).
+                    idx = len(self._chain)
+                    self._chain.append(entry)
+                    self._hash_index[block_hash] = idx
+        elif block_number == self._chain[-1].block_number:
+            if not is_forged and predecessor_hash != self._chain[-1].predecessor_hash:
+                # Received block at same height on different fork — switch
+                # (prefer received over our forged blocks).
+                fork_idx = self._hash_index.get(predecessor_hash)
+                if fork_idx is not None:
+                    removed = self._chain[fork_idx + 1:]
+                    for r in removed:
+                        self._hash_index.pop(r.block_hash, None)
+                    self._chain = self._chain[:fork_idx + 1]
+                    idx = len(self._chain)
+                    self._chain.append(entry)
+                    self._hash_index[block_hash] = idx
+                    logger.info(
+                        "NodeKernel: fork switch at height %d, "
+                        "replaced %d blocks",
+                        block_number, len(removed),
+                    )
+                else:
+                    return
+            else:
+                return
+        else:
+            # Block number <= tip — ignore.
+            return
 
         self._tip = Tip(
             point=Point(slot=slot, hash=block_hash),

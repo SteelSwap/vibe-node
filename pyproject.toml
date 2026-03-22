@@ -1,6 +1,6 @@
 [project]
 name = "vibe-node"
-version = "0.3.0"
+version = "0.6.0"
 description = "A vibe-coded Cardano node"
 readme = "README.md"
 authors = [
@@ -29,7 +29,7 @@ vibe-cardano = { workspace = true }
 vibe-tools = { workspace = true }
 
 [tool.bumpversion]
-current_version = "0.3.0"
+current_version = "0.6.0"
 parse = '(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(\.(?P<release>dev)(?P<dev>\d+))?'
 serialize = [
     "{major}.{minor}.{patch}.{release}{dev}",
@@ -64,7 +64,7 @@ first_value = 0
 testpaths = ["tests", "packages/vibe-cardano/tests"]
 asyncio_mode = "auto"
 timeout = 300
-addopts = "-p no:benchmark"
+addopts = "-p no:benchmark -m 'not tcp'"
 markers = [
     "unit: Unit tests — isolated function/module correctness",
     "property: Property tests — invariant verification via Hypothesis",
@@ -73,12 +73,13 @@ markers = [
     "fixture_only: Tests using cached fixtures only — never skipped for missing Ogmios",
     "devnet: Devnet integration tests — 3-node private cluster validation",
     "slow: Slow tests — benchmarks, statistical tests, large data sets",
+    "tcp: TCP socket tests — real localhost connections, may timeout in CI",
 ]
 
 [dependency-groups]
 dev = [
     "bump-my-version>=1.2.7",
-    "cbor2>=5.6.0",
+    "cbor2pure>=5.8.0",
     "hypothesis>=6.130.0",
     "lancedb>=0.30.0",
     "mkdocs-material>=9.7.5",

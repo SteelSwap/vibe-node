@@ -146,8 +146,8 @@ class TestBuildHeaderBody:
             body_hash=b"\x05" * 32,
             ocert=_make_ocert(),
         )
-        # 8 direct fields + 4 ocert fields + 2 protocol_version fields = 14
-        assert len(header_body) == 14
+        # Babbage/Conway: 10 fields (8 direct + nested ocert + nested protver)
+        assert len(header_body) == 10
 
     def test_block_number_and_slot(self) -> None:
         """Block number and slot are at indices 0 and 1."""
@@ -181,7 +181,7 @@ class TestBuildHeaderBody:
         assert header_body[2] is None
 
     def test_protocol_version(self) -> None:
-        """Protocol version fields at indices 12 and 13."""
+        """Protocol version is nested array at index 9 (Babbage/Conway)."""
         header_body = _build_header_body(
             block_number=1,
             slot=100,
@@ -194,8 +194,7 @@ class TestBuildHeaderBody:
             ocert=_make_ocert(),
             protocol_version=(10, 0),
         )
-        assert header_body[12] == 10
-        assert header_body[13] == 0
+        assert header_body[9] == [10, 0]
 
     def test_cbor_encodable(self) -> None:
         """Header body can be CBOR-encoded."""

@@ -86,9 +86,12 @@ def serve(
     opcert: str = typer.Option(None, envvar="VIBE_OPCERT", help="Path to operational certificate file."),
     cold_vkey: str = typer.Option(None, envvar="VIBE_COLD_VKEY", help="Path to cold verification key file."),
     cold_skey: str = typer.Option(None, envvar="VIBE_COLD_SKEY", help="Path to cold signing key file."),
+    permissive_validation: bool = typer.Option(False, envvar="VIBE_PERMISSIVE_VALIDATION", help="Log validation errors but still store blocks."),
+    mithril_snapshot: str = typer.Option(None, envvar="VIBE_MITHRIL_SNAPSHOT", help="Path to Mithril snapshot directory for fast bootstrap."),
 ) -> None:
     """Start the Cardano node."""
     import asyncio
+    import hashlib
     import json
     import logging
     from datetime import datetime, timezone
@@ -109,6 +112,10 @@ def serve(
     epoch_length = 432000
     security_param = 2160
     active_slot_coeff = 0.05
+    protocol_params = None
+    slots_per_kes_period = 129600
+    genesis_hash = b""
+    initial_pool_stakes: dict[bytes, int] = {}
 
     if genesis_dir is not None:
         genesis_path = Path(genesis_dir) / "shelley-genesis.json"
@@ -122,8 +129,14 @@ def serve(
             epoch_length = sg.get("epochLength", epoch_length)
             security_param = sg.get("securityParam", security_param)
             active_slot_coeff = sg.get("activeSlotsCoeff", active_slot_coeff)
+            protocol_params = sg.get("protocolParams", None)
+            slots_per_kes_period = sg.get("slotsPerKESPeriod", 129600)
+            genesis_bytes = genesis_path.read_bytes()  # Hash raw file bytes, not re-encoded JSON
+            genesis_hash = hashlib.blake2b(genesis_bytes, digest_size=32).digest()
+            initial_pool_stakes = _parse_genesis_stake(sg)
             typer.echo(f"Genesis: systemStart={system_start.isoformat()}, "
-                       f"slotLength={slot_length}s, epochLength={epoch_length}")
+                       f"slotLength={slot_length}s, epochLength={epoch_length}, "
+                       f"pools={len(initial_pool_stakes)}")
 
     # Parse peers
     peer_list: list[PeerAddress] = []
@@ -166,9 +179,47 @@ def serve(
         pool_keys=pool_keys,
         peers=peer_list,
         db_path=Path(db_path),
+        genesis_hash=genesis_hash,
+        protocol_params=protocol_params,
+        permissive_validation=permissive_validation,
+        slots_per_kes_period=slots_per_kes_period,
+        initial_pool_stakes=initial_pool_stakes,
+        mithril_snapshot_path=Path(mithril_snapshot) if mithril_snapshot else None,
     )
 
     asyncio.run(run_node(config))
+
+
+def _parse_genesis_stake(sg: dict) -> dict[bytes, int]:
+    """Compute initial pool stake from shelley-genesis.json.
+
+    Combines initialFunds + staking.stake delegations to sum lovelace
+    per pool. Falls back to pledge values if no delegated funds.
+    """
+    staking = sg.get("staking", {})
+    pools_data = staking.get("pools", {})
+    stake_delegations = staking.get("stake", {})
+    initial_funds = sg.get("initialFunds", {})
+
+    pool_stakes: dict[bytes, int] = {}
+
+    if initial_funds and stake_delegations:
+        staker_to_pool: dict[str, bytes] = {}
+        for staker_hex, pool_hex in stake_delegations.items():
+            staker_to_pool[staker_hex.lower()] = bytes.fromhex(pool_hex)
+
+        for addr_hex, lovelace in initial_funds.items():
+            if len(addr_hex) >= 114:
+                staking_cred = addr_hex[-56:].lower()
+                pool_id = staker_to_pool.get(staking_cred)
+                if pool_id is not None:
+                    pool_stakes[pool_id] = pool_stakes.get(pool_id, 0) + lovelace
+
+    if not pool_stakes and pools_data:
+        for pool_hex, pool_info in pools_data.items():
+            pool_stakes[bytes.fromhex(pool_hex)] = pool_info.get("pledge", 0)
+
+    return pool_stakes
 
 
 def _load_pool_keys(

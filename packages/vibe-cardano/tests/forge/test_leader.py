@@ -1,7 +1,7 @@
 """Tests for leader schedule check (vibe.cardano.forge.leader).
 
 Tests cover:
-    * VRF input construction (epoch_nonce || slot_as_bytes)
+    * VRF seed construction (mkSeed: blake2b(slot||nonce) XOR seedConstant)
     * Leader election: elected with high stake
     * Leader election: not elected with zero stake
     * LeaderProof validation (correct sizes)
@@ -11,10 +11,12 @@ Tests cover:
 Spec references:
     - Ouroboros Praos, Section 4, Definition 6
     - Shelley formal spec, Section 16.1
+    - Haskell ref: Cardano.Protocol.TPraos.BHeader.mkSeed
 """
 
 from __future__ import annotations
 
+import hashlib
 import struct
 from unittest.mock import patch
 
@@ -24,8 +26,12 @@ from hypothesis import strategies as st
 
 from vibe.cardano.crypto.vrf import VRF_OUTPUT_SIZE, VRF_PROOF_SIZE
 from vibe.cardano.forge.leader import (
+    SEED_ETA,
+    SEED_L,
     LeaderProof,
     _make_vrf_input,
+    _mk_input_vrf,
+    _mk_seed,
     check_leadership,
 )
 
@@ -35,30 +41,55 @@ from vibe.cardano.forge.leader import (
 # ---------------------------------------------------------------------------
 
 
-class TestMakeVrfInput:
-    """Test the VRF alpha string construction."""
+class TestMkInputVrf:
+    """Test the Praos mkInputVRF seed construction (Babbage/Conway)."""
 
-    def test_format(self) -> None:
-        """Alpha = epoch_nonce (32 bytes) || slot (8 bytes big-endian)."""
+    def test_output_length(self) -> None:
+        """mkInputVRF produces 32 bytes (blake2b-256, no XOR)."""
         nonce = b"\xab" * 32
-        slot = 12345
-        alpha = _make_vrf_input(nonce, slot)
-        assert len(alpha) == 40
-        assert alpha[:32] == nonce
-        assert alpha[32:] == struct.pack(">Q", slot)
+        seed = _make_vrf_input(nonce, 12345)
+        assert len(seed) == 32
 
-    def test_slot_zero(self) -> None:
-        """Slot 0 encodes as 8 zero bytes."""
-        nonce = b"\x00" * 32
-        alpha = _make_vrf_input(nonce, 0)
-        assert alpha[32:] == b"\x00" * 8
+    def test_mk_input_vrf_manual(self) -> None:
+        """Verify mkInputVRF = blake2b(slot_be64 || epoch_nonce) — no XOR."""
+        epoch_nonce = b"\x02" * 32
+        slot = 42
+        payload = struct.pack(">Q", slot) + epoch_nonce
+        expected = hashlib.blake2b(payload, digest_size=32).digest()
+        assert _mk_input_vrf(slot, epoch_nonce) == expected
 
-    def test_max_slot(self) -> None:
-        """Large slot number encodes correctly."""
-        nonce = b"\xff" * 32
-        slot = 2**63 - 1  # max int64
-        alpha = _make_vrf_input(nonce, slot)
-        assert alpha[32:] == struct.pack(">Q", slot)
+    def test_make_vrf_input_uses_mk_input_vrf(self) -> None:
+        """_make_vrf_input delegates to mkInputVRF (Praos, no XOR)."""
+        nonce = b"\xaa" * 32
+        slot = 100
+        assert _make_vrf_input(nonce, slot) == _mk_input_vrf(slot, nonce)
+
+    def test_mk_seed_differs_from_mk_input_vrf(self) -> None:
+        """mkSeed (TPraos) differs from mkInputVRF (Praos) due to XOR."""
+        nonce = b"\xaa" * 32
+        slot = 100
+        praos_input = _mk_input_vrf(slot, nonce)
+        tpraos_input = _mk_seed(SEED_L, slot, nonce)
+        assert praos_input != tpraos_input
+
+    def test_seed_constants(self) -> None:
+        """seedEta = blake2b(0_u64), seedL = blake2b(1_u64)."""
+        assert SEED_ETA == hashlib.blake2b(struct.pack(">Q", 0), digest_size=32).digest()
+        assert SEED_L == hashlib.blake2b(struct.pack(">Q", 1), digest_size=32).digest()
+        assert SEED_ETA != SEED_L
+
+    def test_different_slots_different_seeds(self) -> None:
+        """Different slots produce different VRF seeds."""
+        nonce = b"\xcc" * 32
+        seed1 = _make_vrf_input(nonce, 1)
+        seed2 = _make_vrf_input(nonce, 2)
+        assert seed1 != seed2
+
+    def test_different_nonces_different_seeds(self) -> None:
+        """Different epoch nonces produce different VRF seeds."""
+        seed1 = _make_vrf_input(b"\x00" * 32, 100)
+        seed2 = _make_vrf_input(b"\xff" * 32, 100)
+        assert seed1 != seed2
 
 
 # ---------------------------------------------------------------------------

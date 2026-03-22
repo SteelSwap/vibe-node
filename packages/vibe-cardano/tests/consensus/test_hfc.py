@@ -1064,3 +1064,101 @@ class TestEpochInfoAdapter:
             f"Epoch overlap: slot={slot}, epoch={epoch}, "
             f"next_epoch_first_slot={next_epoch_first_slot}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test 5: HFC Skeleton / era structure (Haskell parity gap)
+# ---------------------------------------------------------------------------
+
+
+class TestHFCSkeleton:
+    """Test the HFC skeleton/era structure matches the Cardano spec.
+
+    The HFC "skeleton" is the ordered list of eras with their parameters
+    and transition points. This test verifies the structural integrity
+    of the era timeline as defined in the HFC configuration.
+
+    Haskell reference:
+        Ouroboros.Consensus.HardFork.History.Summary
+        The Summary type is the "skeleton" of the hard fork history:
+        a non-empty list of EraSummary values with era parameters.
+    """
+
+    def test_hfc_skeleton(self) -> None:
+        """HFC skeleton has correct era count and ordering for mainnet.
+
+        Verifies:
+        1. All 7 eras are present in the mainnet config
+        2. Era start epochs are strictly ascending
+        3. Era start slots are strictly ascending
+        4. Each era has valid parameters (positive epoch_length, slot_length)
+        5. The HFCState can advance through all eras
+        """
+        config = MAINNET_HFC_CONFIG
+
+        # 1. All 7 eras present.
+        assert len(config.era_transitions) == 7
+        for era in Era:
+            assert era in config.era_transitions, f"Missing era: {era.name}"
+
+        # 2. Era start epochs are strictly ascending.
+        sorted_eras = sorted(config.era_transitions.items(), key=lambda x: x[0].value)
+        for i in range(len(sorted_eras) - 1):
+            era_a, epoch_a = sorted_eras[i]
+            era_b, epoch_b = sorted_eras[i + 1]
+            assert epoch_b > epoch_a, (
+                f"Epochs not ascending: {era_a.name}={epoch_a}, {era_b.name}={epoch_b}"
+            )
+
+        # 3. Era start slots are strictly ascending.
+        era_slots = _era_start_slots(config)
+        for i in range(len(era_slots) - 1):
+            era_a, slot_a = era_slots[i]
+            era_b, slot_b = era_slots[i + 1]
+            assert slot_b > slot_a, (
+                f"Slots not ascending: {era_a.name}={slot_a}, {era_b.name}={slot_b}"
+            )
+
+        # 4. All era params are valid.
+        for era in Era:
+            params = config.era_params.get(era, DEFAULT_ERA_PARAMS[era])
+            assert params.epoch_length > 0, f"{era.name} epoch_length not positive"
+            assert params.slot_length > 0, f"{era.name} slot_length not positive"
+
+        # 5. HFCState can advance through all era boundaries.
+        state = HFCState(config=config)
+        era_slot_dict = dict(era_slots)
+        for era in Era:
+            start_slot = era_slot_dict[era]
+            result_era = state.advance_to_slot(start_slot)
+            assert result_era == era, (
+                f"At slot {start_slot}: expected {era.name}, got {result_era.name}"
+            )
+            assert state.current_era == era
+            assert state.tip_slot == start_slot
+
+    def test_hfc_skeleton_byron_epoch_length(self) -> None:
+        """Byron era uses 21600-slot epochs (10-second blocks, 20s slot)."""
+        params = DEFAULT_ERA_PARAMS[Era.BYRON]
+        assert params.epoch_length == BYRON_EPOCH_LENGTH
+        assert params.slot_length == 20.0
+
+    def test_hfc_skeleton_shelley_plus_epoch_length(self) -> None:
+        """All post-Byron eras use 432000-slot epochs (1s slots)."""
+        for era in [Era.SHELLEY, Era.ALLEGRA, Era.MARY, Era.ALONZO, Era.BABBAGE, Era.CONWAY]:
+            params = DEFAULT_ERA_PARAMS[era]
+            assert params.epoch_length == SHELLEY_EPOCH_LENGTH
+            assert params.slot_length == 1.0
+
+    def test_hfc_skeleton_era_boundary_detection(self) -> None:
+        """HFCState.is_era_boundary returns True for era start slots."""
+        state = HFCState(config=MAINNET_HFC_CONFIG)
+        era_slots = _era_start_slots(MAINNET_HFC_CONFIG)
+
+        for era, start_slot in era_slots:
+            assert state.is_era_boundary(start_slot), (
+                f"Slot {start_slot} should be an era boundary for {era.name}"
+            )
+            # One slot before should NOT be a boundary (except slot 0).
+            if start_slot > 0:
+                assert not state.is_era_boundary(start_slot - 1)
