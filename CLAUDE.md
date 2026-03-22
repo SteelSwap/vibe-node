@@ -115,10 +115,14 @@ Elder Millenial is the committer. Agent Millenial is the co-author. Every commit
 
 **NEVER commit directly to main.** All work must go through a branch and pull request:
 
-1. Create a feature branch for each module or logical unit of work (e.g., `m1.2-public-docs`, `m1.3-cross-ref-infrastructure`)
+1. Create a feature branch for each module or logical unit of work (e.g., `m6.1-dependency-audit`, `m6.2-code-dedup`)
 2. Commit to the feature branch
 3. Push and open a PR for Elder Millenial to review
 4. Only Elder Millenial merges to main
+
+**One branch per module. No exceptions.** Each module (M6.1, M6.2, etc.) gets its own branch and its own PR. Do not combine multiple modules into a single branch.
+
+**NEVER use worktrees then manually copy files between them.** This caused major issues in Phase 5 — duplicated code, confused git state, lost work. If you need isolation, use a normal branch. If work from one branch depends on another, rebase or merge the dependency branch first. Do not copy files between worktrees or branches manually.
 
 This is non-negotiable — the git history is public proof of the vibe-coding process, and PRs ensure every change is reviewed.
 
