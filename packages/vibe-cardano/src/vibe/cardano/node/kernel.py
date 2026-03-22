@@ -58,6 +58,7 @@ class BlockEntry:
     slot: int
     block_hash: bytes
     block_number: int
+    predecessor_hash: bytes  # 32-byte hash of predecessor block
     header_cbor: Any  # Wrapped header for chain-sync: [era_tag, CBORTag(24, bytes)]
     block_cbor: bytes  # Full block for block-fetch
 
@@ -216,18 +217,99 @@ class NodeKernel(ChainProvider, BlockProvider):
         block_number: int,
         header_cbor: bytes,
         block_cbor: bytes,
+        predecessor_hash: bytes = b"\x00" * 32,
+        is_forged: bool = False,
     ) -> None:
-        """Add a block to the chain and notify waiting servers."""
+        """Add a block to the chain.
+
+        For received blocks (from chain-sync): always accept if
+        block_number > tip. These come from a valid Haskell chain.
+
+        For forged blocks: only accept if they extend the current tip
+        (predecessor matches tip hash). If a received block arrives at
+        the same height, it takes precedence (our forged block is
+        replaced via fork switching).
+
+        Haskell reference:
+            Ouroboros.Consensus.Storage.ChainDB.Impl.ChainSel
+        """
         entry = BlockEntry(
             slot=slot,
             block_hash=block_hash,
             block_number=block_number,
+            predecessor_hash=predecessor_hash,
             header_cbor=header_cbor,
             block_cbor=block_cbor,
         )
-        idx = len(self._chain)
-        self._chain.append(entry)
-        self._hash_index[block_hash] = idx
+
+        if is_forged:
+            # Forged blocks: must extend current tip.
+            if self._chain and predecessor_hash != self._chain[-1].block_hash:
+                logger.debug(
+                    "NodeKernel: skipping forged block #%d slot=%d "
+                    "(doesn't extend tip)",
+                    block_number, slot,
+                )
+                return
+
+        if not self._chain:
+            # First block.
+            self._chain.append(entry)
+            self._hash_index[block_hash] = 0
+        elif block_number > self._chain[-1].block_number:
+            # Better than current tip.
+            if predecessor_hash == self._chain[-1].block_hash:
+                # Extends current tip — normal append.
+                idx = len(self._chain)
+                self._chain.append(entry)
+                self._hash_index[block_hash] = idx
+            else:
+                # Fork — find fork point and switch.
+                fork_idx = self._hash_index.get(predecessor_hash)
+                if fork_idx is not None:
+                    removed = self._chain[fork_idx + 1:]
+                    for r in removed:
+                        self._hash_index.pop(r.block_hash, None)
+                    self._chain = self._chain[:fork_idx + 1]
+                    idx = len(self._chain)
+                    self._chain.append(entry)
+                    self._hash_index[block_hash] = idx
+                    logger.info(
+                        "NodeKernel: switched fork, removed %d blocks, "
+                        "new tip block #%d slot=%d",
+                        len(removed), block_number, slot,
+                    )
+                else:
+                    # Predecessor not in chain — just append (received
+                    # blocks from a valid chain may arrive after pruning).
+                    idx = len(self._chain)
+                    self._chain.append(entry)
+                    self._hash_index[block_hash] = idx
+        elif block_number == self._chain[-1].block_number:
+            if not is_forged and predecessor_hash != self._chain[-1].predecessor_hash:
+                # Received block at same height on different fork — switch
+                # (prefer received over our forged blocks).
+                fork_idx = self._hash_index.get(predecessor_hash)
+                if fork_idx is not None:
+                    removed = self._chain[fork_idx + 1:]
+                    for r in removed:
+                        self._hash_index.pop(r.block_hash, None)
+                    self._chain = self._chain[:fork_idx + 1]
+                    idx = len(self._chain)
+                    self._chain.append(entry)
+                    self._hash_index[block_hash] = idx
+                    logger.info(
+                        "NodeKernel: fork switch at height %d, "
+                        "replaced %d blocks",
+                        block_number, len(removed),
+                    )
+                else:
+                    return
+            else:
+                return
+        else:
+            # Block number <= tip — ignore.
+            return
 
         self._tip = Tip(
             point=Point(slot=slot, hash=block_hash),

@@ -10,8 +10,8 @@ This page summarizes the project milestones tracked in [Plane](https://plane.so)
 | **Phase 1 — Research & Analysis** | :material-check-circle: Complete | 2,046 rules, 1,567 gaps, architecture blueprint, test strategy |
 | **Phase 2 — Serialization & Networking** | :material-check-circle: Complete | CBOR decoders, multiplexer, handshake, chain-sync — 643 tests, Haskell test parity |
 | **Phase 3 — Chain Sync & Storage** | :material-check-circle: Complete | Block-fetch, Arrow+Dict storage, Byron-Mary ledger, Mithril import, crash recovery — 1,264 tests |
-| **Phase 4 — Ledger & Consensus** | :material-clock-outline: Planned | UTxO ledger rules, Plutus evaluation, Ouroboros Praos, VRF/KES |
-| **Phase 5 — Block Production & N2C** | :material-clock-outline: Planned | Block forging, mempool, all node-to-client miniprotocols |
+| **Phase 4 — Ledger & Consensus** | :material-check-circle: Complete | UTxO ledger rules, Plutus evaluation, Ouroboros Praos, VRF/KES — 3,415 tests |
+| **Phase 5 — Block Production & N2C** | :material-check-circle: Complete | Block forging, mempool, N2C miniprotocols, Haskell block acceptance — 4,290+ tests |
 | **Phase 6 — Hardening** | :material-clock-outline: Planned | Power-loss recovery, memory optimization, 10-day soak test |
 
 ---

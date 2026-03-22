@@ -74,30 +74,71 @@ class LeaderProof:
             )
 
 
-def _make_vrf_input(epoch_nonce: bytes, slot: int) -> bytes:
-    """Construct the VRF alpha string from epoch nonce and slot.
+def _mk_seed(uc_nonce: bytes, slot: int, epoch_nonce: bytes) -> bytes:
+    """Construct the VRF seed following Haskell's ``mkSeed`` (TPraos era).
 
-    The alpha string is the input to the VRF that determines leader
-    eligibility. It combines the epoch nonce (which is the same for all
-    pools in an epoch) with the slot number.
+    mkSeed ucNonce slot eNonce =
+      (ucNonce `xor`) . blake2b_256 $ (slot_be64 ++ eNonce)
 
-        alpha = epoch_nonce || slot_to_bytes(slot)
-
-    where slot_to_bytes is big-endian uint64.
-
-    Spec ref: Shelley formal spec, Section 16.1 -- VRF input
-    Haskell ref: ``mkSeed`` in ``Cardano.Protocol.TPraos.BHeader``
-        which computes ``hashToNonce(certNat(y)) XOR eta_0`` but for the
-        leader VRF the alpha input is ``nonce || slot``.
+    Haskell ref: ``Cardano.Protocol.TPraos.BHeader.mkSeed``
 
     Args:
-        epoch_nonce: 32-byte epoch nonce.
+        uc_nonce: Universal constant (seedEta or seedL), 32 bytes.
+            seedEta = blake2b_256(0_u64), seedL = blake2b_256(1_u64).
         slot: Slot number.
+        epoch_nonce: 32-byte epoch nonce.
 
     Returns:
-        The VRF alpha string (bytes).
+        32-byte VRF seed.
     """
-    return epoch_nonce + struct.pack(">Q", slot)
+    import hashlib
+    # Step 1: slot_be64 || epoch_nonce
+    payload = struct.pack(">Q", slot) + epoch_nonce
+    # Step 2: blake2b-256
+    h = hashlib.blake2b(payload, digest_size=32).digest()
+    # Step 3: XOR with universal constant
+    return bytes(a ^ b for a, b in zip(h, uc_nonce))
+
+
+# Universal constants from Haskell: mkNonceFromNumber n = blake2b_256(n as Word64)
+import hashlib as _hl
+SEED_ETA: bytes = _hl.blake2b(struct.pack(">Q", 0), digest_size=32).digest()
+SEED_L: bytes = _hl.blake2b(struct.pack(">Q", 1), digest_size=32).digest()
+
+
+def _mk_input_vrf(slot: int, epoch_nonce: bytes) -> bytes:
+    """Construct the unified VRF input for Praos (Babbage/Conway).
+
+    Unlike TPraos ``mkSeed``, this does NOT XOR with a universal constant.
+    Praos uses a single VRF evaluation per slot instead of two separate
+    ones for nonce/leader.
+
+    mkInputVRF slot eNonce = blake2b_256(slot_be64 ++ eNonce)
+
+    Haskell ref: ``Ouroboros.Consensus.Protocol.Praos.VRF.mkInputVRF``
+
+    Args:
+        slot: Slot number.
+        epoch_nonce: 32-byte epoch nonce.
+
+    Returns:
+        32-byte VRF input hash.
+    """
+    import hashlib
+    payload = struct.pack(">Q", slot) + epoch_nonce
+    return hashlib.blake2b(payload, digest_size=32).digest()
+
+
+def _make_vrf_input(epoch_nonce: bytes, slot: int) -> bytes:
+    """Construct the VRF alpha string for leader election.
+
+    Uses Praos ``mkInputVRF`` (Babbage/Conway): single VRF evaluation
+    with no universal constant XOR.
+
+    Haskell ref: ``mkInputVRF slot epochNonce`` in
+        ``Ouroboros.Consensus.Protocol.Praos.VRF``
+    """
+    return _mk_input_vrf(slot, epoch_nonce)
 
 
 def check_leadership(

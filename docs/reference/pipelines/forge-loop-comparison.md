@@ -189,13 +189,16 @@ We store the block but don't trigger or wait for chain selection. The Haskell no
 
 ## Summary of Bugs
 
-| # | Bug | Severity | Impact |
-|---|-----|----------|--------|
-| **1** | `prev_block_number` uses slot number, not actual block number | **CRITICAL** | Haskell rejects: `blockNo /= prevBlockNo + 1` |
-| **2** | `epoch_nonce` read once at startup, not per-slot | **CRITICAL** | VRF proof invalid after epoch 0 |
-| **3** | `relative_stake` read once at startup | **HIGH** | Wrong leader election rate after epoch 0 |
-| **4** | VRF seed construction may differ from `mkSeed` | **UNKNOWN** | Need byte-level comparison |
-| **5** | No ledger state tick before forging | **MEDIUM** | Wrong protocol params for tx selection |
-| **6** | No chain selection wait after addBlock | **LOW** | Delayed peer notification |
+| # | Bug | Severity | Status | Fix |
+|---|-----|----------|--------|-----|
+| **1** | `prev_block_number` uses slot number, not actual block number | **CRITICAL** | FIXED | ChainDB.get_tip() returns (slot, hash, block_number); forge loop uses real block_number |
+| **2** | `epoch_nonce` read once at startup, not per-slot | **CRITICAL** | FIXED | Re-read from node_kernel each slot in forge loop |
+| **3** | `relative_stake` read once at startup | **HIGH** | FIXED | Re-read from node_kernel stake_distribution each slot |
+| **4** | VRF seed uses wrong algorithm (TPraos mkSeed vs Praos mkInputVRF) | **CRITICAL** | FIXED | Conway uses `mkInputVRF = blake2b(slot_be64 \|\| epochNonce)` — NO XOR with seedL constant. TPraos `mkSeed` (with XOR) is only for Shelley-Mary eras. |
+| **5** | No ledger state tick before forging | **MEDIUM** | OPEN | Empty blocks work; needed for tx-bearing blocks |
+| **6** | No chain selection wait after addBlock | **LOW** | OPEN | Blocks eventually propagate via tip_changed event |
+| **7** | Header body used 14-field Shelley format | **CRITICAL** | FIXED | Babbage/Conway uses 10 fields with nested opcert + protver sub-arrays |
+| **8** | Genesis hash from re-encoded JSON | **CRITICAL** | FIXED | Now uses raw file bytes: `genesis_path.read_bytes()` |
+| **9** | NodeKernel served non-linear chain (fork mixing) | **HIGH** | FIXED | Chain selection in NodeKernel with is_forged flag; forged blocks only extend tip |
 
 **Bugs 1 and 2 are almost certainly why Haskell nodes reject our blocks.**

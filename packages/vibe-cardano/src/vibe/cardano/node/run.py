@@ -675,6 +675,7 @@ class PeerManager:
                             #          cbor_tag 0 or 1 → hfc_index = 0 (Byron)
                             header_cbor=[max(0, era_tag - 1) if era_tag >= 2 else 0, cbor2.CBORTag(24, hdr_cbor)],
                             block_cbor=raw_block,
+                            predecessor_hash=prev_hash,
                         )
 
                     _blocks_stored += 1
@@ -1086,6 +1087,8 @@ async def _forge_loop(
                     block_number=forged.block.block_number,
                     header_cbor=[6, cbor2.CBORTag(24, forged.block.header_cbor)],  # HFC index 6=Conway
                     block_cbor=forged.cbor,
+                    predecessor_hash=prev_header_hash or b"\x00" * 32,
+                    is_forged=True,
                 )
 
             logger.info(

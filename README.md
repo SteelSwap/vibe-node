@@ -5,8 +5,8 @@
 [![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](https://www.python.org/downloads/)
 [![Built with AI](https://img.shields.io/badge/built%20with-AI%20%28vibe%20coded%29-ff6d00.svg)]()
 [![Cardano](https://img.shields.io/badge/Cardano-node-0033AD.svg)](https://cardano.org)
-[![Tests](https://img.shields.io/badge/tests-4%2C045%20passing-brightgreen.svg)]()
-[![Version](https://img.shields.io/badge/version-v0.5.0-blue.svg)]()
+[![Tests](https://img.shields.io/badge/tests-4%2C290%20passing-brightgreen.svg)]()
+[![Version](https://img.shields.io/badge/version-v0.6.0-blue.svg)]()
 
 A vibe-coded, spec-compliant Cardano node written in Python.
 
@@ -20,8 +20,8 @@ This is not just a node — it's a public education in vibe coding with extreme 
 
 ## Current Status
 
-> **Phase 5 — Block Production & Full Node Integration: COMPLETE.** 4,045+ tests passing.
-> vibe-node is a fully functional Cardano node: syncs from genesis, forges blocks via VRF leader election, validates all eras through Conway, and runs in a 3-node private devnet alongside Haskell nodes with bidirectional communication.
+> **Phase 5 — Block Production & Haskell Acceptance: COMPLETE.** 4,290+ tests passing.
+> vibe-node forges blocks that are **accepted by Haskell cardano-nodes**. VRF proofs, KES signatures, header format, and block numbering all pass Haskell validation. The 3-node private devnet (2 Haskell + 1 vibe-node) runs with bidirectional chain-sync, block-fetch, and block production.
 
 ### What the node can do
 
@@ -32,11 +32,14 @@ This is not just a node — it's a public education in vibe coding with extreme 
 - **Communicate** via all N2N miniprotocols (handshake, chain-sync, block-fetch, tx-submission, keep-alive) — both client and server
 - **Serve** local clients via all N2C miniprotocols (local chain-sync, local tx-submission, local state-query, local tx-monitor)
 - **Manage** a mempool with transaction validation, capacity enforcement, and block selection
-- **Run** in a 3-node private devnet with 2 Haskell nodes — bidirectional handshake, header streaming, block forging
+- **Run** in a 3-node private devnet with 2 Haskell nodes — bidirectional chain-sync, block-fetch, and block production
+- **Produce blocks accepted by Haskell nodes** — VRF (Praos mkInputVRF), KES signatures, Babbage/Conway header format, and chain selection all validated
 
 ### What's next
 
 - Phase 6: Hardening — 48-hour devnet soak test, preprod block production, power-loss recovery validation, memory optimization, 10-day conformance window
+- Fix remaining chain ordering edge case (UnexpectedPrevHash during fork switches)
+- Ledger state ticking for transaction-bearing blocks
 
 ### Phase Summary
 
@@ -47,7 +50,7 @@ This is not just a node — it's a public education in vibe coding with extreme 
 | **Phase 2** — Serialization & Networking | Complete | CBOR decoders, multiplexer, handshake, chain-sync — 643 tests |
 | **Phase 3** — Chain Sync & Storage | Complete | Block-fetch, Arrow+Dict storage, Byron-Mary ledger, Mithril, crash recovery — 1,264 tests |
 | **Phase 4** — Ledger & Consensus | Complete | VRF/KES, Alonzo-Conway ledger, Plutus, Praos consensus, HFC, devnet — 3,415 tests |
-| **Phase 5** — Block Production & N2C | Complete | Block forging, mempool, all N2C miniprotocols, full node integration, 3-node devnet — 4,045+ tests |
+| **Phase 5** — Block Production & N2C | Complete | Block forging, mempool, N2C miniprotocols, Haskell block acceptance, 3-node devnet — 4,290+ tests |
 
 ### Benchmarks (Real Preprod)
 
