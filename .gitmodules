@@ -22,3 +22,6 @@
 [submodule "vendor/pycardano"]
 	path = vendor/pycardano
 	url = https://github.com/theeldermillenial/pycardano.git
+[submodule "vendor/uplc"]
+	path = vendor/uplc
+	url = https://github.com/theeldermillenial/uplc.git
