@@ -177,6 +177,7 @@ class _PeerConnection:
     task: asyncio.Task[None] | None = None
     stop_event: asyncio.Event | None = None
     reconnect_delay: float = 1.0
+    reconnect_attempt: int = 0
     connected: bool = False
 
 
@@ -267,42 +268,67 @@ class PeerManager:
 
         Implements exponential backoff on connection failures:
         1s -> 2s -> 4s -> ... -> 60s (capped).
+
+        On successful reconnection the backoff delay and attempt counter
+        reset to their initial values so transient errors don't
+        permanently degrade reconnect speed.
+
+        Haskell ref:
+            Ouroboros.Network.PeerSelection.Governor.ActivePeers -- the
+            governor uses exponential backoff with a cap for peer
+            reconnection delays after connection failures.
         """
         while not self._stopped:
             try:
                 await self._connect_peer(peer)
                 # Reset backoff on successful connection.
                 peer.reconnect_delay = 1.0
+                peer.reconnect_attempt = 0
 
                 # Mux is already running (started in _connect_peer after
                 # handshake). Await the mux task until disconnect.
                 if peer.mux_task is not None:
                     await peer.mux_task
 
-            except (ConnectionError, OSError) as exc:
-                logger.warning(
-                    "Peer %s: connection failed: %s (retry in %.1fs)",
+            except (MuxClosedError, BearerClosedError) as exc:
+                # Multiplexer or bearer closed -- normal disconnect path.
+                # Log at INFO rather than WARNING since this is expected
+                # during peer disconnects and node shutdowns.
+                logger.info(
+                    "Peer %s: connection closed: %s",
                     peer.address,
                     exc,
-                    peer.reconnect_delay,
+                )
+            except (ConnectionError, OSError) as exc:
+                logger.warning(
+                    "Peer %s: connection failed: %s",
+                    peer.address,
+                    exc,
                 )
             except asyncio.CancelledError:
                 return
             except Exception as exc:
                 logger.error(
-                    "Peer %s: unexpected error: %s (retry in %.1fs)",
+                    "Peer %s: unexpected error: %s",
                     peer.address,
                     exc,
-                    peer.reconnect_delay,
                     exc_info=True,
                 )
             finally:
                 peer.connected = False
+                await self._disconnect_peer(peer)
 
             if self._stopped:
                 return
 
             # Backoff before reconnect.
+            peer.reconnect_attempt += 1
+            logger.info(
+                "Reconnecting to peer %s in %.1fs (attempt %d)",
+                peer.address,
+                peer.reconnect_delay,
+                peer.reconnect_attempt,
+            )
             await asyncio.sleep(peer.reconnect_delay)
             peer.reconnect_delay = min(peer.reconnect_delay * 2, 60.0)
 
@@ -448,7 +474,7 @@ class PeerManager:
                             peer.address, _headers_received, tip,
                         )
             except Exception as exc:
-                logger.debug("Peer %s: header parse error: %s", peer.address, exc)
+                logger.warning("Peer %s: header parse error: %s", peer.address, exc)
 
         async def _on_roll_backward(point: object, tip: object) -> None:
             logger.info("Chain rollback to %s (tip=%s) from %s", point, tip, peer.address, extra={"event": "chainsync.rollback", "peer": str(peer.address), "point": str(point), "tip": str(tip)})
@@ -628,9 +654,9 @@ class PeerManager:
                                     consumed, created, block_slot=slot,
                                 )
                             except Exception as exc:
-                                logger.debug(
-                                    "Peer %s: ledger apply error: %s",
-                                    peer.address, exc,
+                                logger.warning(
+                                    "Peer %s: ledger apply error at slot %d: %s",
+                                    peer.address, slot, exc,
                                 )
 
                     # --- Store in ChainDB ---
@@ -676,7 +702,7 @@ class PeerManager:
                     stop_event=stop_event,
                 )
             except Exception as exc:
-                logger.debug(
+                logger.warning(
                     "Peer %s: block-fetch error: %s", peer.address, exc
                 )
             finally:
@@ -947,8 +973,8 @@ async def _forge_loop(
                 prev_header_hash = tip[1]  # (slot, hash, block_number)
                 prev_block_number = tip[2]  # Real block number
                 logger.info("Forge building on tip at slot %d, block #%d", tip[0], tip[2], extra={"event": "forge.tip", "slot": tip[0], "block_number": tip[2]})
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Forge: failed to read chain tip at startup: %s", exc)
     blocks_forged = 0
 
     logger.info("Forge loop started (stake=%.2f%%, kes_period=%d)", relative_stake * 100, _current_kes_period, extra={"event": "forge.started", "vrf_vk": pool_keys.vrf_vk.hex()[:16], "kes_vk": kes_vk.hex()[:16], "relative_stake_pct": relative_stake * 100, "kes_period": _current_kes_period})
@@ -1001,8 +1027,9 @@ async def _forge_loop(
                     prev_block_number = tip_block_number  # Real block number, not slot
                 elif slot > 10:
                     continue
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Forge: failed to read chain tip at slot %d: %s", slot, exc)
+                continue  # Skip this slot — don't forge with stale state
 
         # Re-read epoch nonce from kernel (evolves at epoch boundaries)
         if node_kernel is not None:
@@ -1046,7 +1073,7 @@ async def _forge_loop(
                         cbor_bytes=forged.cbor,
                     )
                 except Exception as exc:
-                    logger.warning("Failed to store forged block: %s", exc)
+                    logger.error("Failed to store forged block #%d: %s", forged.block.block_number, exc)
 
             # Add to NodeKernel so chain-sync/block-fetch servers
             # can serve this block to connected peers.
