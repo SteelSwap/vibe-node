@@ -1103,10 +1103,10 @@ class TestMalformedInputRejection:
             decode_block_header(block_cbor)
 
     def test_truncated_header_body_babbage(self):
-        """Babbage header_body with fewer than 14 fields is rejected."""
-        short_body = list(range(10))  # need 14
+        """Babbage header_body with fewer than 10 fields is rejected."""
+        short_body = list(range(5))  # need 10
         block_cbor = _wrap_block(Era.BABBAGE, short_body)
-        with pytest.raises(ValueError, match="expected >= 14 items"):
+        with pytest.raises(ValueError, match="expected >= 10 items"):
             decode_block_header(block_cbor)
 
     def test_block_not_array(self):

@@ -263,9 +263,14 @@ def _decode_header_body_babbage(
       [12] protocol_version major
       [13] protocol_version minor
     """
-    if len(items) < 14:
+    # Babbage/Conway uses 10 fields with nested opcert + protver sub-arrays:
+    #   [0] block_number, [1] slot, [2] prev_hash, [3] issuer_vkey,
+    #   [4] vrf_vkey, [5] vrf_result, [6] body_size, [7] body_hash,
+    #   [8] [kes_vk, n, c0, sig], [9] [major, minor]
+    # Shelley-Mary uses 14 fields with opcert + protver inlined.
+    if len(items) < 10:
         raise ValueError(
-            f"Babbage-era header_body expected >= 14 items, got {len(items)}"
+            f"header_body expected >= 10 items, got {len(items)}"
         )
 
     block_number = items[0]
@@ -286,14 +291,28 @@ def _decode_header_body_babbage(
         if isinstance(candidate, bytes):
             vrf_output = candidate
 
-    op_cert = OperationalCert(
-        hot_vkey=items[8],
-        sequence_number=items[9],
-        kes_period=items[10],
-        sigma=items[11],
-    )
-
-    proto_ver = ProtocolVersion(major=items[12], minor=items[13])
+    # Babbage/Conway: opcert is nested [kes_vk, n, c0, sig] at index 8
+    # Shelley-Mary: opcert is 4 inline fields at indices 8-11
+    if len(items) == 10:
+        # Babbage/Conway 10-field format
+        opcert_data = items[8]  # [kes_vk, n, c0, sig]
+        protver_data = items[9]  # [major, minor]
+        op_cert = OperationalCert(
+            hot_vkey=opcert_data[0],
+            sequence_number=opcert_data[1],
+            kes_period=opcert_data[2],
+            sigma=opcert_data[3],
+        )
+        proto_ver = ProtocolVersion(major=protver_data[0], minor=protver_data[1])
+    else:
+        # Shelley-Mary 14-field format
+        op_cert = OperationalCert(
+            hot_vkey=items[8],
+            sequence_number=items[9],
+            kes_period=items[10],
+            sigma=items[11],
+        )
+        proto_ver = ProtocolVersion(major=items[12], minor=items[13])
 
     return BlockHeader(
         slot=slot,
