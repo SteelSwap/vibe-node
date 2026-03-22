@@ -177,6 +177,7 @@ class _PeerConnection:
     task: asyncio.Task[None] | None = None
     stop_event: asyncio.Event | None = None
     reconnect_delay: float = 1.0
+    reconnect_attempt: int = 0
     connected: bool = False
 
 
@@ -267,42 +268,67 @@ class PeerManager:
 
         Implements exponential backoff on connection failures:
         1s -> 2s -> 4s -> ... -> 60s (capped).
+
+        On successful reconnection the backoff delay and attempt counter
+        reset to their initial values so transient errors don't
+        permanently degrade reconnect speed.
+
+        Haskell ref:
+            Ouroboros.Network.PeerSelection.Governor.ActivePeers -- the
+            governor uses exponential backoff with a cap for peer
+            reconnection delays after connection failures.
         """
         while not self._stopped:
             try:
                 await self._connect_peer(peer)
                 # Reset backoff on successful connection.
                 peer.reconnect_delay = 1.0
+                peer.reconnect_attempt = 0
 
                 # Mux is already running (started in _connect_peer after
                 # handshake). Await the mux task until disconnect.
                 if peer.mux_task is not None:
                     await peer.mux_task
 
-            except (ConnectionError, OSError) as exc:
-                logger.warning(
-                    "Peer %s: connection failed: %s (retry in %.1fs)",
+            except (MuxClosedError, BearerClosedError) as exc:
+                # Multiplexer or bearer closed -- normal disconnect path.
+                # Log at INFO rather than WARNING since this is expected
+                # during peer disconnects and node shutdowns.
+                logger.info(
+                    "Peer %s: connection closed: %s",
                     peer.address,
                     exc,
-                    peer.reconnect_delay,
+                )
+            except (ConnectionError, OSError) as exc:
+                logger.warning(
+                    "Peer %s: connection failed: %s",
+                    peer.address,
+                    exc,
                 )
             except asyncio.CancelledError:
                 return
             except Exception as exc:
                 logger.error(
-                    "Peer %s: unexpected error: %s (retry in %.1fs)",
+                    "Peer %s: unexpected error: %s",
                     peer.address,
                     exc,
-                    peer.reconnect_delay,
                     exc_info=True,
                 )
             finally:
                 peer.connected = False
+                await self._disconnect_peer(peer)
 
             if self._stopped:
                 return
 
             # Backoff before reconnect.
+            peer.reconnect_attempt += 1
+            logger.info(
+                "Reconnecting to peer %s in %.1fs (attempt %d)",
+                peer.address,
+                peer.reconnect_delay,
+                peer.reconnect_attempt,
+            )
             await asyncio.sleep(peer.reconnect_delay)
             peer.reconnect_delay = min(peer.reconnect_delay * 2, 60.0)
 
