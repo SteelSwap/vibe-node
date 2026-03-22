@@ -189,7 +189,7 @@ class PipelinedBlockFetchClient:
         """
         for point_from, point_to in ranges:
             if stop_event is not None and stop_event.is_set():
-                logger.info("Pipelined block-fetch: stop requested")
+                logger.debug("Pipelined block-fetch: stop requested")
                 return
 
             # Collect the first response for this range.
@@ -260,11 +260,7 @@ async def run_pipelined_block_fetch(
         max_in_flight=max_in_flight,
     )
 
-    logger.info(
-        "Starting pipelined block-fetch: %d ranges, max_in_flight=%d",
-        len(ranges),
-        max_in_flight,
-    )
+    logger.info("Pipelined block-fetch starting (%d ranges, depth=%d)", len(ranges), max_in_flight, extra={"event": "blockfetch.pipelined.start", "range_count": len(ranges), "max_in_flight": max_in_flight})
 
     await client.run_pipelined_fetch(
         ranges=ranges,

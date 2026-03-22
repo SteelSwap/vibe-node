@@ -645,17 +645,13 @@ async def run_chain_sync(
             "known points do not overlap with the producer's chain."
         )
 
-    logger.info(
-        "Chain-sync intersection found: %s (server tip: block %d)",
-        intersection,
-        tip.block_number,
-    )
+    logger.info("Chain-sync intersection at %s (server tip: block #%d)", intersection, tip.block_number, extra={"event": "chainsync.intersect", "point": str(intersection), "tip_block": tip.block_number})
 
     # Step 2: Sync loop
     while True:
         # Check stop condition
         if stop_event is not None and stop_event.is_set():
-            logger.info("Chain-sync stop requested, sending Done")
+            logger.debug("Chain-sync stop requested, sending Done")
             await client.done()
             return
 

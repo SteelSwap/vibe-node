@@ -398,7 +398,7 @@ class VolatileDB:
 
             count += 1
 
-        logger.info("VolatileDB: loaded %d blocks from disk", count)
+        logger.info("VolatileDB loaded %d blocks from disk", count, extra={"event": "volatiledb.loaded", "block_count": count})
         return count
 
     # -------------------------------------------------------------------
