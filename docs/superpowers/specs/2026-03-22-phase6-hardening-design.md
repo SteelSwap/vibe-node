@@ -20,7 +20,7 @@ Phase 5 delivered a node that forges blocks accepted by Haskell. But the journey
 
 | Dependency | Known Issues | Action |
 |-----------|-------------|--------|
-| **cbor2pure** | C binding `fp.tell()` bug (Phase 5); pure Python performance | Fork to SteelSwap, fix bugs, open upstream PRs |
+| **cbor2pure** | Pure Python CBOR library (NOT cbor2 which has broken C bindings). We use cbor2pure exclusively — `import cbor2pure as cbor2` across all 32+ files. Audit for edge cases, optimize hot paths. | Fork to SteelSwap, fix any issues found, open upstream PRs |
 | **uplc** | string-04 conformance failure (escape sequences); CEK machine edge cases | Fork to SteelSwap, fix string parsing, run full conformance suite |
 | **pycardano** | Uses cbor2 internally (not cbor2pure); some type stubs missing | Fork to SteelSwap, patch cbor2 → cbor2pure, fix type issues |
 | **cryptography** | No known issues, but audit KES/VRF usage for correctness | Audit: compare outputs against Haskell for known test vectors. No fork unless issues found |
