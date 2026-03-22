@@ -64,7 +64,7 @@ first_value = 0
 testpaths = ["tests", "packages/vibe-cardano/tests"]
 asyncio_mode = "auto"
 timeout = 300
-addopts = "-p no:benchmark"
+addopts = "-p no:benchmark -m 'not tcp'"
 markers = [
     "unit: Unit tests — isolated function/module correctness",
     "property: Property tests — invariant verification via Hypothesis",
@@ -73,6 +73,7 @@ markers = [
     "fixture_only: Tests using cached fixtures only — never skipped for missing Ogmios",
     "devnet: Devnet integration tests — 3-node private cluster validation",
     "slow: Slow tests — benchmarks, statistical tests, large data sets",
+    "tcp: TCP socket tests — real localhost connections, may timeout in CI",
 ]
 
 [dependency-groups]

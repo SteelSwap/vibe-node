@@ -253,7 +253,7 @@ class TestChainDBRegression773:
         # Verify: tip should be valid (one of the fork tips).
         tip = await db.get_tip()
         assert tip is not None
-        tip_slot, tip_hash = tip
+        tip_slot, tip_hash = tip[0], tip[1]
 
         # All blocks from both forks should be retrievable.
         for bh in fork_a_hashes + fork_b_hashes:
