@@ -437,14 +437,10 @@ wheels = [
 
 [[package]]
 name = "cbor2pure"
-version = "5.8.0"
-source = { registry = "https://pypi.org/simple" }
+version = "5.8.1"
+source = { git = "https://github.com/theeldermillenial/cbor2?branch=fix%2Fcbor2pure-raw-tags#43479241cb4c9da2e5f31a9988a2d309e74a1228" }
 dependencies = [
     { name = "cbor2" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/d9/9cdd06e55593e0b2c5f008f714f3ec5b266bf697b4b07682503a746226a6/cbor2pure-5.8.0.tar.gz", hash = "sha256:e03fb87dceb338518f2b4e613f3bc712286c46e3b57d83d4b0ba3b60d1a79932", size = 105377, upload-time = "2026-02-28T03:51:17.428Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/cc/46725fe4751b9dfe1df3dcc499ab06c7379c09b17793c9f47da534a50589/cbor2pure-5.8.0-py3-none-any.whl", hash = "sha256:1d76fce7ca2398e97ec6f4995858bd379e262b3e0dcc5ee0a366ea1c124cf41b", size = 22869, upload-time = "2026-02-28T03:51:16.102Z" },
 ]
 
 [[package]]
@@ -3381,7 +3377,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cbor2pure", specifier = ">=5.8.0" },
+    { name = "cbor2pure", git = "https://github.com/theeldermillenial/cbor2?branch=fix%2Fcbor2pure-raw-tags" },
     { name = "cryptography", specifier = ">=44.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pyarrow", specifier = ">=19.0.0" },
@@ -3434,7 +3430,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "bump-my-version", specifier = ">=1.2.7" },
-    { name = "cbor2pure", specifier = ">=5.8.0" },
+    { name = "cbor2pure", git = "https://github.com/theeldermillenial/cbor2?branch=fix%2Fcbor2pure-raw-tags" },
     { name = "hypothesis", specifier = ">=6.130.0" },
     { name = "lancedb", specifier = ">=0.30.0" },
     { name = "mkdocs-material", specifier = ">=9.7.5" },

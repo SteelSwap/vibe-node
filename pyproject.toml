@@ -27,6 +27,7 @@ members = ["packages/*"]
 vibe-core = { workspace = true }
 vibe-cardano = { workspace = true }
 vibe-tools = { workspace = true }
+cbor2pure = { git = "https://github.com/theeldermillenial/cbor2", branch = "fix/cbor2pure-raw-tags" }
 
 [tool.bumpversion]
 current_version = "0.5.0"
