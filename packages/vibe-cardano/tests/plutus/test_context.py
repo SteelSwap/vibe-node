@@ -115,16 +115,24 @@ class TestTxOutRef:
 class TestValueEncoding:
     """Tests for Value -> Plutus Data encoding."""
 
+    def _lookup(self, m: PlutusMap, key):
+        """Helper: lookup key in PlutusMap (tuple of pairs)."""
+        for k, v in m.items():
+            if k == key:
+                return v
+        raise KeyError(key)
+
     def test_ada_only(self) -> None:
         val = value_to_data(2_000_000)
         assert isinstance(val, PlutusMap)
         # Should have ADA entry
         ada_cs = PlutusByteString(b"")
-        assert ada_cs in val.value
-        inner = val.value[ada_cs]
+        keys = [k for k, v in val.items()]
+        assert ada_cs in keys
+        inner = self._lookup(val, ada_cs)
         assert isinstance(inner, PlutusMap)
         ada_tn = PlutusByteString(b"")
-        assert inner.value[ada_tn] == PlutusInteger(2_000_000)
+        assert self._lookup(inner, ada_tn) == PlutusInteger(2_000_000)
 
     def test_multi_asset(self) -> None:
         policy = b"\xab" * 28
@@ -137,10 +145,11 @@ class TestValueEncoding:
         assert len(val.value) == 2
         # Check token entry
         cs = PlutusByteString(policy)
-        assert cs in val.value
-        inner = val.value[cs]
+        keys = [k for k, v in val.items()]
+        assert cs in keys
+        inner = self._lookup(val, cs)
         assert isinstance(inner, PlutusMap)
-        assert inner.value[PlutusByteString(b"TOKEN")] == PlutusInteger(100)
+        assert self._lookup(inner, PlutusByteString(b"TOKEN")) == PlutusInteger(100)
 
 
 # ---------------------------------------------------------------------------

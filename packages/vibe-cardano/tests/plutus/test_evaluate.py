@@ -168,7 +168,8 @@ class TestPlutusDataConversion:
     def test_dict_to_plutus_map(self) -> None:
         result = pycardano_to_uplc_data({1: b"hello"})
         assert isinstance(result, PlutusMap)
-        assert PlutusInteger(1) in result.value
+        keys = [k for k, v in result.items()]
+        assert PlutusInteger(1) in keys
 
     def test_passthrough_uplc_types(self) -> None:
         """Already-uplc PlutusData should pass through unchanged."""
@@ -380,30 +381,25 @@ class TestPlutusMapDuplicateKeys:
     This test documents the current behavior so we know if/when it changes.
     """
 
-    def test_duplicate_keys_are_deduplicated(self) -> None:
-        """PlutusMap with duplicate keys: frozendict deduplicates.
+    def test_duplicate_keys_preserved(self) -> None:
+        """PlutusMap preserves duplicate keys per Haskell Data type.
 
         The Cardano spec and Haskell implementation allow duplicate keys
-        in Plutus Data maps. The uplc package's use of frozendict means
-        duplicate keys are silently merged (last value wins).
-
-        This test documents the bug (uplc issue #35). If this test starts
-        failing, it means the uplc package has been updated to handle
-        duplicate keys correctly, and we should update our code accordingly.
+        in Plutus Data maps. PlutusMap now stores a tuple of (key, value)
+        pairs, preserving duplicates. Dict input deduplicates at the
+        Python level before reaching PlutusMap.
         """
-        # Create a map with "duplicate" keys
         key1 = PlutusInteger(1)
         val_a = PlutusInteger(100)
         val_b = PlutusInteger(200)
 
-        # Constructing with a Python dict already deduplicates
+        # Dict input deduplicates (Python semantics)
         m = PlutusMap({key1: val_a, key1: val_b})
-
-        # frozendict should keep only one entry
         assert len(m.value) == 1
 
-        # The value will be the last one set (Python dict semantics)
-        assert m.value[key1] == val_b
+        # Tuple-of-pairs input preserves duplicates
+        m2 = PlutusMap(((key1, val_a), (key1, val_b)))
+        assert len(m2.value) == 2
 
     def test_distinct_keys_preserved(self) -> None:
         """Verify distinct keys are all preserved."""
@@ -414,24 +410,19 @@ class TestPlutusMapDuplicateKeys:
         })
         assert len(m.value) == 3
 
-    def test_cbor_round_trip_deduplicates(self) -> None:
-        """CBOR containing duplicate map keys gets deduplicated by uplc.
+    def test_cbor_round_trip_preserves_entries(self) -> None:
+        """PlutusMap CBOR round-trip preserves entries."""
+        from uplc.ast import plutus_cbor_dumps, data_from_cbor
 
-        When we decode CBOR with duplicate map keys and convert to PlutusMap,
-        the frozendict constructor will silently merge duplicates.
-
-        This documents the divergence from Haskell behavior.
-        """
-        # Manually construct CBOR with duplicate keys
-        # CBOR map: {1: 100, 1: 200} -- note: cbor2 will deduplicate on dump
-        # So we construct the raw bytes directly
-        # For documentation purposes, we just test the PlutusMap constructor behavior
-        key = PlutusInteger(1)
-        entries = [(key, PlutusInteger(100)), (key, PlutusInteger(200))]
-
-        # Using dict constructor (standard Python behavior: last value wins)
-        m = PlutusMap(dict(entries))
-        assert m.value[key] == PlutusInteger(200)
+        key1 = PlutusInteger(1)
+        key2 = PlutusInteger(2)
+        m = PlutusMap(((key1, PlutusInteger(100)), (key2, PlutusInteger(200))))
+        encoded = plutus_cbor_dumps(m)
+        decoded = data_from_cbor(encoded)
+        pairs = list(decoded.items())
+        assert len(pairs) == 2
+        assert pairs[0] == (key1, PlutusInteger(100))
+        assert pairs[1] == (key2, PlutusInteger(200))
 
 
 # ---------------------------------------------------------------------------

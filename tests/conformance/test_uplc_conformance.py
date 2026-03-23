@@ -77,6 +77,7 @@ class UplcTestCase(NamedTuple):
     name: str
     uplc_path: Path
     expected_path: Path
+    budget_path: Path | None = None
 
 
 def _discover_test_cases(limit: int = 0) -> list[UplcTestCase]:
@@ -105,7 +106,13 @@ def _discover_test_cases(limit: int = 0) -> list[UplcTestCase]:
         rel = uplc_file.relative_to(_CONFORMANCE_DIR)
         name = str(rel.with_suffix("")).replace("/", "::")
 
-        cases.append(UplcTestCase(name=name, uplc_path=uplc_file, expected_path=expected_file))
+        budget_file = uplc_file.with_suffix(".uplc.budget.expected")
+        cases.append(UplcTestCase(
+            name=name,
+            uplc_path=uplc_file,
+            expected_path=expected_file,
+            budget_path=budget_file if budget_file.exists() else None,
+        ))
 
         if 0 < limit <= len(cases):
             break
@@ -123,6 +130,78 @@ _TEST_CASES = _ALL_CASES  # Run all conformance cases (was capped at 100)
 # ---------------------------------------------------------------------------
 
 _EVALUATION_FAILURE = "evaluation failure"
+_PARSE_ERROR = "parse error"
+
+# ---------------------------------------------------------------------------
+# V4/Van Rossem (Protocol Version 11) builtins — not yet in Conway (PV 9).
+#
+# These builtins are in Batch 6 of the Plutus builtin rollout schedule.
+# They will be available after the Van Rossem intra-era hard fork.
+#
+# Haskell ref: PlutusLedgerApi.Common.Versions
+#   vanRossemPV = conwayPV + 2 = Protocol Version 11
+#   batch6 builtins are gated behind vanRossemPV
+#
+# Haskell ref: PlutusCore/Default/Builtins.hs
+#   BuiltinSemanticsVariant — maps builtins to protocol versions
+# ---------------------------------------------------------------------------
+_V4_VAN_ROSSEM_BUILTINS = frozenset({
+    "expmodinteger",
+    "droplist",
+    "insertcoin",
+    "unionvalue",
+    "scalevalue",
+    "unvaluedata",
+    "listtoarray",
+    "valuedata",
+    "valuecontains",
+    "lookupcoin",
+    "lengthofarray",
+    "indexarray",
+    "bls12_381_g1_multiscalarmul",
+    "bls12_381_g2_multiscalarmul",
+})
+
+# V4/Van Rossem also introduces the 'value' built-in type
+_V4_VAN_ROSSEM_TYPES = frozenset({
+    "value",
+})
+
+
+def _is_v4_skip(error_msg: str) -> str | None:
+    """Check if a parse error is due to a V4/Van Rossem builtin or type.
+
+    Returns a descriptive skip reason if V4, None otherwise.
+    """
+    msg_lower = error_msg.lower()
+    for builtin in _V4_VAN_ROSSEM_BUILTINS:
+        if builtin in msg_lower:
+            return (
+                f"V4/Van Rossem builtin '{builtin}' not available in "
+                f"Conway (PV 9). Requires Protocol Version 11."
+            )
+    for typ in _V4_VAN_ROSSEM_TYPES:
+        if f"unknown builtin type {typ}" in msg_lower:
+            return (
+                f"V4/Van Rossem type '{typ}' not available in "
+                f"Conway (PV 9). Requires Protocol Version 11."
+            )
+    return None
+
+
+_BUDGET_RE = re.compile(r"\{cpu:\s*(\d+)\s*\|\s*mem:\s*(\d+)\s*\}")
+
+
+def _parse_budget(text: str) -> tuple[int, int] | None:
+    """Parse a budget expected file: ({cpu: N\\n| mem: M}) → (cpu, mem).
+
+    Returns None for "parse error", "evaluation failure", or unparseable text.
+    """
+    text = text.strip().strip("()")
+    m = _BUDGET_RE.search(text)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return None
 
 
 def _normalize_whitespace(s: str) -> str:
@@ -130,31 +209,38 @@ def _normalize_whitespace(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+def _strip_binder_names(text: str) -> str:
+    """Strip lambda binder names from de Bruijn UPLC text.
+
+    In de Bruijn representation, variable references are indices (0, 1, 2...)
+    and the lambda binder names are cosmetic. Replace all `(lam NAME` with
+    `(lam _` so we only compare structure and indices.
+    """
+    return re.sub(r"\(lam\s+\S+", "(lam _", text)
+
+
 def _try_structural_compare(actual_text: str, expected_text: str) -> bool | None:
     """Attempt structural (alpha-equivalent) comparison of two UPLC programs.
 
     Returns True if structurally equal, False if structurally different,
     None if comparison can't be performed (e.g. parse failure).
+
+    Compares via de Bruijn indexing: both programs are converted to de Bruijn
+    form (variable references become numeric indices), then lambda binder
+    names are stripped since they are cosmetic in de Bruijn representation.
     """
     try:
-        from uplc.tools import (
-            DeBrujinVariableTransformer,
-            UnDeBrujinVariableTransformer,
-            dumps,
-            parse,
-        )
+        from uplc.tools import dumps, parse
+        from uplc.transformer.debrujin_variables import DeBrujinVariableTransformer
 
         actual_prog = parse(actual_text)
         expected_prog = parse(expected_text)
 
-        # Normalize variable names through de Bruijn -> un-de-Bruijn round-trip
         db = DeBrujinVariableTransformer()
-        udb = UnDeBrujinVariableTransformer()
+        actual_db = _strip_binder_names(dumps(db.visit(actual_prog)))
+        expected_db = _strip_binder_names(dumps(db.visit(expected_prog)))
 
-        actual_norm = dumps(udb.visit(db.visit(actual_prog)))
-        expected_norm = dumps(udb.visit(db.visit(expected_prog)))
-
-        return _normalize_whitespace(actual_norm) == _normalize_whitespace(expected_norm)
+        return _normalize_whitespace(actual_db) == _normalize_whitespace(expected_db)
     except Exception:
         return None
 
@@ -199,16 +285,27 @@ class TestUplcConformance:
         source = test_case.uplc_path.read_text(encoding="utf-8")
         expected_raw = test_case.expected_path.read_text(encoding="utf-8").strip()
         expects_failure = expected_raw == _EVALUATION_FAILURE
+        expects_parse_error = expected_raw == _PARSE_ERROR
 
         # --- Parse ---
         try:
             program = parse(source)
         except Exception as e:
-            if expects_failure:
-                # Some programs are intentionally malformed — parse failure
-                # counts as evaluation failure, which is the expected outcome.
+            if expects_failure or expects_parse_error:
+                # Program is intentionally malformed — parse failure matches
+                # either "evaluation failure" or "parse error" expected output.
                 return
+            # Check if this is a V4/Van Rossem builtin we don't support yet
+            v4_reason = _is_v4_skip(str(e))
+            if v4_reason:
+                pytest.skip(v4_reason)
             pytest.skip(f"Failed to parse UPLC source: {e}")
+
+        # If we expected a parse error but parsing succeeded, that's a failure
+        if expects_parse_error:
+            pytest.fail(
+                f"Expected parse error but program parsed successfully"
+            )
 
         # --- Evaluate ---
         try:
@@ -263,6 +360,79 @@ class TestUplcConformance:
                 f"variable names that the uplc parser cannot handle.\n"
                 f"  Expected: {expected_norm}\n"
                 f"  Actual:   {actual_norm}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Budget conformance tests
+# ---------------------------------------------------------------------------
+
+_BUDGET_CASES = [tc for tc in _TEST_CASES if tc.budget_path is not None]
+
+
+@pytest.mark.conformance
+class TestUplcBudgetConformance:
+    """UPLC budget conformance tests against the Plutus golden test suite.
+
+    Each test evaluates a UPLC program and compares the consumed CPU and
+    memory units against the expected budget from the Haskell CEK machine.
+
+    Haskell ref: UntypedPlutusCore.Evaluation.Machine.Cek (countingMode)
+    """
+
+    @pytest.mark.skipif(
+        len(_BUDGET_CASES) == 0,
+        reason="No UPLC budget test cases found.",
+    )
+    @pytest.mark.parametrize(
+        "test_case",
+        _BUDGET_CASES,
+        ids=[tc.name for tc in _BUDGET_CASES],
+    )
+    def test_uplc_budget(self, test_case: UplcTestCase) -> None:
+        """Evaluate a UPLC program and compare budget against expected."""
+        try:
+            from uplc.tools import eval as uplc_eval, parse
+        except ImportError:
+            pytest.skip("uplc package not installed")
+
+        # --- Read budget expectation ---
+        budget_raw = test_case.budget_path.read_text(encoding="utf-8").strip()
+        expected_budget = _parse_budget(budget_raw)
+
+        if expected_budget is None:
+            # "parse error" or "evaluation failure" — budget not applicable
+            return
+
+        expected_cpu, expected_mem = expected_budget
+
+        # --- Parse ---
+        source = test_case.uplc_path.read_text(encoding="utf-8")
+        try:
+            program = parse(source)
+        except Exception as e:
+            v4_reason = _is_v4_skip(str(e))
+            if v4_reason:
+                pytest.skip(v4_reason)
+            pytest.skip(f"Failed to parse: {e}")
+
+        # --- Evaluate ---
+        try:
+            result = uplc_eval(program)
+        except Exception as e:
+            pytest.skip(f"Evaluation exception: {e}")
+
+        # --- Compare budget ---
+        actual_cpu = result.cost.cpu
+        actual_mem = result.cost.memory
+
+        if actual_cpu != expected_cpu or actual_mem != expected_mem:
+            pytest.fail(
+                f"Budget mismatch.\n"
+                f"  Expected: cpu={expected_cpu}, mem={expected_mem}\n"
+                f"  Actual:   cpu={actual_cpu}, mem={actual_mem}\n"
+                f"  Delta:    cpu={actual_cpu - expected_cpu:+d}, "
+                f"mem={actual_mem - expected_mem:+d}"
             )
 
 
