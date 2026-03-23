@@ -14,6 +14,7 @@ RUN apt-get update && \
         libtool \
         git \
         curl \
+        libsecp256k1-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Rust toolchain (needed by pycardano/pyblst dependencies)
@@ -27,6 +28,8 @@ COPY pyproject.toml uv.lock README.md ./
 COPY packages/ packages/
 COPY src/ src/
 COPY vendor/libsodium-iog/ vendor/libsodium-iog/
+COPY vendor/uplc/ vendor/uplc/
+COPY conftest.py ./
 
 # Install all Python dependencies
 RUN uv sync --frozen --no-dev 2>/dev/null || uv sync --no-dev || true
@@ -49,8 +52,11 @@ RUN cd packages/vibe-cardano && \
 FROM python:3.14-slim
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libffi-dev && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        libffi-dev \
+        libsecp256k1-2 \
+    && rm -rf /var/lib/apt/lists/*
+
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
@@ -62,5 +68,6 @@ COPY --from=builder /app /app
 # Verify VRF works in the runtime image
 RUN uv run python -c "from vibe.cardano.crypto.vrf import HAS_VRF_NATIVE; assert HAS_VRF_NATIVE; print('VRF native OK')"
 
-ENTRYPOINT ["uv", "run", "python", "-m", "vibe.cardano.node"]
+# Auto-detect libsecp256k1 and start the node
+ENTRYPOINT ["/bin/sh", "-c", "export PYSECP_SO=$(find /usr/lib -name 'libsecp256k1.so*' -type f 2>/dev/null | head -1); exec uv run python -m vibe.cardano.node"]
 EXPOSE 3001
