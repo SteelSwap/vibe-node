@@ -1,0 +1,86 @@
+# Dockerfile for vibe-node preview testnet sync benchmark
+# Based on infra/devnet/Dockerfile.vibe-node — same build, preview-specific entrypoint
+#
+# Usage:
+#   docker compose -f docker-compose.preview-sync.yml build
+#   docker compose -f docker-compose.preview-sync.yml up -d
+
+# ── Stage 1: Build everything ────────────────────────────────────────
+FROM python:3.14-slim AS builder
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        libffi-dev \
+        cmake \
+        autoconf \
+        automake \
+        libtool \
+        git \
+        curl \
+        libsecp256k1-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Rust toolchain (needed by pycardano/pyblst dependencies)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+COPY pyproject.toml uv.lock README.md ./
+COPY packages/ packages/
+COPY src/ src/
+COPY vendor/libsodium-iog/ vendor/libsodium-iog/
+COPY vendor/uplc/ vendor/uplc/
+COPY conftest.py ./
+
+# Install all Python dependencies (including psutil for metrics capture)
+RUN uv sync --frozen --no-dev 2>/dev/null || uv sync --no-dev || true
+RUN uv pip install psutil
+
+# Build VRF native extension (IOG libsodium fork + pybind11)
+RUN cd packages/vibe-cardano && \
+    uv pip install pybind11 cmake && \
+    PYBIND11_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())") && \
+    PYTHON_EXE=$(uv run python -c "import sys; print(sys.executable)") && \
+    cmake -B build -DCMAKE_BUILD_TYPE=Release \
+        -Dpybind11_DIR="$PYBIND11_DIR" \
+        -DPYTHON_EXECUTABLE="$PYTHON_EXE" && \
+    cmake --build build -j$(nproc) && \
+    CRYPTO_DIR=$(uv run python -c "import vibe.cardano.crypto; import os; print(os.path.dirname(vibe.cardano.crypto.__file__))") && \
+    cp build/_vrf_native*.so "$CRYPTO_DIR/" && \
+    uv run python -c "from vibe.cardano.crypto.vrf import HAS_VRF_NATIVE; assert HAS_VRF_NATIVE" && \
+    rm -rf build packages/vibe-cardano/build vendor/libsodium-iog
+
+# ── Stage 2: Slim runtime (copy venv from builder) ───────────────────
+FROM python:3.14-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libffi-dev \
+        libsecp256k1-2 \
+        procps \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Copy the entire app + installed venv from builder
+COPY --from=builder /app /app
+
+# Copy metrics capture script into the image
+COPY scripts/capture-metrics.py /app/scripts/capture-metrics.py
+
+# Verify VRF works in the runtime image
+RUN uv run python -c "from vibe.cardano.crypto.vrf import HAS_VRF_NATIVE; assert HAS_VRF_NATIVE; print('VRF native OK')"
+
+# Preview network config
+ENV VIBE_NETWORK_MAGIC=2
+ENV VIBE_PEERS="relays-new.cardano-testnet.iohkdev.io:3001"
+ENV VIBE_DATA_DIR="/data"
+
+# Auto-detect libsecp256k1 and start the node
+ENTRYPOINT ["/bin/sh", "-c", "export PYSECP_SO=$(find /usr/lib -name 'libsecp256k1.so*' -type f 2>/dev/null | head -1); exec uv run python -m vibe.cardano.node"]
+EXPOSE 3001

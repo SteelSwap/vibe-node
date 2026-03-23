@@ -1,0 +1,4 @@
+# Benchmark results (generated at runtime, not committed)
+results/*.json
+results/*.tmp
+!results/.gitkeep
