@@ -77,6 +77,7 @@ class UplcTestCase(NamedTuple):
     name: str
     uplc_path: Path
     expected_path: Path
+    budget_path: Path | None = None
 
 
 def _discover_test_cases(limit: int = 0) -> list[UplcTestCase]:
@@ -105,7 +106,13 @@ def _discover_test_cases(limit: int = 0) -> list[UplcTestCase]:
         rel = uplc_file.relative_to(_CONFORMANCE_DIR)
         name = str(rel.with_suffix("")).replace("/", "::")
 
-        cases.append(UplcTestCase(name=name, uplc_path=uplc_file, expected_path=expected_file))
+        budget_file = uplc_file.with_suffix(".uplc.budget.expected")
+        cases.append(UplcTestCase(
+            name=name,
+            uplc_path=uplc_file,
+            expected_path=expected_file,
+            budget_path=budget_file if budget_file.exists() else None,
+        ))
 
         if 0 < limit <= len(cases):
             break
@@ -179,6 +186,21 @@ def _is_v4_skip(error_msg: str) -> str | None:
                 f"V4/Van Rossem type '{typ}' not available in "
                 f"Conway (PV 9). Requires Protocol Version 11."
             )
+    return None
+
+
+_BUDGET_RE = re.compile(r"\{cpu:\s*(\d+)\s*\|\s*mem:\s*(\d+)\s*\}")
+
+
+def _parse_budget(text: str) -> tuple[int, int] | None:
+    """Parse a budget expected file: ({cpu: N\\n| mem: M}) → (cpu, mem).
+
+    Returns None for "parse error", "evaluation failure", or unparseable text.
+    """
+    text = text.strip().strip("()")
+    m = _BUDGET_RE.search(text)
+    if m:
+        return int(m.group(1)), int(m.group(2))
     return None
 
 
@@ -338,6 +360,79 @@ class TestUplcConformance:
                 f"variable names that the uplc parser cannot handle.\n"
                 f"  Expected: {expected_norm}\n"
                 f"  Actual:   {actual_norm}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Budget conformance tests
+# ---------------------------------------------------------------------------
+
+_BUDGET_CASES = [tc for tc in _TEST_CASES if tc.budget_path is not None]
+
+
+@pytest.mark.conformance
+class TestUplcBudgetConformance:
+    """UPLC budget conformance tests against the Plutus golden test suite.
+
+    Each test evaluates a UPLC program and compares the consumed CPU and
+    memory units against the expected budget from the Haskell CEK machine.
+
+    Haskell ref: UntypedPlutusCore.Evaluation.Machine.Cek (countingMode)
+    """
+
+    @pytest.mark.skipif(
+        len(_BUDGET_CASES) == 0,
+        reason="No UPLC budget test cases found.",
+    )
+    @pytest.mark.parametrize(
+        "test_case",
+        _BUDGET_CASES,
+        ids=[tc.name for tc in _BUDGET_CASES],
+    )
+    def test_uplc_budget(self, test_case: UplcTestCase) -> None:
+        """Evaluate a UPLC program and compare budget against expected."""
+        try:
+            from uplc.tools import eval as uplc_eval, parse
+        except ImportError:
+            pytest.skip("uplc package not installed")
+
+        # --- Read budget expectation ---
+        budget_raw = test_case.budget_path.read_text(encoding="utf-8").strip()
+        expected_budget = _parse_budget(budget_raw)
+
+        if expected_budget is None:
+            # "parse error" or "evaluation failure" — budget not applicable
+            return
+
+        expected_cpu, expected_mem = expected_budget
+
+        # --- Parse ---
+        source = test_case.uplc_path.read_text(encoding="utf-8")
+        try:
+            program = parse(source)
+        except Exception as e:
+            v4_reason = _is_v4_skip(str(e))
+            if v4_reason:
+                pytest.skip(v4_reason)
+            pytest.skip(f"Failed to parse: {e}")
+
+        # --- Evaluate ---
+        try:
+            result = uplc_eval(program)
+        except Exception as e:
+            pytest.skip(f"Evaluation exception: {e}")
+
+        # --- Compare budget ---
+        actual_cpu = result.cost.cpu
+        actual_mem = result.cost.memory
+
+        if actual_cpu != expected_cpu or actual_mem != expected_mem:
+            pytest.fail(
+                f"Budget mismatch.\n"
+                f"  Expected: cpu={expected_cpu}, mem={expected_mem}\n"
+                f"  Actual:   cpu={actual_cpu}, mem={actual_mem}\n"
+                f"  Delta:    cpu={actual_cpu - expected_cpu:+d}, "
+                f"mem={actual_mem - expected_mem:+d}"
             )
 
 
