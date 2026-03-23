@@ -3341,16 +3341,13 @@ requires-dist = [
     { name = "frozendict", specifier = ">=2.3.8" },
     { name = "frozenlist2", specifier = ">=1.0.0" },
     { name = "pyblst", specifier = ">=0.3.14" },
-    { name = "pyblst", marker = "extra == 'crypto'", specifier = ">=0.3.0" },
     { name = "pycardano", specifier = ">=0.9.0" },
     { name = "pycryptodome", specifier = ">=3.21.0" },
     { name = "pynacl", specifier = ">=1.6.0" },
-    { name = "pysecp256k1", marker = "extra == 'crypto'", specifier = ">=0.14.0" },
     { name = "python-secp256k1-cardano", specifier = ">=0.2.4" },
     { name = "regex", specifier = ">=2025.9.18" },
     { name = "rply", specifier = ">=0.7.8" },
 ]
-provides-extras = ["crypto"]
 
 [package.metadata.requires-dev]
 dev = [

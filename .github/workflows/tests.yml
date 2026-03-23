@@ -25,8 +25,11 @@ jobs:
       - name: Pin Python 3.14 for this project
         run: uv python pin 3.14
 
-      - name: Install system dependencies (libsodium build)
-        run: sudo apt-get update && sudo apt-get install -y build-essential autoconf automake libtool cmake
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            build-essential autoconf automake libtool cmake \
+            libsecp256k1-dev
 
       - name: Install dependencies
         run: uv sync --dev
@@ -47,6 +50,16 @@ jobs:
           ls -la "$CRYPTO_DIR"/_vrf_native*
           # Verify it loads
           uv run python -c "from vibe.cardano.crypto.vrf import HAS_VRF_NATIVE; print(f'HAS_VRF_NATIVE={HAS_VRF_NATIVE}'); assert HAS_VRF_NATIVE, 'VRF native extension not loaded'"
+
+      - name: Set PYSECP_SO for pysecp256k1
+        run: |
+          SECP_PATH=$(find /usr/lib -name "libsecp256k1.so*" -type f | head -1)
+          if [ -n "$SECP_PATH" ]; then
+            echo "PYSECP_SO=$SECP_PATH" >> $GITHUB_ENV
+            echo "Found libsecp256k1 at: $SECP_PATH"
+          else
+            echo "WARNING: libsecp256k1 not found"
+          fi
 
       - name: Run tests
         run: uv run pytest -n auto -v --tb=short -p no:sugar -p no:benchmark --timeout=60
