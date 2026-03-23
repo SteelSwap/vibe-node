@@ -16,15 +16,14 @@ Haskell reference:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from dataclasses import dataclass, field
 from typing import Any
 
 from vibe.cardano.consensus.nonce import (
     EpochNonce,
-    accumulate_vrf_output,
-    evolve_nonce,
-    is_in_stability_window,
+    stability_window,
 )
 from vibe.cardano.ledger.delegation import (
     DelegationState,
@@ -63,6 +62,136 @@ class BlockEntry:
     block_cbor: bytes  # Full block for block-fetch
 
 
+class ChainFollower:
+    """Per-client chain-sync state machine.
+
+    Tracks a client's read position on the chain and handles fork
+    switches that invalidate that position.
+
+    Each connected chain-sync client gets its own ChainFollower instance
+    from NodeKernel.new_follower(). The follower is driven by the
+    chain-sync server calling instruction() in a loop.
+
+    Haskell reference:
+        Ouroboros.Consensus.MiniProtocol.ChainSync.Server
+        (the follower / cursor abstraction used per client connection)
+    """
+
+    def __init__(self, follower_id: int, kernel: "NodeKernel") -> None:
+        self.id = follower_id
+        self._kernel = kernel
+        self.client_point: PointOrOrigin = ORIGIN
+        self._pending_rollback: Point | None = None
+
+    def notify_fork_switch(
+        self, removed_hashes: set[bytes], intersection_point: Point
+    ) -> None:
+        """Notify this follower that a fork switch has occurred.
+
+        If the client's current read position was on the removed fork,
+        schedule a rollback to the intersection point.
+
+        Args:
+            removed_hashes: Set of block hashes that were removed.
+            intersection_point: The deepest point shared by both forks.
+        """
+        if (
+            isinstance(self.client_point, Point)
+            and self.client_point.hash in removed_hashes
+        ):
+            self._pending_rollback = intersection_point
+
+    async def find_intersect(
+        self, points: list[PointOrOrigin]
+    ) -> tuple[PointOrOrigin | None, Tip]:
+        """Find the best intersection point and update client_point.
+
+        Args:
+            points: List of points to search for, in order of preference.
+
+        Returns:
+            (intersect_point, tip) where intersect_point is the best
+            match found, or None if no intersection was found.
+        """
+        kernel = self._kernel
+        tip = kernel._tip or kernel._genesis_tip()
+
+        for point in points:
+            if point is ORIGIN or point == ORIGIN:
+                self.client_point = ORIGIN
+                return ORIGIN, tip
+            if isinstance(point, Point) and point.hash in kernel._hash_index:
+                self.client_point = point
+                return point, tip
+
+        # No intersection — reset to Origin
+        self.client_point = ORIGIN
+        return None, tip
+
+    async def instruction(
+        self,
+    ) -> tuple[str, bytes | None, PointOrOrigin | None, Tip]:
+        """Get the next instruction for the chain-sync client.
+
+        Returns one of:
+            ("roll_backward", None, rollback_point, tip)
+            ("roll_forward", header_cbor, point, tip)
+            ("await", None, None, tip)
+        """
+        kernel = self._kernel
+        tip = kernel._tip or kernel._genesis_tip()
+
+        # Pending rollback takes priority
+        if self._pending_rollback is not None:
+            rollback_point = self._pending_rollback
+            self._pending_rollback = None
+            self.client_point = rollback_point
+            return ("roll_backward", None, rollback_point, tip)
+
+        # Find the next block after client_point
+        if self.client_point is ORIGIN or self.client_point == ORIGIN:
+            next_idx = 0
+        elif isinstance(self.client_point, Point):
+            idx = kernel._hash_index.get(self.client_point.hash)
+            if idx is not None:
+                next_idx = idx + 1
+            else:
+                # Client's point was pruned — roll back to start
+                if kernel._chain:
+                    rollback_point = Point(
+                        slot=kernel._chain[0].slot,
+                        hash=kernel._chain[0].block_hash,
+                    )
+                    self.client_point = rollback_point
+                    return ("roll_backward", None, rollback_point, tip)
+                self.client_point = ORIGIN
+                return ("roll_backward", None, ORIGIN, tip)
+        else:
+            next_idx = 0
+
+        if next_idx < len(kernel._chain):
+            entry = kernel._chain[next_idx]
+            point = Point(slot=entry.slot, hash=entry.block_hash)
+            self.client_point = point
+            return ("roll_forward", entry.header_cbor, point, tip)
+
+        # At tip — wait for new blocks
+        try:
+            await asyncio.wait_for(kernel.tip_changed.wait(), timeout=0.5)
+        except TimeoutError:
+            pass
+
+        # Re-check after wake or timeout
+        tip = kernel._tip or kernel._genesis_tip()
+        if next_idx < len(kernel._chain):
+            entry = kernel._chain[next_idx]
+            point = Point(slot=entry.slot, hash=entry.block_hash)
+            self.client_point = point
+            return ("roll_forward", entry.header_cbor, point, tip)
+
+        return ("await", None, None, tip)
+
+
 class NodeKernel(ChainProvider, BlockProvider):
     """Shared node state — implements ChainProvider and BlockProvider.
 
@@ -83,11 +212,20 @@ class NodeKernel(ChainProvider, BlockProvider):
         self._tip: Tip | None = None
         # Event set whenever tip changes (wakes chain-sync servers)
         self.tip_changed: asyncio.Event = asyncio.Event()
-        # Epoch nonce tracking
+        # Per-client chain followers
+        self._followers: dict[int, ChainFollower] = {}
+        self._next_follower_id: int = 0
+        # Praos chain-dependent state — full 5-nonce model
+        # Haskell ref: PraosState in Ouroboros.Consensus.Protocol.Praos
         self._epoch_nonce: EpochNonce = EpochNonce(value=b"\x00" * 32)
-        self._eta_v: bytes = b"\x00" * 32
+        self._evolving_nonce: bytes = b"\x00" * 32      # Running VRF accumulation
+        self._candidate_nonce: bytes = b"\x00" * 32      # Frozen after stability window
+        self._lab_nonce: bytes = b"\x00" * 32             # prevHashToNonce of last applied block
+        self._last_epoch_block_nonce: bytes = b"\x00" * 32  # labNonce carried across epoch boundary
         self._current_epoch: int = 0
         self._epoch_length: int = 432000
+        self._security_param: int = 2160
+        self._active_slot_coeff: float = 0.05
         # Delegation state tracking
         self._delegation_state: DelegationState = DelegationState()
         # Protocol parameters
@@ -182,27 +320,115 @@ class NodeKernel(ChainProvider, BlockProvider):
         if count:
             logger.info("Applied %d protocol parameter updates", count, extra={"event": "params.updated", "update_count": count})
 
-    def init_nonce(self, genesis_hash: bytes, epoch_length: int) -> None:
-        """Seed the epoch nonce from the genesis hash."""
-        self._epoch_nonce = EpochNonce(value=genesis_hash)
-        self._eta_v = genesis_hash
-        self._epoch_length = epoch_length
-        logger.info("Epoch nonce initialised (epoch_length=%d)", epoch_length, extra={"event": "nonce.init", "nonce": genesis_hash.hex()[:16], "epoch_length": epoch_length})
+    def init_nonce(
+        self,
+        genesis_hash: bytes,
+        epoch_length: int,
+        security_param: int = 2160,
+        active_slot_coeff: float = 0.05,
+    ) -> None:
+        """Seed the Praos chain-dependent state from the genesis hash.
 
-    def on_block_vrf_output(self, slot: int, epoch_start_slot: int, vrf_output: bytes) -> None:
-        """Accumulate VRF output from a block within the stability window."""
-        if is_in_stability_window(slot, epoch_start_slot, self._epoch_length):
-            self._eta_v = accumulate_vrf_output(self._eta_v, vrf_output)
+        Haskell ref: translateChainDepStateByronToShelley sets the initial
+        epoch nonce from tpraosInitialNonce (= shelley genesis hash).
+        All other nonce values start as NeutralNonce.
+        """
+        self._epoch_nonce = EpochNonce(value=genesis_hash)
+        self._evolving_nonce = genesis_hash
+        self._candidate_nonce = genesis_hash
+        self._lab_nonce = b"\x00" * 32             # NeutralNonce
+        self._last_epoch_block_nonce = b"\x00" * 32  # NeutralNonce
+        self._epoch_length = epoch_length
+        self._security_param = security_param
+        self._active_slot_coeff = active_slot_coeff
+        logger.info("Epoch nonce initialised (epoch_length=%d, k=%d, f=%.4f)", epoch_length, security_param, active_slot_coeff, extra={"event": "nonce.init", "nonce": genesis_hash.hex()[:16], "epoch_length": epoch_length})
+
+    def _combine_nonces(self, a: bytes, b: bytes) -> bytes:
+        """Combine two nonces with the ⭒ operator.
+
+        Haskell ref: (⭒) in Cardano.Ledger.BaseTypes
+            NeutralNonce ⭒ x = x
+            x ⭒ NeutralNonce = x
+            Nonce a ⭒ Nonce b = Nonce (hash(a || b))
+        """
+        neutral = b"\x00" * 32
+        if a == neutral:
+            return b
+        if b == neutral:
+            return a
+        return hashlib.blake2b(a + b, digest_size=32).digest()
+
+    def on_block(self, slot: int, prev_hash: bytes, vrf_output: bytes) -> None:
+        """Update Praos chain-dependent state for a received/forged block.
+
+        Implements reupdateChainDepState from Praos.hs:
+        1. evolvingNonce = evolvingNonce ⭒ vrfNonce
+        2. candidateNonce = evolvingNonce if in stability window, else frozen
+        3. labNonce = prevHashToNonce(prevHash)
+
+        Args:
+            slot: Block's slot number.
+            prev_hash: Block's predecessor hash (32 bytes).
+            vrf_output: Block's VRF output (64 bytes from header).
+        """
+        epoch_len = self._epoch_length
+        if epoch_len <= 0:
+            return
+
+        # vrfNonce = vrfNonceValue = blake2b_256(blake2b_256("N" || vrf_output))
+        # Haskell ref: vrfNonceValue in Praos/VRF.hs — double hash with "N" prefix
+        from vibe.cardano.crypto.vrf import vrf_nonce_value
+        vrf_nonce = vrf_nonce_value(vrf_output)
+
+        # evolvingNonce = evolvingNonce ⭒ vrfNonce
+        self._evolving_nonce = self._combine_nonces(
+            self._evolving_nonce, vrf_nonce,
+        )
+
+        # candidateNonce: freeze after stability window
+        # Haskell: if slot + stabilityWindow < firstSlotNextEpoch
+        #          then evolvingNonce else candidateNonce
+        block_epoch = slot // epoch_len
+        first_slot_next_epoch = (block_epoch + 1) * epoch_len
+        stab_window = stability_window(
+            epoch_len, self._security_param, self._active_slot_coeff,
+        )
+        if slot + stab_window < first_slot_next_epoch:
+            self._candidate_nonce = self._evolving_nonce
+
+        # labNonce = prevHashToNonce(prevHash)
+        # Haskell: prevHashToNonce just wraps the hash as a Nonce
+        self._lab_nonce = prev_hash
 
     def on_epoch_boundary(self, new_epoch: int, extra_entropy: bytes | None = None) -> None:
-        """Evolve the epoch nonce at an epoch transition."""
+        """Evolve the epoch nonce at an epoch transition.
+
+        Implements tickChainDepState from Praos.hs:
+            epochNonce = candidateNonce ⭒ lastEpochBlockNonce
+            lastEpochBlockNonce = labNonce
+
+        Haskell ref: tickChainDepState in Ouroboros.Consensus.Protocol.Praos
+        """
         if new_epoch <= self._current_epoch:
             return
-        old_nonce = self._epoch_nonce
-        self._epoch_nonce = evolve_nonce(old_nonce, self._eta_v, extra_entropy)
-        self._eta_v = b"\x00" * 32
+
+        # epochNonce = candidateNonce ⭒ lastEpochBlockNonce
+        new_nonce_bytes = self._combine_nonces(
+            self._candidate_nonce, self._last_epoch_block_nonce,
+        )
+        if extra_entropy is not None:
+            new_nonce_bytes = self._combine_nonces(
+                new_nonce_bytes, extra_entropy,
+            )
+
+        old_epoch = self._current_epoch
+        self._epoch_nonce = EpochNonce(value=new_nonce_bytes)
+
+        # lastEpochBlockNonce = labNonce (carry forward)
+        self._last_epoch_block_nonce = self._lab_nonce
+
         self._current_epoch = new_epoch
-        logger.info("Epoch transition %d -> %d", new_epoch - 1, new_epoch, extra={"event": "epoch.transition", "from_epoch": new_epoch - 1, "to_epoch": new_epoch})
+        logger.info("Epoch transition %d -> %d (nonce=%s)", old_epoch, new_epoch, new_nonce_bytes.hex()[:16], extra={"event": "epoch.transition", "from_epoch": old_epoch, "to_epoch": new_epoch})
 
     def add_block(
         self,
@@ -239,10 +465,12 @@ class NodeKernel(ChainProvider, BlockProvider):
         if is_forged:
             # Forged blocks: must extend current tip.
             if self._chain and predecessor_hash != self._chain[-1].block_hash:
-                logger.debug(
+                logger.warning(
                     "NodeKernel: skipping forged block #%d slot=%d "
-                    "(doesn't extend tip)",
+                    "(doesn't extend tip: pred=%s, tip=%s)",
                     block_number, slot,
+                    predecessor_hash.hex()[:16],
+                    self._chain[-1].block_hash.hex()[:16],
                 )
                 return
 
@@ -262,6 +490,11 @@ class NodeKernel(ChainProvider, BlockProvider):
                 fork_idx = self._hash_index.get(predecessor_hash)
                 if fork_idx is not None:
                     removed = self._chain[fork_idx + 1:]
+                    intersection_point = Point(
+                        slot=self._chain[fork_idx].slot,
+                        hash=self._chain[fork_idx].block_hash,
+                    )
+                    self._notify_fork_switch(removed, intersection_point)
                     for r in removed:
                         self._hash_index.pop(r.block_hash, None)
                     self._chain = self._chain[:fork_idx + 1]
@@ -282,6 +515,11 @@ class NodeKernel(ChainProvider, BlockProvider):
                 fork_idx = self._hash_index.get(predecessor_hash)
                 if fork_idx is not None:
                     removed = self._chain[fork_idx + 1:]
+                    intersection_point = Point(
+                        slot=self._chain[fork_idx].slot,
+                        hash=self._chain[fork_idx].block_hash,
+                    )
+                    self._notify_fork_switch(removed, intersection_point)
                     for r in removed:
                         self._hash_index.pop(r.block_hash, None)
                     self._chain = self._chain[:fork_idx + 1]
@@ -314,6 +552,48 @@ class NodeKernel(ChainProvider, BlockProvider):
     def _genesis_tip(self) -> Tip:
         """Return a genesis tip when the chain is empty."""
         return Tip(point=Point(slot=0, hash=b"\x00" * 32), block_number=0)
+
+    # --- Follower registry ---
+
+    def new_follower(self) -> ChainFollower:
+        """Create and register a new chain-sync follower.
+
+        Returns:
+            A new ChainFollower starting at Origin.
+        """
+        follower_id = self._next_follower_id
+        self._next_follower_id += 1
+        follower = ChainFollower(follower_id=follower_id, kernel=self)
+        self._followers[follower_id] = follower
+        logger.debug("ChainFollower %d created", follower_id)
+        return follower
+
+    def close_follower(self, follower_id: int) -> None:
+        """Remove a follower from the registry.
+
+        Args:
+            follower_id: The ID of the follower to remove.
+        """
+        self._followers.pop(follower_id, None)
+        logger.debug("ChainFollower %d closed", follower_id)
+
+    def _notify_fork_switch(
+        self, removed: list[BlockEntry], intersection_point: Point
+    ) -> None:
+        """Notify all followers of a fork switch.
+
+        Called internally when add_block() performs a chain fork switch.
+        Any follower whose client_point is on the removed chain will
+        be given a pending rollback to the intersection_point.
+
+        Args:
+            removed: List of BlockEntry items that were removed from the chain.
+            intersection_point: The deepest point shared by both the old and
+                new forks (the fork point itself, not a removed block).
+        """
+        removed_hashes = {entry.block_hash for entry in removed}
+        for follower in self._followers.values():
+            follower.notify_fork_switch(removed_hashes, intersection_point)
 
     # --- ChainProvider interface ---
 
@@ -351,7 +631,16 @@ class NodeKernel(ChainProvider, BlockProvider):
             if idx is not None:
                 next_idx = idx + 1
             else:
-                # Client's point not in our chain — roll back to Origin
+                # Client's point not in our chain (fork switch removed it).
+                # Find the deepest block in our chain whose predecessor
+                # matches something the client might have, or roll back to
+                # the start of our chain. This avoids full re-sync to Origin.
+                if self._chain:
+                    rollback_point = Point(
+                        slot=self._chain[0].slot,
+                        hash=self._chain[0].block_hash,
+                    )
+                    return ("roll_backward", None, rollback_point, tip)
                 return ("roll_backward", None, ORIGIN, tip)
         else:
             next_idx = 0
