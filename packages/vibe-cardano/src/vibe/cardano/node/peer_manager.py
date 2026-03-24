@@ -346,40 +346,6 @@ class PeerManager:
         node_kernel = self._node_kernel
         _headers_received = 0
 
-        async def _process_header(
-            slot: int, blk_hash: bytes, prev_hash: bytes,
-            block_number: int, header: object, vrf_output: bytes | None,
-        ) -> None:
-            """Process a header optimistically — update ChainDB tip.
-
-            Runs as a fire-and-forget task so it doesn't block the
-            chain-sync protocol. The block body will be stored later
-            when block-fetch delivers it.
-            """
-            try:
-                era_tag = header[0] if isinstance(header, (list, tuple)) else 0
-                header_cbor_wrapped = [
-                    max(0, era_tag - 1) if era_tag >= 2 else 0,
-                    header[1] if isinstance(header, (list, tuple)) else header,
-                ]
-                result = await chain_db.add_block(
-                    slot=slot,
-                    block_hash=blk_hash,
-                    predecessor_hash=prev_hash,
-                    block_number=block_number,
-                    cbor_bytes=b"",  # Body not yet fetched
-                    header_cbor=header_cbor_wrapped,
-                    vrf_output=vrf_output,
-                )
-                if result.adopted:
-                    if self._block_received_event is not None:
-                        self._block_received_event.set()
-                    # NOTE: Don't update nonces here — header-only blocks
-                    # may be replaced by VRF tiebreak. Nonce update happens
-                    # in _on_block when the full body is confirmed.
-            except Exception as exc:
-                logger.debug("Header process error at slot %d: %s", slot, exc)
-
         async def _on_roll_forward(header: object, tip: object) -> None:
             nonlocal _headers_received
             _headers_received += 1
@@ -412,21 +378,7 @@ class PeerManager:
 
                     point = Point(slot=slot, hash=blk_hash)
 
-                    # Optimistic tip update from header — fire and forget.
-                    # Don't await: the chain-sync protocol must continue
-                    # processing headers without blocking.
-                    block_number = getattr(hdr, 'block_number', None)
-                    prev_hash_hdr = getattr(hdr, 'prev_hash', None) or b"\x00" * 32
-                    vrf_out_hdr = getattr(hdr, 'vrf_output', None)
-                    if chain_db is not None and block_number is not None:
-                        asyncio.create_task(
-                            _process_header(
-                                slot, blk_hash, prev_hash_hdr,
-                                block_number, header, vrf_out_hdr,
-                            )
-                        )
-
-                    # Queue for block-fetch (still need the body)
+                    # Queue for block-fetch
                     try:
                         fetch_queue.put_nowait(point)
                     except asyncio.QueueFull:
@@ -634,20 +586,8 @@ class PeerManager:
                                     peer.address, slot, exc,
                                 )
 
-                    # --- Store block in ChainDB ---
-                    # The header may have already been processed optimistically
-                    # in _process_header (fire-and-forget from chain-sync).
-                    # Here we store the full block body and re-run chain selection.
+                    # --- Store in ChainDB (includes chain selection + follower notification) ---
                     if chain_db is not None:
-                        # Always store body in VolatileDB (replaces empty placeholder)
-                        await chain_db.volatile_db.add_block(
-                            block_hash=block_hash,
-                            slot=slot,
-                            predecessor_hash=prev_hash,
-                            block_number=block_number,
-                            cbor_bytes=raw_block,
-                        )
-
                         header_cbor_wrapped = [
                             max(0, era_tag - 1) if era_tag >= 2 else 0,
                             cbor2.CBORTag(24, hdr_cbor),
