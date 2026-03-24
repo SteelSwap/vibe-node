@@ -79,8 +79,26 @@ markers = [
     "tcp: TCP socket tests — real localhost connections, may timeout in CI",
 ]
 
+[tool.ruff]
+line-length = 99
+target-version = "py314"
+exclude = ["vendor/", ".venv/", "build/", "dist/", "*.egg-info"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "W"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["vibe"]
+
+[tool.black]
+line-length = 99
+target-version = ["py314"]
+exclude = "vendor/|.venv/|build/"
+
 [dependency-groups]
 dev = [
+    "black>=26.3.1",
     "bump-my-version>=1.2.7",
     "cbor2pure>=5.8.0",
     "hypothesis>=6.130.0",
@@ -93,5 +111,6 @@ dev = [
     "pytest-sugar>=1.0.0",
     "pytest-timeout>=2.4.0",
     "pytest-xdist>=3.5.0",
+    "ruff>=0.15.7",
     "websockets>=15.0",
 ]
