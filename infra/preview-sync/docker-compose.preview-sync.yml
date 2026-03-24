@@ -1,0 +1,72 @@
+# vibe-node preview testnet sync benchmark
+#
+# Runs vibe-node against the public preview testnet to measure sync performance.
+# A metrics sidecar captures RSS, block height, and timing data periodically.
+#
+# Usage:
+#   docker compose -f docker-compose.preview-sync.yml build
+#   docker compose -f docker-compose.preview-sync.yml up -d
+#   docker compose -f docker-compose.preview-sync.yml logs -f metrics-capture
+#
+# Results are written to the ./results/ bind mount as JSON.
+
+services:
+  # ─── Vibe Node (Preview Sync) ─────────────────────────────────────
+  vibe-node:
+    build:
+      context: ../..
+      dockerfile: infra/preview-sync/Dockerfile.preview-sync
+    environment:
+      VIBE_NETWORK_MAGIC: "2"
+      VIBE_PEERS: "relays-new.cardano-testnet.iohkdev.io:3001"
+      VIBE_DATA_DIR: "/data"
+    volumes:
+      - vibe-preview-data:/data
+    ports:
+      - "${VIBE_NODE_PORT:-30010}:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'print(\"ok\")'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks:
+      - preview-sync
+    restart: unless-stopped
+
+  # ─── Metrics Capture Sidecar ──────────────────────────────────────
+  # Monitors vibe-node via /proc and writes periodic snapshots to JSON.
+  metrics-capture:
+    build:
+      context: ../..
+      dockerfile: infra/preview-sync/Dockerfile.preview-sync
+    entrypoint: ["uv", "run", "python", "/app/scripts/capture-metrics.py"]
+    environment:
+      # Target process name to monitor (matches vibe.cardano.node)
+      METRICS_TARGET: "vibe.cardano.node"
+      # How often to sample (seconds)
+      METRICS_INTERVAL: "${METRICS_INTERVAL:-30}"
+      # Output file path
+      METRICS_OUTPUT: "/results/vibe-node-metrics.json"
+      # Node type label
+      METRICS_NODE_TYPE: "vibe-node"
+      # Connect to vibe-node to query chain tip
+      METRICS_NODE_HOST: "vibe-node"
+      METRICS_NODE_PORT: "3001"
+      METRICS_NETWORK_MAGIC: "2"
+    volumes:
+      - ./results:/results
+    pid: "service:vibe-node"
+    depends_on:
+      vibe-node:
+        condition: service_started
+    networks:
+      - preview-sync
+    restart: unless-stopped
+
+networks:
+  preview-sync:
+    driver: bridge
+
+volumes:
+  vibe-preview-data:

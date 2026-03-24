@@ -63,6 +63,24 @@ This is not just a node — it's a public education in vibe coding with extreme 
 | Lookup latency | 0.70 us/op |
 | Parse throughput | 15,208 blocks/s |
 
+### Preview Full Sync Benchmark
+
+Infrastructure for benchmarking full preview testnet sync against the Haskell cardano-node. See [benchmark methodology](docs/development/preview-sync-benchmark.md) for details.
+
+```bash
+# Sync vibe-node against preview testnet with metrics capture
+./scripts/run-sync-benchmark.sh --interval 30
+
+# Sync Haskell node for comparison
+./scripts/run-haskell-sync-benchmark.sh --interval 30
+
+# Analyze and compare results
+python scripts/analyze-sync-results.py \
+    --vibe infra/preview-sync/results/vibe-node-metrics.json \
+    --haskell infra/preview-sync/results/haskell-node-metrics.json \
+    --output benchmarks/preview-sync/
+```
+
 ## Quick Start
 
 ```bash
@@ -97,7 +115,8 @@ vibe-node monorepo (uv workspace)
 ├── vendor/
 │   └── libsodium-iog/    # IOG libsodium fork (VRF extensions)
 ├── infra/
-│   └── devnet/           # 3-node private devnet (Docker Compose)
+│   ├── devnet/           # 3-node private devnet (Docker Compose)
+│   └── preview-sync/     # Preview testnet sync benchmark (vs Haskell)
 ├── docs/                 # MkDocs Material site
 └── tests/                # Integration, conformance, and property tests
 ```

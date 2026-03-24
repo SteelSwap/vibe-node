@@ -1,0 +1,8 @@
+# Benchmark results (generated at runtime, not committed)
+results/*.json
+results/*.tmp
+!results/.gitkeep
+
+# Preview network config (downloaded at runtime via fetch-preview-config.sh)
+config/preview/*.json
+!config/preview/.gitkeep

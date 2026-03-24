@@ -1,0 +1,82 @@
+# Haskell cardano-node preview testnet sync benchmark
+#
+# Runs the official Haskell cardano-node against preview testnet for comparison
+# with vibe-node sync performance. Uses the same metrics capture approach.
+#
+# Usage:
+#   docker compose -f docker-compose.haskell-sync.yml up -d
+#   docker compose -f docker-compose.haskell-sync.yml logs -f metrics-capture
+#
+# Prerequisites:
+#   Download preview config files first:
+#     ./scripts/fetch-preview-config.sh
+#
+# Results are written to ./results/haskell-node-metrics.json
+
+services:
+  # ─── Haskell Node (Preview Sync) ──────────────────────────────────
+  haskell-node:
+    image: ghcr.io/intersectmbo/cardano-node:10.4.1
+    platform: linux/amd64
+    environment:
+      CARDANO_NODE_SOCKET_PATH: /ipc/node.socket
+      CARDANO_DATABASE_PATH: /data/db
+      CARDANO_SOCKET_PATH: /ipc/node.socket
+      CARDANO_PORT: "3001"
+      CARDANO_CONFIG: /config/config.json
+    command:
+      - "run"
+      - "--topology"
+      - "/config/topology.json"
+      - "--database-path"
+      - "/data/db"
+      - "--socket-path"
+      - "/ipc/node.socket"
+      - "--port"
+      - "3001"
+      - "--config"
+      - "/config/config.json"
+    volumes:
+      - ./config/preview:/config:ro
+      - haskell-preview-data:/data
+      - haskell-preview-ipc:/ipc
+    ports:
+      - "${HASKELL_NODE_PORT:-30011}:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /ipc/node.socket"]
+      interval: 5s
+      timeout: 5s
+      retries: 120
+      start_period: 30s
+    networks:
+      - haskell-sync
+    restart: unless-stopped
+
+  # ─── Metrics Capture (cardano-cli query tip) ──────────────────────
+  # Uses the same cardano-node image since it includes cardano-cli.
+  metrics-capture:
+    image: ghcr.io/intersectmbo/cardano-node:10.4.1
+    platform: linux/amd64
+    entrypoint: ["/bin/bash", "/scripts/haskell-metrics-loop.sh"]
+    environment:
+      CARDANO_NODE_SOCKET_PATH: /ipc/node.socket
+      METRICS_INTERVAL: "${METRICS_INTERVAL:-30}"
+      METRICS_OUTPUT: "/results/haskell-node-metrics.json"
+    volumes:
+      - haskell-preview-ipc:/ipc:ro
+      - ./results:/results
+      - ./scripts:/scripts:ro
+    depends_on:
+      haskell-node:
+        condition: service_healthy
+    networks:
+      - haskell-sync
+    restart: unless-stopped
+
+networks:
+  haskell-sync:
+    driver: bridge
+
+volumes:
+  haskell-preview-data:
+  haskell-preview-ipc:
