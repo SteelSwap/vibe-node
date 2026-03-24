@@ -34,3 +34,7 @@ jobs:
 
       - name: Black check
         run: uv run black --check src/ packages/ tests/
+
+      - name: Type check (vibe-core)
+        run: uv run ty check packages/vibe-core/src/
+        continue-on-error: true
