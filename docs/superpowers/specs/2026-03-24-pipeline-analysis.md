@@ -5,7 +5,7 @@
 
 ---
 
-## Current Thread Swimlane
+## Current Thread Swimlane (STM Architecture)
 
 ```
 THREAD 1 (FORGE)              THREAD 2 (RECEIVE)              THREAD 3 (SERVE)
@@ -24,52 +24,85 @@ THREAD 1 (FORGE)              THREAD 2 (RECEIVE)              THREAD 3 (SERVE)
                                   │
                                validate txs
                                   │
-                               add_block ⚠️NO LOCK
-                                  │ updates tip, fragment
-                               set block_received_event
+                               chain_db.add_block()
+                                  │ writes tip_tvar, fragment_tvar
+                                  │ via TVar._write()
+                               if adopted:
+                                  set block_received_event
                                   ──→ wakes Thread 1
-wait(slot | event)             on_block_adopted ⚠️NO LOCK
-   │                              │ updates nonces
-read tip [READ LOCK]
+                                  │
+                               on_block_adopted()
+                                  │ writes nonce_tvar
+                                  │ via TVar._write()
+                                  │
+wait(slot | event)                                            follower.instruction()
+   │                                                             │
+atomically(_forge_tx):                                        read fragment_tvar.value
+   tip = tx.read(tip_tvar)                                       │ consistent snapshot
+   nonce = tx.read(nonce_tvar)                                if at tip: wait tip_changed
+   stake = tx.read(stake_tvar)                                   │ BLOCKS (executor)
+   │ snapshot — if any TVar
+   │ changes, transaction retries
    │
-tick epoch [WRITE LOCK]                                       follower.instruction()
-   │                                                             │
-read nonce [READ LOCK]                                        read fragment ⚠️NO LOCK
-   │                                                             │
-check_leadership (CPU)                                        if at tip: wait tip_changed
-   │                                                             │ BLOCKS (executor)
+check_leadership (CPU)
+   │
 forge_block (CPU)
    │
-add_block_sync [WRITE LOCK]
-   │ updates tip, fragment
+atomically(_store_tx):
+   verify nonce_tvar unchanged                                wake: read fragment_tvar.value
+   chain_db.add_block_sync()                                     │ consistent snapshot
+   │ writes tip_tvar, fragment_tvar                           send MsgRollForward
 set tip_changed
-   ──→ wakes Thread 3                                         wake: read fragment ⚠️NO LOCK
-on_block_adopted [WRITE LOCK]                                    │
-                                                              send MsgRollForward
+   ──→ wakes Thread 3
+on_block_adopted()
+   │ writes nonce_tvar
 ```
 
-## Problems Found
+### STM TVar Flow
 
-### P1: Thread 2 has NO LOCKS on shared state mutations
-- `chain_db.add_block()` called without `chain_db._lock`
-- `node_kernel.on_block_adopted()` called without `node_kernel._lock`
-- Race with Thread 1 which does hold locks
+```
+           ┌─────────────────────────────────────────┐
+           │           STM TVars (shared state)       │
+           │                                          │
+           │  tip_tvar ──── ChainDB._tip              │
+           │  fragment_tvar ── (fragment, index)      │
+           │  nonce_tvar ── epoch nonce bytes          │
+           │  stake_tvar ── pool stake distribution    │
+           └──┬────────┬────────────────┬─────────────┘
+              │        │                │
+     THREAD 1 │  THREAD 2              │ THREAD 3
+     (FORGE)  │  (RECEIVE)             │ (SERVE)
+              │        │                │
+     atomically()      │                │
+     reads tip+nonce   writes tip+nonce reads fragment
+     detects conflicts writes fragment  via .value
+     via versioned     via ._write()    (GIL-safe)
+     optimistic CC
+```
 
-### P2: Thread 3 has NO LOCKS on shared state reads
-- `_chain_fragment` and `_fragment_index` read without `chain_db._lock`
-- Race with Threads 1 and 2 which modify fragment
+## Problems Found (Original — All Fixed by STM)
 
-### P3: 2-slot receive lag (the performance bottleneck)
-- Header arrives at Thread 2 step 1
-- Tip doesn't update until step 7 (after block-fetch + decode + validate + add_block)
-- The VRF output IS in the header (step 2) but we don't use it until step 7
-- Forge loop reads stale tip, forges 2 slots behind Haskell
+### P1: Thread 2 has NO LOCKS on shared state mutations ✅ FIXED
+- Now: `add_block()` writes `tip_tvar._write()` and `fragment_tvar._write()`
+- `on_block_adopted()` writes `nonce_tvar._write()`
+- STM version bumps ensure forge loop detects changes
 
-### P4: Nonce accumulation coupled to block body
-- `on_block_adopted()` called after body processing
-- Epoch boundary tick in forge loop uses current slot
-- At epoch boundaries, forge loop ticks epoch before body processing catches up
-- Result: VRFKeyBadProof when nonce is based on incomplete VRF accumulation
+### P2: Thread 3 has NO LOCKS on shared state reads ✅ FIXED
+- Now: Follower reads `fragment_tvar.value` for consistent snapshot
+- Python GIL ensures reference reads are atomic
+- `TVar._write()` replaces value in one shot
+
+### P3: 2-slot receive lag ⚠️ PARTIALLY ADDRESSED
+- Nonce is updated after ChainDB adoption (not from header — see P4 note)
+- Tip updates after body validation — same as before
+- STM retry ensures forge always uses latest nonce, but doesn't reduce lag
+- Future: header-first tentative processing (like Haskell pipelining)
+
+### P4: Nonce accumulation coupled to block body ✅ FIXED
+- Nonce updates only after ChainDB confirms adoption (correctness first)
+- STM forge transaction reads nonce atomically with tip
+- If nonce changes during forging, STM transaction retries
+- No more VRFKeyBadProof from stale nonce — forge always gets consistent snapshot
 
 ---
 

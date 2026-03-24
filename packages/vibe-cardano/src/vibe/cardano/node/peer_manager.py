@@ -378,7 +378,15 @@ class PeerManager:
 
                     point = Point(slot=slot, hash=blk_hash)
 
-                    # Queue for block-fetch
+                    # NOTE: We do NOT update the nonce here from the header.
+                    # Haskell's reupdateChainDepState is tentative — committed
+                    # only after chain selection adopts the block. If we update
+                    # nonce from a header whose block is later rejected (stale,
+                    # fork switch), the nonce state is corrupted. The nonce is
+                    # updated in _on_block AFTER ChainDB confirms adoption.
+                    # STM ensures the forge loop sees consistent nonce+tip.
+
+                    # Queue for block-fetch (still need body for storage)
                     try:
                         fetch_queue.put_nowait(point)
                     except asyncio.QueueFull:

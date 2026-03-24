@@ -61,12 +61,14 @@ class ChainFollower:
         Haskell ref: followerForward
         """
         tip = self._chain_db.get_tip_as_tip()
+        # Read fragment index from STM TVar for thread-safe snapshot
+        _fragment, fragment_index = self._chain_db.fragment_tvar.value
         for point in points:
             if point is ORIGIN or point == ORIGIN:
                 self.client_point = ORIGIN
                 self._pending_rollback = None
                 return ORIGIN, tip
-            if isinstance(point, Point) and point.hash in self._chain_db._fragment_index:
+            if isinstance(point, Point) and point.hash in fragment_index:
                 self.client_point = point
                 self._pending_rollback = None
                 return point, tip
@@ -97,8 +99,9 @@ class ChainFollower:
             self.client_point = rollback_point
             return ("roll_backward", None, rollback_point, tip)
 
-        fragment = self._chain_db._chain_fragment
-        fragment_index = self._chain_db._fragment_index
+        # Read fragment from STM TVar — consistent snapshot across threads.
+        # Haskell ref: instructionSTM reads cdbChain TVar
+        fragment, fragment_index = self._chain_db.fragment_tvar.value
 
         if not fragment:
             return ("await", None, None, tip)
@@ -156,7 +159,8 @@ class ChainFollower:
             self.client_point = rollback_point
             return ("roll_backward", None, rollback_point, tip)
 
-        fragment = self._chain_db._chain_fragment
+        # Re-read fragment from TVar (may have changed during wait)
+        fragment, fragment_index = self._chain_db.fragment_tvar.value
         if next_idx < len(fragment):
             entry = fragment[next_idx]
             point = Point(slot=entry.slot, hash=entry.block_hash)

@@ -5,7 +5,7 @@ Three OS threads:
     Thread 2 (daemon): Receive — peer connections, chain-sync/block-fetch clients
     Thread 3 (daemon): Serve — inbound connections, chain-sync/block-fetch servers
 
-Shared state (ChainDB, NodeKernel) is protected by RWLock.
+Shared state (ChainDB, NodeKernel) uses STM TVars for consistency.
 The forge thread wakes on slot boundaries OR block arrival (threading.Event).
 
 Haskell references:
@@ -423,6 +423,7 @@ def _preimport_modules() -> None:
         import cbor2pure  # noqa: F401
     except ImportError:
         pass
+    import vibe.core.stm  # noqa: F401
 
 
 def run_node(config: NodeConfig) -> None:
