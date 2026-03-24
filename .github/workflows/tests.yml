@@ -62,4 +62,4 @@ jobs:
           fi
 
       - name: Run tests
-        run: uv run pytest -n auto -v --tb=short -p no:sugar -p no:benchmark --timeout=60
+        run: uv run pytest -n auto -v --tb=short -p no:sugar -p no:benchmark --ignore=tests/benchmark --timeout=60
