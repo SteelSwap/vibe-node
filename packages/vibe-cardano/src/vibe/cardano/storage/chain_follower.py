@@ -37,6 +37,7 @@ class ChainFollower:
         self._chain_db = chain_db
         self.client_point: PointOrOrigin = ORIGIN
         self._pending_rollback: Point | None = None
+        self._last_seen_generation: int = 0
 
     def notify_fork_switch(
         self, removed_hashes: set[bytes], intersection_point: Point,
@@ -126,13 +127,15 @@ class ChainFollower:
             self.client_point = point
             return ("roll_forward", entry.header_cbor, point, tip)
 
-        # 3. At tip — wait briefly for new blocks
-        try:
-            await asyncio.wait_for(
-                self._chain_db.tip_changed.wait(), timeout=0.5,
-            )
-        except TimeoutError:
-            pass
+        # 3. At tip — wait for new blocks via generation counter.
+        # Poll with short sleep until tip_generation advances.
+        deadline = asyncio.get_event_loop().time() + 0.5
+        while self._chain_db._tip_generation <= self._last_seen_generation:
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(0.05, remaining))
+        self._last_seen_generation = self._chain_db._tip_generation
 
         # Re-check after wake
         tip = self._chain_db.get_tip_as_tip()

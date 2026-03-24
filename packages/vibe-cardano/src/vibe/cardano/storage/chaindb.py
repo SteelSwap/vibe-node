@@ -138,8 +138,12 @@ class ChainDB:
         self._chain_fragment: list[FragmentEntry] = []
         self._fragment_index: dict[bytes, int] = {}
 
-        # Event set whenever the tip changes (wakes chain-sync followers).
+        # Event set whenever the tip changes. Stays set until a consumer
+        # clears it — this prevents missed notifications from set+clear.
         self.tip_changed: asyncio.Event = asyncio.Event()
+        # Monotonic counter so consumers can detect changes even if
+        # multiple tips arrive between checks.
+        self._tip_generation: int = 0
 
         # Follower registry: id → ChainFollower
         # Haskell ref: cdbFollowers TVar
@@ -370,9 +374,10 @@ class ChainDB:
                 rollback_depth, len(self._chain_fragment),
             )
 
-            # Fire tip_changed AFTER fragment is updated
+            # Set tip_changed — stays set until consumers clear it.
+            # This ensures no waiter misses the notification.
+            self._tip_generation += 1
             self.tip_changed.set()
-            self.tip_changed.clear()
 
             await self._maybe_advance_immutable()
 
