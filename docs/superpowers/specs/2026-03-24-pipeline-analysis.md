@@ -5,7 +5,7 @@
 
 ---
 
-## Current Thread Swimlane
+## Original Thread Swimlane (before WI changes)
 
 ```
 THREAD 1 (FORGE)              THREAD 2 (RECEIVE)              THREAD 3 (SERVE)
@@ -47,6 +47,66 @@ set tip_changed
 on_block_adopted [WRITE LOCK]                                    │
                                                               send MsgRollForward
 ```
+
+## Current Thread Swimlane (after WI-1 through WI-5)
+
+```
+THREAD 1 (FORGE)              THREAD 2 (RECEIVE)              THREAD 3 (SERVE)
+────────────────              ──────────────────              ─────────────────
+                               chain-sync: recv header
+                                  │ SYNC callback
+                               decode header (has VRF out!)
+                                  │
+                               ┌─ on_block_adopted [WRITE LOCK]   (WI-3: nonce from header)
+                               │  updates evolving_nonce, epoch
+                               │
+                               └─ create_task: add_block [WRITE LOCK]  (WI-4: tip from header)
+                                  │ fire-and-forget via run_in_executor
+                                  │ updates _tip, _chain_fragment
+                                  │ sets block_received_event ──→ wakes Thread 1
+                                  │ sets tip_changed ──→ wakes Thread 3
+                               │
+                               queue Point → fetch_queue
+                                  │
+                               block-fetch: request body
+                                  │ AWAIT (network I/O)
+                               recv body
+                                  │
+                               decode CBOR body
+                                  │
+                               validate txs
+                                  │
+                               store body in VolatileDB
+                                  │
+                               add_block [WRITE LOCK] (WI-1: locked)
+                                  │ mostly no-op (tip already set)
+                                  │
+wait(slot | event)
+   │
+read tip [READ LOCK]                                          follower.instruction()
+   │                                                             │
+read nonce [READ LOCK]   (WI-5: no epoch tick)                snapshot fragment [READ LOCK] (WI-2)
+   │                                                             │
+check_leadership (CPU)                                        if at tip: wait tip_changed
+   │                                                             │ run_in_executor
+forge_block (CPU)
+   │
+add_block_sync [WRITE LOCK]
+   │ updates tip, fragment
+set tip_changed ──→ wakes Thread 3                            wake: snapshot fragment [READ LOCK]
+   │                                                             │
+on_block_adopted [WRITE LOCK]                                 send MsgRollForward
+```
+
+### What Changed vs Original
+
+| Step | Before | After | WI |
+|------|--------|-------|-----|
+| Nonce update | After body in _on_block (no lock) | At header in _on_roll_forward [WRITE LOCK] | WI-3 |
+| Tip update | After body in _on_block (no lock) | At header via create_task [WRITE LOCK] | WI-4 |
+| _on_block chain_db.add_block | No lock | run_in_executor [WRITE LOCK] | WI-1 |
+| Follower fragment read | No lock | Snapshot under [READ LOCK] | WI-2 |
+| Forge epoch tick | Wall-clock based [WRITE LOCK] | Removed — reads from header processing | WI-5 |
 
 ## Problems Found
 

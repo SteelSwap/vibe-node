@@ -98,7 +98,7 @@ class PeerManager:
         chain_db: ChainDB instance for storing received blocks.
     """
 
-    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks", "_known_points", "_block_received_event")
+    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks", "_known_points", "_block_received_event", "_nonce_processed")
 
     def __init__(
         self,
@@ -117,6 +117,9 @@ class PeerManager:
         # threading.Event — set when a new block is processed,
         # wakes the forge thread to check leadership immediately.
         self._block_received_event = block_received_event
+        # Dedup set: block hashes whose nonce we've already processed.
+        # Prevents double-accumulation when both peers send the same header.
+        self._nonce_processed: set[bytes] = set()
 
     @property
     def known_points(self) -> list[Any]:
@@ -345,6 +348,8 @@ class PeerManager:
         chain_db = self._chain_db
         node_kernel = self._node_kernel
         _headers_received = 0
+        # Use PeerManager-level nonce dedup set (shared across all peers)
+        _nonce_processed = self._nonce_processed
 
         async def _process_header_tip(
             cdb, slot, blk_hash, prev_hash, block_number, header_cbor, vrf_output,
@@ -414,12 +419,16 @@ class PeerManager:
                     vrf_out_h = getattr(hdr, 'vrf_output', None)
 
                     if block_number_h is not None:
-                        # Update nonce from header (sync, with kernel lock)
+                        # Update nonce from header (sync, with kernel lock).
+                        # Guard: skip if we already processed this block's
+                        # nonce (two peers send the same block's header).
                         if node_kernel is not None and vrf_out_h:
-                            with node_kernel._lock.write():
-                                node_kernel.on_block_adopted(
-                                    slot, blk_hash, prev_hash_h, vrf_out_h,
-                                )
+                            if blk_hash not in _nonce_processed:
+                                _nonce_processed.add(blk_hash)
+                                with node_kernel._lock.write():
+                                    node_kernel.on_block_adopted(
+                                        slot, blk_hash, prev_hash_h, vrf_out_h,
+                                    )
 
                         # Update tip from header (fire-and-forget async task)
                         # Body will be stored when block-fetch delivers it.
