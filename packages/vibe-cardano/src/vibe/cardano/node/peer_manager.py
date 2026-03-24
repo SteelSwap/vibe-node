@@ -354,10 +354,14 @@ class PeerManager:
         async def _process_header_tip(
             cdb, slot, blk_hash, prev_hash, block_number, header_cbor, vrf_output,
         ):
-            """Update ChainDB tip from header (fire-and-forget).
+            """Update ChainDB tip AND nonce from header (fire-and-forget).
 
-            Runs as a background task so _on_roll_forward returns immediately.
-            The block body will be stored later when block-fetch delivers it.
+            Order matches Haskell:
+            1. Chain selection (add_block_sync) — decides if block is adopted
+            2. Nonce update (on_block_adopted) — only for adopted blocks
+            3. Fork switch nonce rollback — if tiebreak replaced a block
+
+            Runs as background task so _on_roll_forward returns immediately.
             """
             try:
                 def _locked_add():
@@ -367,26 +371,35 @@ class PeerManager:
                             block_hash=blk_hash,
                             predecessor_hash=prev_hash,
                             block_number=block_number,
-                            cbor_bytes=b"",  # Body not yet fetched
+                            cbor_bytes=b"",
                             header_cbor=header_cbor,
                             vrf_output=vrf_output,
                         )
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(None, _locked_add)
+
                 if result.adopted:
                     if self._block_received_event is not None:
                         self._block_received_event.set()
-                    # If tiebreak occurred, rollback nonce to intersection
-                    # and re-accumulate. Without this, the nonce from the
-                    # replaced block stays in the accumulator.
-                    if result.rollback_depth > 0 and result.intersection_hash is not None:
-                        if node_kernel is not None:
-                            with node_kernel._lock.write():
+
+                    # Nonce update AFTER chain selection confirms adoption.
+                    # Haskell ref: reupdateChainDepState runs after
+                    # chainSelectionForBlock, not before.
+                    if node_kernel is not None and vrf_output:
+                        with node_kernel._lock.write():
+                            if result.rollback_depth > 0 and result.intersection_hash is not None:
+                                # Tiebreak: rollback nonce and re-accumulate
                                 new_blocks = _get_new_chain_blocks(
                                     cdb, result.intersection_hash, blk_hash,
                                 )
                                 node_kernel.on_fork_switch(
                                     result.intersection_hash, new_blocks,
+                                )
+                            elif blk_hash not in _nonce_processed:
+                                # Simple extension: accumulate nonce
+                                _nonce_processed.add(blk_hash)
+                                node_kernel.on_block_adopted(
+                                    slot, blk_hash, prev_hash, vrf_output,
                                 )
             except Exception as exc:
                 logger.debug("Header tip update error at slot %d: %s", slot, exc)
@@ -432,19 +445,11 @@ class PeerManager:
                     vrf_out_h = getattr(hdr, 'vrf_output', None)
 
                     if block_number_h is not None:
-                        # Update nonce from header (sync, with kernel lock).
-                        # Guard: skip if we already processed this block's
-                        # nonce (two peers send the same block's header).
-                        if node_kernel is not None and vrf_out_h:
-                            if blk_hash not in _nonce_processed:
-                                _nonce_processed.add(blk_hash)
-                                with node_kernel._lock.write():
-                                    node_kernel.on_block_adopted(
-                                        slot, blk_hash, prev_hash_h, vrf_out_h,
-                                    )
-
-                        # Update tip from header (fire-and-forget async task)
-                        # Body will be stored when block-fetch delivers it.
+                        # Update tip + nonce from header (fire-and-forget).
+                        # Nonce update happens INSIDE _process_header_tip
+                        # AFTER chain selection confirms adoption. This
+                        # matches Haskell: reupdateChainDepState runs after
+                        # chainSelectionForBlock, not before.
                         if chain_db is not None:
                             header_cbor_h = [
                                 max(0, era_tag - 1) if era_tag >= 2 else 0,
