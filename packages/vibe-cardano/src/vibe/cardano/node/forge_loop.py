@@ -196,26 +196,18 @@ async def forge_loop(
         if shutdown_event.is_set():
             return
 
-        # VRF leader check
-        proof = check_leadership(
-            slot=slot,
-            vrf_sk=pool_keys.vrf_sk,
-            pool_vrf_vk=pool_keys.vrf_vk,
-            relative_stake=relative_stake,
-            active_slot_coeff=config.active_slot_coeff,
-            epoch_nonce=epoch_nonce,
-        )
-
-        if proof is None:
-            continue
-
-        # --- Read current chain state (per-slot, not cached) ---
-        # Haskell: mkCurrentBlockContext reads ChainDB.getCurrentChain each slot
+        # --- Read current chain state BEFORE leader check ---
+        # Haskell ref: mkCurrentBlockContext reads ChainDB.getCurrentChain
+        # If tip slot >= current slot, skip — already forged or immutable.
+        # Haskell: "TraceSlotIsImmutable" when tipSlot >= currentSlot
         if chain_db is not None:
             try:
                 tip = await chain_db.get_tip()
                 if tip is not None:
                     tip_slot, tip_hash, tip_block_number = tip
+                    if tip_slot >= slot:
+                        # Tip is at or ahead of current slot — don't forge
+                        continue
                     if slot - tip_slot > 10:
                         # Still syncing — too far behind (like forecast failure)
                         continue
@@ -227,8 +219,15 @@ async def forge_loop(
                 logger.warning("Forge: failed to read chain tip at slot %d: %s", slot, exc)
                 continue  # Skip this slot — don't forge with stale state
 
-        # Re-read epoch nonce from kernel (evolves at epoch boundaries)
+        # Tick epoch boundary to current slot BEFORE reading nonce.
+        # Haskell ref: tickChainDepState ticks to the current slot,
+        # evolving the epoch nonce if we've crossed an epoch boundary.
+        # Without this, the forge loop uses a stale epoch nonce at the
+        # first slot of a new epoch → VRFKeyBadProof.
         if node_kernel is not None:
+            current_epoch = slot // config.epoch_length if config.epoch_length > 0 else 0
+            if current_epoch > node_kernel.current_epoch:
+                node_kernel.on_epoch_boundary(current_epoch)
             epoch_nonce = node_kernel.epoch_nonce.value
 
         # Re-read stake distribution (changes at epoch boundaries)
@@ -236,6 +235,19 @@ async def forge_loop(
             pool_stake = node_kernel.stake_distribution.get(pool_id, 0)
             total_stake = sum(node_kernel.stake_distribution.values())
             relative_stake = pool_stake / total_stake if total_stake > 0 else relative_stake
+
+        # VRF leader check (uses fresh nonce + stake from above)
+        proof = check_leadership(
+            slot=slot,
+            vrf_sk=pool_keys.vrf_sk,
+            pool_vrf_vk=pool_keys.vrf_vk,
+            relative_stake=relative_stake,
+            active_slot_coeff=config.active_slot_coeff,
+            epoch_nonce=epoch_nonce,
+        )
+
+        if proof is None:
+            continue
 
         # Elected! Forge the block.
         try:
@@ -255,34 +267,36 @@ async def forge_loop(
             )
 
             blocks_forged += 1
-            prev_block_number = forged.block.block_number
-            prev_header_hash = forged.block.block_hash
+            forged_predecessor = prev_header_hash or b"\x00" * 32
 
-            # Store in ChainDB
+            # Store in ChainDB (includes chain selection + follower notification)
             if chain_db is not None:
-                try:
-                    await chain_db.add_block(
-                        slot=forged.block.slot,
-                        block_hash=forged.block.block_hash,
-                        predecessor_hash=prev_header_hash if prev_block_number > 1 else b"\x00" * 32,
-                        block_number=forged.block.block_number,
-                        cbor_bytes=forged.cbor,
-                    )
-                except Exception as exc:
-                    logger.error("Failed to store forged block #%d: %s", forged.block.block_number, exc)
-
-            # Add to NodeKernel so chain-sync/block-fetch servers
-            # can serve this block to connected peers.
-            if node_kernel is not None:
-                node_kernel.add_block(
+                result = await chain_db.add_block(
                     slot=forged.block.slot,
                     block_hash=forged.block.block_hash,
+                    predecessor_hash=forged_predecessor,
                     block_number=forged.block.block_number,
-                    header_cbor=[6, cbor2.CBORTag(24, forged.block.header_cbor)],  # HFC index 6=Conway
-                    block_cbor=forged.cbor,
-                    predecessor_hash=prev_header_hash or b"\x00" * 32,
-                    is_forged=True,
+                    cbor_bytes=forged.cbor,
+                    header_cbor=[6, cbor2.CBORTag(24, forged.block.header_cbor)],
+                    vrf_output=proof.vrf_output,
                 )
+                if not result.adopted:
+                    logger.info(
+                        "Forged block #%d at slot %d orphaned (tip changed)",
+                        forged.block.block_number, forged.block.slot,
+                    )
+                    # Don't update local state — block wasn't adopted
+                    continue
+
+                # Praos nonce update for our own forged block
+                if node_kernel is not None:
+                    node_kernel.on_block_adopted(
+                        forged.block.slot, forged.block.block_hash,
+                        forged_predecessor, proof.vrf_output,
+                    )
+
+            prev_block_number = forged.block.block_number
+            prev_header_hash = forged.block.block_hash
 
             tx_count = len(forged.block.transactions) if hasattr(forged.block, "transactions") else 0
             logger.info("Forged block #%d at slot %d (%d txs, %d bytes)", forged.block.block_number, forged.block.slot, tx_count, len(forged.cbor), extra={"event": "forge.block", "block_number": forged.block.block_number, "slot": forged.block.slot, "tx_count": tx_count, "size_bytes": len(forged.cbor), "hash": forged.block.block_hash.hex()[:16], "blocks_forged": blocks_forged})

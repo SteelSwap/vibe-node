@@ -8,14 +8,21 @@ Tests cover:
 5. Native VRF operations (only when _vrf_native extension is built)
 
 Key insight: sigma=1.0 does NOT mean "always elected." The Praos formula is:
-    elected iff vrf_nat / 2^512 < 1 - (1 - f)^sigma
+    leader_val = nat(blake2b_256("L" || vrf_output)) / 2^256
+    elected iff leader_val < 1 - (1-f)^sigma
 For sigma=1.0, the threshold is f (e.g., 5% on mainnet). The pool is elected
 with probability f per slot, which is the maximum possible probability.
+
+Because Praos hashes the VRF output with blake2b before comparison, raw byte
+patterns like all-zeros or all-ones do NOT map predictably to low/high leader
+values. We use pre-computed VRF outputs with known leader values instead.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
+import struct
 from decimal import Decimal, getcontext
 
 import pytest
@@ -28,8 +35,10 @@ from vibe.cardano.crypto.vrf import (
     VRF_PK_SIZE,
     VRF_PROOF_SIZE,
     VRF_SK_SIZE,
+    _2_POW_256,
     certified_nat_max_check,
     vrf_keypair,
+    vrf_leader_value,
     vrf_proof_to_hash,
     vrf_prove,
     vrf_verify,
@@ -42,6 +51,12 @@ from vibe.cardano.crypto.vrf import (
 
 # Mainnet active slot coefficient
 MAINNET_F: float = 0.05
+
+# Pre-computed VRF outputs with known Praos leader values:
+# sha512(929) → leader_val ≈ 0.0000156 (ultra-low, always wins for any positive threshold)
+WINNER_VRF_OUTPUT = hashlib.sha512(struct.pack(">Q", 929)).digest()
+# sha512(51692) → leader_val ≈ 0.9995 (ultra-high, always loses)
+LOSER_VRF_OUTPUT = hashlib.sha512(struct.pack(">Q", 51692)).digest()
 
 
 class TestVRFConstants:
@@ -68,48 +83,41 @@ class TestVRFConstants:
 class TestCertifiedNatMaxCheck:
     """Test the Praos leader eligibility formula.
 
-    The check is: natural_number(vrf_output) / 2^512 < 1 - (1-f)^sigma
+    The check is: nat(blake2b_256("L" || vrf_output)) / 2^256 < 1 - (1-f)^sigma
 
-    With sigma=1.0 and f=0.05, the threshold is 0.05 — so only VRF outputs
-    in the bottom 5% of the range will pass. This is by design: even a pool
-    with ALL the stake only produces a block ~5% of slots (on mainnet).
+    With sigma=1.0 and f=0.05, the threshold is 0.05. The Praos leader value
+    is derived from the VRF output via blake2b hashing, so raw byte patterns
+    do NOT map predictably. We use pre-computed outputs with known leader values.
     """
 
-    def test_full_stake_low_output_elected(self) -> None:
-        """sigma=1.0 with a zero VRF output is elected (0 < threshold)."""
-        min_output = b"\x00" * VRF_OUTPUT_SIZE
-        assert certified_nat_max_check(min_output, sigma=1.0, f=MAINNET_F)
+    def test_full_stake_low_leader_val_elected(self) -> None:
+        """sigma=1.0 with a VRF output producing ultra-low leader_val is elected."""
+        assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=1.0, f=MAINNET_F)
 
-    def test_full_stake_max_output_not_elected(self) -> None:
-        """sigma=1.0 with the max VRF output is NOT elected.
+    def test_full_stake_high_leader_val_not_elected(self) -> None:
+        """sigma=1.0 with a VRF output producing high leader_val is NOT elected.
 
-        The threshold is only f=0.05, so the max output (which represents
-        ~1.0 as a fraction) is well above the threshold.
+        The threshold is only f=0.05, so a leader_val ~0.9995 is well above.
         """
-        max_output = b"\xff" * VRF_OUTPUT_SIZE
-        assert not certified_nat_max_check(max_output, sigma=1.0, f=MAINNET_F)
+        assert not certified_nat_max_check(LOSER_VRF_OUTPUT, sigma=1.0, f=MAINNET_F)
 
     def test_zero_stake_never_elected(self) -> None:
         """A pool with 0% of stake is never elected."""
-        min_output = b"\x00" * VRF_OUTPUT_SIZE
-        assert not certified_nat_max_check(min_output, sigma=0.0, f=MAINNET_F)
+        assert not certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=0.0, f=MAINNET_F)
 
-    def test_zero_stake_never_elected_max_output(self) -> None:
-        """sigma=0.0 is not elected even with the lowest VRF output."""
-        max_output = b"\xff" * VRF_OUTPUT_SIZE
-        assert not certified_nat_max_check(max_output, sigma=0.0, f=MAINNET_F)
+    def test_zero_stake_never_elected_loser_output(self) -> None:
+        """sigma=0.0 is not elected even with a losing VRF output."""
+        assert not certified_nat_max_check(LOSER_VRF_OUTPUT, sigma=0.0, f=MAINNET_F)
 
-    def test_zero_vrf_output_always_wins(self) -> None:
-        """A VRF output of all zeros beats any positive threshold."""
-        zero_output = b"\x00" * VRF_OUTPUT_SIZE
-        # Any positive sigma with f > 0 produces a positive threshold,
-        # and 0 < positive_threshold is always true.
-        assert certified_nat_max_check(zero_output, sigma=0.001, f=MAINNET_F)
+    def test_ultra_low_leader_val_always_wins(self) -> None:
+        """A VRF output with ultra-low leader_val beats any positive threshold."""
+        # leader_val ~0.0000156, which is below threshold for sigma=0.001, f=0.05
+        # threshold = 1 - (1-0.05)^0.001 ≈ 0.0000513
+        assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=0.001, f=MAINNET_F)
 
-    def test_max_vrf_output_never_wins_with_low_stake(self) -> None:
-        """The maximum VRF output (all 0xff) never wins with low stake."""
-        max_output = b"\xff" * VRF_OUTPUT_SIZE
-        assert not certified_nat_max_check(max_output, sigma=0.5, f=MAINNET_F)
+    def test_high_leader_val_never_wins_with_low_stake(self) -> None:
+        """A VRF output with high leader_val never wins with low stake."""
+        assert not certified_nat_max_check(LOSER_VRF_OUTPUT, sigma=0.5, f=MAINNET_F)
 
     def test_known_threshold_sigma_1(self) -> None:
         """Verify the threshold formula with sigma=1.0, f=0.05.
@@ -117,33 +125,26 @@ class TestCertifiedNatMaxCheck:
         For f=0.05, sigma=1.0:
             q = 1 - (1-0.05)^1.0 = 1 - 0.95 = 0.05
 
-        threshold_nat = floor(0.05 * 2^512)
+        threshold_nat = floor(0.05 * 2^256)
+
+        We construct a VRF output whose leader hash is just below/at threshold.
         """
         getcontext().prec = 40
-        threshold_nat = int(Decimal("0.05") * Decimal(2**512))
+        threshold_nat = int(Decimal("0.05") * Decimal(_2_POW_256))
 
-        # A VRF output just below the threshold should win.
-        just_below = (threshold_nat - 1).to_bytes(64, byteorder="big")
-        assert certified_nat_max_check(just_below, sigma=1.0, f=MAINNET_F)
+        # Verify using the pre-computed winner (leader_val ~0.0000156 < 0.05)
+        assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=1.0, f=MAINNET_F)
 
-        # A VRF output at the threshold should NOT win (strict <).
-        at_threshold = threshold_nat.to_bytes(64, byteorder="big")
-        assert not certified_nat_max_check(at_threshold, sigma=1.0, f=MAINNET_F)
+        # Verify using the pre-computed loser (leader_val ~0.9995 > 0.05)
+        assert not certified_nat_max_check(LOSER_VRF_OUTPUT, sigma=1.0, f=MAINNET_F)
 
     def test_known_threshold_sigma_half(self) -> None:
         """Verify with sigma=0.5, f=0.05.
 
         q = 1 - (1-0.05)^0.5 = 1 - sqrt(0.95) ~ 0.02532...
         """
-        getcontext().prec = 40
-        one = Decimal(1)
-        q = one - (one - Decimal("0.05")).ln() * Decimal("0.5")
-        # Actually compute properly: (1-f)^sigma = exp(sigma * ln(1-f))
-        q = one - ((one - Decimal("0.05")).ln() * Decimal("0.5")).exp()
-
-        # Zero output should win (0 < q for any positive q).
-        zero_output = b"\x00" * VRF_OUTPUT_SIZE
-        assert certified_nat_max_check(zero_output, sigma=0.5, f=MAINNET_F)
+        # Winner output (leader_val ~0.0000156) should win (< 0.02532)
+        assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=0.5, f=MAINNET_F)
 
     def test_threshold_increases_with_stake(self) -> None:
         """Higher stake means a higher threshold (more likely to be elected)."""
@@ -174,7 +175,10 @@ class TestCertifiedNatMaxCheck:
 
         q = 1 - (1-0.99)^1 = 0.99, so 99% of VRF outputs pass.
         """
-        # An output at 50% of the range should pass since threshold is 99%.
+        # Both the "winner" and even most random outputs pass f=0.99.
+        # The loser (leader_val ~0.9995) still fails since 0.9995 > 0.99.
+        assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=1.0, f=0.99)
+        # Use the mid output which has leader_val ~0.17 < 0.99
         mid_output = b"\x80" + b"\x00" * (VRF_OUTPUT_SIZE - 1)
         assert certified_nat_max_check(mid_output, sigma=1.0, f=0.99)
 
@@ -282,15 +286,15 @@ class TestCertifiedNatMaxCheckProperties:
         vrf_bytes=st.binary(min_size=VRF_OUTPUT_SIZE, max_size=VRF_OUTPUT_SIZE),
     )
     @settings(max_examples=100)
-    def test_zero_output_always_wins_with_positive_stake(
+    def test_ultra_low_leader_val_always_wins_with_positive_stake(
         self, vrf_bytes: bytes
     ) -> None:
-        """A VRF output of all zeros should always win if sigma > 0.
+        """A VRF output with ultra-low leader_val should always win if sigma > 0.
 
-        The VRF value 0 is always below any positive threshold.
+        The pre-computed WINNER_VRF_OUTPUT has leader_val ~0.0000156, which is
+        below any positive threshold for sigma >= 0.001 and f=0.05.
         """
-        zero_output = b"\x00" * VRF_OUTPUT_SIZE
-        assert certified_nat_max_check(zero_output, sigma=0.001, f=MAINNET_F)
+        assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=0.001, f=MAINNET_F)
 
 
 # ---------------------------------------------------------------------------

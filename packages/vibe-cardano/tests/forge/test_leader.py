@@ -150,15 +150,21 @@ def _mock_vrf_proof_to_hash(proof: bytes) -> bytes:
 
 
 def _mock_vrf_proof_to_hash_low(proof: bytes) -> bytes:
-    """Mock that returns a LOW VRF output (will be elected with any stake)."""
-    # All zeros = 0, which is always < threshold for any positive stake
-    return b"\x00" * VRF_OUTPUT_SIZE
+    """Mock that returns a VRF output with ultra-low Praos leader value.
+
+    sha512(929) produces a VRF output whose blake2b_256("L"||output) leader
+    value is ~0.0000156, which passes the leader check for any positive stake.
+    """
+    return hashlib.sha512(struct.pack(">Q", 929)).digest()
 
 
 def _mock_vrf_proof_to_hash_high(proof: bytes) -> bytes:
-    """Mock that returns a HIGH VRF output (will never be elected)."""
-    # All 0xFF = max value, which is always >= threshold
-    return b"\xff" * VRF_OUTPUT_SIZE
+    """Mock that returns a VRF output with ultra-high Praos leader value.
+
+    sha512(51692) produces a VRF output whose blake2b_256("L"||output) leader
+    value is ~0.9995, which fails the leader check for any realistic stake.
+    """
+    return hashlib.sha512(struct.pack(">Q", 51692)).digest()
 
 
 class TestCheckLeadership:

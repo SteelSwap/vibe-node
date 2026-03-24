@@ -153,7 +153,7 @@ async def test_chain_sync_server_sends_await_reply_at_tip():
     # Run server with a timeout so it doesn't hang.
     try:
         await asyncio.wait_for(
-            run_chain_sync_server(channel, provider, stop_event=stop),
+            run_chain_sync_server(channel, chain_provider=provider, stop_event=stop),
             timeout=5.0,
         )
     except TimeoutError:
@@ -218,7 +218,7 @@ async def test_chain_sync_server_handles_client_done_during_await():
     # The server should exit cleanly (no exception propagated).
     try:
         await asyncio.wait_for(
-            run_chain_sync_server(channel, provider, stop_event=stop),
+            run_chain_sync_server(channel, chain_provider=provider, stop_event=stop),
             timeout=5.0,
         )
     except TimeoutError:

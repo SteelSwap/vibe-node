@@ -27,6 +27,7 @@ Spec references:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from decimal import Decimal, getcontext
 from typing import Final
@@ -49,9 +50,12 @@ VRF_PK_SIZE: Final[int] = 32
 VRF_SK_SIZE: Final[int] = 64
 """Size of a VRF secret key in bytes (Ed25519 scalar + public key)."""
 
-# The maximum value of a 512-bit unsigned integer, used as the denominator
-# when converting a VRF output to a rational number in [0, 1).
-_2_POW_512: Final[int] = 2**512
+# The maximum value of a 256-bit unsigned integer, used as the denominator
+# when converting a Praos leader value to a rational number in [0, 1).
+# Praos derives a 32-byte leader hash from the VRF output via
+# blake2b_256("L" || vrf_output), so the range is 2^256, not 2^512.
+# Haskell ref: vrfLeaderValue in Praos/VRF.hs
+_2_POW_256: Final[int] = 2**256
 
 # ---------------------------------------------------------------------------
 # Native VRF bindings via pybind11 (optional)
@@ -233,6 +237,35 @@ def vrf_proof_to_hash(proof: bytes) -> bytes:
 # ---------------------------------------------------------------------------
 
 
+def vrf_leader_value(vrf_output: bytes) -> bytes:
+    """Derive the Praos leader value from a VRF output.
+
+    Praos uses range extension via domain-separated hashing:
+        leaderHash = blake2b_256("L" || vrf_output)
+
+    The leader check then uses this 32-byte hash (interpreted as a
+    natural number) divided by 2^256 as the lottery value.
+
+    Haskell ref: ``vrfLeaderValue`` / ``hashVRF SVRFLeader`` in
+        ``Ouroboros.Consensus.Protocol.Praos.VRF``
+    """
+    return hashlib.blake2b(b"L" + vrf_output, digest_size=32).digest()
+
+
+def vrf_nonce_value(vrf_output: bytes) -> bytes:
+    """Derive the Praos nonce contribution from a VRF output.
+
+    Praos uses double hashing with an "N" domain separator:
+        nonceHash = blake2b_256("N" || vrf_output)
+        nonce     = blake2b_256(nonceHash)
+
+    Haskell ref: ``vrfNonceValue`` / ``hashVRF SVRFNonce`` in
+        ``Ouroboros.Consensus.Protocol.Praos.VRF``
+    """
+    inner = hashlib.blake2b(b"N" + vrf_output, digest_size=32).digest()
+    return hashlib.blake2b(inner, digest_size=32).digest()
+
+
 def certified_nat_max_check(
     vrf_output: bytes,
     sigma: float,
@@ -240,14 +273,13 @@ def certified_nat_max_check(
 ) -> bool:
     """Check whether a VRF output wins the Praos leader lottery.
 
-    The Ouroboros Praos leader check determines if a stake pool is
-    elected to produce a block in a given slot. The check is:
+    The Ouroboros Praos leader check derives a 32-byte leader value
+    from the VRF output via domain-separated hashing, then checks:
 
-        natural_number(vrf_output) / 2^512 < 1 - (1 - f)^sigma
+        nat(blake2b_256("L" || vrf_output)) / 2^256 < 1 - (1 - f)^sigma
 
     where:
-        - ``vrf_output`` is the 64-byte VRF output (interpreted as a
-          big-endian 512-bit unsigned integer)
+        - ``vrf_output`` is the 64-byte VRF output
         - ``sigma`` is the pool's relative stake (proportion of total
           active stake, in [0.0, 1.0])
         - ``f`` is the active slot coefficient (fraction of slots that
@@ -259,10 +291,10 @@ def certified_nat_max_check(
 
     Spec reference:
         Ouroboros Praos, Section 4, Definition 6 (slot leader election)
-        Shelley formal spec, Section 16.1, Figure 62
 
     Haskell reference:
-        Cardano.Protocol.TPraos.Rules.Overlay.checkVRFValue
+        vrfLeaderValue in Ouroboros.Consensus.Protocol.Praos.VRF
+        checkLeaderNatValue in Cardano.Protocol.TPraos.BHeader
 
     Parameters
     ----------
@@ -304,13 +336,12 @@ def certified_nat_max_check(
     if sigma == 0.0:
         return False
 
-    # Interpret the VRF output as a big-endian unsigned 512-bit integer.
-    vrf_nat = int.from_bytes(vrf_output, byteorder="big")
+    # Praos leader value: blake2b_256("L" || vrf_output) as a 256-bit nat.
+    # Haskell ref: vrfLeaderValue → hashVRF SVRFLeader → hash("L" <> out)
+    leader_hash = vrf_leader_value(vrf_output)
+    vrf_nat = int.from_bytes(leader_hash, byteorder="big")
 
     # Compute threshold q = 1 - (1 - f)^sigma using Decimal for precision.
-    # We need enough precision to avoid disagreements with the Haskell node,
-    # which uses rational arithmetic. 40 digits is more than sufficient for
-    # the 512-bit comparison.
     ctx = getcontext()
     old_prec = ctx.prec
     try:
@@ -320,38 +351,20 @@ def certified_nat_max_check(
         d_f = Decimal(str(f))
 
         # q = 1 - (1 - f)^sigma
-        # For sigma=1.0 this simplifies to q = f, which is always > 0.
         one = Decimal(1)
         complement = one - d_f  # (1 - f)
-        # (1 - f)^sigma using ln/exp for non-integer exponents.
-        # Decimal doesn't have a native power-with-float, so we use
-        # the identity: x^y = exp(y * ln(x))
         if d_sigma == one:
             threshold = d_f
         elif d_sigma == Decimal(0):
-            # Already handled above, but be defensive.
             return False
         else:
-            # Use Python's float pow for the exponentiation, then convert
-            # back to Decimal. The Haskell node uses a Taylor expansion
-            # (approx via rational arithmetic). Our approach:
-            # compute (1-f)^sigma as a high-precision Decimal.
-            #
-            # For the comparison to work correctly, we need the threshold
-            # as a fraction of 2^512. We compute:
-            #   threshold_nat = floor(q * 2^512)
-            # and compare vrf_nat < threshold_nat.
-            #
-            # Using Decimal for the full computation:
-            # ln(1-f) * sigma, then exp
             ln_complement = complement.ln()
             power = (ln_complement * d_sigma).exp()
             threshold = one - power
 
-        # Convert to the integer domain: is vrf_nat / 2^512 < threshold?
-        # Equivalently: vrf_nat < threshold * 2^512
-        # We use integer multiplication to avoid any floating point.
-        threshold_nat = int(threshold * Decimal(_2_POW_512))
+        # Compare: vrf_nat / 2^256 < threshold
+        # Equivalently: vrf_nat < threshold * 2^256
+        threshold_nat = int(threshold * Decimal(_2_POW_256))
 
         return vrf_nat < threshold_nat
 

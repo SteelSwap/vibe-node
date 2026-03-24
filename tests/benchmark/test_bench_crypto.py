@@ -236,7 +236,9 @@ class TestVRF:
         """Generate VRF keypair for benchmarking."""
         if not HAS_VRF_NATIVE:
             pytest.skip("VRF native extension not available")
-        return vrf_keypair()
+        # vrf_keypair() returns (pk, sk) — swap to (sk, pk)
+        pk, sk = vrf_keypair()
+        return sk, pk
 
     @pytest.fixture(scope="class")
     def vrf_proof_data(self, vrf_keys):
@@ -257,7 +259,7 @@ class TestVRF:
         result = benchmark.pedantic(
             vrf_verify, args=(pk, proof, alpha), rounds=100
         )
-        assert result is True
+        assert result  # vrf_verify returns output bytes (truthy) on success
 
     def test_vrf_proof_to_hash(self, benchmark, vrf_proof_data) -> None:
         _, proof, _, _ = vrf_proof_data

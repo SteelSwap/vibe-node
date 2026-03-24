@@ -22,6 +22,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/vibe"]
 
+[dependency-groups]
+dev = [
+    "pytest-benchmark>=5.2.3",
+]
+
 # ---------------------------------------------------------------------------
 # Native VRF extension (built separately via scripts/build-vrf.sh or CI)
 # ---------------------------------------------------------------------------
