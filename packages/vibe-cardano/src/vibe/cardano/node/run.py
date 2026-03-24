@@ -313,11 +313,15 @@ async def run_node(config: NodeConfig) -> None:
     logger.info("Mempool initialised (capacity=%d bytes)", mempool.capacity_bytes, extra={"event": "mempool.init", "capacity_bytes": mempool.capacity_bytes})
 
     # --- NodeKernel: shared state for protocol servers ---
-    node_kernel = NodeKernel()
+    node_kernel = NodeKernel(chain_db=chain_db)
     nonce_seed = config.genesis_hash or hashlib.blake2b(
         config.network_magic.to_bytes(4, "big"), digest_size=32
     ).digest()
-    node_kernel.init_nonce(nonce_seed, config.epoch_length)
+    node_kernel.init_nonce(
+        nonce_seed, config.epoch_length,
+        security_param=config.security_param,
+        active_slot_coeff=config.active_slot_coeff,
+    )
     if config.initial_pool_stakes:
         node_kernel.update_stake_distribution(config.initial_pool_stakes)
     if config.protocol_params:
@@ -348,6 +352,7 @@ async def run_node(config: NodeConfig) -> None:
             _run_n2n_server(
                 config.host, config.port, config.network_magic,
                 node_kernel, mempool, shutdown_event,
+                chain_db=chain_db,
             ),
             name="n2n-server",
         )

@@ -112,6 +112,7 @@ async def run_n2n_server(
     node_kernel: Any,
     mempool: Any,
     shutdown_event: asyncio.Event,
+    chain_db: Any = None,
 ) -> None:
     """Run the TCP listener for inbound N2N peer connections.
 
@@ -158,6 +159,7 @@ async def run_n2n_server(
         # Start the mux in background.
         mux_task = asyncio.create_task(mux.run(), name=f"mux-inbound-{peer_info}")
         stop = asyncio.Event()
+        follower = None
 
         try:
             # Run handshake responder on channel 0.
@@ -189,12 +191,14 @@ async def run_n2n_server(
             )
 
             # Launch chain-sync server (serve our headers to the peer).
-            if node_kernel is not None:
+            # Follower comes from ChainDB (source of truth for selected chain).
+            if chain_db is not None:
+                follower = chain_db.new_follower()
                 asyncio.create_task(
                     _safe_server(
                         run_chain_sync_server(
                             channels[CHAIN_SYNC_N2N_ID],
-                            chain_provider=node_kernel,
+                            follower=follower,
                             stop_event=stop,
                         ),
                         "chain-sync",
@@ -202,12 +206,14 @@ async def run_n2n_server(
                     name=f"cs-server-{peer_info}",
                 )
 
-                # Launch block-fetch server (serve full blocks to the peer).
+            # Launch block-fetch server (serve full blocks to the peer).
+            # Uses chain_db for block lookups (volatile + immutable).
+            if chain_db is not None:
                 asyncio.create_task(
                     _safe_server(
                         run_block_fetch_server(
                             channels[BLOCK_FETCH_N2N_ID],
-                            block_provider=node_kernel,
+                            block_provider=chain_db,
                             stop_event=stop,
                         ),
                         "block-fetch",
@@ -263,6 +269,8 @@ async def run_n2n_server(
             logger.debug("N2N inbound %s ended: %s", peer_info, exc)
         finally:
             stop.set()
+            if follower is not None and chain_db is not None:
+                chain_db.close_follower(follower.id)
             await mux.close()
             if not mux_task.done():
                 mux_task.cancel()

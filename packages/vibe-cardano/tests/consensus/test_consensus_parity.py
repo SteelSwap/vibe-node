@@ -373,54 +373,58 @@ class TestPraosZeroStakeNeverElected:
 
 
 class TestPraosFullStakeLowVRF:
-    """Full stake (sigma=1.0) with a zero VRF output is always elected.
+    """Full stake (sigma=1.0) leader check with known VRF outputs.
 
-    Note: sigma=1.0 does NOT mean "always elected" — only that the
-    threshold is f. But VRF output of all zeros is below any positive
-    threshold.
+    In Praos, the leader value is blake2b_256("L" || vrf_output) / 2^256,
+    NOT the raw VRF output. So "zero VRF output" doesn't mean "zero
+    leader value" — the hash scrambles the mapping.
 
-    Haskell ref: The threshold at sigma=1.0 is exactly f.
+    At sigma=1.0, the threshold is exactly f. A VRF output is elected
+    iff its derived leader value < f.
+
+    Haskell ref: vrfLeaderValue in Praos/VRF.hs, checkLeaderNatValue
     """
 
-    @given(
-        f=st.floats(min_value=0.01, max_value=0.99),
-    )
-    @settings(max_examples=100)
-    def test_full_stake_zero_vrf_elected(self, f: float) -> None:
-        """sigma=1.0, VRF=0 is always elected for any f > 0."""
+    def test_full_stake_high_f_elected(self) -> None:
+        """sigma=1.0, f=0.5 — zero VRF output's leader value (~0.23) < 0.5."""
         zero_vrf = b"\x00" * 64
-        assert leader_check(zero_vrf, 1.0, f) is True
+        assert leader_check(zero_vrf, 1.0, 0.5) is True
+
+    def test_full_stake_low_f_not_elected(self) -> None:
+        """sigma=1.0, f=0.1 — zero VRF output's leader value (~0.23) > 0.1."""
+        zero_vrf = b"\x00" * 64
+        assert leader_check(zero_vrf, 1.0, 0.1) is False
 
     @given(
         f=st.floats(min_value=0.01, max_value=0.99),
     )
     @settings(max_examples=100)
-    def test_full_stake_max_vrf_not_elected_at_low_f(self, f: float) -> None:
-        """sigma=1.0, VRF=max is NOT elected unless f is very high.
-
-        At sigma=1.0, threshold = f. The max VRF nat is (2^512 - 1),
-        which represents a value very close to 1.0. So it only passes
-        if f >= ~1.0, which is excluded by the f < 1.0 constraint.
-        """
-        max_vrf = b"\xff" * 64
-        assert leader_check(max_vrf, 1.0, f) is False
+    def test_full_stake_threshold_is_f(self, f: float) -> None:
+        """sigma=1.0 means threshold = f. Check consistency."""
+        import hashlib
+        zero_vrf = b"\x00" * 64
+        leader_hash = hashlib.blake2b(b"L" + zero_vrf, digest_size=32).digest()
+        leader_val = int.from_bytes(leader_hash, "big") / (2**256)
+        expected = leader_val < f
+        assert leader_check(zero_vrf, 1.0, f) is expected
 
     def test_threshold_boundary_precision(self) -> None:
-        """Test that the threshold boundary is precise.
+        """Test that the threshold comparison uses the Praos leader hash.
 
-        For sigma=1.0, f=0.05, threshold_nat = floor(0.05 * 2^512).
-        A VRF output at threshold_nat - 1 should win.
-        A VRF output at threshold_nat should lose.
+        In Praos, the leader value is blake2b_256("L" || vrf_output) / 2^256.
+        We verify that leader_check correctly compares this derived value
+        against the threshold (= f at sigma=1.0).
         """
+        import hashlib
         getcontext().prec = 40
         f = 0.05
-        threshold_nat = int(Decimal("0.05") * Decimal(2**512))
-
-        just_below = (threshold_nat - 1).to_bytes(64, byteorder="big")
-        at_threshold = threshold_nat.to_bytes(64, byteorder="big")
-
-        assert leader_check(just_below, 1.0, f) is True
-        assert leader_check(at_threshold, 1.0, f) is False
+        # Use a known VRF output whose leader hash we can compute
+        vrf_output = b"\x42" * 64
+        leader_hash = hashlib.blake2b(b"L" + vrf_output, digest_size=32).digest()
+        leader_val = int.from_bytes(leader_hash, "big") / (2**256)
+        # The result should be consistent with the derived leader value
+        expected = leader_val < f
+        assert leader_check(vrf_output, 1.0, f) is expected
 
 
 # ---------------------------------------------------------------------------

@@ -196,9 +196,22 @@ We store the block but don't trigger or wait for chain selection. The Haskell no
 | **3** | `relative_stake` read once at startup | **HIGH** | FIXED | Re-read from node_kernel stake_distribution each slot |
 | **4** | VRF seed uses wrong algorithm (TPraos mkSeed vs Praos mkInputVRF) | **CRITICAL** | FIXED | Conway uses `mkInputVRF = blake2b(slot_be64 \|\| epochNonce)` — NO XOR with seedL constant. TPraos `mkSeed` (with XOR) is only for Shelley-Mary eras. |
 | **5** | No ledger state tick before forging | **MEDIUM** | OPEN | Empty blocks work; needed for tx-bearing blocks |
-| **6** | No chain selection wait after addBlock | **LOW** | OPEN | Blocks eventually propagate via tip_changed event |
+| **6** | No chain selection wait after addBlock | **HIGH** | OPEN | Forge loop must wait for chain selection to complete before continuing. See Section 7 of `block-production-validation.md`. Without this, forge loop reads stale tip. |
 | **7** | Header body used 14-field Shelley format | **CRITICAL** | FIXED | Babbage/Conway uses 10 fields with nested opcert + protver sub-arrays |
 | **8** | Genesis hash from re-encoded JSON | **CRITICAL** | FIXED | Now uses raw file bytes: `genesis_path.read_bytes()` |
 | **9** | NodeKernel served non-linear chain (fork mixing) | **HIGH** | FIXED | Chain selection in NodeKernel with is_forged flag; forged blocks only extend tip |
+| **10** | Predecessor hash overwritten before use in forge_loop | **CRITICAL** | FIXED | `forged_predecessor` saved before `prev_header_hash = forged.block.block_hash` |
+| **11** | Praos leader check uses raw VRF output instead of leader hash | **CRITICAL** | FIXED | Praos uses `blake2b_256("L" \|\| vrf_output) / 2^256`, not raw `vrf_output / 2^512`. Haskell ref: `vrfLeaderValue` in `Praos/VRF.hs` |
+| **12** | Epoch nonce read AFTER leader check in forge loop | **CRITICAL** | FIXED | Moved nonce + stake reads before `check_leadership()`. Without this, first slot of new epoch uses stale nonce → `VRFKeyBadProof`. |
+| **13** | Nonce accumulation uses wrong VRF derivation | **HIGH** | FIXED | Praos `vrfNonceValue = blake2b_256(blake2b_256("N" \|\| vrf_output))`, not `blake2b_256(vrf_output)`. |
+| **14** | No follower state machine for chain-sync serving | **CRITICAL** | OPEN | Fork switches remove blocks from the served chain without notifying chain-sync clients. Clients receive blocks with broken predecessor links → `UnexpectedPrevHash`. See Section 7 of `block-production-validation.md` for the Haskell follower architecture. |
 
-**Bugs 1 and 2 are almost certainly why Haskell nodes reject our blocks.**
+### Bug Status Summary
+
+**Phase 5 bugs (1-9):** All critical bugs fixed. Bugs 5-6 remain open but were low priority.
+
+**Phase 6 bugs found 2026-03-23 (10-14):**
+
+- **Bugs 10-13** found and fixed by comparing devnet Haskell node errors against Haskell source code. These explain why v0.5.0 blocks were never actually accepted by Haskell nodes — the VRF proof validation failed silently on the Haskell side.
+- **Bug 14** is the current blocker. With VRF fixes in place, ~10% of forged blocks are accepted (those where no fork switch occurs between forge and serve). The remaining 90% fail with `UnexpectedPrevHash` because the chain-sync server lacks the Haskell follower state machine that coordinates rollbacks during fork switches.
+- **Bug 6** severity upgraded from LOW to HIGH — it is the root cause of bug 14. The Haskell forge loop blocks on `blockProcessed` after `addBlockAsync`, ensuring chain selection completes before the next slot's `getCurrentChain` read.

@@ -32,7 +32,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
-from typing import Callable, Awaitable
+from typing import Any, Callable, Awaitable
 
 from vibe.core.protocols.agency import (
     Agency,
@@ -727,14 +727,15 @@ class ChainProvider:
 
 async def run_chain_sync_server(
     channel: object,
-    chain_provider: ChainProvider,
+    follower: Any = None,
+    chain_provider: Any = None,
     *,
     stop_event: asyncio.Event | None = None,
 ) -> None:
     """Run the server side of the N2N chain-sync protocol.
 
     Responds to client MsgFindIntersect and MsgRequestNext messages by
-    querying the chain_provider for block data.
+    querying either a ChainFollower (preferred) or a ChainProvider (legacy).
 
     Haskell reference:
         Ouroboros/Network/Protocol/ChainSync/Server.hs (chainSyncServerPeer)
@@ -743,8 +744,11 @@ async def run_chain_sync_server(
     ----------
     channel : MiniProtocolChannel
         The mux channel for chain-sync (responder direction).
-    chain_provider : ChainProvider
-        Source of chain data (blocks, tip, intersection).
+    follower : ChainFollower | None
+        Per-connection chain follower (new path). Takes precedence over
+        chain_provider when provided.
+    chain_provider : ChainProvider | None
+        Legacy source of chain data. Used when follower is None.
     stop_event : asyncio.Event | None
         If provided, the server exits when this event is set.
     """
@@ -770,7 +774,10 @@ async def run_chain_sync_server(
 
         if isinstance(msg, CsMsgFindIntersect):
             # Client wants to find intersection.
-            intersect, tip = await chain_provider.find_intersect(msg.points)
+            if follower is not None:
+                intersect, tip = await follower.find_intersect(msg.points)
+            else:
+                intersect, tip = await chain_provider.find_intersect(msg.points)
             if intersect is not None:
                 client_point = intersect
                 await runner.send_message(
@@ -781,17 +788,22 @@ async def run_chain_sync_server(
 
         elif isinstance(msg, CsMsgRequestNext):
             # Client wants the next block.
-            action, header, point, tip = await chain_provider.next_block(
-                client_point
-            )
+            if follower is not None:
+                action, header, point, tip = await follower.instruction()
+            else:
+                action, header, point, tip = await chain_provider.next_block(
+                    client_point
+                )
 
             if action == "roll_forward" and header is not None:
-                client_point = point  # type: ignore[assignment]
+                if follower is None:
+                    client_point = point  # type: ignore[assignment]
                 await runner.send_message(
                     CsMsgRollForward(header=header, tip=tip)
                 )
             elif action == "roll_backward" and point is not None:
-                client_point = point
+                if follower is None:
+                    client_point = point
                 await runner.send_message(
                     CsMsgRollBackward(point=point, tip=tip)
                 )
@@ -799,7 +811,8 @@ async def run_chain_sync_server(
                 # Send AwaitReply, then block until new data.
                 await runner.send_message(CsMsgAwaitReply())
                 # Now in StNext(MustReply) — must send roll_forward or
-                # roll_backward next. Wait for chain_provider to have data.
+                # roll_backward next. Wait for follower/chain_provider to
+                # have data.
                 #
                 # While we poll for new blocks, the client may disconnect
                 # (MsgDone from StIdle is not valid here per the FSM, but
@@ -809,17 +822,24 @@ async def run_chain_sync_server(
                     while True:
                         if stop_event is not None and stop_event.is_set():
                             return
-                        action2, header2, point2, tip2 = (
-                            await chain_provider.next_block(client_point)
-                        )
+                        if follower is not None:
+                            action2, header2, point2, tip2 = (
+                                await follower.instruction()
+                            )
+                        else:
+                            action2, header2, point2, tip2 = (
+                                await chain_provider.next_block(client_point)
+                            )
                         if action2 == "roll_forward" and header2 is not None:
-                            client_point = point2  # type: ignore[assignment]
+                            if follower is None:
+                                client_point = point2  # type: ignore[assignment]
                             await runner.send_message(
                                 CsMsgRollForward(header=header2, tip=tip2)
                             )
                             break
                         elif action2 == "roll_backward" and point2 is not None:
-                            client_point = point2
+                            if follower is None:
+                                client_point = point2
                             await runner.send_message(
                                 CsMsgRollBackward(point=point2, tip=tip2)
                             )

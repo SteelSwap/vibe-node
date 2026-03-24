@@ -347,3 +347,140 @@ For a remote node to adopt a block we produce, ALL of these must hold:
 8. **Chain is preferred** — the chain including our block must be longer/better than their current chain
 
 **If any of these fail, the block is rejected.**
+
+---
+
+## 7. Forge-to-Serve Pipeline: Preventing UnexpectedPrevHash
+
+The most subtle block production bug is `UnexpectedPrevHash` — where the chain-sync server sends a block whose `prev_hash` doesn't match the hash of the previous block the client received. This happens when a fork switch removes a forged block from the served chain after the chain-sync server has already sent its header to a peer.
+
+### The Haskell Architecture
+
+The Haskell node prevents this with a **four-layer pipeline**:
+
+```mermaid
+sequenceDiagram
+    participant FL as Forge Loop
+    participant Q as ChainSel Queue
+    participant CS as Chain Selection
+    participant VDB as VolatileDB
+    participant Chain as Selected Chain (TVar)
+    participant Fol as Followers
+    participant CSS as Chain-Sync Server
+
+    FL->>Q: addBlockAsync(block) → returns Promise
+    Q->>VDB: putBlock(block)
+    Q->>CS: chainSelectionForBlock
+    CS->>Chain: writeTVar cdbChain (atomic)
+
+    alt Fork switch (rollback > 0)
+        CS->>Fol: fhSwitchFork(oldSuffix)
+        Note over Fol: State → RollBackTo(intersection)
+    end
+
+    CS->>Q: fill blockProcessed TMVar
+    Q-->>FL: blockProcessed resolves → forge loop continues
+
+    CSS->>Fol: followerInstruction
+    alt Follower has RollBackTo
+        Fol-->>CSS: RollBack(point)
+        CSS->>CSS: Send MsgRollBackward(point, tip)
+    else Follower has RollForwardFrom
+        Fol-->>CSS: AddBlock(header)
+        CSS->>CSS: Send MsgRollForward(header, tip)
+    end
+```
+
+### Layer 1: Synchronous Block Processing
+
+**Haskell ref:** `NodeKernel.hs:740-752`
+
+```haskell
+result <- ChainDB.addBlockAsync chainDB noPunish newBlock
+mbCurTip <- atomically $ ChainDB.blockProcessed result
+```
+
+The forge loop calls `addBlockAsync` (enqueues the block) but **immediately blocks** on `blockProcessed`. This TMVar is only filled after:
+1. The block is stored in VolatileDB
+2. Chain selection has run
+3. The selected chain has been updated
+
+**Implication:** The forge loop **cannot** read `getCurrentChain` for the next slot until chain selection from the current block is complete. This prevents building on a stale tip.
+
+### Layer 2: VolatileDB + Chain Selection Queue
+
+**Haskell ref:** `ChainDB.Impl.Types.hs:579-608`, `ChainDB.Impl.ChainSel.hs:404-446`
+
+Blocks enter a queue (`ChainSelQueue`) and are processed by a background thread:
+
+1. Block stored in VolatileDB (all candidate blocks, not just selected chain)
+2. `chainSelectionForBlock` runs — evaluates all candidate chains
+3. If the new block produces a better chain, `switchTo` is called
+4. `deliverProcessed(newTip)` fills the `blockProcessed` TMVar
+
+**Key insight:** The VolatileDB holds ALL blocks (including from different forks). Chain selection picks the best valid chain from all available blocks. The "selected chain" is a separate data structure.
+
+### Layer 3: Atomic Chain Update
+
+**Haskell ref:** `ChainDB.Impl.ChainSel.hs:874-931`
+
+```haskell
+atomically $ do
+    writeTVar cdbChain $ InternalChain newChain newChainWithTime
+    -- When rolling back, notify all followers
+    when (getRollback chainDiff > 0) $ do
+        followerHandles <- Map.elems <$> readTVar cdbFollowers
+        let oldSuffix = AF.anchorNewest (getRollback chainDiff) curChain
+        forM_ followerHandles $ \hdl -> fhSwitchFork hdl oldSuffix
+```
+
+The chain update **and** follower notification happen **in the same STM transaction**. This means:
+- No reader can see the new chain without the followers being updated
+- No chain-sync server can serve a post-fork-switch block without first sending a rollback
+- The invariant is: if a follower's position is on the orphaned suffix, it MUST roll back before rolling forward
+
+### Layer 4: Follower State Machine
+
+**Haskell ref:** `ChainDB.Impl.Follower.hs:418-565`
+
+Each chain-sync server has a **Follower** — a per-client state machine with two states:
+
+```
+┌─────────────────────┐     fork switch       ┌──────────────────┐
+│ RollForwardFrom(pt) │ ──────────────────────>│  RollBackTo(pt)  │
+└─────────────────────┘                        └──────────────────┘
+         ▲                                              │
+         │              instruction consumed             │
+         └──────────────────────────────────────────────┘
+```
+
+- **`RollForwardFrom(pt)`** — client is at `pt`, next instruction is `AddBlock(next_header)`
+- **`RollBackTo(pt)`** — client needs to roll back to `pt` before any new blocks
+
+When `fhSwitchFork` is called during a fork switch:
+```haskell
+switchFork oldSuffix = \case
+    RollForwardFrom pt
+      | isOnOldSuffix pt -> RollBackTo intersectionPoint
+    followerState -> followerState  -- not affected
+```
+
+If the follower's current position is on the orphaned suffix, its state transitions to `RollBackTo(intersection)`. The next time the chain-sync server asks for an instruction, it gets a `RollBack` → sends `MsgRollBackward` to the peer → peer rolls back → then normal forwarding resumes from the intersection.
+
+### What vibe-node Must Implement
+
+Our `NodeKernel` currently has none of this. The minimum viable fix:
+
+1. **Follower objects** — Each chain-sync server gets a Follower that tracks `client_point` and has a `pending_rollback: Point | None` field
+2. **Fork switch notification** — When `add_block` removes blocks from the chain (fork switch), iterate all followers. If a follower's `client_point` is in the removed set, set `pending_rollback` to the fork point.
+3. **Rollback-aware next_block** — Before returning `roll_forward`, check if the follower has a `pending_rollback`. If so, return `roll_backward` to the fork point first, then clear the rollback.
+4. **Forge loop sync gate** — After adding a forged block to the kernel, verify it was actually adopted (not immediately orphaned by a received block). If orphaned, don't report it as forged.
+
+### Why This Bug Is So Persistent
+
+The `UnexpectedPrevHash` error only manifests when:
+1. vibe-node forges a block AND
+2. A Haskell block at the same or higher height arrives within the same slot AND
+3. The chain-sync server has already sent the forged block's header to the Haskell client
+
+On a fast devnet (0.2s slots, 10% active), blocks arrive rapidly and the race window is wide. On slower networks the bug would be rarer but still present.

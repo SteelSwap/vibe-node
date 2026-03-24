@@ -31,6 +31,37 @@ __all__ = ["PeerManager"]
 logger = logging.getLogger(__name__)
 
 
+def _get_new_chain_blocks(
+    chain_db: Any,
+    intersection_hash: bytes,
+    tip_hash: bytes,
+) -> list[tuple[int, bytes, bytes, bytes | None]]:
+    """Walk backward from tip to intersection through VolatileDB.
+
+    Returns list of (slot, block_hash, prev_hash, vrf_output) oldest-first,
+    for blocks AFTER the intersection (not including intersection itself).
+    Used to re-apply nonce state after a fork switch.
+    """
+    from vibe.cardano.serialization.block import decode_block_header
+    blocks: list[tuple[int, bytes, bytes, bytes | None]] = []
+    h = tip_hash
+    while h and h != intersection_hash and h in chain_db.volatile_db._block_info:
+        info = chain_db.volatile_db._block_info[h]
+        # Try to get VRF output from the block
+        vrf_out: bytes | None = None
+        block_cbor = chain_db.volatile_db._blocks.get(h)
+        if block_cbor:
+            try:
+                hdr = decode_block_header(block_cbor)
+                vrf_out = hdr.vrf_output
+            except Exception:
+                pass
+        blocks.append((info.slot, info.block_hash, info.predecessor_hash, vrf_out))
+        h = info.predecessor_hash
+    blocks.reverse()  # oldest first
+    return blocks
+
+
 @dataclass
 class _PeerConnection:
     """Internal tracking for a single peer connection."""
@@ -546,30 +577,41 @@ class PeerManager:
                                     peer.address, slot, exc,
                                 )
 
-                    # --- Store in ChainDB ---
+                    # --- Store in ChainDB (includes chain selection + follower notification) ---
                     if chain_db is not None:
-                        await chain_db.add_block(
+                        # HFC era index: cbor_tag >= 2 → hfc_index = cbor_tag - 1
+                        header_cbor_wrapped = [
+                            max(0, era_tag - 1) if era_tag >= 2 else 0,
+                            cbor2.CBORTag(24, hdr_cbor),
+                        ]
+                        hdr_vrf_out = getattr(hdr, 'vrf_output', None)
+                        result = await chain_db.add_block(
                             slot=slot,
                             block_hash=block_hash,
                             predecessor_hash=prev_hash,
                             block_number=block_number,
                             cbor_bytes=raw_block,
+                            header_cbor=header_cbor_wrapped,
+                            vrf_output=hdr_vrf_out,
                         )
 
-                    # --- Add to NodeKernel for serving to peers ---
-                    if node_kernel is not None:
-                        node_kernel.add_block(
-                            slot=slot,
-                            block_hash=block_hash,
-                            block_number=block_number,
-                            # HFC N-ary sum index: Byron=0, Shelley=1, ..., Conway=6
-                            # CBOR era tags: Byron_Main=0, Byron_EBB=1, Shelley=2, ..., Conway=7
-                            # Mapping: cbor_tag >= 2 -> hfc_index = cbor_tag - 1
-                            #          cbor_tag 0 or 1 -> hfc_index = 0 (Byron)
-                            header_cbor=[max(0, era_tag - 1) if era_tag >= 2 else 0, cbor2.CBORTag(24, hdr_cbor)],
-                            block_cbor=raw_block,
-                            predecessor_hash=prev_hash,
-                        )
+                        # Praos chain-dependent state update
+                        if result.adopted and node_kernel is not None:
+                            vrf_out = hdr_vrf_out
+                            if result.rollback_depth > 0 and result.intersection_hash is not None:
+                                # Fork switch — rollback nonce and re-apply
+                                # Walk new chain from intersection to tip via VolatileDB
+                                new_blocks = _get_new_chain_blocks(
+                                    chain_db, result.intersection_hash, block_hash,
+                                )
+                                node_kernel.on_fork_switch(
+                                    result.intersection_hash, new_blocks,
+                                )
+                            else:
+                                # Simple extension
+                                node_kernel.on_block_adopted(
+                                    slot, block_hash, prev_hash, vrf_out,
+                                )
 
                     _blocks_stored += 1
                     tx_count = len(block_body[1]) if len(block_body) > 1 and isinstance(block_body[1], list) else 0

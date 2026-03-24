@@ -111,16 +111,46 @@ def mk_nonce(data: bytes) -> EpochNonce:
 # ---------------------------------------------------------------------------
 
 
+def stability_window(
+    epoch_length: int,
+    security_param: int = 0,
+    active_slot_coeff: float = 0.0,
+) -> int:
+    """Return the stability window size for the given parameters.
+
+    Haskell ref: ``stabilityWindow`` in ``Ouroboros.Consensus.Protocol.Praos``
+        stabilityWindow = 3 * k / f
+
+    If security_param (k) and active_slot_coeff (f) are provided, uses the
+    Haskell formula ``3 * k / f``, capped at epoch_length.  Otherwise falls
+    back to the legacy 2/3 * epoch_length approximation.
+
+    Args:
+        epoch_length: Number of slots per epoch.
+        security_param: Security parameter k (0 = use fallback).
+        active_slot_coeff: Active slot coefficient f (0.0 = use fallback).
+
+    Returns:
+        Number of slots in the stability window.
+    """
+    if security_param > 0 and active_slot_coeff > 0.0:
+        window = int(3 * security_param / active_slot_coeff)
+        return min(window, epoch_length)
+    # Fallback: 2/3 of epoch (approximate, correct for mainnet-like params)
+    return (epoch_length * 2) // 3
+
+
 def is_in_stability_window(
     slot: int,
     epoch_start_slot: int,
     epoch_length: int,
+    security_param: int = 0,
+    active_slot_coeff: float = 0.0,
 ) -> bool:
     """Return True if *slot* falls within the stability window of its epoch.
 
-    The stability window is the first ``STABILITY_WINDOW_FRACTION`` (2/3) of
-    the epoch.  Only VRF outputs from blocks in this window contribute to the
-    next epoch's nonce.
+    Only VRF outputs from blocks in this window contribute to the next
+    epoch's nonce.
 
     Spec ref: Ouroboros Praos, Section 7.
     Haskell ref: ``stabilityWindow`` in ``Ouroboros.Consensus.Protocol.Praos``
@@ -129,14 +159,15 @@ def is_in_stability_window(
         slot: The absolute slot number to check.
         epoch_start_slot: The first slot of the epoch containing *slot*.
         epoch_length: Number of slots per epoch.
+        security_param: Security parameter k (0 = use 2/3 fallback).
+        active_slot_coeff: Active slot coefficient f (0.0 = use fallback).
 
     Returns:
-        True if the slot is in the first 2/3 of the epoch.
+        True if the slot is in the stability window.
     """
     slot_in_epoch = slot - epoch_start_slot
-    # The stability window covers slots [0, 2/3 * epoch_length).
-    # Using integer arithmetic: slot_in_epoch * 3 < epoch_length * 2
-    return slot_in_epoch * 3 < epoch_length * 2
+    window = stability_window(epoch_length, security_param, active_slot_coeff)
+    return slot_in_epoch < window
 
 
 # ---------------------------------------------------------------------------
