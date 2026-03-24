@@ -293,10 +293,9 @@ async def _async_init(config: NodeConfig) -> dict:
     db_path = config.db_path
     db_path.mkdir(parents=True, exist_ok=True)
 
-    # Single shared lock for ALL mutable state (ChainDB + NodeKernel).
-    # Using one lock prevents AB-BA deadlock and ensures atomicity
-    # across chain selection + nonce update.
-    shared_lock = RWLock()
+    # Create shared locks
+    chaindb_lock = RWLock()
+    kernel_lock = RWLock()
 
     immutable_db = ImmutableDB(
         base_dir=db_path / "immutable",
@@ -312,7 +311,7 @@ async def _async_init(config: NodeConfig) -> dict:
         volatile_db=volatile_db,
         ledger_db=ledger_db,
         k=config.security_param,
-        lock=shared_lock,
+        lock=chaindb_lock,
     )
 
     # Mithril snapshot import
@@ -363,7 +362,7 @@ async def _async_init(config: NodeConfig) -> dict:
     )
 
     # --- NodeKernel ---
-    node_kernel = NodeKernel(chain_db=chain_db, lock=shared_lock)
+    node_kernel = NodeKernel(chain_db=chain_db, lock=kernel_lock)
     nonce_seed = config.genesis_hash or hashlib.blake2b(
         config.network_magic.to_bytes(4, "big"), digest_size=32
     ).digest()

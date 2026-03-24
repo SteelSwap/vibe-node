@@ -47,39 +47,18 @@ def _get_new_chain_blocks(
     h = tip_hash
     while h and h != intersection_hash and h in chain_db.volatile_db._block_info:
         info = chain_db.volatile_db._block_info[h]
+        # Try to get VRF output from the block
         vrf_out: bytes | None = None
-
-        # Try chain fragment first (has VRF for header-only blocks)
-        frag_idx = chain_db._fragment_index.get(h)
-        if frag_idx is not None and frag_idx < len(chain_db._chain_fragment):
-            entry = chain_db._chain_fragment[frag_idx]
-            # Fragment stores header_cbor — decode for VRF
-            if entry.header_cbor:
-                try:
-                    from vibe.cardano.serialization.block import decode_block_header_raw, Era
-                    hdr_data = entry.header_cbor
-                    if isinstance(hdr_data, (list, tuple)) and len(hdr_data) >= 2:
-                        era_tag = hdr_data[0]
-                        wrapped = hdr_data[1]
-                        hdr_bytes = wrapped.value if hasattr(wrapped, "value") else wrapped
-                        hdr = decode_block_header_raw(hdr_bytes, Era(era_tag))
-                        vrf_out = hdr.vrf_output
-                except Exception:
-                    pass
-
-        # Fallback: try VolatileDB block body
-        if vrf_out is None:
-            block_cbor = chain_db.volatile_db._blocks.get(h)
-            if block_cbor and len(block_cbor) > 10:  # Skip empty placeholders
-                try:
-                    hdr = decode_block_header(block_cbor)
-                    vrf_out = hdr.vrf_output
-                except Exception:
-                    pass
-
+        block_cbor = chain_db.volatile_db._blocks.get(h)
+        if block_cbor:
+            try:
+                hdr = decode_block_header(block_cbor)
+                vrf_out = hdr.vrf_output
+            except Exception:
+                pass
         blocks.append((info.slot, info.block_hash, info.predecessor_hash, vrf_out))
         h = info.predecessor_hash
-    blocks.reverse()
+    blocks.reverse()  # oldest first
     return blocks
 
 
@@ -119,7 +98,7 @@ class PeerManager:
         chain_db: ChainDB instance for storing received blocks.
     """
 
-    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks", "_known_points", "_block_received_event", "_nonce_processed")
+    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks", "_known_points", "_block_received_event")
 
     def __init__(
         self,
@@ -138,9 +117,6 @@ class PeerManager:
         # threading.Event — set when a new block is processed,
         # wakes the forge thread to check leadership immediately.
         self._block_received_event = block_received_event
-        # Dedup set: block hashes whose nonce we've already processed.
-        # Prevents double-accumulation when both peers send the same header.
-        self._nonce_processed: set[bytes] = set()
 
     @property
     def known_points(self) -> list[Any]:
@@ -369,63 +345,6 @@ class PeerManager:
         chain_db = self._chain_db
         node_kernel = self._node_kernel
         _headers_received = 0
-        # Use PeerManager-level nonce dedup set (shared across all peers)
-        _nonce_processed = self._nonce_processed
-
-        async def _process_header_tip(
-            cdb, slot, blk_hash, prev_hash, block_number, header_cbor, vrf_output,
-        ):
-            """Update ChainDB tip AND nonce from header (fire-and-forget).
-
-            Order matches Haskell:
-            1. Chain selection (add_block_sync) — decides if block is adopted
-            2. Nonce update (on_block_adopted) — only for adopted blocks
-            3. Fork switch nonce rollback — if tiebreak replaced a block
-
-            Runs as background task so _on_roll_forward returns immediately.
-            """
-            try:
-                # Chain selection + nonce update must be ATOMIC.
-                # Both under the same lock to prevent interleaving
-                # with concurrent header processing from the other peer.
-                def _locked_add_and_nonce():
-                    with cdb._lock.write():
-                        result = cdb.add_block_sync(
-                            slot=slot,
-                            block_hash=blk_hash,
-                            predecessor_hash=prev_hash,
-                            block_number=block_number,
-                            cbor_bytes=b"",
-                            header_cbor=header_cbor,
-                            vrf_output=vrf_output,
-                        )
-                        # Nonce update inside the same lock scope.
-                        # Haskell ref: switchTo atomically updates cdbChain
-                        # AND notifies followers AND ticks chain dep state.
-                        if result.adopted and node_kernel is not None and vrf_output:
-                            with node_kernel._lock.write():
-                                if result.rollback_depth > 0 and result.intersection_hash is not None:
-                                    new_blocks = _get_new_chain_blocks(
-                                        cdb, result.intersection_hash, blk_hash,
-                                    )
-                                    node_kernel.on_fork_switch(
-                                        result.intersection_hash, new_blocks,
-                                    )
-                                elif blk_hash not in _nonce_processed:
-                                    _nonce_processed.add(blk_hash)
-                                    node_kernel.on_block_adopted(
-                                        slot, blk_hash, prev_hash, vrf_output,
-                                    )
-                        return result
-
-                loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(None, _locked_add_and_nonce)
-
-                if result.adopted:
-                    if self._block_received_event is not None:
-                        self._block_received_event.set()
-            except Exception as exc:
-                logger.debug("Header tip update error at slot %d: %s", slot, exc)
 
         async def _on_roll_forward(header: object, tip: object) -> None:
             nonlocal _headers_received
@@ -459,33 +378,7 @@ class PeerManager:
 
                     point = Point(slot=slot, hash=blk_hash)
 
-                    # Process header immediately: update nonce + tip.
-                    # VRF output is a header field — no need to wait for body.
-                    # Haskell ref: chainSelectionForBlock runs on Header,
-                    # reupdateChainDepState reads hvVrfRes from HeaderView.
-                    block_number_h = getattr(hdr, 'block_number', None)
-                    prev_hash_h = getattr(hdr, 'prev_hash', None) or b"\x00" * 32
-                    vrf_out_h = getattr(hdr, 'vrf_output', None)
-
-                    if block_number_h is not None:
-                        # Update tip + nonce from header (fire-and-forget).
-                        # Nonce update happens INSIDE _process_header_tip
-                        # AFTER chain selection confirms adoption. This
-                        # matches Haskell: reupdateChainDepState runs after
-                        # chainSelectionForBlock, not before.
-                        if chain_db is not None:
-                            header_cbor_h = [
-                                max(0, era_tag - 1) if era_tag >= 2 else 0,
-                                wrapped,
-                            ]
-                            asyncio.create_task(
-                                _process_header_tip(
-                                    chain_db, slot, blk_hash, prev_hash_h,
-                                    block_number_h, header_cbor_h, vrf_out_h,
-                                )
-                            )
-
-                    # Queue for block-fetch (still need body for storage + serving)
+                    # Queue for block-fetch
                     try:
                         fetch_queue.put_nowait(point)
                     except asyncio.QueueFull:
@@ -693,47 +586,43 @@ class PeerManager:
                                     peer.address, slot, exc,
                                 )
 
-                    # --- Store block body in VolatileDB + run chain selection ---
-                    # Tip was already updated from header in _on_roll_forward.
-                    # Here we store the full body so block-fetch can serve it,
-                    # and re-run chain selection (mostly a no-op since header
-                    # already set the tip).
+                    # --- Store in ChainDB (includes chain selection + follower notification) ---
                     if chain_db is not None:
-                        # Store body in VolatileDB (replaces empty placeholder)
-                        await chain_db.volatile_db.add_block(
-                            block_hash=block_hash,
-                            slot=slot,
-                            predecessor_hash=prev_hash,
-                            block_number=block_number,
-                            cbor_bytes=raw_block,
-                        )
-
-                        # Re-run chain selection with full body
                         header_cbor_wrapped = [
                             max(0, era_tag - 1) if era_tag >= 2 else 0,
                             cbor2.CBORTag(24, hdr_cbor),
                         ]
                         hdr_vrf_out = getattr(hdr, 'vrf_output', None)
-
-                        def _add_block_locked():
-                            with chain_db._lock.write():
-                                return chain_db.add_block_sync(
-                                    slot=slot,
-                                    block_hash=block_hash,
-                                    predecessor_hash=prev_hash,
-                                    block_number=block_number,
-                                    cbor_bytes=raw_block,
-                                    header_cbor=header_cbor_wrapped,
-                                    vrf_output=hdr_vrf_out,
-                                )
-
-                        loop = asyncio.get_event_loop()
-                        result = await loop.run_in_executor(None, _add_block_locked)
+                        result = await chain_db.add_block(
+                            slot=slot,
+                            block_hash=block_hash,
+                            predecessor_hash=prev_hash,
+                            block_number=block_number,
+                            cbor_bytes=raw_block,
+                            header_cbor=header_cbor_wrapped,
+                            vrf_output=hdr_vrf_out,
+                        )
 
                         if result.adopted and self._block_received_event is not None:
                             self._block_received_event.set()
 
-                        # NOTE: Nonce already updated from header (WI-3)
+                        # Praos chain-dependent state update
+                        if result.adopted and node_kernel is not None:
+                            vrf_out = hdr_vrf_out
+                            if result.rollback_depth > 0 and result.intersection_hash is not None:
+                                # Fork switch — rollback nonce and re-apply
+                                # Walk new chain from intersection to tip via VolatileDB
+                                new_blocks = _get_new_chain_blocks(
+                                    chain_db, result.intersection_hash, block_hash,
+                                )
+                                node_kernel.on_fork_switch(
+                                    result.intersection_hash, new_blocks,
+                                )
+                            else:
+                                # Simple extension
+                                node_kernel.on_block_adopted(
+                                    slot, block_hash, prev_hash, vrf_out,
+                                )
 
                     _blocks_stored += 1
                     tx_count = len(block_body[1]) if len(block_body) > 1 and isinstance(block_body[1], list) else 0
