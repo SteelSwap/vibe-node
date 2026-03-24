@@ -208,34 +208,52 @@ def forge_loop(
                 kes_sk = evolved
             _current_kes_period = new_kes_period
 
-        # --- Read current chain state (read lock) ---
-        if chain_db is not None:
-            with chain_db._lock.read():
-                tip = chain_db._tip
-                if tip is not None:
-                    if tip.slot >= slot:
-                        continue
-                    if slot - tip.slot > 10:
-                        continue
-                    prev_header_hash = tip.block_hash
-                    prev_block_number = tip.block_number
-                elif slot > 10:
-                    continue
+        # --- STM transaction: read state + check + forge ---
+        # Reads tip, nonce, stake via TVars. If any change between
+        # read and commit (e.g., header processing on Thread 2),
+        # the transaction retries automatically.
+        # Haskell ref: the forge loop uses STM to read getCurrentChain
+        # and tickChainDepState atomically.
+        from vibe.core.stm import atomically
 
-        # --- Tick epoch + read nonce (kernel lock) ---
-        if node_kernel is not None:
-            with node_kernel._lock.write():
-                current_epoch = slot // config.epoch_length if config.epoch_length > 0 else 0
-                if current_epoch > node_kernel.current_epoch:
-                    node_kernel.on_epoch_boundary(current_epoch)
-            with node_kernel._lock.read():
-                epoch_nonce = node_kernel.epoch_nonce.value
-                if node_kernel.stake_distribution:
-                    pool_stake = node_kernel.stake_distribution.get(pool_id, 0)
-                    total_stake = sum(node_kernel.stake_distribution.values())
-                    relative_stake = pool_stake / total_stake if total_stake > 0 else relative_stake
+        def _forge_tx(tx):
+            """STM transaction: read shared state, check leadership, forge."""
+            # Read tip from ChainDB TVar
+            tip_val = tx.read(chain_db.tip_tvar) if chain_db is not None else None
+            if tip_val is not None:
+                if slot - tip_val.slot > 10:
+                    return None  # Still syncing
+            elif slot > 10:
+                return None
 
-        # --- VRF leader check (no lock — pure computation) ---
+            # Read nonce + stake from NodeKernel TVars
+            nonce_val = tx.read(node_kernel.nonce_tvar) if node_kernel is not None else epoch_nonce
+            stake_val = tx.read(node_kernel.stake_tvar) if node_kernel is not None else {}
+
+            return {
+                "tip": tip_val,
+                "nonce": nonce_val,
+                "stake": stake_val,
+            }
+
+        snapshot = atomically(_forge_tx)
+        if snapshot is None:
+            continue
+
+        # Extract snapshot values
+        tip_snap = snapshot["tip"]
+        if tip_snap is not None:
+            prev_header_hash = tip_snap.block_hash
+            prev_block_number = tip_snap.block_number
+
+        epoch_nonce = snapshot["nonce"]
+        stake_snap = snapshot["stake"]
+        if stake_snap:
+            pool_stake = stake_snap.get(pool_id, 0)
+            total_stake = sum(stake_snap.values())
+            relative_stake = pool_stake / total_stake if total_stake > 0 else relative_stake
+
+        # --- VRF leader check (pure computation, no shared state) ---
         proof = check_leadership(
             slot=slot,
             vrf_sk=pool_keys.vrf_sk,
@@ -248,13 +266,13 @@ def forge_loop(
         if proof is None:
             continue
 
-        # --- Forge block (no lock — pure computation) ---
+        # --- Forge block (pure computation, no shared state) ---
         try:
             forged = forge_block(
                 leader_proof=proof,
                 prev_block_number=prev_block_number,
                 prev_header_hash=prev_header_hash,
-                mempool_txs=[],  # TODO: sync mempool access
+                mempool_txs=[],
                 kes_sk=kes_sk,
                 kes_period=_current_kes_period,
                 ocert=ocert,
@@ -265,9 +283,17 @@ def forge_loop(
             blocks_forged += 1
             forged_predecessor = prev_header_hash or b"\x00" * 32
 
-            # --- Store in ChainDB (write lock) ---
+            # --- Store forged block + verify nonce consistency ---
+            # Use STM to verify the nonce hasn't changed since we read it.
+            # If it changed (header processing ticked epoch), retry forging.
             if chain_db is not None:
-                with chain_db._lock.write():
+                def _store_tx(tx):
+                    # Verify nonce is still what we used for VRF
+                    current_nonce = tx.read(node_kernel.nonce_tvar) if node_kernel else epoch_nonce
+                    if current_nonce != epoch_nonce:
+                        return "nonce_changed"  # Will retry next slot
+
+                    # Store block (non-transactional — VolatileDB is append-only)
                     result = chain_db.add_block_sync(
                         slot=forged.block.slot,
                         block_hash=forged.block.block_hash,
@@ -277,6 +303,17 @@ def forge_loop(
                         header_cbor=[6, cbor2.CBORTag(24, forged.block.header_cbor)],
                         vrf_output=proof.vrf_output,
                     )
+                    return result
+
+                store_result = atomically(_store_tx)
+                if store_result == "nonce_changed":
+                    logger.info(
+                        "Forged block #%d at slot %d discarded (nonce changed)",
+                        forged.block.block_number, forged.block.slot,
+                    )
+                    continue
+                result = store_result
+
                 if not result.adopted:
                     logger.info(
                         "Forged block #%d at slot %d orphaned (tip changed)",
@@ -284,13 +321,12 @@ def forge_loop(
                     )
                     continue
 
-                # Nonce update (kernel write lock)
+                # Nonce update for our forged block
                 if node_kernel is not None:
-                    with node_kernel._lock.write():
-                        node_kernel.on_block_adopted(
-                            forged.block.slot, forged.block.block_hash,
-                            forged_predecessor, proof.vrf_output,
-                        )
+                    node_kernel.on_block_adopted(
+                        forged.block.slot, forged.block.block_hash,
+                        forged_predecessor, proof.vrf_output,
+                    )
 
             prev_block_number = forged.block.block_number
             prev_header_hash = forged.block.block_hash
