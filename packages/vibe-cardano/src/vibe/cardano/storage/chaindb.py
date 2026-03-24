@@ -149,10 +149,14 @@ class ChainDB:
         self._fragment_index: dict[bytes, int] = {}
 
         # Thread-safe tip change notification.
-        # threading.Event works across threads (forge → serve).
-        # _tip_generation is a monotonic counter for poll-based detection.
         self.tip_changed: threading.Event = threading.Event()
         self._tip_generation: int = 0
+
+        # STM TVars for cross-thread shared state.
+        # Haskell ref: cdbChain :: TVar (AnchoredFragment)
+        from vibe.core.stm import TVar
+        self.tip_tvar: TVar = TVar(None)  # _ChainTip | None
+        self.fragment_tvar: TVar = TVar(([], {}))  # (fragment_list, index_dict)
 
         # Follower registry: id → ChainFollower
         # Haskell ref: cdbFollowers TVar
@@ -343,6 +347,7 @@ class ChainDB:
                         self._notify_fork_switch(removed_hashes, ipoint)
 
             self._tip = new_tip
+            self.tip_tvar._write(new_tip)  # STM TVar update
 
             # Rebuild or extend fragment
             if rollback_depth > 0 or old_tip is None:
@@ -375,6 +380,10 @@ class ChainDB:
                         e.block_hash: i
                         for i, e in enumerate(self._chain_fragment)
                     }
+                # Update STM TVar
+                self.fragment_tvar._write(
+                    (list(self._chain_fragment), dict(self._fragment_index))
+                )
 
             logger.debug(
                 "ChainDB: new tip block %s at slot %d, blockNo %d "
@@ -532,6 +541,8 @@ class ChainDB:
         self._fragment_index = {
             e.block_hash: i for i, e in enumerate(fragment)
         }
+        # Update STM TVar
+        self.fragment_tvar._write((list(fragment), dict(self._fragment_index)))
 
     def _compute_chain_diff(
         self, new_block_hash: bytes,
