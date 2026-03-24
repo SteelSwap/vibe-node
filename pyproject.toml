@@ -11,6 +11,7 @@ dependencies = [
     "vibe-cardano",
     "vibe-tools",
     "typer>=0.15",
+    "pytest-benchmark>=5.2.3",
 ]
 
 [project.scripts]
@@ -66,7 +67,7 @@ first_value = 0
 testpaths = ["tests", "packages/vibe-cardano/tests"]
 asyncio_mode = "auto"
 timeout = 300
-addopts = "-p no:benchmark -m 'not tcp'"
+addopts = "-m 'not tcp'"
 markers = [
     "unit: Unit tests — isolated function/module correctness",
     "property: Property tests — invariant verification via Hypothesis",
