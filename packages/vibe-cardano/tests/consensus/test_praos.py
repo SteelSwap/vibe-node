@@ -116,49 +116,35 @@ class TestActiveSlotCoeff:
 
 
 class TestLeaderCheck:
-    def test_zero_vrf_always_wins(self) -> None:
-        """VRF output of all zeros should always win the lottery."""
-        assert leader_check(b"\x00" * 64, 0.01, 0.05) is True
+    # Pre-computed VRF outputs with known Praos leader values
+    _WINNER = hashlib.sha512(b"\x00\x00\x00\x00\x00\x00\x03\xa1").digest()  # sha512(929)
+    _LOSER = hashlib.sha512(b"\x00\x00\x00\x00\x00\x00\xc9\xec").digest()  # sha512(51692)
 
-    def test_max_vrf_always_loses(self) -> None:
-        """VRF output of all 0xFF should lose for small stake."""
-        assert leader_check(b"\xff" * 64, 0.001, 0.05) is False
+    def test_low_leader_val_always_wins(self) -> None:
+        """VRF output with ultra-low leader_val should always win the lottery."""
+        assert leader_check(self._WINNER, 0.01, 0.05) is True
+
+    def test_high_leader_val_always_loses(self) -> None:
+        """VRF output with high leader_val should lose for small stake."""
+        assert leader_check(self._LOSER, 0.001, 0.05) is False
 
     def test_zero_stake_never_wins(self) -> None:
-        assert leader_check(b"\x00" * 64, 0.0, 0.05) is False
+        assert leader_check(self._WINNER, 0.0, 0.05) is False
 
-    def test_full_stake_high_f_always_wins(self) -> None:
-        """With sigma=1.0 and f=1-epsilon, threshold approaches 1.0.
+    def test_full_stake_winner_always_wins(self) -> None:
+        """With sigma=1.0 and f=0.05, threshold=0.05.
 
-        The Praos formula: threshold = 1 - (1 - f)^sigma.
-        When sigma=1.0, threshold = f.  So even with f=0.05 and sigma=1.0,
-        the threshold is only 0.05 — a max VRF output (~1.0) will NOT win.
-        This is by design: even a pool with 100% stake only wins ~5% of slots.
-
-        To guarantee a win, we need f close to 1.0.
+        The winner VRF output has leader_val ~0.0000156 < 0.05 => elected.
         """
-        # f=0.999 and sigma=1.0 => threshold = 0.999
-        # Max VRF = (2^512 - 1) / 2^512 ~= 0.9999... < 0.999?  No, 0.999... > 0.999.
-        # Actually the max VRF value is very close to 1.0, so it can still fail.
-        # Use a more moderate VRF output to demonstrate the principle:
-        # With sigma=1.0 and f=0.05, threshold=0.05, so VRF output of 0
-        # should always win.
-        assert leader_check(b"\x00" * 64, 1.0, 0.05) is True
+        assert leader_check(self._WINNER, 1.0, 0.05) is True
 
     def test_sigma_one_threshold_is_f(self) -> None:
         """When sigma=1.0, the threshold equals f exactly.
 
-        This means even with 100% of stake, the pool only wins f fraction
-        of slots. This is correct Praos behavior — the active slot
-        coefficient controls the overall block density, not individual pools.
+        Winner (leader_val ~0.0000156) should win, loser (~0.9995) should lose.
         """
-        # VRF output just under 5% of 2^512 should pass for f=0.05, sigma=1.0
-        # The threshold_nat = floor(0.05 * 2^512)
-        # VRF nat = 0 < threshold_nat => wins
-        assert leader_check(b"\x00" * 64, 1.0, 0.05) is True
-        # VRF output of all 0xFF (= 2^512 - 1) represents ~1.0, which is
-        # above the threshold of 0.05, so it should NOT win even at sigma=1.0
-        assert leader_check(b"\xff" * 64, 1.0, 0.05) is False
+        assert leader_check(self._WINNER, 1.0, 0.05) is True
+        assert leader_check(self._LOSER, 1.0, 0.05) is False
 
     def test_invalid_vrf_size_raises(self) -> None:
         with pytest.raises(ValueError, match="64 bytes"):

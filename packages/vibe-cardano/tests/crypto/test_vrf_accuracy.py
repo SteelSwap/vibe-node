@@ -17,7 +17,9 @@ Haskell reference:
 
 from __future__ import annotations
 
+import hashlib
 import os
+import struct
 from decimal import Decimal, getcontext
 
 import pytest
@@ -26,7 +28,9 @@ from hypothesis import strategies as st
 
 from vibe.cardano.crypto.vrf import (
     VRF_OUTPUT_SIZE,
+    _2_POW_256,
     certified_nat_max_check,
+    vrf_leader_value,
 )
 
 
@@ -34,8 +38,9 @@ from vibe.cardano.crypto.vrf import (
 # Constants
 # ---------------------------------------------------------------------------
 
-#: 2^512, the denominator when converting a VRF output to a fraction in [0, 1).
-_2_POW_512 = 2**512
+# Pre-computed VRF outputs with known Praos leader values
+WINNER_VRF_OUTPUT = hashlib.sha512(struct.pack(">Q", 929)).digest()  # leader_val ~0.0000156
+LOSER_VRF_OUTPUT = hashlib.sha512(struct.pack(">Q", 51692)).digest()  # leader_val ~0.9995
 
 
 # ---------------------------------------------------------------------------
@@ -57,38 +62,35 @@ class TestVRFCheckWithHighF:
     the protocol doesn't allow. f=0.0 means no slots active.
     """
 
-    def test_high_f_all_zeros_elected(self) -> None:
-        """f=0.999, sigma=1.0: zero VRF output is elected."""
-        zero_output = b"\x00" * VRF_OUTPUT_SIZE
-        assert certified_nat_max_check(zero_output, sigma=1.0, f=0.999)
+    def test_high_f_winner_elected(self) -> None:
+        """f=0.999, sigma=1.0: ultra-low leader_val VRF output is elected."""
+        assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=1.0, f=0.999)
 
     def test_high_f_mid_range_elected(self) -> None:
         """f=0.999, sigma=1.0: midpoint VRF output is elected.
 
-        Midpoint represents ~0.5, which is well below threshold 0.999.
+        The blake2b leader hash of the midpoint output has leader_val ~0.17,
+        which is well below the threshold of 0.999.
         """
         mid_output = b"\x80" + b"\x00" * (VRF_OUTPUT_SIZE - 1)
         assert certified_nat_max_check(mid_output, sigma=1.0, f=0.999)
 
-    def test_high_f_high_output_elected(self) -> None:
-        """f=0.999, sigma=1.0: output at ~0.99 is still elected.
+    def test_high_f_various_outputs_elected(self) -> None:
+        """f=0.999, sigma=1.0: most VRF outputs are elected.
 
-        Threshold is 0.999, so ~0.99 should pass.
+        Threshold is 0.999, so only outputs with leader_val >= 0.999 fail.
+        The winner output (~0.0000156) should definitely pass.
         """
-        # 0.99 * 2^512 as an integer, packed into 64 bytes
-        getcontext().prec = 40
-        val = int(Decimal("0.99") * Decimal(_2_POW_512))
-        output = val.to_bytes(64, byteorder="big")
-        assert certified_nat_max_check(output, sigma=1.0, f=0.999)
+        assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=1.0, f=0.999)
+        # All-zeros output has leader_val ~0.23 < 0.999 => elected
+        assert certified_nat_max_check(b"\x00" * VRF_OUTPUT_SIZE, sigma=1.0, f=0.999)
 
-    def test_high_f_max_output_not_elected(self) -> None:
-        """f=0.999, sigma=1.0: max VRF output (all 0xff) still fails.
+    def test_high_f_loser_output_not_elected(self) -> None:
+        """f=0.999, sigma=1.0: VRF output with leader_val ~0.9995 fails.
 
-        The max output represents (2^512 - 1) / 2^512 ~ 1.0, which
-        exceeds any threshold < 1.0.
+        The loser output has leader_val ~0.9995 > 0.999, so it should fail.
         """
-        max_output = b"\xff" * VRF_OUTPUT_SIZE
-        assert not certified_nat_max_check(max_output, sigma=1.0, f=0.999)
+        assert not certified_nat_max_check(LOSER_VRF_OUTPUT, sigma=1.0, f=0.999)
 
     def test_f_one_raises_value_error(self) -> None:
         """f=1.0 is outside the valid range (0, 1) and must be rejected."""
@@ -226,39 +228,28 @@ class TestSigmaOneThresholdEqualsF:
     """
 
     def test_sigma_one_threshold_is_f(self) -> None:
-        """Verify threshold_nat = floor(f * 2^512) when sigma=1.0."""
+        """Verify that sigma=1 threshold is f and the winner/loser classify correctly."""
         f_val = 0.05
-        getcontext().prec = 40
-        expected_threshold_nat = int(Decimal(str(f_val)) * Decimal(_2_POW_512))
-
-        # VRF output just below threshold should win
-        just_below = (expected_threshold_nat - 1).to_bytes(64, byteorder="big")
-        assert certified_nat_max_check(just_below, sigma=1.0, f=f_val)
-
-        # VRF output at threshold should NOT win (strict <)
-        at_threshold = expected_threshold_nat.to_bytes(64, byteorder="big")
-        assert not certified_nat_max_check(at_threshold, sigma=1.0, f=f_val)
+        # Winner (leader_val ~0.0000156 < 0.05) should win
+        assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=1.0, f=f_val)
+        # Loser (leader_val ~0.9995 > 0.05) should lose
+        assert not certified_nat_max_check(LOSER_VRF_OUTPUT, sigma=1.0, f=f_val)
 
     def test_sigma_one_various_f(self) -> None:
-        """Check sigma=1 threshold equals f for several f values."""
+        """Check sigma=1 threshold equals f for several f values.
+
+        Winner (leader_val ~0.0000156) should win for all f > 0.0000156.
+        Loser (leader_val ~0.9995) should lose for all f < 0.9995.
+        """
         getcontext().prec = 40
         for f_val in [0.01, 0.05, 0.1, 0.5, 0.9, 0.99]:
-            expected_threshold_nat = int(
-                Decimal(str(f_val)) * Decimal(_2_POW_512)
+            # Winner should always win (leader_val ~0.0000156 < any f in this list)
+            assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=1.0, f=f_val), (
+                f"Expected winner elected for f={f_val}, sigma=1.0"
             )
-            # Just below threshold: elected
-            just_below = (expected_threshold_nat - 1).to_bytes(
-                64, byteorder="big"
-            )
-            assert certified_nat_max_check(just_below, sigma=1.0, f=f_val), (
-                f"Expected elected for f={f_val}, sigma=1.0 just below threshold"
-            )
-            # At threshold: not elected
-            at_threshold = expected_threshold_nat.to_bytes(64, byteorder="big")
-            assert not certified_nat_max_check(
-                at_threshold, sigma=1.0, f=f_val
-            ), (
-                f"Expected NOT elected for f={f_val}, sigma=1.0 at threshold"
+            # Loser should lose for all f < 0.9995
+            assert not certified_nat_max_check(LOSER_VRF_OUTPUT, sigma=1.0, f=f_val), (
+                f"Expected loser NOT elected for f={f_val}, sigma=1.0"
             )
 
 
@@ -296,10 +287,9 @@ class TestFZeroAlwaysRejected:
         max_output = b"\xff" * VRF_OUTPUT_SIZE
         assert not certified_nat_max_check(max_output, sigma=1.0, f=0.001)
 
-    def test_very_small_f_zero_output_still_wins(self) -> None:
-        """Even with very small f, the zero VRF output always wins.
+    def test_very_small_f_winner_output_still_wins(self) -> None:
+        """Even with very small f, the winner VRF output wins.
 
-        The threshold is positive (f > 0), so 0 < threshold is true.
+        Winner has leader_val ~0.0000156 < f=0.001 => elected.
         """
-        zero_output = b"\x00" * VRF_OUTPUT_SIZE
-        assert certified_nat_max_check(zero_output, sigma=1.0, f=0.001)
+        assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=1.0, f=0.001)

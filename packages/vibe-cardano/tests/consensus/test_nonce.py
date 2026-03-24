@@ -135,12 +135,10 @@ class TestStabilityWindow:
 
     def test_small_epoch_length(self) -> None:
         """Edge case with small epoch (e.g., testnet with epoch_length=100)."""
-        # 2/3 of 100 = 66.67, so slots 0-65 are in, 66+ are out
-        # slot_in_epoch * 3 < 100 * 2 => slot_in_epoch * 3 < 200
-        # slot 66: 66*3=198 < 200 => True (in window)
-        assert is_in_stability_window(slot=66, epoch_start_slot=0, epoch_length=100)
-        # slot 67: 67*3=201 < 200 => False (out of window)
-        assert not is_in_stability_window(slot=67, epoch_start_slot=0, epoch_length=100)
+        # stability_window(100) = (100*2)//3 = 66
+        # So slots 0-65 are in the window, 66+ are out.
+        assert is_in_stability_window(slot=65, epoch_start_slot=0, epoch_length=100)
+        assert not is_in_stability_window(slot=66, epoch_start_slot=0, epoch_length=100)
 
 
 # ---------------------------------------------------------------------------
@@ -300,8 +298,9 @@ class TestNonceProperties:
         )
         assert isinstance(result, bool)
 
-        # The boundary is at 2/3: slot_in_epoch * 3 < epoch_length * 2
-        if slot_offset * 3 < epoch_length * 2:
+        # The boundary is at (epoch_length * 2) // 3 (integer division)
+        window = (epoch_length * 2) // 3
+        if slot_offset < window:
             assert result is True
         else:
             assert result is False

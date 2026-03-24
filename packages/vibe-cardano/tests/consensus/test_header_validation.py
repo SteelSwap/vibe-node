@@ -260,12 +260,14 @@ class TestVRFLeaderCheck:
         assert len(vrf_errors) == 1
 
     def test_vrf_output_passing_leader_check(self) -> None:
-        """A VRF output of all 0x00 should pass for any positive stake."""
+        """A VRF output with ultra-low Praos leader value passes for any positive stake."""
+        import struct
         issuer = b"\xcc" * 32
-        # All-0x00 VRF output is the minimum value (0), always < threshold
+        # sha512(929) produces a VRF output with leader_val ~0.0000156
+        winner_vrf = hashlib.sha512(struct.pack(">Q", 929)).digest()
         curr = MockBlockHeader(
             issuer_vkey=issuer,
-            vrf_output=b"\x00" * 64,
+            vrf_output=winner_vrf,
         )
         dist = _make_stake_dist(issuer, stake=0.01)
         errors = validate_header(curr, dist, prev_header=None)

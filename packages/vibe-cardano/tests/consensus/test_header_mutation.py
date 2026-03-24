@@ -22,6 +22,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import os
+import struct
 from dataclasses import dataclass
 from typing import Optional
 
@@ -195,8 +196,10 @@ class ValidHeaderFixture:
         # --- KES-sign the header body ---
         kes_sig = kes_sign(self.kes_sk, self.relative_kes_period, header_body_cbor)
 
-        # --- VRF output: all zeros always passes the leader check ---
-        vrf_output = b"\x00" * 64
+        # --- VRF output: use pre-computed winner (leader_val ~0.0000156) ---
+        # sha512(929) produces a VRF output whose Praos leader hash is ultra-low,
+        # guaranteeing it passes the leader check for any positive stake/f.
+        vrf_output = hashlib.sha512(struct.pack(">Q", 929)).digest()
 
         # --- Build the current header ---
         prev_hash = _blake2b_256(prev_header_cbor)
