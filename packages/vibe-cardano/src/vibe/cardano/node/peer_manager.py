@@ -98,9 +98,15 @@ class PeerManager:
         chain_db: ChainDB instance for storing received blocks.
     """
 
-    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks", "_known_points")
+    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks", "_known_points", "_block_received_event")
 
-    def __init__(self, config: NodeConfig, chain_db: Any = None, node_kernel: Any = None) -> None:
+    def __init__(
+        self,
+        config: NodeConfig,
+        chain_db: Any = None,
+        node_kernel: Any = None,
+        block_received_event: Any = None,
+    ) -> None:
         self._config = config
         self._chain_db = chain_db
         self._node_kernel = node_kernel
@@ -108,6 +114,9 @@ class PeerManager:
         self._stopped = False
         self._tasks: list[asyncio.Task[None]] = []
         self._known_points: list[Any] = []
+        # threading.Event — set when a new block is processed,
+        # wakes the forge thread to check leadership immediately.
+        self._block_received_event = block_received_event
 
     @property
     def known_points(self) -> list[Any]:
@@ -369,11 +378,19 @@ class PeerManager:
 
                     point = Point(slot=slot, hash=blk_hash)
 
-                    # Queue for block-fetch
+                    # NOTE: We do NOT update the nonce here from the header.
+                    # Haskell's reupdateChainDepState is tentative — committed
+                    # only after chain selection adopts the block. If we update
+                    # nonce from a header whose block is later rejected (stale,
+                    # fork switch), the nonce state is corrupted. The nonce is
+                    # updated in _on_block AFTER ChainDB confirms adoption.
+                    # STM ensures the forge loop sees consistent nonce+tip.
+
+                    # Queue for block-fetch (still need body for storage)
                     try:
                         fetch_queue.put_nowait(point)
                     except asyncio.QueueFull:
-                        pass  # Drop if queue full -- backpressure
+                        pass
 
                     if _headers_received % 100 == 1 or _headers_received <= 5:
                         logger.info("Chain-sync header #%d at slot %d from %s", _headers_received, slot, peer.address, extra={"event": "chainsync.header", "peer": str(peer.address), "header_num": _headers_received, "slot": slot, "hash": blk_hash.hex()[:16]})
@@ -579,7 +596,6 @@ class PeerManager:
 
                     # --- Store in ChainDB (includes chain selection + follower notification) ---
                     if chain_db is not None:
-                        # HFC era index: cbor_tag >= 2 → hfc_index = cbor_tag - 1
                         header_cbor_wrapped = [
                             max(0, era_tag - 1) if era_tag >= 2 else 0,
                             cbor2.CBORTag(24, hdr_cbor),
@@ -594,6 +610,9 @@ class PeerManager:
                             header_cbor=header_cbor_wrapped,
                             vrf_output=hdr_vrf_out,
                         )
+
+                        if result.adopted and self._block_received_event is not None:
+                            self._block_received_event.set()
 
                         # Praos chain-dependent state update
                         if result.adopted and node_kernel is not None:

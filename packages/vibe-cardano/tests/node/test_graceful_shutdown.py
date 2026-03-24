@@ -31,7 +31,6 @@ import pytest
 
 from vibe.cardano.node.run import (
     SlotClock,
-    _forge_loop,
     _snapshot_loop,
 )
 from vibe.cardano.consensus.slot_arithmetic import SlotConfig

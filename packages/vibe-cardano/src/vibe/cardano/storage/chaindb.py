@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -121,11 +122,20 @@ class ChainDB:
         volatile_db: VolatileDB,
         ledger_db: LedgerDB,
         k: int = 2160,
+        lock: Any = None,
     ) -> None:
         self.immutable_db = immutable_db
         self.volatile_db = volatile_db
         self.ledger_db = ledger_db
         self._k = k
+
+        # Thread-safety: RWLock for concurrent read/exclusive write.
+        # If not provided, creates a default instance (transparent in
+        # single-threaded mode).
+        if lock is None:
+            from vibe.core.rwlock import RWLock
+            lock = RWLock()
+        self._lock = lock
 
         # Current selected chain tip (None if DB is empty).
         self._tip: _ChainTip | None = None
@@ -138,12 +148,15 @@ class ChainDB:
         self._chain_fragment: list[FragmentEntry] = []
         self._fragment_index: dict[bytes, int] = {}
 
-        # Event set whenever the tip changes. Stays set until a consumer
-        # clears it — this prevents missed notifications from set+clear.
-        self.tip_changed: asyncio.Event = asyncio.Event()
-        # Monotonic counter so consumers can detect changes even if
-        # multiple tips arrive between checks.
+        # Thread-safe tip change notification.
+        self.tip_changed: threading.Event = threading.Event()
         self._tip_generation: int = 0
+
+        # STM TVars for cross-thread shared state.
+        # Haskell ref: cdbChain :: TVar (AnchoredFragment)
+        from vibe.core.stm import TVar
+        self.tip_tvar: TVar = TVar(None)  # _ChainTip | None
+        self.fragment_tvar: TVar = TVar(([], {}))  # (fragment_list, index_dict)
 
         # Follower registry: id → ChainFollower
         # Haskell ref: cdbFollowers TVar
@@ -334,6 +347,7 @@ class ChainDB:
                         self._notify_fork_switch(removed_hashes, ipoint)
 
             self._tip = new_tip
+            self.tip_tvar._write(new_tip)  # STM TVar update
 
             # Rebuild or extend fragment
             if rollback_depth > 0 or old_tip is None:
@@ -366,6 +380,10 @@ class ChainDB:
                         e.block_hash: i
                         for i, e in enumerate(self._chain_fragment)
                     }
+                # Update STM TVar
+                self.fragment_tvar._write(
+                    (list(self._chain_fragment), dict(self._fragment_index))
+                )
 
             logger.debug(
                 "ChainDB: new tip block %s at slot %d, blockNo %d "
@@ -396,6 +414,32 @@ class ChainDB:
             if self._tip else None
         )
         return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
+
+    def add_block_sync(self, **kwargs: Any) -> ChainSelectionResult:
+        """Synchronous wrapper for add_block, used by the forge thread.
+
+        Uses a thread-local event loop to avoid conflicts with other
+        threads' event loops.
+        """
+        import asyncio as _asyncio
+        # Get or create a thread-local event loop
+        try:
+            loop = _asyncio.get_event_loop()
+            if loop.is_running():
+                # Can't use running loop — create a new one
+                loop = _asyncio.new_event_loop()
+                try:
+                    return loop.run_until_complete(self.add_block(**kwargs))
+                finally:
+                    loop.close()
+            else:
+                return loop.run_until_complete(self.add_block(**kwargs))
+        except RuntimeError:
+            loop = _asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(self.add_block(**kwargs))
+            finally:
+                loop.close()
 
     async def get_tip(self) -> tuple[int, bytes, int] | None:
         """Return the current chain tip as (slot, hash, block_number).
@@ -497,6 +541,8 @@ class ChainDB:
         self._fragment_index = {
             e.block_hash: i for i, e in enumerate(fragment)
         }
+        # Update STM TVar
+        self.fragment_tvar._write((list(fragment), dict(self._fragment_index)))
 
     def _compute_chain_diff(
         self, new_block_hash: bytes,

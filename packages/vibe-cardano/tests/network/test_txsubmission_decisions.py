@@ -1265,14 +1265,24 @@ class TestFilterActivePeersNotLimitingDecisions:
     def test_decisions_not_limited_by_active_filter(
         self, state: SharedTxState
     ) -> None:
-        """Every peer gets at least one decision, regardless of active status."""
+        """Peers with room in their window get at least a request_tx_ids."""
         decisions = state.make_decisions()
         peers_in_decisions = {pid for pid, _, _ in decisions}
 
-        # All peers should appear in decisions (at minimum they need
-        # a request_tx_ids to keep the pipeline running)
-        for pid in state.peers:
-            assert pid in peers_in_decisions, (
-                f"Peer {pid} has no decisions but should at minimum get "
-                f"a request_tx_ids"
+        # Peers whose unacked window has room should get at least a
+        # request_tx_ids to keep the pipeline running.  Peers at their
+        # unacked limit AND with no requestable txs correctly get no
+        # decision — the protocol only acts when there is work to do.
+        for pid, peer in state.peers.items():
+            has_window = peer.unacked_count < MAX_UNACKED_TX_IDS
+            has_requestable = any(
+                txid not in state.mempool_tx_ids
+                and txid not in state.in_flight_tx_ids
+                and txid not in peer.requested_tx_ids
+                for txid in peer.available_tx_ids
             )
+            if has_window or has_requestable:
+                assert pid in peers_in_decisions, (
+                    f"Peer {pid} has room (unacked={peer.unacked_count}) "
+                    f"or requestable txs but got no decision"
+                )

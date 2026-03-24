@@ -164,7 +164,7 @@ def main() -> None:
     logger.info("vibe-node starting (magic=%d, %s:%d, %d peers, producer=%s)", config.network_magic, config.host, config.port, len(config.peers), config.is_block_producer, extra={"event": "node.init", "network_magic": config.network_magic, "host": config.host, "port": config.port, "peer_count": len(config.peers), "block_producer": config.is_block_producer})
 
     from vibe.cardano.node.run import run_node
-    asyncio.run(run_node(config))
+    run_node(config)  # Sync — handles its own asyncio for init, then threads
 
 
 if __name__ == "__main__":

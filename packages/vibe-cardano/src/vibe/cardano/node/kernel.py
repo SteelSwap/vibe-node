@@ -57,12 +57,23 @@ class NodeKernel:
         Ouroboros.Consensus.NodeKernel — owns ChainDB and protocol state.
     """
 
-    def __init__(self, chain_db: Any = None) -> None:
+    def __init__(self, chain_db: Any = None, lock: Any = None) -> None:
         self._chain_db = chain_db
+
+        # Thread-safety: RWLock for concurrent nonce reads / exclusive writes
+        if lock is None:
+            from vibe.core.rwlock import RWLock
+            lock = RWLock()
+        self._lock = lock
 
         # Praos chain-dependent state — full 5-nonce model
         # Haskell ref: PraosState in Ouroboros.Consensus.Protocol.Praos
         self._epoch_nonce: EpochNonce = EpochNonce(value=b"\x00" * 32)
+
+        # STM TVar for epoch nonce — used by forge loop for atomic reads
+        from vibe.core.stm import TVar
+        self.nonce_tvar: TVar = TVar(self._epoch_nonce.value)
+        self.stake_tvar: TVar = TVar({})
         self._evolving_nonce: bytes = b"\x00" * 32
         self._candidate_nonce: bytes = b"\x00" * 32
         self._lab_nonce: bytes = b"\x00" * 32
@@ -135,6 +146,7 @@ class NodeKernel:
         self._stake_distribution = compute_pool_stake_distribution(
             self._delegation_state, utxo_stakes,
         )
+        self.stake_tvar._write(dict(self._stake_distribution))
         total = sum(self._stake_distribution.values())
         logger.info(
             "Stake distribution updated: %d pools, total stake=%d",
@@ -184,6 +196,7 @@ class NodeKernel:
         Haskell ref: translateChainDepStateByronToShelley
         """
         self._epoch_nonce = EpochNonce(value=genesis_hash)
+        self.nonce_tvar._write(genesis_hash)
         self._evolving_nonce = genesis_hash
         self._candidate_nonce = genesis_hash
         self._lab_nonce = b"\x00" * 32
@@ -257,6 +270,7 @@ class NodeKernel:
 
         old_epoch = self._current_epoch
         self._epoch_nonce = EpochNonce(value=new_nonce_bytes)
+        self.nonce_tvar._write(new_nonce_bytes)
         self._last_epoch_block_nonce = self._lab_nonce
         self._current_epoch = new_epoch
         logger.info(
@@ -301,6 +315,7 @@ class NodeKernel:
         if cp is None:
             return False
         self._epoch_nonce = EpochNonce(value=cp["epoch_nonce"])
+        self.nonce_tvar._write(cp["epoch_nonce"])
         self._evolving_nonce = cp["evolving_nonce"]
         self._candidate_nonce = cp["candidate_nonce"]
         self._lab_nonce = cp["lab_nonce"]

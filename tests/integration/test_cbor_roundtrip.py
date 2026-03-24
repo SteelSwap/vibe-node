@@ -40,7 +40,7 @@ async def test_block_hash_roundtrip():
         r, w = await asyncio.wait_for(
             asyncio.open_connection("localhost", 30001), timeout=3
         )
-    except (ConnectionRefusedError, TimeoutError):
+    except (ConnectionRefusedError, TimeoutError, OSError):
         pytest.skip("No Haskell node on localhost:30001")
 
     bearer = Bearer(r, w)
