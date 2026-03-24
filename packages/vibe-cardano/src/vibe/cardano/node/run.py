@@ -272,16 +272,10 @@ def _run_serve_thread(
 # ---------------------------------------------------------------------------
 
 
-async def run_node(config: NodeConfig) -> None:
-    """Top-level node entry point — initialise storage, spawn 3 threads.
+async def _async_init(config: NodeConfig) -> dict:
+    """Async initialisation: storage, Mithril import, ledger restore.
 
-    Storage initialisation is async (Mithril import, ledger restore).
-    After init, the node runs on 3 OS threads:
-        Thread 1 (main): Forge loop
-        Thread 2 (daemon): Block reception
-        Thread 3 (daemon): Block serving
-
-    Haskell ref: Ouroboros.Consensus.Node.run
+    Returns a dict of initialised components for the threading phase.
     """
     import hashlib
 
@@ -391,11 +385,71 @@ async def run_node(config: NodeConfig) -> None:
     slot_clock = SlotClock(slot_config)
     logger.info("Current slot: %d", slot_clock.current_slot())
 
-    # --- Threading primitives ---
+    return {
+        "config": config,
+        "chain_db": chain_db,
+        "node_kernel": node_kernel,
+        "mempool": mempool,
+        "slot_config": slot_config,
+        "slot_clock": slot_clock,
+        "ledger_db": ledger_db,
+    }
+
+
+def _preimport_modules() -> None:
+    """Force-import all modules used by worker threads.
+
+    Python's import lock causes deadlocks when multiple threads
+    try to import the same module simultaneously at startup.
+    Pre-importing resolves all lazy imports on the main thread.
+    """
+    import vibe.cardano.network.chainsync_protocol  # noqa: F401
+    import vibe.cardano.network.blockfetch_protocol  # noqa: F401
+    import vibe.cardano.network.handshake_protocol  # noqa: F401
+    import vibe.cardano.network.keepalive_protocol  # noqa: F401
+    import vibe.cardano.network.chainsync  # noqa: F401
+    import vibe.cardano.network.blockfetch  # noqa: F401
+    import vibe.cardano.serialization.block  # noqa: F401
+    import vibe.cardano.forge.block  # noqa: F401
+    import vibe.cardano.forge.leader  # noqa: F401
+    import vibe.cardano.crypto.kes  # noqa: F401
+    import vibe.cardano.crypto.vrf  # noqa: F401
+    import vibe.core.multiplexer  # noqa: F401
+    try:
+        import vibe.core.protocols.runner  # noqa: F401
+    except ImportError:
+        pass
+    try:
+        import cbor2pure  # noqa: F401
+    except ImportError:
+        pass
+
+
+def run_node(config: NodeConfig) -> None:
+    """Top-level node entry point — init storage, spawn 3 threads.
+
+    Runs async init (Mithril, ledger restore) first, then splits
+    into 3 OS threads for forge, receive, and serve.
+
+    Called from __main__.py as: run_node(config)  (NOT asyncio.run)
+    """
+    # Phase 0: Pre-import all modules to avoid import deadlocks
+    _preimport_modules()
+
+    # Phase 1: Async init (storage, Mithril, snapshots)
+    components = asyncio.run(_async_init(config))
+
+    chain_db = components["chain_db"]
+    node_kernel = components["node_kernel"]
+    mempool = components["mempool"]
+    slot_config = components["slot_config"]
+    slot_clock = components["slot_clock"]
+    ledger_db = components["ledger_db"]
+
+    # Phase 2: Threading
     block_received = threading.Event()
     shutdown = threading.Event()
 
-    # --- Thread 2: RECEIVE ---
     receive_thread = threading.Thread(
         target=_run_receive_thread,
         args=(config, chain_db, node_kernel, block_received, shutdown,
@@ -404,7 +458,6 @@ async def run_node(config: NodeConfig) -> None:
         name="vibe-receive",
     )
 
-    # --- Thread 3: SERVE ---
     serve_thread = threading.Thread(
         target=_run_serve_thread,
         args=(config, chain_db, node_kernel, mempool, shutdown),
@@ -412,7 +465,6 @@ async def run_node(config: NodeConfig) -> None:
         name="vibe-serve",
     )
 
-    # Install signal handlers on main thread
     def _handle_signal(signum, frame):
         logger.info("Received signal %s — shutting down", signum)
         shutdown.set()
@@ -420,12 +472,11 @@ async def run_node(config: NodeConfig) -> None:
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
-    # Start daemon threads
     receive_thread.start()
     serve_thread.start()
     logger.info("Node started — 3 threads (forge, receive, serve)")
 
-    # --- Thread 1: FORGE (runs on main thread) ---
+    # Thread 1: FORGE (main thread — no asyncio loop)
     if config.is_block_producer:
         forge_loop(
             config=config,
@@ -437,10 +488,9 @@ async def run_node(config: NodeConfig) -> None:
             mempool=mempool,
         )
     else:
-        # Relay-only: wait for shutdown
         shutdown.wait()
 
-    # --- Graceful shutdown ---
+    # Graceful shutdown
     logger.info("Shutting down...")
     shutdown.set()
     receive_thread.join(timeout=5)

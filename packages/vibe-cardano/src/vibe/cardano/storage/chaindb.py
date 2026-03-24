@@ -409,15 +409,28 @@ class ChainDB:
     def add_block_sync(self, **kwargs: Any) -> ChainSelectionResult:
         """Synchronous wrapper for add_block, used by the forge thread.
 
-        Creates a temporary event loop to run the async add_block.
-        The write lock should be held by the caller.
+        Uses a thread-local event loop to avoid conflicts with other
+        threads' event loops.
         """
         import asyncio as _asyncio
-        loop = _asyncio.new_event_loop()
+        # Get or create a thread-local event loop
         try:
-            return loop.run_until_complete(self.add_block(**kwargs))
-        finally:
-            loop.close()
+            loop = _asyncio.get_event_loop()
+            if loop.is_running():
+                # Can't use running loop — create a new one
+                loop = _asyncio.new_event_loop()
+                try:
+                    return loop.run_until_complete(self.add_block(**kwargs))
+                finally:
+                    loop.close()
+            else:
+                return loop.run_until_complete(self.add_block(**kwargs))
+        except RuntimeError:
+            loop = _asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(self.add_block(**kwargs))
+            finally:
+                loop.close()
 
     async def get_tip(self) -> tuple[int, bytes, int] | None:
         """Return the current chain tip as (slot, hash, block_number).

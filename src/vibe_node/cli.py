@@ -187,7 +187,7 @@ def serve(
         mithril_snapshot_path=Path(mithril_snapshot) if mithril_snapshot else None,
     )
 
-    asyncio.run(run_node(config))
+    run_node(config)  # Sync — handles its own asyncio for init, then threads
 
 
 def _parse_genesis_stake(sg: dict) -> dict[bytes, int]:
