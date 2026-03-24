@@ -140,7 +140,7 @@ As a home user, I want to see a network connection status on Daedalus so that I 
 
 There are three (at least) the following three distinct modes that the network can be operating in: each one has a red, green, amber status.
 
-::: center
+<!-- center -->
   Initial block sync      
   ----------------------- ------------------------------------------------------------------
   red                     receiving $<1$ blocks per 10s
@@ -161,7 +161,7 @@ This assumes that the slot time remains 20 seconds, or at least that the average
 
 As a user I want my transaction to be submitted to the blockchain and received by the target user within the following time period:
 
-::: center
+<!-- center -->
   ----------- -------------
   Threshold     100 seconds
   Target         60 seconds
@@ -249,7 +249,7 @@ At the same time, the node itself has a limit on the rate at which it can proces
 Of course it makes no sense if the system design is robust, but so defensive that it fails to meet performance goals. An example would be a protocol that never transmits a message unless it has received an explicit ACK for the previous message. This approach might avoid overloading the network, but would waste most of the potential bandwidth.
 
 
-::: center
+<!-- center -->
 
 **Data flow inside a Node**
 

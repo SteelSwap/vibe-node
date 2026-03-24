@@ -41,12 +41,12 @@ $$\begin{equation*}
 ### Properties of Function Approximation
 There are several properties that approximations of the transcendental functions are expected to have. In the following let $\ln'(x)$ be the approximation of $\ln(x)$, $\exp'(x)$ be the approximation of $e^{x}$ and $x\star y$ the approximation of $x^{y}$.
 
-::: property
+<!-- property -->
 []{#prop:monotone label="prop:monotone"} Both $\exp'$ and $\ln'$ must be monotone on their respective domains.
 
 In order to guarantee correctness of the approximations, we also require that the mathematical laws are fulfilled. For some small $\epsilon > 0$, define $x \approx y \Leftrightarrow \lvert x - y\rvert < \epsilon$.
 
-::: property
+<!-- property -->
 []{#prop:ln-laws label="prop:ln-laws"} The following mathematical laws state the requirements for the approximations of the $\ln'$ and $\exp'$ function:
 
 - $\ln'(x\cdot y) \approx \ln'(x) + \ln'(y)$

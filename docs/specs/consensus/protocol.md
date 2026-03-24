@@ -10,12 +10,12 @@ It turns out, however, that it suffices to look only at the headers at the very 
 
 This does beg the question of how to compare two chains when one (or both) of them are empty, since now we have no header to compare. We will resolve this by stating the following fundamental assumption about *all* chain selection algorithms supported by the consensus layer:
 
-::: assumption
+<!-- assumption -->
 []{#prefer-extension label="prefer-extension"} The extension of a chain is always preferred over that chain.
 
 A direct consequence of \[prefer-extension\]{reference-type="ref+label" reference="prefer-extension"} is that a non-empty chain is always preferred over an empty one,[^2] but we will actually need something stronger than that: we insist that shorter chains can never be preferred over longer ones:
 
-::: assumption
+<!-- assumption -->
 []{#never-shrink label="never-shrink"} A shorter chain is never preferred over a longer chain.
 
 \[never-shrink\]{reference-type="ref+Label" reference="never-shrink"} does not say anything about chains of equal length; this will be important for Praos ([1.6](#praos){reference-type="ref+label" reference="praos"}). An important side-note here is that the Ouroboros Genesis consensus protocol includes a chain selection rule (the genesis rule) that violates \[never-shrink\]{reference-type="ref+label" reference="never-shrink"} (though not \[prefer-extension\]{reference-type="ref+label" reference="prefer-extension"}); it also cannot be defined by only looking at the tips of chains. It will therefore require special treatment; we will come back to this in \[genesis\]{reference-type="ref+label" reference="genesis"}.
@@ -48,20 +48,20 @@ We model consensus protocols as a single class called `ConsensusProtocol`; this 
 
     class (..) => ConsensusProtocol p where
 
-The type variable $p$ is a type-level tag describing a particular consensus protocol; if Haskell had open kinds[^4], we could say `(p :: ConsensusProtocol)`. All functions within this class take an argument of type
+The type variable $p$ is a type-level tag describing a particular consensus protocol; if Haskell had open kinds[^4], we could say `(p<!-- ConsensusProtocol -->
 
-    data family ConsensusConfig p :: Type
+    data family ConsensusConfig p<!-- Type -->
 
 This allows the protocol to depend on some static configuration data; what configuration data is required will vary from protocol to protocol.[^5] The rest of the consensus layer does not really do much with this configuration, except make it available where required; however, we do require that whatever the configuration is, we can extract $k$ from it:
 
-    protocolSecurityParam :: ConsensusConfig p -> SecurityParam
+    protocolSecurityParam<!-- ConsensusConfig -->
 
 For example, this is used by the chain database to determine when blocks can be moved from the volatile DB to the immutable DB (\[storage:components\]{reference-type="ref+label" reference="storage:components"}). In the rest of this section we will consider the various parts of the `ConsensusProtocol` class one by one.
 
 ### Chain selection
 As mentioned in 1.1.1{reference-type="ref+label" reference="consensus:overview:chainsel"}, chain selection will only look at the headers at the tip of the ledger. Since we are defining consensus protocols independent from a concrete choice of ledger, however (\[decouple-consensus-ledger\]{reference-type="ref+label" reference="decouple-consensus-ledger"}), we cannot use a concrete block or header type. Instead, we merely say that the chain selection requires *some* view on headers that it needs to make its decisions:
 
-    type family SelectView p :: Type
+    type family SelectView p<!-- Type -->
     type SelectView p = BlockNo
 
 The default is `BlockNo` because as we have seen this is all that is required for the most important chain selection rule, simply preferring longer chains over shorter ones. It is the responsibility of the glue code that connects a specific choice of ledger to a consensus protocol to define the projection from a concrete block type to this `SelectView` (1.3). We then require that these views must be comparable
@@ -91,22 +91,22 @@ When two *candidate* chains (that is, two chains that aren't our current) are eq
 ### Ledger view
 We mentioned in \[overview:ledger\]{reference-type="ref+label" reference="overview:ledger"} that some consensus protocols may require limited information from the ledger; for instance, the Praos consensus protocol needs access to the stake distribution for the leadership check. In the `ConsensusProtocol` abstraction, this is modelled as a *view* on the ledger state
 
-    type family LedgerView p :: Type
+    type family LedgerView p<!-- Type -->
 
 The ledger view will be required in only one function: when we "tick" the state of the consensus protocol. We will discuss this state management in more detail next.
 
 ### Protocol state management
 Each consensus protocol has its own type chain dependent state[^6]
 
-    type family ChainDepState p :: Type
+    type family ChainDepState p<!-- Type -->
 
 The state must be updated with each block that comes in, but just like for chain selection, we don't work with a concrete block type but instead define a *view* on blocks that is used to update the consensus state:
 
-    type family ValidateView p :: Type
+    type family ValidateView p<!-- Type -->
 
 We're referring to this as the `ValidateView` because updating the consensus state also serves as *validation* of (that part of) the block; consequently, validation can also *fail*, with protocol specific error messages:
 
-    type family ValidationErr p :: Type
+    type family ValidationErr p<!-- Type -->
 
 Updating the chain dependent state now comes as a pair of functions. As for the ledger (\[overview:ledger\]{reference-type="ref+label" reference="overview:ledger"}), we first *tick* the protocol state to the appropriate slot, passing the already ticked ledger view as an argument:[^7]
 
@@ -142,11 +142,11 @@ Re-applying previously-validated blocks happens when we are replaying blocks fro
 ### Leader selection
 The final responsibility of the consensus protocol is leader selection. First, it is entirely possible for nodes to track the blockchain without ever producing any blocks themselves; indeed, this will be the case for the majority of nodes[^8] In order for a node to be able to lead at all, it may need access to keys and other configuration data; the exact nature of what is required is different from protocol to protocol, and so we model this as a type family
 
-    type family CanBeLeader p :: Type
+    type family CanBeLeader p<!-- Type -->
 
 A value of `CanBeLeader` merely indicates that the node has the required configuration to lead at all. It does *not* necessarily mean that the node has the right to lead in any particular slot; *this* is indicated by a value of type `IsLeader`:
 
-    type family IsLeader p :: Type
+    type family IsLeader p<!-- Type -->
 
 In simple cases `IsLeader` can just be a unit value ("yes, you are a leader now") but for more sophisticated consensus protocols such as Praos this will be a cryptographic proof that the node indeed has the right to lead in this slot. Checking whether a that *can* lead *should* lead in a given slot is the responsibility of the final function in this class:
 
@@ -160,7 +160,7 @@ In simple cases `IsLeader` can just be a unit value ("yes, you are a leader now"
 ## Connecting a block to a protocol
 Although a single consensus protocol might be used with many blocks, any given block is designed for a *single* consensus protocol. The following type family witnesses this relation:[^9]
 
-    type family BlockProtocol blk :: Type
+    type family BlockProtocol blk<!-- Type -->
 
 Of course, for the block to be usable with that consensus protocol, we need functions that construct the `SelectView` (1.2.1{reference-type="ref+label" reference="consensus:class:chainsel"}) and `ValidateView` (1.2.3{reference-type="ref+label" reference="consensus:class:state"}) projections from that block:
 
@@ -175,7 +175,7 @@ Of course, for the block to be usable with that consensus protocol, we need func
 
 The `BlockConfig` is the static configuration required to work with blocks of this type; it's just another data family:
 
-    data family BlockConfig blk :: Type
+    data family BlockConfig blk<!-- Type -->
 
 ## Design decisions constraining the Ouroboros protocol family
 TODO: Perhaps we should move this to conclusions; some of these requirements may only become clear in later chapters (like the forecasting range).
@@ -334,7 +334,7 @@ TODO: Discuss $\Delta$: When relating the papers to the implementation, we loose
 
 In the vision that underlies the abstract design of the consensus layer, the separation of responsibility between the consensus layer and the ledger layer happens along three axes.
 
-::: description
+<!-- description -->
 Block *selection* versus block *contents*
 
 The primary objective of the consensus layer is to ensure that *consensus* is reached: that is, everyone agrees on (a sufficiently long prefix of) the chain. From a sufficiently high vantage point, the consensus layer could reasonably be described as an implementation of the various Ouroboros papers (Praos, Genesis, etc.). A critical component of this is *chain selection*, choosing between competing chains. The consensus layer does not need to be aware of what is inside the blocks that it is choosing between.

@@ -114,13 +114,13 @@ the rules below, it is good practice to update the code's style to match them.
 
       ```haskell
       data Foo = Foo {
-            fooBar      :: Int
-          , fooArgument :: Bool
+            fooBar<!-- Int -->
+          , fooArgument<!-- Bool -->
           }
         deriving (Show, Eq)
 
       newtype Foo = Foo {
-            unFoo :: Int
+            unFoo<!-- Int -->
           }
         deriving (Show, Eq)
       ```
@@ -133,14 +133,14 @@ the rules below, it is good practice to update the code's style to match them.
 
       ```haskell
       data Foo = Foo {
-            fooBar      :: Int
-          , fooArgument :: Bool
+            fooBar<!-- Int -->
+          , fooArgument<!-- Bool -->
           }
         deriving stock    (Show, Eq, Generic)
         deriving anyclass (NoThunks, NFData)
 
       newtype Foo = Foo {
-            unFoo :: Int
+            unFoo<!-- Int -->
           }
         deriving stock   (Show)
         deriving newtype (Eq)
@@ -152,7 +152,7 @@ the rules below, it is good practice to update the code's style to match them.
       Records that fit onto a single line can be formatted like this:
 
       ```haskell
-      data Foo = X {foo :: A, bar :: B} | Y
+      data Foo = X {foo<!-- A -->
       ```
 
    c. We indent `data` definitions with multiple constructors as follows:
@@ -732,12 +732,12 @@ the rules below, it is good practice to update the code's style to match them.
 
     data Foo = Foo {
           -- | The bar ..
-          fooBar :: Int
+          fooBar<!-- Int -->
 
           -- | The baz ..
           --
           -- INVARIANT: 'fooBaz' is always greater than 7
-        , fooBaz :: Int
+        , fooBaz<!-- Int -->
         }
     ```
 
@@ -1006,7 +1006,7 @@ the rules below, it is good practice to update the code's style to match them.
     We try to avoid partial fields, but replacing partial fields such as
 
     ```haskell
-    data Foo = FooX {foo :: A, bar :: B} | FooY
+    data Foo = FooX {foo<!-- A -->
     ```
 
     with
@@ -1020,7 +1020,7 @@ the rules below, it is good practice to update the code's style to match them.
     as an argument to the `FooX` constructor.
 
     ```haskell
-    data X = X {foo :: A, bar :: B}
+    data X = X {foo<!-- A -->
     data Foo = FooX X | FooY
     ```
 
@@ -1065,9 +1065,9 @@ the rules below, it is good practice to update the code's style to match them.
 
     ```haskell
     data API m = API {
-          foo_ :: HasCallStack => Maybe a -> m a
+          foo_<!-- HasCallStack -->
         }
-    foo :: HasCallStack => API m -> Maybe a -> m a
+    foo<!-- HasCallStack -->
     foo = foo_
     ```
 
@@ -1081,7 +1081,7 @@ the rules below, it is good practice to update the code's style to match them.
 
     When passing the `Proxy`, use `Proxy @X` where `X` is the concrete type.
 
-    *Why:* this is less verbose than `Proxy :: Proxy X`.
+    *Why:* this is less verbose than `Proxy<!-- Proxy -->
 
     Generally try to avoid type applications, as they are rather brittle: if the
     type arguments to the function change order, suddenly a function call might
@@ -1094,7 +1094,7 @@ the rules below, it is good practice to update the code's style to match them.
     like so:
 
     ```haskell
-    pb :: Proxy blk
+    pb<!-- Proxy -->
     pb = Proxy
     ```
 

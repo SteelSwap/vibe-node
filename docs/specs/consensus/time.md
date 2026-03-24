@@ -5,13 +5,13 @@ A fundamental property of the Ouroboros family of consensus protocols is that th
 
 It's not difficult to illustrate this with an example. Suppose we want to know which slot time $t$ corresponds to in:
 
-::: center
+<!-- center -->
 
 We can read off from this depiction that $t$ is in epoch 1 *of the second era*, and relative slot 14 within that epoch. Since there are 16 slots to an epoch in that era, that makes it slot $1 \times 16 + 14 = 30$ within that era. The second era was preceded by three epochs in the first era, each of which contained 10 slots, which means that time $t$ was slot $3 \times 10 + 30 = 60$ globally.
 
 But now consider how this calculation changes if the era transition would have happened one epoch later:
 
-::: center
+<!-- center -->
 
 Slot $t$ is now in epoch 0 of the second era, with relative slot 11, making it slot $0 \times 16 + 11 = 11$ within the second era. Since the second era got preceded by *four* epochs of the first era, that makes time $t$ global slot $4 \times 10 + 11 = 51$.
 
@@ -32,22 +32,22 @@ Depending on the particular choice of consensus algorithm, not all slots contain
 
 As we saw in 1.1{reference-type="ref+label" reference="time:introduction"}, we cannot do time conversions independent of a ledger state. This motivates the following definition:
 
-:::: definition
+<!-- definition -->
 Let $\mathtt{Conv_{\sigma}(t)}$ be the function that converts time $t$, with $t$ either specified as a wallclock time, a slot number, or an epoch number, to a triplet
 
-::: center
+<!-- center -->
 (wallclock time, slot number, epoch number)
 
 using ledger state $\sigma$, provided $\sigma$ contains sufficient information to do so; $\mathtt{Conv_{\sigma}(t)}$ is undefined otherwise.
 
 Since all past era transitions are (obviously) known, time conversion should always be possible for points in the past. Let $\mathtt{tip(\sigma)}$ be the (time of) the most recently applied block in $\sigma$. Then:
 
-::: property
+<!-- property -->
 $\mathtt{Conv_{\sigma}(t)}$ should be defined for all $t \le \mathtt{tip(\sigma)}$.
 
 Furthermore, we assume that time conversion is monotone:
 
-::: property
+<!-- property -->
 []{#time-conversion-monotone label="time-conversion-monotone"} If $\mathtt{Conv_{\sigma}(t)}$ is defined, then $\mathtt{Conv_{\mathtt{apply_\mathit{bs}(\sigma)}}(t)}$ must be as well and $$\begin{equation*}
 \mathtt{Conv_{\mathtt{apply_\mathit{bs}(\sigma)}}(t)} = \mathtt{Conv_{\sigma}(t)}
 \end{equation*}$$
@@ -58,7 +58,7 @@ where $\mathtt{apply_\mathit{bs}(\sigma)}$ denotes the ledger state after applyi
 
 Under certain conditions a ledger state may be usable to do time conversions for slots ahead of the ledger state.
 
-::: definition
+<!-- definition -->
 We say that time $t > \mathtt{tip(\sigma)}$ is within the forecast range of $\sigma$ if $\mathtt{Conv}_{\sigma}(t)$ is defined.
 
 Note that monotonicity (\[time-conversion-monotone\]{reference-type="ref+label" reference="time-conversion-monotone"}) should still apply.
@@ -67,7 +67,7 @@ Note that monotonicity (\[time-conversion-monotone\]{reference-type="ref+label" 
 
 In order to be able to have a non-empty forecast range, we need to restrict when era transitions can occur.
 
-::: definition
+<!-- definition -->
 A *safe zone* is a period of time ahead of a ledger's tip in which an era transition is guaranteed not to occur if it is not yet known.
 
 Intuitively, a non-empty safe zone means that there will be time between an era transition being announced and it happening, no matter how the chain is extended (no matter which blocks are applied): $$\begin{equation}
@@ -88,7 +88,7 @@ Intuitively, a non-empty safe zone means that there will be time between an era 
 
 Monotonicity (\[time-conversion-monotone\]{reference-type="ref+label" reference="time-conversion-monotone"}) only talks about a chain's linear history; since the consensus layer needs to deal with rollbacks (switching to alternative chains) too, we will actually need a stronger property. Clearly, time conversions cannot be invariant under switching to arbitrary chains; after all, alternative chains might have era transitions in different places. The consensus layer however does not *support* switching to arbitrary alternative chains; we have a maximum rollback (\[consensus:overview:k\]{reference-type="ref+label" reference="consensus:overview:k"}), and we never switch to a shorter chain (\[consensus:overview:chainsel\]{reference-type="ref+label" reference="consensus:overview:chainsel"}, \[never-shrink\]{reference-type="ref+label" reference="never-shrink"}). This means that we can model switching to an alternative chain as $$\mathtt{switch_{(\mathit{n},\;\mathit{bs})}(\sigma)}$$ where $n \le k$ indicates how many blocks we want to rollback, $\mathit{bs}$ is a list of new blocks we want to apply, and $\mathtt{length} \; \mathit{bs} \ge n$.
 
-::: property
+<!-- property -->
 []{#time-stable-under-evolution label="time-stable-under-evolution"} If $\mathtt{Conv}_{\sigma}(t)$ is defined, then so is $\mathtt{Conv}_{\mathtt{switch_{(\mathit{n},\;\mathit{bs})}(\sigma)}}(t)$ and moreover $$\begin{equation*}
   \mathtt{Conv_{\sigma}(t)}
 = \mathtt{Conv_{\mathtt{switch_{(\mathit{n},\;\mathit{bs})}(\sigma)}}(t)}
@@ -207,10 +207,10 @@ $$\begin{equation}
 **[]{#hfc:era-transition-becoming-known label="hfc:era-transition-becoming-known"}Era transition becoming known**
 
 ### Cross-fork conversions
-:::: lemma
+<!-- lemma -->
 Suppose we have the ledger state at some point $P$, and want to do time conversions for time $t$ of a point $Q$ on a different fork of the chain:
 
-::: center
+<!-- center -->
 
 Provided that $Q$ is within the forecast range of the common ancestor $A$ of $P$ and $Q$, the ledger state at $P$ can be used to do time conversions for point $t$.
 
@@ -240,7 +240,7 @@ Recall from \[nonfunctional:network:headerbody\]{reference-type="ref+label" refe
 
 Suppose the node's own ledger state is at point $P$, and the incoming header is at point $Q$. In order to validate the header, we need a ledger *view* at point $Q$ without having the ledger *state* at point $Q$; this means that point $Q$ must be within the ledger's forecast range at the common ancestor $A$ of $P$ and $Q$ (\[,ledger:forecasting\]{reference-type="ref+label" reference=",ledger:forecasting"}):
 
-::: center
+<!-- center -->
 
 As we have seen in 1.5.2{reference-type="ref+label" reference="time:cross-fork"}, if $Q$ is within the *time* forecast range at $A$---put another way, if the time forecast range is at least as wide as the ledger forecast range---then we also can use the ledger state at $P$ to do time conversions at point $Q$. Moreover, as we saw in 1.4.2{reference-type="ref+label" reference="time:ledgerrestrictions:safezones"}, for many ledgers that inclusion *must* hold. If we make this a requirement for *all* ledgers, in principle the chain sync client could do a header-in-future check.
 
@@ -255,11 +255,11 @@ We saw in the previous section that the chain sync client *could* do the in-futu
 
 It turns out that in general we cannot, not even in relatively common cases. Consider again the diagram from 1.6.1{reference-type="ref+label" reference="time:header-infuture-check"}, but specialised to the typical case that the upstream node is on the same chain as we are, but a bit ahead of us:
 
-::: center
+<!-- center -->
 
 Since $P$ and $Q$ are on the same chain, point $P$ is necessarily also the "intersection" point, and the distance between $P$ and $Q$ can only arise from the block download logic lagging behind the chain sync client. Now consider what happens when the node switches to an alternative fork:
 
-::: center
+<!-- center -->
 
 Note what happens: since the node is switching to another fork, it must rollback some blocks and then roll forward; consequently, the intersection point $A$ moves back, and $P$ moves forward (albeit on a different chain). $Q$ stays the same, *but might have fallen out of the forecast range at $A$*.
 

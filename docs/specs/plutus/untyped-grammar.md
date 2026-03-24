@@ -2,7 +2,7 @@
 This section presents the grammar of Plutus Core in a Lisp-like form. This is intended as a specification of the abstract syntax of the language; it may also by used by tools as a concrete syntax for working with Plutus Core programs, but this is a secondary use and we do not make any guarantees of its completeness when used in this way. The primary concrete form of Plutus Core programs is the binary format described in Appendix \[appendix:flat-serialisation\].
 
 ## Lexical grammar
-::: minipage
+<!-- minipage -->
 $$\begin{array}{lrclr}
 
         \textrm{Name}          & n      & ::= & \texttt{[a-zA-Z][a-zA-Z0-9\_\textquotesingle]*(-[0-9]+)?}   & \textrm{name}\\
@@ -17,7 +17,7 @@ $$\begin{array}{lrclr}
 
 ## Grammar
 
-::: minipage
+<!-- minipage -->
 $$\begin{array}{lrclr}
     \textrm{Term}       & L,M,N  & ::= & x                               & \textrm{variable}\\
                         &        &     & \con{\tn}{c}                    & \textrm{constant}\\

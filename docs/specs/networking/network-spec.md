@@ -9,7 +9,7 @@
 Previously supported versions of the *node-to-node protocol* are listed in table 2.1.
 
 
-::: center
+<!-- center -->
   **version**        **description**
   ------------------ -----------------------------------------------------------------------
   `NodeToNodeV_1`    initial version
@@ -33,7 +33,7 @@ Previously supported versions of the *node-to-node protocol* are listed in table
 Previously supported versions of the *node-to-client protocol* are listed in table 2.2.
 
 
-::: center
+<!-- center -->
   **version**          **description**
   -------------------- ------------------------------------------------------
   `NodeToClientV_1`    initial version

@@ -27,23 +27,23 @@ $$\begin{array}{lrclr}
 
 **Grammar of reduction frames for Plutus Core**
 
-::: prooftree
+<!-- prooftree -->
 
-::: prooftree
+<!-- prooftree -->
 
-::: prooftree
+<!-- prooftree -->
 
-::: prooftree
+<!-- prooftree -->
 
-::: prooftree
+<!-- prooftree -->
 
-::: prooftree
+<!-- prooftree -->
 
-::: prooftree
+<!-- prooftree -->
 
-::: prooftree
+<!-- prooftree -->
 
-::: prooftree
+<!-- prooftree -->
 
 **Reduction via contextual semantics**
 

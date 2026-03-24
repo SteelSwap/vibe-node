@@ -70,7 +70,7 @@ Note here that the calculation of the actual cost, in Ada, of running running a 
       \end{array}
 \end{equation*}$$ *Accessor Functions*
 
-::: center
+<!-- center -->
 , , , 
 
 *Helper Functions* $$\begin{align*}

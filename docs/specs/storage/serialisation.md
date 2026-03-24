@@ -41,10 +41,10 @@ The following data is stored on disk (see \[storage\]{reference-type="ref+label"
 We use the following abstraction for serialising data to and from disk:
 
     class EncodeDisk blk a where
-      encodeDisk :: CodecConfig blk -> a -> Encoding
+      encodeDisk<!-- CodecConfig -->
 
     class DecodeDisk blk a where
-      decodeDisk :: CodecConfig blk -> forall s. Decoder s a
+      decodeDisk<!-- CodecConfig -->
 
 - These type classes have two type parameters: the block `blk`, over which most things are parameterised, and `a`, the type to (de)serialise. For example, `a` can be the block type itself or the type corresponding to the ledger state.
 
@@ -57,7 +57,7 @@ We use the following abstraction for serialising data to and from disk:
 ### Nested contents
 By writing a block to disk we automatically have written the block's header to disk, as the header is a part of the block. While we never write just a header, we do support *reading* just the header. This is more efficient than reading the entire block and then extracting the header, as fewer bytes have to be read from disk and deserialised.
 
-::: center
+<!-- center -->
 
 Extracting the header from a block on disk can be very simple, like in the figure above. The block starts with an envelope, which is followed by the block header and the block body. In this case, we read the bytes starting from the start of the header until the end of the header, which we then decode. We use the following abstraction to represent this information:
 
@@ -67,7 +67,7 @@ Extracting the header from a block on disk can be very simple, like in the figur
         }
 
     class HasBinaryBlockInfo blk where
-      getBinaryBlockInfo :: blk -> BinaryBlockInfo
+      getBinaryBlockInfo<!-- blk -->
 
 As the size of a header can vary on a per-block basis, we maintain this information *per block* in the storage layer. We trade four extra bytes of storage and memory space for faster reading of headers.
 
@@ -86,7 +86,7 @@ As usual, we parameterise over the block type. We also parameterise over another
 `NestedCtxt` is indexed by `blk`: it is the block that determines this type. However, we often want to partially apply the second argument (the functor), leaving the block type not yet defined, hence we define:
 
     newtype NestedCtxt f blk a = NestedCtxt {
-          flipNestedCtxt :: NestedCtxt_ blk f a
+          flipNestedCtxt<!-- NestedCtxt -->
         }
 
 The `a` type index will correspond to the raw, sliced header that requires the additional context. It can vary with the context, e.g., the context for a Byron EBB will fix `a` to a raw EBB header (without the necessary envelope).
@@ -94,15 +94,15 @@ The `a` type index will correspond to the raw, sliced header that requires the a
 Now that we have defined `NestedCtxt`, we can define the class that allows us to separate the nested type (the header) into the context and the raw, sliced type (the raw header, `a`), as well as the inverse:
 
     class (..) => HasNestedContent f blk where
-      unnest :: f blk -> DepPair (NestedCtxt f blk)
-      nest   :: DepPair (NestedCtxt f blk) -> f blk
+      unnest<!-- f -->
+      nest<!-- DepPair -->
 
 `DepPair` is a dependent pair that allows us to hide the type parameter `a`. When writing a block, `unnest` is used to extract the context so that it can be stored in the appropriate index. When reading a header, `nest` is used to combine the context, read from the appropriate index, with the raw header into the header.
 
 In certain scenarios, we do not have access to the separately stored context of the block, but we do have access to the encoded block, in which case we should be able to able to extract the context directly from the encoded block, without having to decode it entirely. We use the `ReconstructNestedCtxt` class for this:
 
     class HasNestedContent f blk => ReconstructNestedCtxt f blk where
-      reconstructPrefixLen  :: proxy (f blk) -> PrefixLen
+      reconstructPrefixLen<!-- proxy -->
       reconstructNestedCtxt ::
            proxy (f blk)
         -> ShortByteString
@@ -114,19 +114,19 @@ The `PrefixLen` is the number of bytes extracted from the beginning of the encod
 As these contexts and context-dependent types do not fit the mould of the `EncodeDisk` and `DecodeDisk` classes described in 1.1{reference-type="ref+label" reference="serialisation:storage"}, we define variants of these classes:
 
     class EncodeDiskDepIx f blk where
-      encodeDiskDepIx :: CodecConfig blk
+      encodeDiskDepIx<!-- CodecConfig -->
                       -> SomeSecond f blk -> Encoding
 
     class DecodeDiskDepIx f blk where
-      decodeDiskDepIx :: CodecConfig blk
+      decodeDiskDepIx<!-- CodecConfig -->
                       -> Decoder s (SomeSecond f blk)
 
     class EncodeDiskDep f blk where
-      encodeDiskDep :: CodecConfig blk -> f blk a
+      encodeDiskDep<!-- CodecConfig -->
                     -> a -> Encoding
 
     class DecodeDiskDep f blk where
-      decodeDiskDep :: CodecConfig blk -> f blk a
+      decodeDiskDep<!-- CodecConfig -->
                     -> forall s. Decoder s (ByteString -> a)
 
 ## Serialising for network transmission
@@ -151,18 +151,18 @@ The following data is sent across the network:
 We use the following abstraction for serialising data to and from the network:
 
     class SerialiseNodeToNode blk a where
-      encodeNodeToNode :: CodecConfig blk
+      encodeNodeToNode<!-- CodecConfig -->
                        -> BlockNodeToNodeVersion blk
                        -> a -> Encoding
-      decodeNodeToNode :: CodecConfig blk
+      decodeNodeToNode<!-- CodecConfig -->
                        -> BlockNodeToNodeVersion blk
                        -> forall s. Decoder s a
 
     class SerialiseNodeToClient blk a where
-      encodeNodeToClient :: CodecConfig blk
+      encodeNodeToClient<!-- CodecConfig -->
                          -> BlockNodeToClientVersion blk
                          -> a -> Encoding
-      decodeNodeToClient :: CodecConfig blk
+      decodeNodeToClient<!-- CodecConfig -->
                          -> BlockNodeToClientVersion blk
                          -> forall s. Decoder s a
 
@@ -196,8 +196,8 @@ For each backwards-incompatible change, either a change in the network protocols
 This same network version is passed to the consensus layer, so we can follow the same approach. However, we decouple the network version numbers from the consensus version numbers for the following reason. A new network version number is needed for each backwards-incompatible change to the network protocols or the encoding of the consensus data types. This is clearly a strict superset of the changes caused by consensus. When the network layer introduces a new protocol message, this does not necessarily mean anything changes in the encoding of the consensus data types. This means multiple network versions can correspond to the same consensus-side encoding or *consensus version*. In the other direction, each change to the consensus-side encodings should result in a new network version. We capture this in the following abstraction:
 
     class (..) => HasNetworkProtocolVersion blk where
-      type BlockNodeToNodeVersion   blk :: Type
-      type BlockNodeToClientVersion blk :: Type
+      type BlockNodeToNodeVersion   blk<!-- Type -->
+      type BlockNodeToClientVersion blk<!-- Type -->
 
     class HasNetworkProtocolVersion blk
        => SupportedNetworkProtocolVersion blk where
@@ -229,7 +229,7 @@ This optimisation is only used to *send* and thus encode blocks and headers, not
 As discussed in 1.1.1{reference-type="ref+label" reference="serialisation:storage:nested-contents"}, reading a header (nested in a block) from disk requires reading the context and the raw header, and then combining them before we can deserialise the header. This means the approach for serialised headers differs slightly:
 
     newtype SerialisedHeader blk = SerialisedHeaderFromDepPair {
-          serialisedHeaderToDepPair :: GenDepPair Serialised
+          serialisedHeaderToDepPair<!-- GenDepPair -->
                                                   (NestedCtxt Header blk)
         }
 

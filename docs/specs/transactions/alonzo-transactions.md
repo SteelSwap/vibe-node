@@ -84,7 +84,7 @@ These types are consistent with the Shelley ledger as much as possible, except f
     \end{array}
 \end{equation*}$$ *Tag types*
 
-::: center
+<!-- center -->
 $\mathsf{inputTag},~\mathsf{forgeTag},~\mathsf{certTag},~\mathsf{wdrlTag}$
 
 *Script types* $$\begin{equation*}
@@ -351,7 +351,7 @@ An amount of Ada can also be represented as a multicurrency value using the nota
 
   The script validation function outputs the pair of the validation result and the remaining execution units (after the ones used by script execution have been subtracted). Note that script exeuction stops if the full execution units budget has been spent before the validation is complete.
 
-::: note
+<!-- note -->
 **Know your contract arguments** A Plutus validator script may receive either a list of three terms of type $\Data$, such as for output locking scripts, or two terms (redeemer and context, with no datum), such as in the rest of the Plutus scripts use cases. Contract authors must keep this in mind when writing contracts, as there is only one function (per Plutus version) to interface with the Plutus interpreter, that runs every kind of Plutus script - with no knowledge of what $\Data$ arguments are passed to it via this list.
 
 *Abstract Script Validation Functions* $$\begin{align*}

@@ -1,52 +1,52 @@
-::::: frame
+<!-- frame -->
 ### Chain selection rule
 
-::: alertblock
+<!-- alertblock -->
 Density rule A candidate chain is preferred over our current chain if it is denser (contains more blocks) in a window of $s$ slots anchored at the intersection between the two chains.
 
-::: alertblock
+<!-- alertblock -->
 Genesis window size The genesis window size $s$ will be set to $s = 3k/f$.
 
 
-:::: frame
+<!-- frame -->
 ### Fragment selection
 
-::: center
+<!-- center -->
 
 
-:::: frame
+<!-- frame -->
 ### Fragment selection
 
-::: center
+<!-- center -->
 
 
-::: frame
+<!-- frame -->
 Known density
 
 We say that a chain fragment has a *known density* at some point $p$ if either of the following conditions hold:
 
 1.  The fragment contains a block after at least $s$ slots:
 
-    ::: center
+<!-- center -->
     :::
 
 2.  The chain (not just the fragment) terminates within the window:
 
-    ::: center
+<!-- center -->
     :::
 
-::::: frame
+<!-- frame -->
 Fragment selection
 
-::: alertblock
+<!-- alertblock -->
 Look-ahead closure []{#lookahead-closure label="lookahead-closure"} Let $\mathcal{S}$ be a set of chain fragments all anchored at the same point. We say that $\mathcal{S}$ is *look-ahead closed* if whenever there are two fragments $A, B \in \mathcal{S}$, the densities of $A$ and $B$ are known at their intersection.
 
 Unfortunately, requires unbounded lookahead:
 
-::: center
+<!-- center -->
 
 
-:::: frame
+<!-- frame -->
 Preferred Prefix
 
 $$\begin{equation*}
@@ -60,40 +60,40 @@ $$\begin{equation*}
 \right\}
 \end{equation*}$$
 
-::: alertblock
+<!-- alertblock -->
 Preferred prefix Given a set $\mathcal{S}$ of chain fragments, all anchored at the same point, a preferred prefix is a prefix $\Pi$ of one of the fragments in $\mathcal{S}$, such that $\Pi$ is guaranteed to be a prefix of a preferred fragment in the lookahead-closure of $\mathcal{S}$.
 
 
-::::: frame
+<!-- frame -->
 Prefix selection
 
-:::: alertblock
+<!-- alertblock -->
 Step 1: Resolve initial fork
 
-::: center
+<!-- center -->
 
 
-::::: frame
+<!-- frame -->
 Prefix selection
 
-:::: alertblock
+<!-- alertblock -->
 Step 2: Adopt common prefix
 
-::: center
+<!-- center -->
 
 
-::::: frame
+<!-- frame -->
 Prefix selection
 
-:::: alertblock
+<!-- alertblock -->
 Step 2: Adopt common prefix (special case)
 
-::: center
+<!-- center -->
 
 
 Smooth transition to longest chain rule.
 
-::: frame
+<!-- frame -->
 Maximum rollback
 
 1.  Ouroboros Praos assumes all nodes are online all the time
@@ -104,7 +104,7 @@ Maximum rollback
 
 4.  ...unless we are eclipsed by a malicious node and we adopt more than $k$ of their blocks (reasonably long time)
 
-::: frame
+<!-- frame -->
 Maximum rollback
 
 1.  Ouroboros Genesis drops the "always online" assumption ...
@@ -113,7 +113,7 @@ Maximum rollback
 
 3.  ...but we don't want to do that
 
-::: frame
+<!-- frame -->
 Maximum rollback
 
 1.  Genesis analysis tells us we do not need to roll back more than $k$ *when we are up to date* (just like Praos)
@@ -126,10 +126,10 @@ Maximum rollback
 
 5.  Solution: make sure to connect to a large number of upstream peers (probably randomly chosen), and refuse to make chain selection decisions if that quota is not reached.
 
-:::: frame
+<!-- frame -->
 Being "up to date"
 
-::: alertblock
+<!-- alertblock -->
 Recovering "alert" status When prefix selection can see all available chains to their tip, and we have selected and adopted the best one, the node is up to date.
 
 When not up to date:

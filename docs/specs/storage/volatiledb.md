@@ -31,9 +31,9 @@ We list the requirements and non-requirements of this component in no particular
 Before we describe the implementation of the Volatile DB, we first describe its functionality. The Volatile DB has the following API:
 
     data VolatileDB m blk = VolatileDB {
-          closeDB :: m ()
+          closeDB<!-- m -->
 
-        , putBlock :: blk -> m ()
+        , putBlock<!-- blk -->
 
         , getBlockComponent ::
                forall b.
@@ -41,13 +41,13 @@ Before we describe the implementation of the Volatile DB, we first describe its 
             -> HeaderHash blk
             -> m (Maybe b)
 
-        , garbageCollect :: SlotNo -> m ()
+        , garbageCollect<!-- SlotNo -->
 
-        , getBlockInfo :: STM m (HeaderHash blk -> Maybe (BlockInfo blk))
+        , getBlockInfo<!-- STM -->
 
-        , filterByPredecessor :: STM m (ChainHash blk -> Set (HeaderHash blk))
+        , filterByPredecessor<!-- STM -->
 
-        , getMaxSlotNo :: STM m MaxSlotNo
+        , getMaxSlotNo<!-- STM -->
         }
 
 The database is parameterised over the block type `blk` and the monad `m`, like most of the consensus layer. Mention our use of records for components?

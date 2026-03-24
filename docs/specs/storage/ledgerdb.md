@@ -5,7 +5,7 @@ The Ledger DB is responsible for the following tasks:
 
 2.  **Maintaining the past $k$ ledger states**: As discussed in \[consensus:overview:k\]{reference-type="ref+label" reference="consensus:overview:k"}, we might roll back up to $k$ blocks when switching to a more preferable fork. Consider the example below:
 
-    ::: center
+<!-- center -->
     :::
 
     Our current chain's tip is $C_2$, but the fork containing blocks $F_1$, $F_2$, and $F_3$ is more preferable. We roll back our chain to the intersection point of the two chains, $I$, which must be not more than $k$ blocks back from our current tip. Next, we must validate block $F_1$ using the ledger state at block $I$, after which we can validate $F_2$ using the resulting ledger state, and so on.
@@ -70,7 +70,7 @@ The representation was much more complex, to account for these missing ledger st
 
 Consider the example below using `snapEvery` = 3. $L_i$ indicate ledger states and $\emptyset_i$ indicate skipped ledger states. $L_0$ corresponds to the most recent ledger state, at the tip of the chain.
 
-::: center
+<!-- center -->
 
 When we need access to the ledger state at position $3$, we are in luck and can use the available $L_3$. However, when we need access to the skipped ledger state at position $1$, we have to do the following: we look for the most recent ledger state before $\emptyset_1$, i.e., $L_3$. Next, we need to reapply blocks $B_2$ and $B_1$ to it, which means we have to read those from disk, deserialise them, and apply them again.
 

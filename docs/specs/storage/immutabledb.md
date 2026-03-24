@@ -21,11 +21,11 @@ Because of the specific requirements and non-requirements listed above, we decid
 Before we describe the implementation of the Immutable DB, we first describe its functionality. The Immutable DB has the following API:
 
     data ImmutableDB m blk = ImmutableDB {
-          closeDB :: m ()
+          closeDB<!-- m -->
 
-        , getTip :: STM m (WithOrigin (Tip blk))
+        , getTip<!-- STM -->
 
-        , appendBlock :: blk -> m ()
+        , appendBlock<!-- blk -->
 
         , getBlockComponent ::
                forall b.
@@ -69,17 +69,17 @@ move to ChainDB?
 Besides reading or streaming blocks from the Immutable DB, it must be possible to read or stream headers, raw blocks (see \[serialisation:network:serialised\]{reference-type="ref+label" reference="serialisation:network:serialised"}), but in some cases also *nested contexts* (see \[serialisation:storage:nested-contents\]{reference-type="ref+label" reference="serialisation:storage:nested-contents"}) or even block sizes. Adding an operation to the API for each of these would result in too much duplication. We handle this with the `BlockComponent` abstraction: when reading or streaming, one can choose which *components* of a block should be returned, e.g., the block itself, the header of the block, the size of the block, the raw block, the raw header, etc. We model this with the following GADT:
 
     data BlockComponent blk a where
-      GetVerifiedBlock :: BlockComponent blk blk
-      GetBlock         :: BlockComponent blk blk
-      GetRawBlock      :: BlockComponent blk ByteString
-      GetHeader        :: BlockComponent blk (Header blk)
-      GetRawHeader     :: BlockComponent blk ByteString
-      GetHash          :: BlockComponent blk (HeaderHash blk)
-      GetSlot          :: BlockComponent blk SlotNo
-      GetIsEBB         :: BlockComponent blk IsEBB
-      GetBlockSize     :: BlockComponent blk Word32
-      GetHeaderSize    :: BlockComponent blk Word16
-      GetNestedCtxt    :: BlockComponent blk (SomeSecond (NestedCtxt Header) blk)
+      GetVerifiedBlock<!-- BlockComponent -->
+      GetBlock<!-- BlockComponent -->
+      GetRawBlock<!-- BlockComponent -->
+      GetHeader<!-- BlockComponent -->
+      GetRawHeader<!-- BlockComponent -->
+      GetHash<!-- BlockComponent -->
+      GetSlot<!-- BlockComponent -->
+      GetIsEBB<!-- BlockComponent -->
+      GetBlockSize<!-- BlockComponent -->
+      GetHeaderSize<!-- BlockComponent -->
+      GetNestedCtxt<!-- BlockComponent -->
       ..
 
 The `a` type index determines the type of the block component. Additionally, we have `Functor` and `Applicative` instances. The latter allows combining multiple `BlockComponent`s into one. This can be considered a small DSL for querying components of a block.
@@ -88,9 +88,9 @@ The `a` type index determines the type of the block component. Additionally, we 
 The following API can be used to interact with an iterator:
 
     data Iterator m blk b = Iterator {
-          iteratorNext    :: m (IteratorResult b)
-        , iteratorHasNext :: STM m (Maybe (RealPoint blk))
-        , iteratorClose   :: m ()
+          iteratorNext<!-- m -->
+        , iteratorHasNext<!-- STM -->
+        , iteratorClose<!-- m -->
         }
 
     data IteratorResult b =
@@ -151,12 +151,12 @@ Internally, we translate *absolute* slot numbers into *chunk numbers* and *relat
 
 how should this be formatted?
 
-::: definition
+<!-- definition -->
 Let $s$ be the absolute slot number of a block. Using a chunk size of $\mathit{sz}$:
 
 $$\mathsf{chunkNumber(s)} = \lfloor s / \mathit{sz} \rfloor$$ Naturally, chunks are zero-indexed.
 
-::: definition
+<!-- definition -->
 Let $s$ be the absolute slot number of a block. Using a chunk size of $\mathit{sz}$:
 
 $$\mathsf{relativeSlot(s, \mathit{isEBB})} =
@@ -167,7 +167,7 @@ $$\mathsf{relativeSlot(s, \mathit{isEBB})} =
 
 In the example below, we show a chunk with chunk number 1 using a chunk size of 100:
 
-::: center
+<!-- center -->
 
 Note that some slots are empty, e.g., 102 and 198 are missing. The first and lasts slots can be empty too. In practice, it will never be the case that an entire chunk is empty, but the implementation allows for it.
 
@@ -204,7 +204,7 @@ We use a separate index for each task: the *primary index* for the first task an
 
 In the secondary index, we store the information about a block that is needed before or without having to read and deserialise the block. The secondary index is an append-only file, like the chunk file, and contains a *secondary index entry* for each block. For simplicity and robustness, a secondary index merely contains a series of densely stored secondary index entries with no extra information between, before, or after them. This avoids needing to initialise or finalise such a file, which also makes the recovery process simpler (1.2.3{reference-type="ref+label" reference="immutable:implementation:recovery"}). A secondary index entry consists of the following fields:
 
-::: center
+<!-- center -->
   field             size \[bytes\]
   --------------- ----------------
   block offset                   8
@@ -264,7 +264,7 @@ However, as mentioned in 1.2{reference-type="ref+label" reference="immutable:imp
 
 We illustrate this format with an example primary index below, which matches the chunk out of the example from 1.2.1{reference-type="ref+label" reference="immutable:implementation:chunk-layout"}. The offsets correspond to the blocks on the line below them, where $\emptyset$ indicates an empty slot. We assume a fixed size of 10 bytes for each secondary index entry. The offset $X$ corresponds the final size of the secondary index.
 
-::: center
+<!-- center -->
 
 The version number we mentioned above can be used to migrate indices in the old format to a newer format, when the need would arise in the future. We do not include a version number in the secondary index, as both index formats are tightly coupled, which means that both index files should be migrated together.
 

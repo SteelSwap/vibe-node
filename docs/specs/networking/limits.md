@@ -6,7 +6,7 @@ There are several layers, where timeouts play a crucial way in making the system
 After handshake negotiation is done, mux is using a bearer with `30s` timeout on receiving a mux SDU (the previous note applies as well). Once a mini-protocol is in execution it must enforce it's own set of timeouts which we included in the previous chapter and for convenience we referenced them in the table 1.1 below.
 
 
-::: center
+<!-- center -->
   --------------- ----------------------------------------------------------------------------------------------------------------------------------------
   Handshake       table \[table:handshake-timeouts\]
   Chain-Sync      table \[table:chain-sync-timeouts\]
@@ -27,7 +27,7 @@ Once all outbound and inbound mini-protocols have terminated and the idleness ti
 All per mini-protocol size limits are referenced in table 1.2:
 
 
-::: center
+<!-- center -->
   --------------- -------------------------------------------------------------------------------------------------------------------------------------------------
   Handshake       table \[table:handshake-size-limits\]
   Chain-Sync      table \[table:chain-sync-size-limits\]

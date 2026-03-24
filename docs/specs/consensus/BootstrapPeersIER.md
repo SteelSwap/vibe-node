@@ -70,18 +70,18 @@ See [input-output-hk/ouroboros-network#4555](https://github.com/input-output-hk/
   The Diffusion Layer should react promptly.
   ```haskell
   data LedgerStateJudgement = YoungEnough | TooOld
-  lpGetLedgerStateJudgement :: STM m LedgerStateJudgement
+  lpGetLedgerStateJudgement<!-- STM -->
   ```
   Here, `YoungEnough` signals that the ledger state's distribution among stake relays is sufficiently close to that of the actual real world.
   For now, we conservatively return `YoungEnough` only when the node concludes it has fully caught-up, and `TooOld` otherwise.
 
 - Whenever necessary, the Diffusion Layer can ask the Consensus Layer for the ledger peer information, eg
   ```haskell
-  lpGetLedgerPeers :: STM m [(PoolStake, NonEmpty RelayAccessPoint)]
+  lpGetLedgerPeers<!-- STM -->
   ```
   Note that this is completely independent of `lpGetLedgerStateJudgement`; we anticipate that it will be called conditional on `lpGetLedgerStateJudgement == YoungEnough`.
 
  - Additionally, the Consensus Layer will provide the Diffusion Layer with the slot number of the latest tip, to allow the Diffusion Layer to support the related `UseLedgerAfter` feature without the Consensus Layer having to be aware of it. Concretely:
    ```haskell
-   lpGetLatestSlot :: STM m SlotNo
+   lpGetLatestSlot<!-- STM -->
    ```

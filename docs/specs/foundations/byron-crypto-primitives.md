@@ -37,7 +37,7 @@ Figure 1 introduces the cryptographic abstractions used in this document. Note 
 **Cryptographic definitions**
 
 ## A note on serialization
-::: definition
+<!-- definition -->
 For all types $\type{A}$ and $\type{B}$, given a function $\fun{f} \in \type{A} \to \type{B}$, we say that the serialization function for values of type $\type{A}$, namely $\serialised{ }_\type{A}$ distributes over $\fun{f}$ if there exists a function $\fun{f}_{\serialised{ }}$ such that for all $a \in \type{A}$: $$\begin{equation}
     \label{eq:distributivity-serialization}
     \serialised{\fun{f}~a}_\type{B} = \fun{f}_{\serialised{ }}~\serialised{a}_\type{A}

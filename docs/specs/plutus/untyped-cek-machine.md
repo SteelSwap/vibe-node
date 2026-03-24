@@ -43,7 +43,7 @@ To make the CEK machine fit into the built-in evaluation mechanism defined in Se
 The rules in Figure 5 show the transitions of the machine; if any situation arises which is not included in these transitions (for example, if a frame $\inAppRightFrame{\VCon{\tn}{c}}$ is encountered or if an attempt is made to apply `force` to a partial builtin application which is expecting a term argument), then the machine stops immediately in an error state.
 
 
-::: minipage
+<!-- minipage -->
 $$\begin{alignat*}
 {2}
  s;\rho & \compute x                                 &~\mapsto~& s \return  \rho[x] \enskip \text{if $x$ is bound in $\rho$}\\

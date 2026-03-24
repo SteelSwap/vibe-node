@@ -6,7 +6,7 @@ documentation about the implementation of Ouroboros which is at the
 heart of Cardano.
 
 
-:::info
+<!-- info -->
 
 This documentation is a work-in-progress, please feel free to raise
 issues and contribute on

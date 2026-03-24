@@ -69,12 +69,12 @@ Client and server implementation
 
 Dummy mini-protocols are not used by 'cardano-node'; however, they might be helpful when writing demos, testing purposes or getting familiar with the framework.
 
-::: framed
+<!-- framed -->
 **Ping Pong Protocol**Section 1.5.1\
 A simple ping-pong protocol for testing.\
 [`typed-protocols/src/Network/TypedProtocol/PingPong/Type.hs`](https://input-output-hk.github.io/typed-protocols/typed-protocols-examples/Network-TypedProtocol-PingPong-Type.html#t:PingPong)
 
-::: framed
+<!-- framed -->
 **Request Response Protocol**Section 1.5.2\
 A ping-pong-like protocol which allows the exchange of data.\
 [`typed-protocols/src/Network/TypedProtocol/ReqResp/Type.hs`](https://input-output-hk.github.io/typed-protocols/typed-protocols-examples/Network-TypedProtocol-ReqResp-Type.html#t:ReqResp)
@@ -83,7 +83,7 @@ A ping-pong-like protocol which allows the exchange of data.\
 
 Handshake mini-protocol is shared by the node-to-node and node-to-client protocols (it is polymorphic to allow that).
 
-::: framed
+<!-- framed -->
 **Handshake Mini Protocol**Section \[handshake-protocol\]\
 This protocol is used for version negotiation.\
 [`ouroboros-network-framework/src/Ouroboros/Network/Protocol/Handshake/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-framework/Ouroboros-Network-Protocol-Handshake-Type.html#t:Handshake)
@@ -92,27 +92,27 @@ This protocol is used for version negotiation.\
 
 In this section, we list all the mini-protocols that constitute the node-to-node protocol.
 
-::: framed
+<!-- framed -->
 **Chain Synchronisation Protocol**Section 1.7\
 The protocol by which a downstream chain consumer follows an upstream chain producer.\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/ChainSync/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-ChainSync-Type.html#t:ChainSync)
 
-::: framed
+<!-- framed -->
 **Block Fetch Protocol**Section 1.8\
 The block fetching mechanism enables a node to download ranges of blocks.\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/BlockFetch/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-BlockFetch-Type.html#t:BlockFetch)
 
-::: framed
+<!-- framed -->
 **Transaction Submission Protocol v2**Section \[tx-submission-protocol2\]\
 A Protocol for transmitting transactions between core nodes.\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/TxSubmission2/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-TxSubmission2-Type.html#t:TxSubmission2)
 
-::: framed
+<!-- framed -->
 **Keep Alive Protocol**Section \[keep-alive-protocol\]\
 A protocol for sending keep alive messages and doing round trip measurements\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/KeepAlive/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-KeepAlive-Type.html#t:KeepAlive)
 
-::: framed
+<!-- framed -->
 **Peer Sharing Protocol**Section \[peer-sharing-protocol\]\
 A mini-protocol which allows to share peer addresses\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/PeerSharing/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-PeerSharing-Type.html#t:PeerSharing)
@@ -121,22 +121,22 @@ A mini-protocol which allows to share peer addresses\
 
 Mini-protocols used by node-to-client protocol. The chain-sync mini-protocol is shared between node-to-node and node-to-client protocols, but it is instantiated differently. In node-to-client protocol, it is used with full blocks rather than just headers.
 
-::: framed
+<!-- framed -->
 **Chain Synchronisation Protocol**Section 1.7\
 The protocol by which a downstream chain consumer follows an upstream chain producer.\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/ChainSync/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-ChainSync-Type.html#t:ChainSync)
 
-::: framed
+<!-- framed -->
 **Local State Query Mini Protocol**Section 1.13\
 Protocol used by local clients to query ledger state\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/LocalStateQuery/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-LocalStateQuery-Type.html#t:LocalStateQuery)
 
-::: framed
+<!-- framed -->
 **Local Tx Submission Mini Protocol**Section \[local-tx-submission-protocol\]\
 Protocol used by local clients to submit transactions\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/LocalTxSubmission/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-LocalTxSubmission-Type.html#t:LocalTxSubmission)
 
-::: framed
+<!-- framed -->
 **Local Tx Monitor Mini Protocol**Section \[local-tx-monitor-protocol\]\
 Protocol used by local clients to monitor transactions\
 [`ouroboros-network-protocols/src/Ouroboros/Network/Protocol/LocalTxMonitor/Type.hs`](https://ouroboros-network.cardano.intersectmbo.org/ouroboros-network-protocols/Ouroboros-Network-Protocol-LocalTxMonitor-Type.html#t:LocalTxMonitor)
@@ -270,7 +270,7 @@ Messages of the protocol:
 
 These bounds limit how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- --------
        `5760`
@@ -283,7 +283,7 @@ These bounds limit how many bytes can be sent in a given state; indirectly, this
 
 These limits bound how much time the receiver side can wait for the arrival of a message. If a timeout is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- -------
        `10`s
@@ -329,7 +329,7 @@ If the negotiation is successful, the negotiated version data is sent back using
 
 These bounds limit how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
-::: center
+<!-- center -->
   -- --------
        `5760`
        `5760`
@@ -339,7 +339,7 @@ These bounds limit how many bytes can be sent in a given state; indirectly, this
 
 These limits bound how much time the receiver side can wait for the arrival of a message. If a timeout is violated, the connection SHOULD be torn down.
 
-::: center
+<!-- center -->
   -- -------
        `10`s
        `10`s
@@ -369,7 +369,7 @@ If the negotiation is successful, the negotiated version data is sent back using
 
 These bounds limit how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
-::: center
+<!-- center -->
   -- --------
        `5760`
        `5760`
@@ -409,7 +409,7 @@ In case of simultaneous open of a TCP connection, both handshake clients will se
 
 The protocol does not forbid, nor could it detect a usage of outside of TCP simultaneous open. The process of choosing between the proposed and received version must be symmetric in the following sense.
 
-:   We use `acceptable :: vData -> vData -> Accept vData` function to compute accepted version data from local and remote data, where
+:   We use `acceptable<!-- vData -->
 
           data Accept vData = Accept vData
                             | Refuse Text
@@ -459,7 +459,7 @@ The chain synchronisation protocol is polymorphic. The node-to-client protocol u
 
 **State machine of the Chain-Sync mini-protocol**
 
-::: center
+<!-- center -->
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
@@ -516,7 +516,7 @@ The protocol uses the following messages:
 
 Table 1.3 specifies how many bytes can be sent in a given state in the chain-sync mini-protocol of the node-to-node protocol; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- ---------
        `65535`
@@ -531,7 +531,7 @@ Table 1.3 specifies how many bytes can be sent in a given state in the chain-sy
 ### Node-to-node timeouts per state
 The table 1.4 specifies message timeouts in a given state. If a timeout is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- ----------------------------------
                                 `3673`s
@@ -564,7 +564,7 @@ The chain producer assumes that a consumer which has just connected, only knows 
 A typical situation is when the consumer follows the chain of the producer but is not yet at the head of the chain (this also covers a consumer booting from the genesis). In this case, the protocol follows a simple, consumer-driven, request-response pattern. The consumer sends messages to ask for the next block. If the *read-pointer* is not yet at the head of the chain, the producer replies with a and advances the *read-pointer* to the next block (optimistically assuming that the client will update its chain accordingly). The message contains the next block and also the head-point of the producer. The protocol follows this pattern until the *read-pointer* reaches the end of its chain.
 
 
-::: center
+<!-- center -->
 
 **Consumer-driven block download.**
 
@@ -583,7 +583,7 @@ The node of the chain producer can switch to a new fork at any time, independent
 2\) If the *read-pointer* points to a block that is no longer part of the chain that is followed by the node, the *read-pointer* is set to the last block that is common between the new and the old chain. The node also sets a flag that signals the chain-sync thread to send a instead of a . Finally, the producer thread must unblock if it is in the state.
 
 
-::: center
+<!-- center -->
 
 ***read-pointer* update for a fork switch in case of a rollback.**
 
@@ -649,7 +649,7 @@ The block fetching mechanism enables a node to download a range of blocks.
 
 **State machine of the block-fetch mini-protocol**
 
-::: center
+<!-- center -->
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
@@ -678,7 +678,7 @@ The block fetching mechanism enables a node to download a range of blocks.
 
 The transitions are shown in table 1.5.
 
-:::: center
+<!-- center -->
 
   -- -- --------- --
                   
@@ -696,7 +696,7 @@ The transitions are shown in table 1.5.
 
 These bounds limit how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- -----------
          `65535`
@@ -710,7 +710,7 @@ These bounds limit how many bytes can be sent in a given state; indirectly, this
 
 These limits bound how much time the receiver side can wait for the arrival of a message. If a timeout is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- -------
           \-
@@ -747,7 +747,7 @@ Note that Version 1 of the tx-submission protocol is no longer supported. Versio
 
 **State machine of the Tx-Submission mini-protocol (version 2).**
 
-::: center
+<!-- center -->
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
@@ -830,7 +830,7 @@ Note that Version 1 of the tx-submission protocol is no longer supported. Versio
 ### Size limits per state
 Table 1.8 specifies how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- -----------
           `5760`
@@ -851,7 +851,7 @@ The maximal number of unacknowledged transactions ids is `10`. It is a protocol 
 
 The table 1.9 specifies message timeouts in a given state. If a timeout is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- -------
           \-
@@ -896,7 +896,7 @@ Keep-alive mini-protocol is a member of the node-to-node protocol. It is used fo
 
 **State machine of the keep-alive protocol.**
 
-::: center
+<!-- center -->
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
@@ -919,7 +919,7 @@ Keep-alive mini-protocol is a member of the node-to-node protocol. It is used fo
 ### Size limits per state
 These bounds limit how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- ---------
        `65535`
@@ -932,7 +932,7 @@ These bounds limit how many bytes can be sent in a given state; indirectly, this
 
 These limits bound how much time the receiver side can wait for the arrival of a message. If a timeout is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- -------
        `97`s
@@ -962,7 +962,7 @@ The Peer-Sharing mini-protocol is a simple Request-Reply mini-protocol. The mini
 
 **State machine of the peer sharing protocol.**
 
-::: center
+<!-- center -->
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
@@ -989,7 +989,7 @@ The Peer-Sharing mini-protocol is a simple Request-Reply mini-protocol. The mini
 ### Size limits per state
 These bounds limit how many bytes can be sent in a given state; indirectly, this limits the payload size of each message. If a space limit is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- --------
        `5760`
@@ -1002,7 +1002,7 @@ These bounds limit how many bytes can be sent in a given state; indirectly, this
 
 These limits bound how much time the receiver side can wait for the arrival of a message. If a timeout is violated, the connection SHOULD be torn down.
 
-:::: center
+<!-- center -->
 
   -- -------
           \-
@@ -1084,7 +1084,7 @@ Note that the local transaction submission protocol is a push-based protocol whe
 
 **State machine of the Local Tx-Submission mini-protocol.**
 
-::: center
+<!-- center -->
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
@@ -1133,7 +1133,7 @@ Local State Query mini-protocol allows querying of the consensus/ledger state. T
 
 **State machine of the Local State Query mini-protocol.**
 
-::: center
+<!-- center -->
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
@@ -1215,7 +1215,7 @@ A mini-protocol which allows the monitoring of transactions in the local mempool
 
 **State machine of the Local Tx-Monitor mini-protocol.**
 
-::: center
+<!-- center -->
   -- --------------------------------------
      [**Client**]{style="color: mygreen"}
      [**Server**]{style="color: myblue"}
@@ -1331,7 +1331,7 @@ The *node-to-node protocol* consists of the following protocols:
 Currently supported versions of the *node-to-node protocol* are listed in table 1.7.
 
 
-::: center
+<!-- center -->
   ------------------ ------------------------------------------------------------------------------
   `NodeToNodeV_14`   No changes, identifies Plomin HF nodes mandatory on mainnet as of 2025.01.29
   `NodeToNodeV_15`   No changes, identifies nodes which support SRV records
@@ -1346,7 +1346,7 @@ Previously supported node-to-node versions are listed in table \[table:historica
 
 The following table 1.14 shows mux mini-protocol numbers assigned to each node-to-node mini-protocol.
 
-:::: center
+<!-- center -->
 
   --------------------------------------------------- ------
   Handshake                     $0$
@@ -1364,7 +1364,7 @@ The following table 1.14 shows mux mini-protocol numbers assigned to each node-
 
 Ingress buffer is the buffer which holds received data for a given mini-protocol. It is an internal detail of the multiplexer. Each implementation should define its ingress buffer size limits. Here we specify the default choices we made for Cardano Node. These limits depend on how much pipelining depth a given mini-protocol can do. This is an internal implementation detail since the amount of pipelining is controlled by the peer who owns its ingress buffer.
 
-:::: center
+<!-- center -->
 
   ------------------------------------------- -----------------
   Handshake                           \-
@@ -1395,7 +1395,7 @@ The *node-to-client protocol* consists of the following protocols:
 Supported versions of *node-to-client protocol* are listed in table 1.8.
 
 
-::: center
+<!-- center -->
   -------------------- ----------------------------------------------------------------
   `NodeToClientV_16`   Conway era, `ImmutableTip` and `GetStakeDelegDeposits` queries
   `NodeToClientV_17`   `GetProposals`, `GetRatifyState` queries
@@ -1415,7 +1415,7 @@ Previously supported node-to-client versions are listed in table \[table:histori
 
 The following table 1.16 show mux mini-protocol numbers assigned to each node-to-client mini-protocol.
 
-:::: center
+<!-- center -->
 
   ------------------------------------------------------ -----
   Handshake                        $0$

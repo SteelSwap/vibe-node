@@ -581,14 +581,14 @@ We model consensus protocols as a single class called `ConsensusProtocol` ; this
 class(..)=>ConsensusProtocolpwhere
 ```
 
-The type variable _p_ is a type-level tag describing a particular consensus protocol; if Haskell had open kinds[5] , we could say `(p :: ConsensusProtocol)` . All functions within this class take an argument of type 
+The type variable _p_ is a type-level tag describing a particular consensus protocol; if Haskell had open kinds[5] , we could say `(p<!-- ConsensusProtocol -->
 
-## `data family ConsensusConfig p :: Type` 
+## `data family ConsensusConfig p<!-- Type -->
 
 This allows the protocol to depend on some static configuration data; what configuration data is required will vary from protocol to protocol.[6] The rest of the consensus layer does not really do much with this configuration, except make it available where required; however, we do require that whatever the configuration is, we can extract _k_ from it: 
 
 ```
-protocolSecurityParam::ConsensusConfigp->SecurityParam
+protocolSecurityParam<!-- ConsensusConfigp -->
 ```
 
 For example, this is used by the chain database to determine when blocks can be moved from the volatile DB to the immutable DB (section 7.1). In the rest of this section we will consider the various parts of the `ConsensusProtocol` class one by one. 
@@ -597,7 +597,7 @@ For example, this is used by the chain database to determine when blocks can be 
 
 As mentioned in section 4.1.1, chain selection will only look at the headers at the tip of the ledger. Since we are defining consensus protocols independent from a concrete choice of ledger, however (section 2.2.3), we cannot use a concrete block or header type. Instead, we merely say that the chain selection requires _some_ view on headers that it needs to make its decisions: 
 
-## `type family SelectView p :: Type` 
+## `type family SelectView p<!-- Type -->
 
 ```
 typeSelectViewp=BlockNo
@@ -629,13 +629,13 @@ Both of these responsibilities would require more than seeing just the tip of th
 
 When two _candidate_ chains (that is, two chains that aren’t our current) are equally preferable, we are free to choose either one. However, when a candidate chain is equally preferable to our current, we _must_ stick with our current chain. This is true for all Ouroboros consensus protocols, and we define it once and for all: 
 
-`preferCandidate :: ConsensusProtocol p => proxy p -> SelectView p` −− _ˆ Tip of our chain_ `-> SelectView p` −− _ˆ Tip of the candidate_ `-> Bool preferCandidate _ ours cand = cand > ours` 
+`preferCandidate<!-- ConsensusProtocol -->
 
 ## **4.2.2 Ledger view** 
 
 We mentioned in section 2.1.2 that some consensus protocols may require limited information from the ledger; for instance, the Praos consensus protocol needs access to the stake distribution for the leadership check. In the `ConsensusProtocol` abstraction, this is modelled as a _view_ on the ledger state 
 
-## `type family LedgerView p :: Type` 
+## `type family LedgerView p<!-- Type -->
 
 The ledger view will be required in only one function: when we “tick” the state of the consensus protocol. We will discuss this state management in more detail next. 
 
@@ -643,11 +643,11 @@ The ledger view will be required in only one function: when we “tick” the st
 
 Each consensus protocol has its own type chain dependent state[7] 
 
-## `type family ChainDepState p :: Type` 
+## `type family ChainDepState p<!-- Type -->
 
 The state must be updated with each block that comes in, but just like for chain selection, we don’t work with a concrete block type but instead define a _view_ on blocks that is used to update the consensus state: 
 
-## `type family ValidateView p :: Type` 
+## `type family ValidateView p<!-- Type -->
 
 We’re referring to this as the `ValidateView` because updating the consensus state also serves as _validation_ of (that part of) the block; consequently, validation can also _fail_ , with protocol specific error messages: 
 
@@ -658,7 +658,7 @@ We’re referring to this as the `ValidateView` because updating the consensus s
 How does this relate to the best case == worst case thing? Or to the asymptotic attacker/defender costs? 
 
 ```
-typefamilyValidationErrp::Type
+typefamilyValidationErrp<!-- Type -->
 ```
 
 Updating the chain dependent state now comes as a pair of functions. As for the ledger (section 2.1.2), we first _tick_ the protocol state to the appropriate slot, passing the already ticked ledger view as an argument:[8] 
@@ -713,7 +713,7 @@ Re-applying previously-validated blocks happens when we are replaying blocks fro
 The final responsibility of the consensus protocol is leader selection. First, it is entirely possible for nodes to track the blockchain without ever producing any blocks themselves; indeed, this will be the case for the majority of nodes[9] In order for a node to be able to lead at all, it may need access to keys and other configuration data; the exact nature of what is required is different from protocol to protocol, and so we model this as a type family 
 
 ```
-typefamilyCanBeLeaderp::Type
+typefamilyCanBeLeaderp<!-- Type -->
 ```
 
 > 8Throughout the consensus layer, the result of ticking is distinguished from the unticked value at the type level. This allows to store additional (or indeed, less) information in the ticked ledger state, but also clarifies ordering. For example, it is clear in `tickChainDepState` that the ledger view we pass as an argument is already ticked, as opposed to the _old_ ledger view. 
@@ -725,7 +725,7 @@ typefamilyCanBeLeaderp::Type
 A value of `CanBeLeader` merely indicates that the node has the required configuration to lead at all. It does _not_ necessarily mean that the node has the right to lead in any particular slot; _this_ is indicated by a value of type `IsLeader` : 
 
 ```
-typefamilyIsLeaderp::Type
+typefamilyIsLeaderp<!-- Type -->
 ```
 
 In simple cases `IsLeader` can just be a unit value (“yes, you are a leader now”) but for more sophisticated consensus protocols such as Praos this will be a cryptographic proof that the node indeed has the right to lead in this slot. Checking whether a that _can_ lead _should_ lead in a given slot is the responsibility of the final function in this class: 
@@ -747,7 +747,7 @@ ConsensusConfigp
 Although a single consensus protocol might be used with many blocks, any given block is designed for a _single_ consensus protocol. The following type family witnesses this relation:[10] 
 
 ```
-typefamilyBlockProtocolblk::Type
+typefamilyBlockProtocolblk<!-- Type -->
 ```
 
 Of course, for the block to be usable with that consensus protocol, we need functions that construct the `SelectView` (section 4.2.1) and `ValidateView` (section 4.2.3) projections from that block: 
@@ -772,7 +772,7 @@ selectView::
 The `BlockConfig` is the static configuration required to work with blocks of this type; it’s just another data family: 
 
 ```
-datafamilyBlockConfigblk::Type
+datafamilyBlockConfigblk<!-- Type -->
 ```
 
 ## **4.4 Design decisions constraining the Ouroboros protocol family** 
@@ -1020,7 +1020,7 @@ We will start with ledger API that can be defined independent of a choice of blo
 Like the other abstractions in the consensus layer, the ledger defines its own type of required static configuration 
 
 ```
-typefamilyLedgerCfgl::Type
+typefamilyLedgerCfgl<!-- Type -->
 ```
 
 ## **Tip** 
@@ -1032,7 +1032,7 @@ classGetTiplwhere
 ```
 
 ```
-getTip::l->Pointl
+getTip<!-- l -->
 ```
 
 28 
@@ -1043,11 +1043,11 @@ We can now define the `IsLedger` class as
 
 ```
 class(GetTipl,GetTip(Tickedl),..)=>IsLedgerlwhere
-typefamilyLedgerErrl::Type
+typefamilyLedgerErrl<!-- Type -->
 ```
 
 ```
-applyChainTick::LedgerCfgl->SlotNo->l->Tickedl
+applyChainTick<!-- LedgerCfgl -->
 ```
 
 The type of `applyChainTick` is similar to the type of `tickChainDepState` we saw in section 4.2.3. Examples of the time-based changes in the ledger state include activating delegation certificates in the Byron ledger, or paying out staking rewards in the Shelley ledger. 
@@ -1093,7 +1093,7 @@ We mentioned at the start of section 5.1 that a single block can be used with mu
 29 
 
 ```
-datafamilyLedgerStateblk::Type
+datafamilyLedgerStateblk<!-- Type -->
 ```
 
 and then require that it must be possible to apply a block to its associated ledger state `class ApplyBlock (LedgerState blk) blk => UpdateLedger blk` 
@@ -1167,9 +1167,9 @@ Since we’re always forecasting what the ledger would look like _if it would be
 dataForecasta=Forecast{
 ```
 
-- `forecastAt :: WithOrigin SlotNo` 
+- `forecastAt<!-- WithOrigin -->
 
-- `, forecastFor :: SlotNo -> Except OutsideForecastRange (Ticked a) }` 
+- `, forecastFor<!-- SlotNo -->
 
 Here `forecastAt` is the tip of the ledger in which the forecast was constructed and `forecastFor` is constructing the forecast for a particular slot, possibly returning an error message of that slot is out of range. This terminology—a forecast constructed _at_ a slot and computed _for_ a slot—is used throughout both this technical report as well as the consensus layer code base. 
 
@@ -1269,11 +1269,11 @@ link?
 
 We use the following abstraction for serialising data to and from disk: 
 
-- `class EncodeDisk blk a where encodeDisk :: CodecConfig blk -> a -> Encoding` 
+- `class EncodeDisk blk a where encodeDisk<!-- CodecConfig -->
 
 - `class DecodeDisk blk a where` 
 
-   - `decodeDisk :: CodecConfig blk -> forall s. Decoder s a` 
+   - `decodeDisk<!-- CodecConfig -->
 
    - These type classes have two type parameters: the block `blk` , over which most things are parameterised, and `a` , the type to (de)serialise. For example, `a` can be the block type itself or the type corresponding to the ledger state. 
 
@@ -1300,7 +1300,7 @@ Extracting the header from a block on disk can be very simple, like in the figur
 
    - `, headerSize :: !Word16 }` 
 
-- `class HasBinaryBlockInfo blk where getBinaryBlockInfo :: blk -> BinaryBlockInfo` 
+- `class HasBinaryBlockInfo blk where getBinaryBlockInfo<!-- blk -->
 
 34 
 
@@ -1327,7 +1327,7 @@ newtypeNestedCtxtfblka=NestedCtxt{
 ```
 
 ```
-flipNestedCtxt::NestedCtxt_blkfa
+flipNestedCtxt<!-- NestedCtxt -->
 ```
 
 ```
@@ -1340,8 +1340,8 @@ Now that we have defined `NestedCtxt` , we can define the class that allows us t
 
 ```
 class(..)=>HasNestedContentfblkwhere
-unnest::fblk->DepPair(NestedCtxtfblk)
-nest::DepPair(NestedCtxtfblk)->fblk
+unnest<!-- fblk -->
+nest<!-- DepPair -->
 ```
 
 `DepPair` is a dependent pair that allows us to hide the type parameter `a` . When writing a block, `unnest` is used to extract the context so that it can be stored in the appropriate index. When reading a header, `nest` is used to combine the context, read from the appropriate index, with the raw header into the header. 
@@ -1350,7 +1350,7 @@ In certain scenarios, we do not have access to the separately stored context of 
 
 ```
 classHasNestedContentfblk=>ReconstructNestedCtxtfblkwhere
-reconstructPrefixLen::proxy(fblk)->PrefixLen
+reconstructPrefixLen<!-- proxy -->
 ```
 
 35 
@@ -1371,25 +1371,25 @@ As these contexts and context-dependent types do not fit the mould of the `Encod
 
 ```
 classEncodeDiskDepIxfblkwhere
-encodeDiskDepIx::CodecConfigblk
+encodeDiskDepIx<!-- CodecConfigblk -->
 ->SomeSecondfblk->Encoding
 ```
 
 ```
 classDecodeDiskDepIxfblkwhere
-decodeDiskDepIx::CodecConfigblk
+decodeDiskDepIx<!-- CodecConfigblk -->
 ->Decoders(SomeSecondfblk)
 ```
 
 ```
 classEncodeDiskDepfblkwhere
-encodeDiskDep::CodecConfigblk->fblka
+encodeDiskDep<!-- CodecConfigblk -->
 ->a->Encoding
 ```
 
 ```
 classDecodeDiskDepfblkwhere
-decodeDiskDep::CodecConfigblk->fblka
+decodeDiskDep<!-- CodecConfigblk -->
 ->foralls.Decoders(ByteString->a)
 ```
 
@@ -1421,7 +1421,7 @@ The following data is sent across the network:
 
 We use the following abstraction for serialising data to and from the network: 
 
-- `class SerialiseNodeToNode blk a where encodeNodeToNode :: CodecConfig blk` 
+- `class SerialiseNodeToNode blk a where encodeNodeToNode<!-- CodecConfig -->
 
 **==> picture [50 x 47] intentionally omitted <==**
 
@@ -1433,7 +1433,7 @@ less<br>whites-<br>pace<br>**----- End of picture text -----**<br>
 
    - `-> a -> Encoding` 
 
-- `decodeNodeToNode :: CodecConfig blk` 
+- `decodeNodeToNode<!-- CodecConfig -->
 
    - `-> BlockNodeToNodeVersion blk` 
 
@@ -1443,7 +1443,7 @@ less<br>whites-<br>pace<br>**----- End of picture text -----**<br>
 
 ```
 classSerialiseNodeToClientblkawhere
-encodeNodeToClient::CodecConfigblk
+encodeNodeToClient<!-- CodecConfigblk -->
 ```
 
 ```
@@ -1453,7 +1453,7 @@ encodeNodeToClient::CodecConfigblk
 - `-> a -> Encoding` 
 
 ```
-decodeNodeToClient::CodecConfigblk
+decodeNodeToClient<!-- CodecConfigblk -->
 ```
 
 - `-> BlockNodeToClientVersion blk` 
@@ -1506,7 +1506,7 @@ When the network layer establishes a connection with another node or client, it 
 
 This same network version is passed to the consensus layer, so we can follow the same approach. However, we decouple the network version numbers from the consensus version numbers for the following reason. A new network version number is needed for each backwards-incompatible change to the network protocols or the encoding of the consensus data types. This is clearly a strict superset of the changes caused by consensus. When the network layer introduces a new protocol message, this does not necessarily mean anything changes in the encoding of the consensus data types. This means multiple network versions can correspond to the same consensus-side encoding or _consensus version_ . In the other direction, each change to the consensus-side encodings should result in a new network version. We capture this in the following abstraction: 
 
-- `class (..) => HasNetworkProtocolVersion blk where type BlockNodeToNodeVersion blk :: Type type BlockNodeToClientVersion blk :: Type` 
+- `class (..) => HasNetworkProtocolVersion blk where type BlockNodeToNodeVersion blk<!-- Type -->
 
 - `class HasNetworkProtocolVersion blk` 
 
@@ -1568,7 +1568,7 @@ newtypeSerialisedHeaderblk=SerialisedHeaderFromDepPair{
 ```
 
 ```
-serialisedHeaderToDepPair::GenDepPairSerialised
+serialisedHeaderToDepPair<!-- GenDepPairSerialised -->
 ```
 
 ```
@@ -1697,15 +1697,15 @@ Before we describe the implementation of the Immutable DB, we first describe its
 
 ```
 dataImmutableDBmblk=ImmutableDB{
-closeDB::m()
+closeDB<!-- m -->
 ```
 
 ```
-,getTip::STMm(WithOrigin(Tipblk))
+,getTip<!-- STMm -->
 ```
 
 ```
-,appendBlock::blk->m()
+,appendBlock<!-- blk -->
 ,getBlockComponent::
 forallb.
 BlockComponentblkb
@@ -1765,17 +1765,17 @@ Besides reading or streaming blocks from the Immutable DB, it must be possible t
 
 ```
 dataBlockComponentblkawhere
-GetVerifiedBlock::BlockComponentblkblk
-GetBlock::BlockComponentblkblk
-GetRawBlock::BlockComponentblkByteString
-GetHeader::BlockComponentblk(Headerblk)
-GetRawHeader::BlockComponentblkByteString
-GetHash::BlockComponentblk(HeaderHashblk)
-GetSlot::BlockComponentblkSlotNo
-GetIsEBB::BlockComponentblkIsEBB
-GetBlockSize::BlockComponentblkWord32
-GetHeaderSize::BlockComponentblkWord16
-GetNestedCtxt::BlockComponentblk(SomeSecond(NestedCtxtHeader)blk)
+GetVerifiedBlock<!-- BlockComponentblkblk -->
+GetBlock<!-- BlockComponentblkblk -->
+GetRawBlock<!-- BlockComponentblkByteString -->
+GetHeader<!-- BlockComponentblk -->
+GetRawHeader<!-- BlockComponentblkByteString -->
+GetHash<!-- BlockComponentblk -->
+GetSlot<!-- BlockComponentblkSlotNo -->
+GetIsEBB<!-- BlockComponentblkIsEBB -->
+GetBlockSize<!-- BlockComponentblkWord -->
+GetHeaderSize<!-- BlockComponentblkWord -->
+GetNestedCtxt<!-- BlockComponentblk -->
 ..
 ```
 
@@ -1787,9 +1787,9 @@ The following API can be used to interact with an iterator:
 
 ```
 dataIteratormblkb=Iterator{
-iteratorNext::m(IteratorResultb)
-,iteratorHasNext::STMm(Maybe(RealPointblk))
-,iteratorClose::m()
+iteratorNext<!-- m -->
+,iteratorHasNext<!-- STMm -->
+,iteratorClose<!-- m -->
 }
 ```
 
@@ -2124,11 +2124,11 @@ Before we describe the implementation of the Volatile DB, we first describe its 
 
 ```
 dataVolatileDBmblk=VolatileDB{
-closeDB::m()
+closeDB<!-- m -->
 ```
 
 ```
-,putBlock::blk->m()
+,putBlock<!-- blk -->
 ,getBlockComponent::
 forallb.
 BlockComponentblkb
@@ -2137,19 +2137,19 @@ BlockComponentblkb
 ```
 
 ```
-,garbageCollect::SlotNo->m()
+,garbageCollect<!-- SlotNo -->
 ```
 
 ```
-,getBlockInfo::STMm(HeaderHashblk->Maybe(BlockInfoblk))
+,getBlockInfo<!-- STMm -->
 ```
 
 ```
-,filterByPredecessor::STMm(ChainHashblk->Set(HeaderHashblk))
+,filterByPredecessor<!-- STMm -->
 ```
 
 ```
-,getMaxSlotNo::STMmMaxSlotNo
+,getMaxSlotNo<!-- STMmMaxSlotNo -->
 ```
 
 ```
@@ -2827,10 +2827,10 @@ The API of a follower is as follows:
 
 ```
 dataFollowermblka=Follower{
-followerInstruction::m(Maybe(ChainUpdateblka))
-,followerInstructionBlocking::m(ChainUpdateblka)
+followerInstruction<!-- m -->
+,followerInstructionBlocking<!-- m -->
 ,followerForward::[Pointblk]->m(Maybe(Pointblk))
-,followerClose::m()
+,followerClose<!-- m -->
 }
 ```
 
@@ -4396,7 +4396,7 @@ Some details specific to the Byron ledger. EBBs already discussed at length in c
 The Byron ledger state provides the current protocol version in 
 
 ```
-adoptedProtocolVersion::ProtocolVersion
+adoptedProtocolVersion<!-- ProtocolVersion -->
 ```
 
 in the `State` type from `Cardano.Chain.Update.Validation.Interface` . This protocol version is a threetuple _major_ , _minor_ , _alt_ . The Byron specification does not provide any semantic interpretation of these components. By convention (outside of the purview of the Byron specification), the hard fork is initiated the moment that the _major_ component of `adoptedProtocolVersion` reaches a predefined, hardcoded, value. 

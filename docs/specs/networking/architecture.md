@@ -11,7 +11,7 @@ There are two protocols which support different sets of mini-protocols:
 Chain-sync mini-protocol (the node-to-node version) is used to replicate a remote chain of headers; block-fetch mini-protocol to download blocks and tx-submission to disseminate transactions across the network.
 
 
-::: center
+<!-- center -->
 
 **Cardano Node**
 

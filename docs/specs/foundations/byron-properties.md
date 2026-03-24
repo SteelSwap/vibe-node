@@ -2,10 +2,10 @@
 ## Transition-system traces
 This section introduces the notion of traces induced by the transition systems described in [@small_step_semantics].
 
-::: definition
+<!-- definition -->
 Given a state transition system $L=(S,T,\Sigma, R, \Gamma)$, the set of traces of $L$, denoted as $\fun{traces}_L$ is defined as: $$\{ (e, s, \txs, s') \mid e \in \Gamma,~ s \in S,~ \txs \in \seqof{\Sigma},~ s' \in S\}$$
 
-::: definition
+<!-- definition -->
 Given a state transition system $L=(S,T,\Sigma, R, \Gamma)$, we define the notion of valid traces inductively:
 
 - For all $e \in \Gamma$, $s \in S$, $(e, s, \epsilon, s)$ is a valid trace of $L$.
@@ -34,7 +34,7 @@ In a set operation quantification over a sequence $\mathcal{A}$, the operation i
 ## UTxO Properties
 Property \[prop:no-double-spending\] expresses the fact that transaction inputs cannot be used more than once. This property requires that the starting UTxO does not contain any future outputs, which is a reasonable constraint.
 
-::: property
+<!-- property -->
 []{#prop:no-double-spending label="prop:no-double-spending"} For all
 
 $$\left(
@@ -61,7 +61,7 @@ $$\forall \txs_i,~\txs_j \cdot i < j \Rightarrow \txins{\txs_i} \cap \txins{\txs
 
 Property \[prop:utxo-out-min-in\] expresses the fact that all inputs and outputs are accounted for, in such a way that we can reconstruct the final (UTxO) state by adding all the outputs to the initial state, and removing the spent outputs.
 
-::: property
+<!-- property -->
 []{#prop:utxo-out-min-in label="prop:utxo-out-min-in"} For all
 
 $$\left(
@@ -88,7 +88,7 @@ $$\bigcup_{\txins{}} \txs \subtractdom (\var{utxo_0} \cup \bigcup_{\txouts{}} \t
 
 Property \[prop:utxo-money-supply-cnst\] models the fact that the amount of money in the system (counted as Lovelaces) remains constant.
 
-::: property
+<!-- property -->
 []{#prop:utxo-money-supply-cnst label="prop:utxo-money-supply-cnst"} For all
 
 $$\left(
@@ -112,7 +112,7 @@ $$\var{reserves} + \balance{utxo} =  \var{reserves_0} + \balance{utxo_0}$$
 ## Delegation Properties
 Property \[prop:no-dcert-replay\] states that delegation certificates cannot be replayed. Remember that $\Delta_i$ is the $i^{\text{th}}$ element of $\Delta$, which is a sequence of sequences of delegation certificates, so $\Delta_i \in \seqof{\DCert}$ and $\Delta_{i_j} \in \DCert$ (assuming $j$ is a valid index of $\Delta_i$).
 
-::: property
+<!-- property -->
 []{#prop:no-dcert-replay label="prop:no-dcert-replay"} For all $$\left(
     \begin{array}{l}
       \var{delegSt}

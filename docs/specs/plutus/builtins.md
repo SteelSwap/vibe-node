@@ -4,7 +4,7 @@ As mentioned above, Plutus Core is generic over a universe $\Uni$ of types and a
 ## Built-in types
 We require some extra syntactic notation for built-in types: see Figure \[fig:type-names-operators\].
 
-::: minipage
+<!-- minipage -->
 $$\begin{array}{rclr}
     \at    & ::= & n & \textrm{Atomic type}\\
      \op             & ::= & n & \textrm{Type operator}\\
@@ -27,7 +27,7 @@ For non-atomic type names $\tn = \op(\tn_1, \ldots, \tn_r)$ we would generally e
 ### Type variables
 Built-in functions can be polymorphic, and to deal with this we need *type variables*. An argument of a polymorphic function can be either restricted to built-in types or can be an arbitrary term, and we define two different kinds of type variables to cover these two situations. See Figure \[fig:type-variables\].
 
-::: minipage
+<!-- minipage -->
 $$\begin{array}{lrclr}
         \textrm{TypeVariable}    & \textit{tv}& ::= & n_{\#} & \textrm{built-in-polymorphic type variable}\\
                                  &    &      & \star & \textrm{fully-polymorphic type variable}\\

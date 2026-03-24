@@ -270,13 +270,13 @@ The following is a possible Plutus implementation of a simple $m$ out of $n$ mul
     data MultiSig = MultiSig
                     { signatories :: [Ledger.PubKey]
                     -- ^ List of public keys of people who may sign the transaction
-                    , requiredSignatures :: Integer
+                    , requiredSignatures<!-- Integer -->
                     -- ^ Minimum number of signatures required to unlock
                     --   the output (should not exceed @length signatories@)
                     --   n.b., should also check that this is >= 0
                     }
 
-    validate :: MultiSig -> () -> () -> PendingTx -> Bool
+    validate<!-- MultiSig -->
     validate multiSig@(MultiSig keys num) () () p =
         let present = P.length (P.filter (V.txSignedBy p) keys)
         in present `P.geq` num
