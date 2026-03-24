@@ -57,8 +57,14 @@ class NodeKernel:
         Ouroboros.Consensus.NodeKernel — owns ChainDB and protocol state.
     """
 
-    def __init__(self, chain_db: Any = None) -> None:
+    def __init__(self, chain_db: Any = None, lock: Any = None) -> None:
         self._chain_db = chain_db
+
+        # Thread-safety: RWLock for concurrent nonce reads / exclusive writes
+        if lock is None:
+            from vibe.core.rwlock import RWLock
+            lock = RWLock()
+        self._lock = lock
 
         # Praos chain-dependent state — full 5-nonce model
         # Haskell ref: PraosState in Ouroboros.Consensus.Protocol.Praos

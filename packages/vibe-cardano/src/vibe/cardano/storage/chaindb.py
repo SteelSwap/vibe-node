@@ -121,11 +121,20 @@ class ChainDB:
         volatile_db: VolatileDB,
         ledger_db: LedgerDB,
         k: int = 2160,
+        lock: Any = None,
     ) -> None:
         self.immutable_db = immutable_db
         self.volatile_db = volatile_db
         self.ledger_db = ledger_db
         self._k = k
+
+        # Thread-safety: RWLock for concurrent read/exclusive write.
+        # If not provided, creates a default instance (transparent in
+        # single-threaded mode).
+        if lock is None:
+            from vibe.core.rwlock import RWLock
+            lock = RWLock()
+        self._lock = lock
 
         # Current selected chain tip (None if DB is empty).
         self._tip: _ChainTip | None = None
@@ -396,6 +405,19 @@ class ChainDB:
             if self._tip else None
         )
         return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
+
+    def add_block_sync(self, **kwargs: Any) -> ChainSelectionResult:
+        """Synchronous wrapper for add_block, used by the forge thread.
+
+        Creates a temporary event loop to run the async add_block.
+        The write lock should be held by the caller.
+        """
+        import asyncio as _asyncio
+        loop = _asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(self.add_block(**kwargs))
+        finally:
+            loop.close()
 
     async def get_tip(self) -> tuple[int, bytes, int] | None:
         """Return the current chain tip as (slot, hash, block_number).
