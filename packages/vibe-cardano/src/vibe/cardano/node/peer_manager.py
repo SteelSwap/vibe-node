@@ -47,18 +47,39 @@ def _get_new_chain_blocks(
     h = tip_hash
     while h and h != intersection_hash and h in chain_db.volatile_db._block_info:
         info = chain_db.volatile_db._block_info[h]
-        # Try to get VRF output from the block
         vrf_out: bytes | None = None
-        block_cbor = chain_db.volatile_db._blocks.get(h)
-        if block_cbor:
-            try:
-                hdr = decode_block_header(block_cbor)
-                vrf_out = hdr.vrf_output
-            except Exception:
-                pass
+
+        # Try chain fragment first (has VRF for header-only blocks)
+        frag_idx = chain_db._fragment_index.get(h)
+        if frag_idx is not None and frag_idx < len(chain_db._chain_fragment):
+            entry = chain_db._chain_fragment[frag_idx]
+            # Fragment stores header_cbor — decode for VRF
+            if entry.header_cbor:
+                try:
+                    from vibe.cardano.serialization.block import decode_block_header_raw, Era
+                    hdr_data = entry.header_cbor
+                    if isinstance(hdr_data, (list, tuple)) and len(hdr_data) >= 2:
+                        era_tag = hdr_data[0]
+                        wrapped = hdr_data[1]
+                        hdr_bytes = wrapped.value if hasattr(wrapped, "value") else wrapped
+                        hdr = decode_block_header_raw(hdr_bytes, Era(era_tag))
+                        vrf_out = hdr.vrf_output
+                except Exception:
+                    pass
+
+        # Fallback: try VolatileDB block body
+        if vrf_out is None:
+            block_cbor = chain_db.volatile_db._blocks.get(h)
+            if block_cbor and len(block_cbor) > 10:  # Skip empty placeholders
+                try:
+                    hdr = decode_block_header(block_cbor)
+                    vrf_out = hdr.vrf_output
+                except Exception:
+                    pass
+
         blocks.append((info.slot, info.block_hash, info.predecessor_hash, vrf_out))
         h = info.predecessor_hash
-    blocks.reverse()  # oldest first
+    blocks.reverse()
     return blocks
 
 
@@ -364,9 +385,12 @@ class PeerManager:
             Runs as background task so _on_roll_forward returns immediately.
             """
             try:
-                def _locked_add():
+                # Chain selection + nonce update must be ATOMIC.
+                # Both under the same lock to prevent interleaving
+                # with concurrent header processing from the other peer.
+                def _locked_add_and_nonce():
                     with cdb._lock.write():
-                        return cdb.add_block_sync(
+                        result = cdb.add_block_sync(
                             slot=slot,
                             block_hash=blk_hash,
                             predecessor_hash=prev_hash,
@@ -375,32 +399,31 @@ class PeerManager:
                             header_cbor=header_cbor,
                             vrf_output=vrf_output,
                         )
+                        # Nonce update inside the same lock scope.
+                        # Haskell ref: switchTo atomically updates cdbChain
+                        # AND notifies followers AND ticks chain dep state.
+                        if result.adopted and node_kernel is not None and vrf_output:
+                            with node_kernel._lock.write():
+                                if result.rollback_depth > 0 and result.intersection_hash is not None:
+                                    new_blocks = _get_new_chain_blocks(
+                                        cdb, result.intersection_hash, blk_hash,
+                                    )
+                                    node_kernel.on_fork_switch(
+                                        result.intersection_hash, new_blocks,
+                                    )
+                                elif blk_hash not in _nonce_processed:
+                                    _nonce_processed.add(blk_hash)
+                                    node_kernel.on_block_adopted(
+                                        slot, blk_hash, prev_hash, vrf_output,
+                                    )
+                        return result
+
                 loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(None, _locked_add)
+                result = await loop.run_in_executor(None, _locked_add_and_nonce)
 
                 if result.adopted:
                     if self._block_received_event is not None:
                         self._block_received_event.set()
-
-                    # Nonce update AFTER chain selection confirms adoption.
-                    # Haskell ref: reupdateChainDepState runs after
-                    # chainSelectionForBlock, not before.
-                    if node_kernel is not None and vrf_output:
-                        with node_kernel._lock.write():
-                            if result.rollback_depth > 0 and result.intersection_hash is not None:
-                                # Tiebreak: rollback nonce and re-accumulate
-                                new_blocks = _get_new_chain_blocks(
-                                    cdb, result.intersection_hash, blk_hash,
-                                )
-                                node_kernel.on_fork_switch(
-                                    result.intersection_hash, new_blocks,
-                                )
-                            elif blk_hash not in _nonce_processed:
-                                # Simple extension: accumulate nonce
-                                _nonce_processed.add(blk_hash)
-                                node_kernel.on_block_adopted(
-                                    slot, blk_hash, prev_hash, vrf_output,
-                                )
             except Exception as exc:
                 logger.debug("Header tip update error at slot %d: %s", slot, exc)
 
