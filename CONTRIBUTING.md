@@ -24,16 +24,16 @@ uv run pytest -x -q
 
 ## Code Style
 
-Enforced by **ruff** (lint + isort) and **black** (format). Line length: 99.
+Enforced by **ruff** (lint, isort, format, docstrings). Line length: 99. Docstrings follow **Google style**.
 
 ```bash
 # Check
 uv run ruff check src/ packages/ tests/
-uv run black --check src/ packages/ tests/
+uv run ruff format --check src/ packages/ tests/
 
 # Fix
 uv run ruff check --fix src/ packages/ tests/
-uv run black src/ packages/ tests/
+uv run ruff format src/ packages/ tests/
 ```
 
 Pre-commit hooks run these automatically on staged files. CI fails on violations.
