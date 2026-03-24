@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -147,11 +148,10 @@ class ChainDB:
         self._chain_fragment: list[FragmentEntry] = []
         self._fragment_index: dict[bytes, int] = {}
 
-        # Event set whenever the tip changes. Stays set until a consumer
-        # clears it — this prevents missed notifications from set+clear.
-        self.tip_changed: asyncio.Event = asyncio.Event()
-        # Monotonic counter so consumers can detect changes even if
-        # multiple tips arrive between checks.
+        # Thread-safe tip change notification.
+        # threading.Event works across threads (forge → serve).
+        # _tip_generation is a monotonic counter for poll-based detection.
+        self.tip_changed: threading.Event = threading.Event()
         self._tip_generation: int = 0
 
         # Follower registry: id → ChainFollower

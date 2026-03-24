@@ -127,14 +127,23 @@ class ChainFollower:
             self.client_point = point
             return ("roll_forward", entry.header_cbor, point, tip)
 
-        # 3. At tip — wait for new blocks via generation counter.
-        # Poll with short sleep until tip_generation advances.
-        deadline = asyncio.get_event_loop().time() + 0.5
-        while self._chain_db._tip_generation <= self._last_seen_generation:
-            remaining = deadline - asyncio.get_event_loop().time()
-            if remaining <= 0:
-                break
-            await asyncio.sleep(min(0.05, remaining))
+        # 3. At tip — wait for new blocks.
+        # Wait on threading.Event via run_in_executor to avoid blocking
+        # the asyncio event loop. Wakes instantly when any thread sets
+        # tip_changed (e.g., forge thread or receive thread).
+        try:
+            loop = asyncio.get_event_loop()
+            await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,  # default thread pool
+                    self._chain_db.tip_changed.wait,
+                    0.5,  # timeout
+                ),
+                timeout=0.6,
+            )
+            self._chain_db.tip_changed.clear()
+        except (TimeoutError, asyncio.TimeoutError):
+            pass
         self._last_seen_generation = self._chain_db._tip_generation
 
         # Re-check after wake
