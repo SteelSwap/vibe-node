@@ -213,9 +213,8 @@ def forge_loop(
             with chain_db._lock.read():
                 tip = chain_db._tip
                 if tip is not None:
-                    if tip.slot >= slot:
-                        continue
                     if slot - tip.slot > 10:
+                        # Still syncing — too far behind
                         continue
                     prev_header_hash = tip.block_hash
                     prev_block_number = tip.block_number
