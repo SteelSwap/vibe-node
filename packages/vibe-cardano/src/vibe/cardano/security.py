@@ -108,12 +108,12 @@ def safe_cbor_loads(
     max_depth:
         Maximum allowed nesting depth.  Defaults to :data:`MAX_CBOR_DEPTH`.
 
-    Returns
+    Returns:
     -------
     Any
         The decoded Python object.
 
-    Raises
+    Raises:
     ------
     ValueError
         If ``len(data)`` exceeds *max_size*.
@@ -156,7 +156,7 @@ def validate_protocol_message(
     expected_types:
         Sequence of types that are acceptable at this point in the protocol.
 
-    Returns
+    Returns:
     -------
     The original *msg* if its type matches, or ``None`` with a logged warning.
     """

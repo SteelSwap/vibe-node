@@ -145,9 +145,9 @@ class TestCddlSchemaDiscovery:
         # Every era's CDDL should define at least 'block' or 'transaction_body'
         has_block = "block" in text.lower()
         has_tx = "transaction" in text.lower()
-        assert (
-            has_block or has_tx
-        ), f"{era} CDDL file doesn't define 'block' or 'transaction' types"
+        assert has_block or has_tx, (
+            f"{era} CDDL file doesn't define 'block' or 'transaction' types"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -349,9 +349,9 @@ class TestStructuralCddlConformance:
             0,
             0,  # protocol_version (2 fields)
         ]
-        assert (
-            len(header_body) == 15
-        ), f"Shelley header_body should have 15 fields, got {len(header_body)}"
+        assert len(header_body) == 15, (
+            f"Shelley header_body should have 15 fields, got {len(header_body)}"
+        )
 
     def test_block_header_body_babbage_field_count(self):
         """Babbage header_body has 14 fields per CDDL (single VRF cert)."""
@@ -371,9 +371,9 @@ class TestStructuralCddlConformance:
             0,
             0,  # protocol_version (2 fields)
         ]
-        assert (
-            len(header_body) == 14
-        ), f"Babbage header_body should have 14 fields, got {len(header_body)}"
+        assert len(header_body) == 14, (
+            f"Babbage header_body should have 14 fields, got {len(header_body)}"
+        )
 
     def test_operational_cert_field_sizes(self):
         """OCert fields have specific sizes per CDDL."""
@@ -536,9 +536,9 @@ class TestCborTagConformance:
             result = cbor2.dumps(tagged)
             # Tags 0-23 encode as 0xC0 + tag (single byte)
             expected_byte = 0xC0 + era_tag
-            assert (
-                result[0] == expected_byte
-            ), f"Era tag {era_tag} should encode as 0x{expected_byte:02x}, got 0x{result[0]:02x}"
+            assert result[0] == expected_byte, (
+                f"Era tag {era_tag} should encode as 0x{expected_byte:02x}, got 0x{result[0]:02x}"
+            )
 
     def test_canonical_map_key_ordering(self):
         """Canonical CBOR requires map keys sorted by encoded byte value.

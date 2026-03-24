@@ -75,7 +75,7 @@ class MsgRequestTxIds:
     determines whether the client must reply with at least one tx ID
     (blocking=True) or may reply with an empty list (blocking=False).
 
-    Attributes
+    Attributes:
     ----------
     blocking : bool
         If True, the client MUST reply with a non-empty list or MsgDone.
@@ -100,7 +100,7 @@ class MsgReplyTxIds:
     blocking request, this list MUST be non-empty. When replying to a
     non-blocking request, the list may be empty.
 
-    Attributes
+    Attributes:
     ----------
     txids : list[tuple[bytes, int]]
         List of (transaction_id_bytes, size_in_bytes) pairs.
@@ -114,7 +114,7 @@ class MsgReplyTxIds:
 class MsgRequestTxs:
     """Server -> Client: request full transactions by their IDs.
 
-    Attributes
+    Attributes:
     ----------
     txids : list[bytes]
         List of transaction IDs to fetch.
@@ -128,7 +128,7 @@ class MsgRequestTxs:
 class MsgReplyTxs:
     """Client -> Server: reply with full CBOR-encoded transactions.
 
-    Attributes
+    Attributes:
     ----------
     txs : list[bytes]
         List of CBOR-encoded transaction bodies.
@@ -273,12 +273,12 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
     cbor_bytes : bytes
         Raw CBOR payload (one complete message).
 
-    Returns
+    Returns:
     -------
     ServerMessage
         One of: MsgRequestTxIds, MsgRequestTxs.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.
@@ -325,12 +325,12 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
 
     Client sends MsgInit, MsgReplyTxIds, MsgReplyTxs, or MsgDone.
 
-    Returns
+    Returns:
     -------
     ClientMessage
         One of: MsgInit, MsgReplyTxIds, MsgReplyTxs, MsgDone.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.

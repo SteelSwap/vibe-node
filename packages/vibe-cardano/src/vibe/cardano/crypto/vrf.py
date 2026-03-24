@@ -106,7 +106,7 @@ def vrf_keypair() -> tuple[bytes, bytes]:
     Uses the ECVRF-ED25519-SHA512-Elligator2 (draft-03) construction
     from the IOG libsodium fork.
 
-    Raises
+    Raises:
     ------
     NotImplementedError
         If the native VRF extension is not available.
@@ -130,12 +130,12 @@ def vrf_prove(sk: bytes, alpha: bytes) -> bytes:
         Input message / alpha string (arbitrary length). Typically
         the encoded slot number or epoch nonce.
 
-    Returns
+    Returns:
     -------
     bytes
         The 80-byte VRF proof.
 
-    Raises
+    Raises:
     ------
     NotImplementedError
         If the native VRF extension is not available.
@@ -168,13 +168,13 @@ def vrf_verify(pk: bytes, proof: bytes, alpha: bytes) -> bytes | None:
         Input message (the VRF "alpha string" — typically the encoded
         slot number or nonce).
 
-    Returns
+    Returns:
     -------
     bytes | None
         The 64-byte VRF output if verification succeeds, or ``None``
         if the proof is invalid.
 
-    Raises
+    Raises:
     ------
     NotImplementedError
         If the native VRF extension is not available.
@@ -213,12 +213,12 @@ def vrf_proof_to_hash(proof: bytes) -> bytes:
     proof:
         VRF proof (80 bytes).
 
-    Returns
+    Returns:
     -------
     bytes
         The 64-byte VRF output hash.
 
-    Raises
+    Raises:
     ------
     NotImplementedError
         If the native VRF extension is not available.
@@ -311,12 +311,12 @@ def certified_nat_max_check(
     f:
         Active slot coefficient (0.0 to 1.0 exclusive).
 
-    Returns
+    Returns:
     -------
     bool
         True if the pool is elected as slot leader, False otherwise.
 
-    Raises
+    Raises:
     ------
     ValueError
         If ``vrf_output`` is not 64 bytes, or ``sigma``/``f`` are

@@ -133,7 +133,8 @@ class TestNoDoubleSpend:
     @settings(max_examples=50, deadline=5000)
     def test_no_double_spend_property(self, num_txs: int, seed: int):
         """No input appears in more than one transaction's consumed set
-        when transactions are applied sequentially to the UTxO."""
+        when transactions are applied sequentially to the UTxO.
+        """
         # Create UTxO with enough entries for our transactions
         total_entries = num_txs
         utxo_set, sk, vk = _make_utxo_set(
@@ -173,9 +174,9 @@ class TestNoDoubleSpend:
             all_consumed.append(txin)
 
         # Verify: no input was consumed twice
-        assert len(all_consumed) == len(
-            set(all_consumed)
-        ), f"Double spend detected! Consumed inputs: {all_consumed}"
+        assert len(all_consumed) == len(set(all_consumed)), (
+            f"Double spend detected! Consumed inputs: {all_consumed}"
+        )
 
 
 # ---------------------------------------------------------------------------

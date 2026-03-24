@@ -475,7 +475,7 @@ class TxSubmissionClient:
         The server has agency in StIdle and will send either
         MsgRequestTxIds or MsgRequestTxs.
 
-        Returns
+        Returns:
         -------
         TsMsgRequestTxIds | TsMsgRequestTxs
             The server's request.

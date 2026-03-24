@@ -156,7 +156,8 @@ class TestIteratorRegressionGCDuringIteration:
     @pytest.mark.asyncio
     async def test_iterator_survives_truncated_chunk(self, tmp_path):
         """If the chunk file is truncated mid-iteration, the iterator
-        should return empty bytes for blocks whose data is gone."""
+        should return empty bytes for blocks whose data is gone.
+        """
         db = ImmutableDB(str(tmp_path), epoch_size=1000)
         await db.append_block(1, make_hash(1), b"A" * 100)
         await db.append_block(2, make_hash(2), b"B" * 100)
@@ -238,7 +239,8 @@ class TestIteratorRegression1435:
     async def test_1435c_iterator_after_rollback(self, tmp_path):
         """(c) Iterator created, then delete_after truncates the DB.
         The iterator's pre-loaded entries reference blocks that no longer
-        exist on disk. Should return empty bytes, not crash."""
+        exist on disk. Should return empty bytes, not crash.
+        """
         db = ImmutableDB(str(tmp_path), epoch_size=1000)
         for s in [1, 3, 5, 7]:
             await db.append_block(s, make_hash(s), f"blk{s}".encode())
@@ -264,7 +266,8 @@ class TestIteratorRegression1435:
     @pytest.mark.asyncio
     async def test_1435d_iterator_after_gc_volatile(self, tmp_path):
         """(d) After GC removes volatile blocks, ChainDB.get_block returns
-        None for those blocks. Iterator over immutable is unaffected."""
+        None for those blocks. Iterator over immutable is unaffected.
+        """
         chain_db = _make_chain_db(tmp_path, k=3)
         blocks = await add_chain(chain_db, start_slot=1, count=7)
 
@@ -398,7 +401,8 @@ class TestGCScheduleQueueLength:
     @pytest.mark.asyncio
     async def test_gc_runs_on_every_promotion_cycle(self, tmp_path):
         """Each time immutable advances, GC should clean volatile.
-        Track immutable tip progression to verify it advances regularly."""
+        Track immutable tip progression to verify it advances regularly.
+        """
         k = 3
         chain_db = _make_chain_db(tmp_path, k=k)
 
@@ -431,12 +435,14 @@ class TestGCScheduleQueueLength:
 
 class TestGCScheduleOverlap:
     """Verify that consecutive GC runs don't overlap — each GC pass
-    should only remove blocks that haven't already been removed."""
+    should only remove blocks that haven't already been removed.
+    """
 
     @pytest.mark.asyncio
     async def test_consecutive_gc_no_double_removal(self, tmp_path):
         """Running GC twice at the same slot should remove 0 blocks
-        the second time (idempotent)."""
+        the second time (idempotent).
+        """
         vol = VolatileDB(db_dir=tmp_path / "volatile")
         pred = GENESIS_HASH
         for i in range(1, 11):
@@ -453,7 +459,8 @@ class TestGCScheduleOverlap:
     @pytest.mark.asyncio
     async def test_incremental_gc_no_overlap(self, tmp_path):
         """GC at slot 3, then GC at slot 6 — second pass should only
-        remove blocks in (3, 6], not re-remove blocks <= 3."""
+        remove blocks in (3, 6], not re-remove blocks <= 3.
+        """
         vol = VolatileDB(db_dir=tmp_path / "volatile")
         pred = GENESIS_HASH
         for i in range(1, 11):
@@ -870,7 +877,8 @@ class RefChainDBModel:
 
 class TestModelCorrectness:
     """Verify ChainDB matches a simple reference model for a sequence
-    of operations."""
+    of operations.
+    """
 
     @pytest.mark.asyncio
     async def test_sequential_model_agreement(self, tmp_path):
@@ -898,9 +906,9 @@ class TestModelCorrectness:
             model_tip = model.get_tip()
             assert real_tip is not None
             assert model_tip is not None
-            assert (
-                real_tip[0] == model_tip[0]
-            ), f"Tip slot mismatch at block {i}: real={real_tip[0]}, model={model_tip[0]}"
+            assert real_tip[0] == model_tip[0], (
+                f"Tip slot mismatch at block {i}: real={real_tip[0]}, model={model_tip[0]}"
+            )
             assert real_tip[1] == model_tip[1], f"Tip hash mismatch at block {i}"
 
             # Block lookup should agree
@@ -912,9 +920,9 @@ class TestModelCorrectness:
                 # blocks but promoted them to immutable. The block should
                 # still be findable via ChainDB.get_block (volatile then immutable).
                 if model_block is not None:
-                    assert (
-                        real_block is not None
-                    ), f"Block {j} in model but not in ChainDB at step {i}"
+                    assert real_block is not None, (
+                        f"Block {j} in model but not in ChainDB at step {i}"
+                    )
                     assert real_block == model_block
 
             pred = bh

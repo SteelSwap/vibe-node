@@ -79,7 +79,7 @@ class Peer(Generic[St]):
     async def send(self, message: Message[St]) -> None:
         """Send a message, advancing the protocol state.
 
-        Raises
+        Raises:
         ------
         ProtocolError
             If this peer does not have agency, if the message's
@@ -125,7 +125,7 @@ class Peer(Generic[St]):
 
         Blocks until a message is available on the receive queue.
 
-        Raises
+        Raises:
         ------
         ProtocolError
             If this peer currently has agency (meaning it should be

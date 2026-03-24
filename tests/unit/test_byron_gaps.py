@@ -60,9 +60,9 @@ class TestAddLovelaceOverflow:
         a = MAX_LOVELACE_VAL // 2 + 1
         b = MAX_LOVELACE_VAL // 2 + 1
         total = a + b
-        assert (
-            total > MAX_LOVELACE_VAL
-        ), f"Sum {total} should exceed maxLovelaceVal {MAX_LOVELACE_VAL}"
+        assert total > MAX_LOVELACE_VAL, (
+            f"Sum {total} should exceed maxLovelaceVal {MAX_LOVELACE_VAL}"
+        )
 
     def test_add_within_bounds_is_valid(self) -> None:
         """Adding two values that sum <= 45e15 is fine."""
@@ -289,18 +289,18 @@ class TestByronSlottingRoundtrip:
             first = epoch_to_first_slot(epoch, BYRON_CONFIG)
             local = slot - first
             reconstructed = first + local
-            assert (
-                reconstructed == slot
-            ), f"Roundtrip failed for slot {slot}: epoch={epoch}, first={first}, local={local}"
+            assert reconstructed == slot, (
+                f"Roundtrip failed for slot {slot}: epoch={epoch}, first={first}, local={local}"
+            )
 
     def test_wall_clock_roundtrip(self) -> None:
-        """slot -> wall_clock -> slot roundtrips for Byron slots."""
+        """Slot -> wall_clock -> slot roundtrips for Byron slots."""
         for slot in [0, 1, 100, 21599, 21600]:
             wall = slot_to_wall_clock(slot, BYRON_CONFIG)
             recovered = wall_clock_to_slot(wall, BYRON_CONFIG)
-            assert (
-                recovered == slot
-            ), f"Wall-clock roundtrip failed: slot={slot}, recovered={recovered}"
+            assert recovered == slot, (
+                f"Wall-clock roundtrip failed: slot={slot}, recovered={recovered}"
+            )
 
 
 # ---------------------------------------------------------------------------

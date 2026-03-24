@@ -171,9 +171,9 @@ class TestFixtureEraProgression:
         """Each era fixture should have the correct protocol major version."""
         block = load_fixture(era)
         actual_pv = block["protocol"]["version"]["major"]
-        assert (
-            actual_pv == expected_pv
-        ), f"{era} should have protocol version {expected_pv}, got {actual_pv}"
+        assert actual_pv == expected_pv, (
+            f"{era} should have protocol version {expected_pv}, got {actual_pv}"
+        )
 
     def test_heights_increase_across_eras(self) -> None:
         """Block heights should increase across eras (realistic chain ordering)."""
@@ -190,9 +190,9 @@ class TestFixtureEraProgression:
         eras = ["byron", "shelley", "alonzo", "babbage", "conway"]
         slots = [load_fixture(era)["slot"] for era in eras]
         for i in range(1, len(slots)):
-            assert (
-                slots[i] > slots[i - 1]
-            ), f"{eras[i]} slot ({slots[i]}) should be > {eras[i - 1]} slot ({slots[i - 1]})"
+            assert slots[i] > slots[i - 1], (
+                f"{eras[i]} slot ({slots[i]}) should be > {eras[i - 1]} slot ({slots[i - 1]})"
+            )
 
 
 class TestFixtureBlockIdFormat:
@@ -323,9 +323,9 @@ class TestLiveByronConformance:
         blocks = await fetch_blocks_from_origin(ogmios_client, count=20)
         heights = [b["height"] for b in blocks]
         for i in range(1, len(heights)):
-            assert (
-                heights[i] >= heights[i - 1]
-            ), f"Height decreased: {heights[i - 1]} -> {heights[i]}"
+            assert heights[i] >= heights[i - 1], (
+                f"Height decreased: {heights[i - 1]} -> {heights[i]}"
+            )
 
     async def test_byron_ancestor_chain(
         self,
@@ -336,9 +336,9 @@ class TestLiveByronConformance:
         for i in range(1, len(blocks)):
             ancestor = blocks[i].get("ancestor")
             prev_id = blocks[i - 1]["id"]
-            assert (
-                ancestor == prev_id
-            ), f"Block {i} ancestor {ancestor[:16]}... != prev {prev_id[:16]}..."
+            assert ancestor == prev_id, (
+                f"Block {i} ancestor {ancestor[:16]}... != prev {prev_id[:16]}..."
+            )
 
 
 @pytest.mark.conformance
@@ -400,9 +400,9 @@ class TestLiveMultiEraConformance:
         blocks = await fetch_blocks_from_origin(ogmios_client, count=20)
         for block in blocks:
             meta = extract_block_metadata(block)
-            assert (
-                meta["total_fee_lovelace"] >= 0
-            ), f"Negative fee total in block {block['id'][:16]}..."
+            assert meta["total_fee_lovelace"] >= 0, (
+                f"Negative fee total in block {block['id'][:16]}..."
+            )
 
     async def test_block_size_is_reasonable(
         self,
@@ -426,9 +426,9 @@ class TestLiveMultiEraConformance:
             if byte_size == 0 and block.get("type") == "ebb":
                 continue
             if byte_size > 0:
-                assert (
-                    byte_size < 2_100_000
-                ), f"Block size {byte_size} exceeds 2MB limit for block {block['id'][:16]}..."
+                assert byte_size < 2_100_000, (
+                    f"Block size {byte_size} exceeds 2MB limit for block {block['id'][:16]}..."
+                )
 
 
 @pytest.mark.conformance

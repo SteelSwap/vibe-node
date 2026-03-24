@@ -98,9 +98,9 @@ async def test_ancestor_chain(ogmios_client):
     for i in range(1, len(blocks)):
         ancestor = blocks[i].get("ancestor")
         prev_id = blocks[i - 1]["id"]
-        assert (
-            ancestor == prev_id
-        ), f"Block {i} ancestor {ancestor[:16]}... != prev ID {prev_id[:16]}..."
+        assert ancestor == prev_id, (
+            f"Block {i} ancestor {ancestor[:16]}... != prev ID {prev_id[:16]}..."
+        )
 
 
 @pytest.mark.timeout(30)

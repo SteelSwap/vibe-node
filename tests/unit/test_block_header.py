@@ -472,9 +472,9 @@ class TestBlake2b256KnownVectors:
         ]
         for input_bytes, expected_hex in vectors:
             digest = hashlib.blake2b(input_bytes, digest_size=32).digest()
-            assert (
-                digest.hex() == expected_hex
-            ), f"blake2b-256({input_bytes!r}) = {digest.hex()}, expected {expected_hex}"
+            assert digest.hex() == expected_hex, (
+                f"blake2b-256({input_bytes!r}) = {digest.hex()}, expected {expected_hex}"
+            )
             # Also verify block_hash produces the same result
             assert block_hash(input_bytes).hex() == expected_hex
 
@@ -495,9 +495,9 @@ class TestBlake2b256KnownVectors:
         ]
         for data in inputs:
             digest = block_hash(data)
-            assert (
-                len(digest) == 32
-            ), f"block_hash({data[:20]!r}...) produced {len(digest)} bytes, expected 32"
+            assert len(digest) == 32, (
+                f"block_hash({data[:20]!r}...) produced {len(digest)} bytes, expected 32"
+            )
             assert isinstance(digest, bytes)
 
 
@@ -518,9 +518,9 @@ class TestBlake2b224KnownVector:
         assert len(digest) == 28
         # Known blake2b-224 of empty input
         expected_hex = "836cc68931c2e4e3e838602eca1902591d216837bafddfe6f0c8cb07"
-        assert (
-            digest.hex() == expected_hex
-        ), f"blake2b-224(b'') = {digest.hex()}, expected {expected_hex}"
+        assert digest.hex() == expected_hex, (
+            f"blake2b-224(b'') = {digest.hex()}, expected {expected_hex}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -670,9 +670,9 @@ class TestByronGoldenHeader:
         golden_bytes = bytes.fromhex(_BYRON_GOLDEN_HEADER_HEX)
         decoded = cbor2.loads(golden_bytes)
         prev_hash = decoded[1]
-        assert isinstance(
-            prev_hash, bytes
-        ), f"prev_hash should be bytes, got {type(prev_hash).__name__}"
+        assert isinstance(prev_hash, bytes), (
+            f"prev_hash should be bytes, got {type(prev_hash).__name__}"
+        )
         assert len(prev_hash) == 32, f"prev_hash should be 32 bytes, got {len(prev_hash)}"
 
     def test_body_proof_is_array(self):
@@ -683,9 +683,9 @@ class TestByronGoldenHeader:
         golden_bytes = bytes.fromhex(_BYRON_GOLDEN_HEADER_HEX)
         decoded = cbor2.loads(golden_bytes)
         body_proof = decoded[2]
-        assert isinstance(
-            body_proof, list
-        ), f"body_proof should be array, got {type(body_proof).__name__}"
+        assert isinstance(body_proof, list), (
+            f"body_proof should be array, got {type(body_proof).__name__}"
+        )
 
     def test_consensus_data_is_array(self):
         """Fourth element (consensus_data) is a CBOR array.
@@ -695,9 +695,9 @@ class TestByronGoldenHeader:
         golden_bytes = bytes.fromhex(_BYRON_GOLDEN_HEADER_HEX)
         decoded = cbor2.loads(golden_bytes)
         consensus_data = decoded[3]
-        assert isinstance(
-            consensus_data, list
-        ), f"consensus_data should be array, got {type(consensus_data).__name__}"
+        assert isinstance(consensus_data, list), (
+            f"consensus_data should be array, got {type(consensus_data).__name__}"
+        )
 
     def test_extra_data_present(self):
         """Fifth element (extra_data) is present and is a CBOR structure.
@@ -707,9 +707,9 @@ class TestByronGoldenHeader:
         golden_bytes = bytes.fromhex(_BYRON_GOLDEN_HEADER_HEX)
         decoded = cbor2.loads(golden_bytes)
         extra_data = decoded[4]
-        assert isinstance(
-            extra_data, list
-        ), f"extra_data should be array, got {type(extra_data).__name__}"
+        assert isinstance(extra_data, list), (
+            f"extra_data should be array, got {type(extra_data).__name__}"
+        )
 
     def test_golden_bytes_deterministic_hash(self):
         """Golden bytes produce a deterministic Blake2b-256 hash.
@@ -1020,9 +1020,9 @@ class TestInvalidHeaderSizeRejection:
         # This is the validation check the Haskell node performs:
         # if headerLength > ppMaxHeaderSize then reject
         header_too_large = actual_header_size > max_header_size
-        assert (
-            header_too_large
-        ), f"Header of {actual_header_size}B should exceed max of {max_header_size}B"
+        assert header_too_large, (
+            f"Header of {actual_header_size}B should exceed max of {max_header_size}B"
+        )
 
     def test_header_within_limit_passes(self):
         """When max_header_size >= actual_header_size, validation passes.

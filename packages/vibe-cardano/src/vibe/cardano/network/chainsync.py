@@ -92,7 +92,7 @@ class Point:
 
     For the genesis/origin point, use :data:`ORIGIN` instead.
 
-    Attributes
+    Attributes:
     ----------
     slot : int
         Absolute slot number.
@@ -115,7 +115,7 @@ PointOrOrigin = Union[Point, Origin]
 class Tip:
     """The tip of the producer's chain.
 
-    Attributes
+    Attributes:
     ----------
     point : PointOrOrigin
         The point at the tip (or Origin for genesis tip).
@@ -151,7 +151,7 @@ class MsgAwaitReply:
 class MsgRollForward:
     """Server -> Client: extend the chain with this header.
 
-    Attributes
+    Attributes:
     ----------
     header : bytes
         CBOR-encoded block header bytes.  For N2N chain-sync this is
@@ -170,7 +170,7 @@ class MsgRollForward:
 class MsgRollBackward:
     """Server -> Client: roll back to this point.
 
-    Attributes
+    Attributes:
     ----------
     point : PointOrOrigin
         The point to roll back to (or Origin).
@@ -187,7 +187,7 @@ class MsgRollBackward:
 class MsgFindIntersect:
     """Client -> Server: find the best intersection from these points.
 
-    Attributes
+    Attributes:
     ----------
     points : list[PointOrOrigin]
         Candidate points, ordered by preference (highest slot first).
@@ -201,7 +201,7 @@ class MsgFindIntersect:
 class MsgIntersectFound:
     """Server -> Client: intersection found at this point.
 
-    Attributes
+    Attributes:
     ----------
     point : PointOrOrigin
         The intersection point.
@@ -218,7 +218,7 @@ class MsgIntersectFound:
 class MsgIntersectNotFound:
     """Server -> Client: no intersection found.
 
-    Attributes
+    Attributes:
     ----------
     tip : Tip
         The producer's current chain tip.
@@ -380,13 +380,13 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
     cbor_bytes : bytes
         Raw CBOR payload (one complete message).
 
-    Returns
+    Returns:
     -------
     ServerMessage
         One of: MsgAwaitReply, MsgRollForward, MsgRollBackward,
         MsgIntersectFound, MsgIntersectNotFound.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.
@@ -448,12 +448,12 @@ ClientMessage = Union[MsgRequestNext, MsgFindIntersect, MsgDone]
 def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
     """Decode a client-to-server chain-sync message from CBOR bytes.
 
-    Returns
+    Returns:
     -------
     ClientMessage
         One of: MsgRequestNext, MsgFindIntersect, MsgDone.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.

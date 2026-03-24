@@ -193,9 +193,9 @@ class TestN2CNotN2NVersion:
         """
         n2n_versions = {N2N_V14, N2N_V15}
         n2c_versions = {N2C_V16, N2C_V17, N2C_V18, N2C_V19}
-        assert n2n_versions.isdisjoint(
-            n2c_versions
-        ), f"N2N and N2C version numbers overlap: {n2n_versions & n2c_versions}"
+        assert n2n_versions.isdisjoint(n2c_versions), (
+            f"N2N and N2C version numbers overlap: {n2n_versions & n2c_versions}"
+        )
 
     def test_cbor_roundtrip_preserves_isolation(self) -> None:
         """After CBOR serialization, N2C data still can't be N2N-decoded.

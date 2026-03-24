@@ -308,7 +308,8 @@ class TestOCertSequenceMonotonicity:
 
     def test_same_counter_is_valid(self) -> None:
         """Two blocks with the same OCert counter should not trigger
-        COUNTER_TOO_SMALL (m <= n is satisfied when m == n)."""
+        COUNTER_TOO_SMALL (m <= n is satisfied when m == n).
+        """
         ocert = OperationalCert(
             kes_vk=b"\x00" * 32,
             cert_count=5,
@@ -400,9 +401,9 @@ class TestOCertSequenceMonotonicity:
                 max_kes_evo=62,
             )
             counter_errors = [e for e in errors if e.failure == OCertFailure.COUNTER_TOO_SMALL]
-            assert (
-                len(counter_errors) == 0
-            ), f"on_chain={on_chain}, cert={cert_count} should be valid"
+            assert len(counter_errors) == 0, (
+                f"on_chain={on_chain}, cert={cert_count} should be valid"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -588,6 +589,6 @@ class TestLeaderScheduleStatistics:
         low_stake_wins = sum(1 for v in vrf_outputs if leader_check(v, 0.1, 0.05))
         high_stake_wins = sum(1 for v in vrf_outputs if leader_check(v, 0.9, 0.05))
 
-        assert (
-            high_stake_wins > low_stake_wins
-        ), f"High stake ({high_stake_wins} wins) should exceed low stake ({low_stake_wins} wins)"
+        assert high_stake_wins > low_stake_wins, (
+            f"High stake ({high_stake_wins} wins) should exceed low stake ({low_stake_wins} wins)"
+        )

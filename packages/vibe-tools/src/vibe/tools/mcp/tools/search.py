@@ -18,7 +18,8 @@ async def search(
     offset: int = 0,
 ) -> dict:
     """Search the Cardano knowledge base using BM25 + vector fusion (RRF).
-    Returns ranked results from specs, code, issues, and PRs."""
+    Returns ranked results from specs, code, issues, and PRs.
+    """
     filters: dict[str, str] = {}
     if era:
         filters["era"] = era

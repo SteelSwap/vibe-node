@@ -137,7 +137,8 @@ class TestRetry:
 class TestForgeScenario:
     def test_nonce_read_consistent_with_forge(self):
         """Simulate the forge scenario: read nonce + tip, forge, commit.
-        Another thread changes nonce mid-forge — should retry."""
+        Another thread changes nonce mid-forge — should retry.
+        """
         nonce = TVar(b"nonce_epoch_1")
         tip = TVar({"slot": 100, "hash": b"tip_100"})
 

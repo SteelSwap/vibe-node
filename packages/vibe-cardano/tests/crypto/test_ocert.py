@@ -645,9 +645,9 @@ class TestOcertCounterSequence:
                 kes_depth=kes_depth,
             )
             failures = {e.failure for e in errors}
-            assert (
-                OCertFailure.COUNTER_TOO_SMALL not in failures
-            ), f"Counter {cert_count} rejected with on-chain {on_chain_counter}"
+            assert OCertFailure.COUNTER_TOO_SMALL not in failures, (
+                f"Counter {cert_count} rejected with on-chain {on_chain_counter}"
+            )
 
             # Simulate on-chain counter update: max(m, n)
             on_chain_counter = max(on_chain_counter, cert_count)

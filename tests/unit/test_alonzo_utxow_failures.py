@@ -163,7 +163,8 @@ class TestPhase1NativeScriptFailure:
 
     def test_native_timelock_fails_evaluation(self):
         """Native timelock script requiring a signature that is missing
-        should produce a NativeScriptFailure error."""
+        should produce a NativeScriptFailure error.
+        """
         # Create a native script requiring a specific key hash
         required_key_hash = hashlib.blake2b(b"missing_signer", digest_size=28).digest()
         script_hash_bytes = hashlib.blake2b(b"native_script_hash", digest_size=28).digest()
@@ -580,7 +581,8 @@ class TestRedeemerIncorrectPurpose:
     def test_spend_redeemer_for_mint_policy(self):
         """Spend redeemer at index 0 but the only Plutus script is a
         minting policy (no Plutus-locked inputs), so the redeemer tag
-        is wrong."""
+        is wrong.
+        """
         sk, vk = _make_key_pair(seed=8)
         addr = _make_address(vk)
 
@@ -824,7 +826,8 @@ class TestNoExtraRedeemersSameScriptCerts:
     def test_single_cert_redeemer_for_multiple_same_script_certs(self):
         """Two certificates referencing the same Plutus script need a
         redeemer at each cert index. A redeemer at index 0 + index 1
-        should both be valid (no extra redeemers error)."""
+        should both be valid (no extra redeemers error).
+        """
         script_hash = _make_script_hash(seed=120)
         script_hash_bytes = bytes(script_hash)
 
@@ -890,7 +893,8 @@ class TestMultipleEqualPlutusLockedCerts:
         """Two identical delegation certs using the same Plutus script
         should each need a redeemer at their respective indices. Missing
         one redeemer means we can still validate the other without
-        ExtraRedeemers firing."""
+        ExtraRedeemers firing.
+        """
         script_hash = _make_script_hash(seed=130)
         script_hash_bytes = bytes(script_hash)
 
@@ -937,11 +941,13 @@ class TestMultipleEqualPlutusLockedCerts:
 
 class TestUTXOWIntegration:
     """Integration tests verifying multiple UTXOW failures fire through
-    the top-level validate_alonzo_witnesses function."""
+    the top-level validate_alonzo_witnesses function.
+    """
 
     def test_multiple_utxow_failures_accumulated(self):
         """A transaction with multiple UTXOW violations should report
-        all of them, not just the first."""
+        all of them, not just the first.
+        """
         script_hash = _make_script_hash(seed=200)
         script_hash_bytes = bytes(script_hash)
         script_addr = _make_script_address(script_hash)

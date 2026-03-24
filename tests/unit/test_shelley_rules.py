@@ -161,7 +161,7 @@ class TestShelleyMinFee:
     """Tests for the Shelley minimum fee calculation."""
 
     def test_min_fee_basic(self):
-        """fee = a * txSize + b."""
+        """Fee = a * txSize + b."""
         params = ShelleyProtocolParams(min_fee_a=44, min_fee_b=155381)
         assert shelley_min_fee(200, params) == 44 * 200 + 155381
 
@@ -836,9 +836,9 @@ class TestPoolStateInvariants:
 
         # Invariant: retiring pools are subset of registered pools
         for retiring_key in state.retiring:
-            assert (
-                retiring_key in state.pools
-            ), f"Retiring pool {retiring_key.hex()} not in registered pools"
+            assert retiring_key in state.pools, (
+                f"Retiring pool {retiring_key.hex()} not in registered pools"
+            )
 
     def test_non_negative_deposits(self):
         """Deposits field is never negative after any DELEG/POOL transition.
@@ -897,9 +897,9 @@ class TestPoolStateInvariants:
         # Refund is negative (money returned to tx), registration is positive
         # Net of all three certs should equal key_deposit + pool_deposit - key_deposit = pool_deposit
         net = compute_certificate_deposits([reg, pool_reg, dereg], params)
-        assert (
-            net == params.pool_deposit
-        ), f"Net deposits after reg+pool_reg+dereg should be pool_deposit={params.pool_deposit}, got {net}"
+        assert net == params.pool_deposit, (
+            f"Net deposits after reg+pool_reg+dereg should be pool_deposit={params.pool_deposit}, got {net}"
+        )
 
     def test_preserve_balance_restricted(self):
         """Property: restricted-balance preservation.
@@ -930,9 +930,9 @@ class TestPoolStateInvariants:
             + tx.transaction_body.fee
         )
 
-        assert (
-            consumed == produced
-        ), f"Balance not preserved: consumed={consumed}, produced={produced}"
+        assert consumed == produced, (
+            f"Balance not preserved: consumed={consumed}, produced={produced}"
+        )
 
 
 # Withdrawal and staking witness tests
@@ -1239,9 +1239,9 @@ class TestShelleyTxSizeConformance:
         """Assert that the tx fee >= min_fee for the actual serialized size."""
         tx_size = self._compute_tx_size(tx)
         min_fee = shelley_min_fee(tx_size, params)
-        assert (
-            tx.transaction_body.fee >= min_fee
-        ), f"Fee {tx.transaction_body.fee} < min_fee {min_fee} for tx_size={tx_size}"
+        assert tx.transaction_body.fee >= min_fee, (
+            f"Fee {tx.transaction_body.fee} < min_fee {min_fee} for tx_size={tx_size}"
+        )
 
     def test_simple_utxo_tx_size(self):
         """Simple 1-input 1-output UTxO transfer: verify size and fee consistency."""
@@ -1277,9 +1277,9 @@ class TestShelleyTxSizeConformance:
             )
         )
         # Multi-input should be larger than simple
-        assert (
-            tx_size > simple_size
-        ), f"Multi-input tx ({tx_size}) should be larger than simple ({simple_size})"
+        assert tx_size > simple_size, (
+            f"Multi-input tx ({tx_size}) should be larger than simple ({simple_size})"
+        )
         self._assert_fee_consistent(tx, self.MAINNET_PARAMS)
 
     def test_register_stake_cert_tx_size(self):

@@ -326,7 +326,7 @@ class LocalTxSubmissionServer:
         The client has agency in StIdle and will send either
         MsgSubmitTx or MsgDone.
 
-        Returns
+        Returns:
         -------
         LtsMsgSubmitTx | LtsMsgDone
             The client's message.

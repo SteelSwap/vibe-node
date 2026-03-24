@@ -105,7 +105,8 @@ class TestDeserializeScript:
 
     def test_conformance_programs_roundtrip(self):
         """Spot-check: parse conformance programs → flatten → unflatten → eval
-        produces the same result as direct eval."""
+        produces the same result as direct eval.
+        """
         programs = [
             "(program 1.0.0 [(builtin addInteger) (con integer 3) (con integer 4)])",
             "(program 1.0.0 (con bool True))",

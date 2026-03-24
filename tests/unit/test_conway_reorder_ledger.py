@@ -272,7 +272,8 @@ class TestWithdrawalDelegation:
 
     def test_withdrawal_from_delegated_key_succeeds(self):
         """Withdrawal from a credential that has delegated to a DRep
-        should produce no errors."""
+        should produce no errors.
+        """
         cred = make_credential(1)
         drep_cred = make_credential(2)
         drep = DRep(drep_type=DRepType.KEY_HASH, credential=drep_cred)
@@ -326,7 +327,8 @@ class TestApplyConwayTx:
 
     def test_apply_tx_with_proposals_and_votes(self):
         """A full Conway tx with proposals and votes should update
-        governance state correctly: proposals added, votes recorded."""
+        governance state correctly: proposals added, votes recorded.
+        """
         drep_cred = make_credential(1)
         tx_id = make_tx_id_bytes(42)
 

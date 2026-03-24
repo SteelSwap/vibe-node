@@ -110,9 +110,9 @@ class TestShelleyGenesis:
 
     def test_has_all_required_top_level_fields(self, shelley_genesis: dict) -> None:
         for field_name in self.REQUIRED_FIELDS:
-            assert (
-                field_name in shelley_genesis
-            ), f"Missing required field '{field_name}' in shelley-genesis.json"
+            assert field_name in shelley_genesis, (
+                f"Missing required field '{field_name}' in shelley-genesis.json"
+            )
 
     def test_has_all_required_protocol_params(self, shelley_genesis: dict) -> None:
         pp = shelley_genesis.get("protocolParams", {})
@@ -160,9 +160,9 @@ class TestByronGenesis:
 
     def test_has_all_required_top_level_fields(self, byron_genesis: dict) -> None:
         for field_name in self.REQUIRED_FIELDS:
-            assert (
-                field_name in byron_genesis
-            ), f"Missing required field '{field_name}' in byron-genesis.json"
+            assert field_name in byron_genesis, (
+                f"Missing required field '{field_name}' in byron-genesis.json"
+            )
 
     def test_has_block_version_data_fields(self, byron_genesis: dict) -> None:
         bvd = byron_genesis.get("blockVersionData", {})
@@ -198,9 +198,9 @@ class TestAlonzoGenesis:
 
     def test_has_all_required_fields(self, alonzo_genesis: dict) -> None:
         for field_name in self.REQUIRED_FIELDS:
-            assert (
-                field_name in alonzo_genesis
-            ), f"Missing required field '{field_name}' in alonzo-genesis.json"
+            assert field_name in alonzo_genesis, (
+                f"Missing required field '{field_name}' in alonzo-genesis.json"
+            )
 
     def test_has_plutus_v1_cost_model(self, alonzo_genesis: dict) -> None:
         cost_models = alonzo_genesis.get("costModels", {})
@@ -270,25 +270,25 @@ class TestConwayGenesis:
 
     def test_has_all_required_fields(self, conway_genesis: dict) -> None:
         for field_name in self.REQUIRED_FIELDS:
-            assert (
-                field_name in conway_genesis
-            ), f"Missing required field '{field_name}' in conway-genesis.json"
+            assert field_name in conway_genesis, (
+                f"Missing required field '{field_name}' in conway-genesis.json"
+            )
 
     def test_pool_voting_thresholds(self, conway_genesis: dict) -> None:
         pvt = conway_genesis.get("poolVotingThresholds", {})
         for field_name in self.REQUIRED_POOL_THRESHOLDS:
             assert field_name in pvt, f"Missing poolVotingThresholds.{field_name}"
-            assert (
-                0 <= pvt[field_name] <= 1
-            ), f"poolVotingThresholds.{field_name} must be [0, 1], got {pvt[field_name]}"
+            assert 0 <= pvt[field_name] <= 1, (
+                f"poolVotingThresholds.{field_name} must be [0, 1], got {pvt[field_name]}"
+            )
 
     def test_drep_voting_thresholds(self, conway_genesis: dict) -> None:
         dvt = conway_genesis.get("dRepVotingThresholds", {})
         for field_name in self.REQUIRED_DREP_THRESHOLDS:
             assert field_name in dvt, f"Missing dRepVotingThresholds.{field_name}"
-            assert (
-                0 <= dvt[field_name] <= 1
-            ), f"dRepVotingThresholds.{field_name} must be [0, 1], got {dvt[field_name]}"
+            assert 0 <= dvt[field_name] <= 1, (
+                f"dRepVotingThresholds.{field_name} must be [0, 1], got {dvt[field_name]}"
+            )
 
 
 # ---------------------------------------------------------------------------

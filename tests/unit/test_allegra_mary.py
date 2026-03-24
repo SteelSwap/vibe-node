@@ -1103,9 +1103,9 @@ class TestTimelockDeterminism:
 
         # Evaluate 100 times at the same slot — must all be identical
         results_at_100 = [evaluate_timelock(script, signers, current_slot=100) for _ in range(100)]
-        assert all(
-            r == results_at_100[0] for r in results_at_100
-        ), "Timelock evaluation is not deterministic"
+        assert all(r == results_at_100[0] for r in results_at_100), (
+            "Timelock evaluation is not deterministic"
+        )
         assert results_at_100[0] is True
 
         # And at a failing slot

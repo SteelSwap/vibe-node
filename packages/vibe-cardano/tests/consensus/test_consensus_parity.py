@@ -495,7 +495,8 @@ class TestEpochNonceMultiEpochEvolution:
     @settings(max_examples=50)
     def test_vrf_accumulation_deterministic(self, vrf_outputs: list[bytes]) -> None:
         """Accumulating the same VRF outputs in the same order always
-        gives the same result."""
+        gives the same result.
+        """
         eta = b"\x00" * 32
 
         # First pass
@@ -586,9 +587,9 @@ class TestPraosLeaderDistribution:
         )
         fraction = n_elected / n_trials
         # Expected ~1.27%, generous bounds [0.8%, 1.8%]
-        assert (
-            0.008 <= fraction <= 0.018
-        ), f"Quarter-stake election rate {fraction:.4f} outside [0.008, 0.018]"
+        assert 0.008 <= fraction <= 0.018, (
+            f"Quarter-stake election rate {fraction:.4f} outside [0.008, 0.018]"
+        )
 
     def test_three_quarter_stake_election_rate(self) -> None:
         """sigma=0.75, f=0.05: expected ~3.80% election rate.
@@ -610,9 +611,9 @@ class TestPraosLeaderDistribution:
         )
         fraction = n_elected / n_trials
         # Expected ~3.80%, generous bounds [2.8%, 4.8%]
-        assert (
-            0.028 <= fraction <= 0.048
-        ), f"3/4 stake election rate {fraction:.4f} outside [0.028, 0.048]"
+        assert 0.028 <= fraction <= 0.048, (
+            f"3/4 stake election rate {fraction:.4f} outside [0.028, 0.048]"
+        )
 
     def test_election_rate_increases_monotonically_statistical(self) -> None:
         """Statistical verification: higher stake => more elections.

@@ -147,9 +147,9 @@ class TestAlonzoByronAddress:
 
         # Staking credential should be Nothing (Byron has no staking part)
         maybe_staking = addr_data.fields[1]
-        assert (
-            maybe_staking.constructor == 1
-        ), "Byron address should have Nothing for staking credential"
+        assert maybe_staking.constructor == 1, (
+            "Byron address should have Nothing for staking credential"
+        )
 
     def test_byron_address_in_input(self) -> None:
         """Byron bootstrap address in a TxIn should produce PubKeyCredential.
@@ -235,9 +235,9 @@ class TestBabbageTxInfoV2:
         # V2 field index 1 = reference_inputs
         ref_inputs = tx_info.fields[1]
         assert isinstance(ref_inputs, PlutusList)
-        assert (
-            len(ref_inputs.value) == 2
-        ), f"Expected 2 reference inputs, got {len(ref_inputs.value)}"
+        assert len(ref_inputs.value) == 2, (
+            f"Expected 2 reference inputs, got {len(ref_inputs.value)}"
+        )
 
         # Each reference input is TxInInfo = Constr 0 [TxOutRef, TxOut]
         for ri in ref_inputs.value:
@@ -284,9 +284,9 @@ class TestBabbageTxInfoV2:
         assert isinstance(datum_field, PlutusConstr)
 
         # Should be Just(datum), i.e. Constr 0 [datum]
-        assert (
-            datum_field.constructor == 0
-        ), f"Inline datum should produce Just (Constr 0), got Constr {datum_field.constructor}"
+        assert datum_field.constructor == 0, (
+            f"Inline datum should produce Just (Constr 0), got Constr {datum_field.constructor}"
+        )
         # The datum value itself is inside
         assert datum_field.fields[0] == inline_datum
 
@@ -485,9 +485,9 @@ class TestConwayTxInfoV3Certs:
 
         # V1 DCertDelegRegKey = Constr 0 [StakingCredential] -- only 1 field
         assert cert.constructor == 0
-        assert (
-            len(cert.fields) == 1
-        ), f"V1 DCert should have 1 field (credential only), got {len(cert.fields)}"
+        assert len(cert.fields) == 1, (
+            f"V1 DCert should have 1 field (credential only), got {len(cert.fields)}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -590,32 +590,34 @@ class TestTxInfoFieldCounts:
 
     def test_v1_txinfo_has_10_fields(self) -> None:
         """PlutusV1 TxInfo: inputs, outputs, fee, mint, dcerts, wdrl,
-        valid_range, signatories, data, id = 10 fields."""
+        valid_range, signatories, data, id = 10 fields.
+        """
         builder = TxInfoBuilder()
         builder.set_tx_id(b"\xaa" * 32)
         tx_info = builder.build_v1()
-        assert (
-            len(tx_info.fields) == 10
-        ), f"V1 TxInfo must have 10 fields, got {len(tx_info.fields)}"
+        assert len(tx_info.fields) == 10, (
+            f"V1 TxInfo must have 10 fields, got {len(tx_info.fields)}"
+        )
 
     def test_v2_txinfo_has_12_fields(self) -> None:
         """PlutusV2 TxInfo: adds reference_inputs and redeemers = 12 fields."""
         builder = TxInfoBuilder()
         builder.set_tx_id(b"\xaa" * 32)
         tx_info = builder.build_v2()
-        assert (
-            len(tx_info.fields) == 12
-        ), f"V2 TxInfo must have 12 fields, got {len(tx_info.fields)}"
+        assert len(tx_info.fields) == 12, (
+            f"V2 TxInfo must have 12 fields, got {len(tx_info.fields)}"
+        )
 
     def test_v3_txinfo_has_16_fields(self) -> None:
         """PlutusV3 TxInfo: adds voting_procedures, proposal_procedures,
-        current_treasury_amount, treasury_donation = 16 fields."""
+        current_treasury_amount, treasury_donation = 16 fields.
+        """
         builder = TxInfoBuilder()
         builder.set_tx_id(b"\xaa" * 32)
         tx_info = builder.build_v3()
-        assert (
-            len(tx_info.fields) == 16
-        ), f"V3 TxInfo must have 16 fields, got {len(tx_info.fields)}"
+        assert len(tx_info.fields) == 16, (
+            f"V3 TxInfo must have 16 fields, got {len(tx_info.fields)}"
+        )
 
     def test_field_counts_all_differ(self) -> None:
         """All three versions must have distinct field counts.
@@ -634,6 +636,6 @@ class TestTxInfoFieldCounts:
         assert v1_count != v2_count, "V1 and V2 field counts must differ"
         assert v2_count != v3_count, "V2 and V3 field counts must differ"
         assert v1_count != v3_count, "V1 and V3 field counts must differ"
-        assert (
-            v1_count < v2_count < v3_count
-        ), f"Field counts must increase: V1={v1_count} < V2={v2_count} < V3={v3_count}"
+        assert v1_count < v2_count < v3_count, (
+            f"Field counts must increase: V1={v1_count} < V2={v2_count} < V3={v3_count}"
+        )

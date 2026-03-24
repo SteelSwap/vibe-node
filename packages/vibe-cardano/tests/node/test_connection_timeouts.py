@@ -333,9 +333,9 @@ async def test_reconnect_after_disconnect():
             pass
 
     # Should have attempted at least 2 connections.
-    assert (
-        len(connect_attempts) >= 2
-    ), f"Expected at least 2 connect attempts, got {len(connect_attempts)}"
+    assert len(connect_attempts) >= 2, (
+        f"Expected at least 2 connect attempts, got {len(connect_attempts)}"
+    )
 
     # Verify exponential backoff: second attempt should be delayed.
     if len(connect_attempts) >= 2:

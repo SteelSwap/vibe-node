@@ -1007,9 +1007,9 @@ class TestFairnessBoundedDelay:
                 first_n_max = max(first_n_max, current_run)
             else:
                 current_run = 1
-        assert (
-            first_n_max == 1
-        ), f"In first round, max consecutive from one protocol should be 1, got {first_n_max}"
+        assert first_n_max == 1, (
+            f"In first round, max consecutive from one protocol should be 1, got {first_n_max}"
+        )
 
         await mux.close()
         try:
@@ -1051,9 +1051,9 @@ class TestFairnessPropertyNProtocols:
 
         # All N protocols got scheduled.
         serviced = {seg.protocol_id for seg in segments}
-        assert serviced == set(
-            range(n_protocols)
-        ), f"Expected all {n_protocols} protocols serviced, got {serviced}"
+        assert serviced == set(range(n_protocols)), (
+            f"Expected all {n_protocols} protocols serviced, got {serviced}"
+        )
 
         await mux.close()
         try:
@@ -1473,7 +1473,8 @@ class TestInvalidSDU:
 
         class LengthMismatchBearer:
             """Bearer that simulates a payload length mismatch by raising
-            IncompleteReadError as the real Bearer.read_segment would."""
+            IncompleteReadError as the real Bearer.read_segment would.
+            """
 
             def __init__(self) -> None:
                 self._closed = False

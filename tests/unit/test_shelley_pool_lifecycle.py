@@ -224,9 +224,9 @@ class TestPoolLifecycleEndToEnd:
         )
         assert reward_full > 0
         assert reward_half > 0
-        assert (
-            reward_full > reward_half
-        ), "A pool making all expected blocks should earn more than one making half"
+        assert reward_full > reward_half, (
+            "A pool making all expected blocks should earn more than one making half"
+        )
 
     # -- 4. Process epoch boundary — verify reward distribution --
 
@@ -278,9 +278,9 @@ class TestPoolLifecycleEndToEnd:
         r_small = pool_reward(small_pool, total_stake, rewards_pot, n_opt, Fraction(3, 10))
         r_large = pool_reward(large_pool, total_stake, rewards_pot, n_opt, Fraction(3, 10))
 
-        assert (
-            r_large > r_small
-        ), f"Pool with 4x stake should earn more: large={r_large}, small={r_small}"
+        assert r_large > r_small, (
+            f"Pool with 4x stake should earn more: large={r_large}, small={r_small}"
+        )
 
     # -- 6. Verify delegators get their share minus margin --
 
@@ -423,9 +423,9 @@ class TestTwoPoolRewardDistribution:
         reward_a = pool_reward(pool_a, total_stake, rewards_pot, 500, a0)
         reward_b = pool_reward(pool_b, total_stake, rewards_pot, 500, a0)
 
-        assert (
-            reward_a > reward_b
-        ), f"Higher pledge pool should get more reward: {reward_a} vs {reward_b}"
+        assert reward_a > reward_b, (
+            f"Higher pledge pool should get more reward: {reward_a} vs {reward_b}"
+        )
 
     def test_no_pledge_influence_when_a0_zero(self):
         """With a0=0, pledge has no effect — equal stake means equal reward."""
@@ -451,9 +451,9 @@ class TestTwoPoolRewardDistribution:
         reward_a = pool_reward(pool_a, total_stake, rewards_pot, 500, a0)
         reward_b = pool_reward(pool_b, total_stake, rewards_pot, 500, a0)
 
-        assert (
-            reward_a == reward_b
-        ), f"With a0=0, pledge should not matter: {reward_a} vs {reward_b}"
+        assert reward_a == reward_b, (
+            f"With a0=0, pledge should not matter: {reward_a} vs {reward_b}"
+        )
 
     # -- 11. Margin affects delegator rewards --
 
@@ -486,12 +486,12 @@ class TestTwoPoolRewardDistribution:
         deleg_low = result_low.member_rewards.get(_fake_hash(0xAA), 0)
         deleg_high = result_high.member_rewards.get(_fake_hash(0xAA), 0)
 
-        assert (
-            deleg_low > deleg_high
-        ), f"Low-margin pool should give delegators more: {deleg_low} vs {deleg_high}"
-        assert (
-            result_high.operator_reward > result_low.operator_reward
-        ), "High-margin operator should get more"
+        assert deleg_low > deleg_high, (
+            f"Low-margin pool should give delegators more: {deleg_low} vs {deleg_high}"
+        )
+        assert result_high.operator_reward > result_low.operator_reward, (
+            "High-margin operator should get more"
+        )
 
 
 # ===========================================================================
@@ -790,9 +790,9 @@ class TestRewardInvariants:
 
         result = member_rewards(pool, total_pool_reward, delegator_stakes)
         total = result.operator_reward + sum(result.member_rewards.values())
-        assert (
-            total <= total_pool_reward
-        ), f"Distributed {total} exceeds pool reward {total_pool_reward}"
+        assert total <= total_pool_reward, (
+            f"Distributed {total} exceeds pool reward {total_pool_reward}"
+        )
 
     def test_epoch_boundary_full_pipeline(self):
         """Full epoch boundary pipeline: snapshot + rewards + nonce + retirement.

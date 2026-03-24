@@ -245,9 +245,9 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         real_removed = run_async(self._db.gc(gc_slot))
         model_removed = self._model.gc(gc_slot)
 
-        assert (
-            real_removed == model_removed
-        ), f"GC at slot {gc_slot}: real removed {real_removed}, model removed {model_removed}"
+        assert real_removed == model_removed, (
+            f"GC at slot {gc_slot}: real removed {real_removed}, model removed {model_removed}"
+        )
 
         # Clean up _added_hashes to reflect GC
         self._added_hashes = [h for h in self._added_hashes if h in self._model.blocks]
@@ -329,9 +329,9 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         )
 
         # Block count should not increase
-        assert (
-            self._db.block_count == count_before
-        ), f"Duplicate add changed count: {count_before} -> {self._db.block_count}"
+        assert self._db.block_count == count_before, (
+            f"Duplicate add changed count: {count_before} -> {self._db.block_count}"
+        )
 
     # -- Invariants (checked after every step) --
 
@@ -340,9 +340,9 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         """len(real.all_blocks) == len(model)."""
         if self._closed:
             return
-        assert self._db.block_count == len(
-            self._model.blocks
-        ), f"Block count: real={self._db.block_count}, model={len(self._model.blocks)}"
+        assert self._db.block_count == len(self._model.blocks), (
+            f"Block count: real={self._db.block_count}, model={len(self._model.blocks)}"
+        )
 
     @invariant()
     def max_slot_matches(self):

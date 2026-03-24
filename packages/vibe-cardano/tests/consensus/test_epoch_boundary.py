@@ -707,7 +707,8 @@ class TestStakeSnapshotThreeEpochDelay:
 
     def test_relative_stake_uses_correct_snapshot(self) -> None:
         """Relative stake calculated from the 'go' snapshot reflects
-        the state from 2 epochs ago, not the current state."""
+        the state from 2 epochs ago, not the current state.
+        """
         # Old snapshot (2 epochs ago): POOL_A had 25% of stake
         old_snapshot = StakeSnapshot(
             pool_stakes={POOL_A: 250, POOL_B: 750},
@@ -749,7 +750,8 @@ class TestRewardZeroAfterRegistration:
 
     def test_newly_registered_credential_has_zero_rewards(self) -> None:
         """A freshly registered credential should not appear in reward
-        distribution results until it is part of an active delegation."""
+        distribution results until it is part of an active delegation.
+        """
         # Simulate: CRED_4 just registered but is NOT yet in the delegation map
         # or utxo_stakes. It should not appear in rewards.
         pp_a = _mock_pool_params(POOL_A, pledge=1_000_000)

@@ -143,9 +143,9 @@ async def test_cbor_roundtrip_preserves_bytes():
     for i, original in enumerate(test_cases):
         decoded = cbor2.loads(original)
         reencoded = cbor2.dumps(decoded)
-        assert (
-            original == reencoded
-        ), f"Case {i}: roundtrip changed bytes ({len(original)}B → {len(reencoded)}B)"
+        assert original == reencoded, (
+            f"Case {i}: roundtrip changed bytes ({len(original)}B → {len(reencoded)}B)"
+        )
         orig_hash = hashlib.blake2b(original, digest_size=32).digest()
         re_hash = hashlib.blake2b(reencoded, digest_size=32).digest()
         assert orig_hash == re_hash, f"Case {i}: hash changed on roundtrip"

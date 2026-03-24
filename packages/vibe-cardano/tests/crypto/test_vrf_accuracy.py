@@ -229,13 +229,13 @@ class TestSigmaOneThresholdEqualsF:
         getcontext().prec = 40
         for f_val in [0.01, 0.05, 0.1, 0.5, 0.9, 0.99]:
             # Winner should always win (leader_val ~0.0000156 < any f in this list)
-            assert certified_nat_max_check(
-                WINNER_VRF_OUTPUT, sigma=1.0, f=f_val
-            ), f"Expected winner elected for f={f_val}, sigma=1.0"
+            assert certified_nat_max_check(WINNER_VRF_OUTPUT, sigma=1.0, f=f_val), (
+                f"Expected winner elected for f={f_val}, sigma=1.0"
+            )
             # Loser should lose for all f < 0.9995
-            assert not certified_nat_max_check(
-                LOSER_VRF_OUTPUT, sigma=1.0, f=f_val
-            ), f"Expected loser NOT elected for f={f_val}, sigma=1.0"
+            assert not certified_nat_max_check(LOSER_VRF_OUTPUT, sigma=1.0, f=f_val), (
+                f"Expected loser NOT elected for f={f_val}, sigma=1.0"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +264,7 @@ class TestFZeroAlwaysRejected:
             certified_nat_max_check(output, sigma=0.5, f=-0.01)
 
     def test_very_small_f_low_threshold(self) -> None:
-        """f very close to 0 should have a very low threshold.
+        """F very close to 0 should have a very low threshold.
 
         With f=0.001 and sigma=1.0, threshold = 0.001. Only ~0.1% of
         VRF outputs pass. The max output should fail.

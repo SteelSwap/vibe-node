@@ -90,9 +90,9 @@ class TestByronBlockHeader:
         # 1a 2d964a09 = uint32 764824073
         # 5820 + 00*32 = 32-byte bstr of zeros
         expected = "821a2d964a095820" + "00" * 32
-        assert (
-            result.hex() == expected
-        ), f"Byron header encoding mismatch:\n  got:      {result.hex()}\n  expected: {expected}"
+        assert result.hex() == expected, (
+            f"Byron header encoding mismatch:\n  got:      {result.hex()}\n  expected: {expected}"
+        )
 
     def test_byron_ebb_tag(self):
         """Byron EBB blocks use CBOR tag 1 in the hard-fork combinator."""
@@ -160,9 +160,9 @@ class TestShelleyTxBody:
         # Verify key 0 is followed by tag 258
         # The map encoding for key 0: 00 = uint(0)
         # Then d9 0102 = tag(258) per CBOR encoding (0xd9 = tag with 2-byte arg)
-        assert result.hex().startswith(
-            "a400d90102"
-        ), f"Expected map(4), key(0), tag(258) prefix, got {result.hex()[:20]}"
+        assert result.hex().startswith("a400d90102"), (
+            f"Expected map(4), key(0), tag(258) prefix, got {result.hex()[:20]}"
+        )
 
     def test_tx_input_encoding(self):
         """A transaction input is [hash32, uint]."""
@@ -254,9 +254,9 @@ class TestShelleyBlockHeaderBody:
         assert result[0] == 0x8F, f"Expected array(15), got 0x{result[0]:02x}"
 
         # Verify block_number encoding: 1903e8 = uint16(1000)
-        assert (
-            "1903e8" in result.hex()[:20]
-        ), f"Expected uint(1000) near start, got {result.hex()[:20]}"
+        assert "1903e8" in result.hex()[:20], (
+            f"Expected uint(1000) near start, got {result.hex()[:20]}"
+        )
 
     def test_header_body_with_null_prev_hash(self):
         """Genesis block has null prev_hash (first Shelley block)."""
@@ -281,9 +281,9 @@ class TestShelleyBlockHeaderBody:
         result = cbor2.dumps(header_body)
 
         # 8f = array(15), 00 = uint(0), 00 = uint(0), f6 = null
-        assert result.hex().startswith(
-            "8f0000f6"
-        ), f"Expected array(15), 0, 0, null at start, got {result.hex()[:10]}"
+        assert result.hex().startswith("8f0000f6"), (
+            f"Expected array(15), 0, 0, null at start, got {result.hex()[:10]}"
+        )
 
     def test_vrf_cert_encoding(self):
         """VRF cert is [output_bytes, proof_bytes] — a 2-element array."""
@@ -484,9 +484,9 @@ class TestAlonzoScriptIntegrityHash:
 
         # Key 11 = 0x0b, then 5820 + dead*16
         expected_fragment = "0b5820" + "dead" * 16
-        assert (
-            expected_fragment in result.hex()
-        ), "Expected key(11) + bstr(32) fragment in encoding"
+        assert expected_fragment in result.hex(), (
+            "Expected key(11) + bstr(32) fragment in encoding"
+        )
 
     def test_hash32_encoding(self):
         """A $hash32 is always a 32-byte bstr."""
@@ -692,9 +692,9 @@ class TestBabbageTxOutInlineDatum:
         # Key 2 = 0x02
         # Value: array(2) 82, uint(1) 01, tag24 d818 42 182a
         datum_fragment = "02" + "82" + "01" + "d818" + "42" + "182a"
-        assert (
-            datum_fragment in result.hex()
-        ), f"Expected inline datum fragment, got {result.hex()}"
+        assert datum_fragment in result.hex(), (
+            f"Expected inline datum fragment, got {result.hex()}"
+        )
 
     def test_tag24_embedded_cbor(self):
         """Tag 24 wraps CBOR-encoded data as a bytestring."""

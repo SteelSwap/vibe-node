@@ -93,9 +93,9 @@ class TestInvalidMetadataSize:
         # Create metadata that exceeds max tx size
         huge_metadata = {0: "x" * (max_tx_size + 1)}
         metadata_cbor = cbor2.dumps(huge_metadata)
-        assert (
-            len(metadata_cbor) > max_tx_size
-        ), f"Metadata CBOR size {len(metadata_cbor)} should exceed MaxTxSize {max_tx_size}"
+        assert len(metadata_cbor) > max_tx_size, (
+            f"Metadata CBOR size {len(metadata_cbor)} should exceed MaxTxSize {max_tx_size}"
+        )
 
     def test_small_metadata_within_bounds(self) -> None:
         """Reasonably sized metadata fits within tx size limits."""
@@ -136,9 +136,9 @@ class TestMultiAssetCBOREdgeCases:
 
         # A pure-ADA value should be "equal" to this
         pure_ada = Value(coin=1_000_000)
-        assert _value_eq(
-            value, pure_ada
-        ), "Value with zero-quantity token should equal pure ADA value"
+        assert _value_eq(value, pure_ada), (
+            "Value with zero-quantity token should equal pure ADA value"
+        )
 
     def test_empty_nested_map(self) -> None:
         """MultiAsset with empty nested map (policy with no assets).
@@ -148,9 +148,9 @@ class TestMultiAssetCBOREdgeCases:
         pid = _make_policy_id(1)
         ma = MultiAsset({pid: Asset({})})
 
-        assert _multi_asset_is_empty(
-            ma
-        ), "MultiAsset with empty asset map should be considered empty"
+        assert _multi_asset_is_empty(ma), (
+            "MultiAsset with empty asset map should be considered empty"
+        )
 
     def test_negative_values_for_burning(self) -> None:
         """MultiAsset with negative values represent burning.
@@ -417,9 +417,9 @@ class TestMaryMinUtxoManyAssets:
         txout = TransactionOutput(addr, Value(coin=1_000_000, multi_asset=ma))
 
         min_val = mary_min_utxo_value(txout, params)
-        assert (
-            min_val >= params.min_utxo_value
-        ), "Multi-asset min UTxO should be >= base minUTxOValue"
+        assert min_val >= params.min_utxo_value, (
+            "Multi-asset min UTxO should be >= base minUTxOValue"
+        )
 
     def test_many_policies_many_assets(self) -> None:
         """Min UTxO with many policies and assets is significantly higher."""
@@ -438,9 +438,9 @@ class TestMaryMinUtxoManyAssets:
 
         min_val = mary_min_utxo_value(txout, params)
         # With 30 assets and 10 policies, the min should be well above base
-        assert (
-            min_val > params.min_utxo_value
-        ), f"Expected min_val > {params.min_utxo_value}, got {min_val}"
+        assert min_val > params.min_utxo_value, (
+            f"Expected min_val > {params.min_utxo_value}, got {min_val}"
+        )
 
     def test_pure_ada_returns_base_min(self) -> None:
         """Pure ADA output returns exactly minUTxOValue."""

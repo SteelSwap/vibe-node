@@ -503,9 +503,9 @@ class TestLocalChainSyncCodec:
             encoded1 = codec.encode(msg)
             decoded = codec.decode(encoded1)
             encoded2 = codec.encode(decoded)
-            assert (
-                encoded1 == encoded2
-            ), f"Roundtrip failed for {type(msg).__name__}: {encoded1.hex()} != {encoded2.hex()}"
+            assert encoded1 == encoded2, (
+                f"Roundtrip failed for {type(msg).__name__}: {encoded1.hex()} != {encoded2.hex()}"
+            )
 
 
 # ---------------------------------------------------------------------------

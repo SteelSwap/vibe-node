@@ -194,9 +194,9 @@ class TestIntegratedPRTCLTransition:
                     HeaderValidationFailure.VRF_LEADER_CHECK_FAILED,
                 )
             ]
-            assert (
-                structural_errors == []
-            ), f"Header {i}: unexpected structural errors: {structural_errors}"
+            assert structural_errors == [], (
+                f"Header {i}: unexpected structural errors: {structural_errors}"
+            )
 
             # Accumulate VRF output into the running nonce (simulating
             # what the epoch boundary handler does in production).
@@ -231,7 +231,8 @@ class TestPRTCLEpochBoundary:
 
     def test_epoch_boundary_nonce_evolution(self) -> None:
         """Simulate blocks in epoch N (within stability window), then
-        trigger epoch transition and verify the new nonce."""
+        trigger epoch transition and verify the new nonce.
+        """
         epoch_length = 100  # small epoch for test convenience
         stability_cutoff = (epoch_length * 2) // 3  # slot 66 relative
 
@@ -258,7 +259,8 @@ class TestPRTCLEpochBoundary:
 
     def test_block_outside_stability_window_excluded(self) -> None:
         """A block in the last 1/3 of the epoch should NOT be in the
-        stability window — its VRF output must not contribute to eta_v."""
+        stability window — its VRF output must not contribute to eta_v.
+        """
         epoch_length = 100
         # Slot 67 relative is past the 2/3 cutoff.
         assert not is_in_stability_window(67, 0, epoch_length)
@@ -392,7 +394,8 @@ class TestHFCForecastAcrossEraBoundary:
 
     def test_slot_in_next_era_uses_correct_params(self) -> None:
         """A slot in the Shelley era after a Byron->Shelley transition
-        uses Shelley's 432000-slot epoch length, not Byron's 21600."""
+        uses Shelley's 432000-slot epoch length, not Byron's 21600.
+        """
         config = HardForkConfig(
             era_transitions={
                 Era.BYRON: 0,

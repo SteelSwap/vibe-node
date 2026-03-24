@@ -432,7 +432,8 @@ class TestWitnessSetDecoding:
 
     def test_vkeywitness_serializes_as_two_element_array(self):
         """test_vkeywitness_serializes_as_two_element_array:
-        VKey witness is a 2-element CBOR array [vkey, signature]."""
+        VKey witness is a 2-element CBOR array [vkey, signature].
+        """
         vkey = b"\xaa" * 32
         sig = b"\xbb" * 64
         vkw = VerificationKeyWitness(
@@ -445,7 +446,8 @@ class TestWitnessSetDecoding:
 
     def test_vkeywitness_element_order_vkey_then_sig(self):
         """test_vkeywitness_element_order_is_vkey_then_signature:
-        Element [0] is vkey, element [1] is signature."""
+        Element [0] is vkey, element [1] is signature.
+        """
         vkey = b"\xaa" * 32
         sig = b"\xbb" * 64
         vkw = VerificationKeyWitness(
@@ -459,7 +461,8 @@ class TestWitnessSetDecoding:
 
     def test_vkeywitness_uses_definite_length_encoding(self):
         """test_vkeywitness_uses_definite_length_encoding:
-        Check first byte is 0x82 (definite-length, not indefinite)."""
+        Check first byte is 0x82 (definite-length, not indefinite).
+        """
         vkey = b"\x01" * 32
         sig = b"\x02" * 64
         vkw = VerificationKeyWitness(
@@ -513,7 +516,8 @@ class TestBootstrapWitness:
 
     def test_bootstrap_witness_four_fields_present(self):
         """test_bootstrap_witness_four_fields_present:
-        4 fields: vkey(32), sig(64), chain_code(32), attributes(bytes)."""
+        4 fields: vkey(32), sig(64), chain_code(32), attributes(bytes).
+        """
         vkey = b"\x01" * 32
         sig = b"\x02" * 64
         chain_code = b"\x03" * 32
@@ -531,7 +535,8 @@ class TestBootstrapWitness:
 
     def test_bootstrap_witness_cbor_round_trip(self):
         """test_bootstrap_witness_cbor_round_trip:
-        Serialize as 4-element array, deserialize, verify fields match."""
+        Serialize as 4-element array, deserialize, verify fields match.
+        """
         vkey = b"\x01" * 32
         sig = b"\x02" * 64
         chain_code = b"\x03" * 32
@@ -547,7 +552,8 @@ class TestBootstrapWitness:
 
     def test_bootstrap_witness_empty_attributes(self):
         """test_bootstrap_witness_empty_attributes:
-        Common case for non-HDPayload Byron addresses."""
+        Common case for non-HDPayload Byron addresses.
+        """
         vkey = b"\x01" * 32
         sig = b"\x02" * 64
         chain_code = b"\x03" * 32
@@ -559,7 +565,8 @@ class TestBootstrapWitness:
 
     def test_bootstrap_witness_with_hd_payload_attributes(self):
         """test_bootstrap_witness_with_hd_payload_attributes:
-        Attributes containing HD derivation path preserved through round-trip."""
+        Attributes containing HD derivation path preserved through round-trip.
+        """
         vkey = b"\x01" * 32
         sig = b"\x02" * 64
         chain_code = b"\x03" * 32
@@ -715,7 +722,8 @@ class TestDecodeBlockTransactions:
 
 class TestTxSizeIncludesWitnesses:
     """test_tx_size_includes_witnesses_for_fee:
-    The fee-relevant size of a transaction must include witnesses."""
+    The fee-relevant size of a transaction must include witnesses.
+    """
 
     def test_full_tx_larger_than_body_alone(self):
         body_raw = _make_tx_body_primitive()
@@ -770,7 +778,8 @@ class TestValidityFlag:
 
 class TestBodyRawPreservation:
     """test_annotated_transaction_preserves_bytes (adapted):
-    The raw body primitive is preserved for hash computation."""
+    The raw body primitive is preserved for hash computation.
+    """
 
     def test_body_raw_preserved(self):
         body = _make_tx_body_primitive(fee=42_000)
@@ -871,7 +880,7 @@ class TestMetadataKeyMustBeUint:
             Metadata({"bad_key": "value"})
 
     def test_negative_key_accepted_by_pycardano(self):
-        """pycardano accepts negative int keys (isinstance check only).
+        """Pycardano accepts negative int keys (isinstance check only).
 
         Note: The CDDL says transaction_metadatum_label = uint, meaning
         negative keys are technically invalid per spec. pycardano does not
@@ -926,7 +935,8 @@ class TestMetadataTextMax64BytesNotChars:
 
     def test_multibyte_chars_hit_byte_limit(self):
         """Multibyte UTF-8 characters — fewer than 64 chars can exceed 64 bytes.
-        Each emoji is 4 bytes UTF-8, so 17 emojis = 68 bytes > 64."""
+        Each emoji is 4 bytes UTF-8, so 17 emojis = 68 bytes > 64.
+        """
         from pycardano.exception import InvalidArgumentException
 
         # 17 x 4-byte chars = 68 bytes

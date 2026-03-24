@@ -480,13 +480,13 @@ class ChainSyncClient:
         points : list[PointOrOrigin]
             Candidate intersection points, highest slot first.
 
-        Returns
+        Returns:
         -------
         tuple[PointOrOrigin | None, Tip]
             The intersection point (or None if not found) and the
             server's current tip.
 
-        Raises
+        Raises:
         ------
         ProtocolError
             If not in StIdle state.
@@ -510,7 +510,7 @@ class ChainSyncClient:
         with the AwaitReply message. The caller can then wait and call
         recv_after_await() to get the actual roll forward/backward.
 
-        Returns
+        Returns:
         -------
         CsMsgRollForward | CsMsgRollBackward | CsMsgAwaitReply
             The server's response.
@@ -530,12 +530,12 @@ class ChainSyncClient:
         server MUST send RollForward or RollBackward. No further
         AwaitReply is permitted.
 
-        Returns
+        Returns:
         -------
         CsMsgRollForward | CsMsgRollBackward
             The server's response with chain data.
 
-        Raises
+        Raises:
         ------
         ProtocolError
             If the server sends an unexpected message (including another
@@ -604,7 +604,7 @@ async def run_chain_sync(
     stop_event : asyncio.Event | None
         If provided, the loop exits when this event is set.
 
-    Raises
+    Raises:
     ------
     ProtocolError
         If intersection is not found (no common point with the server).

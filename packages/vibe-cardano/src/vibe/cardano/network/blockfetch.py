@@ -59,7 +59,7 @@ BLOCK_FETCH_N2N_ID: int = 3
 class MsgRequestRange:
     """Client -> Server: request blocks in the given range.
 
-    Attributes
+    Attributes:
     ----------
     point_from : PointOrOrigin
         Start of the range (inclusive).
@@ -97,7 +97,7 @@ class MsgNoBlocks:
 class MsgBlock:
     """Server -> Client: a single block in the batch.
 
-    Attributes
+    Attributes:
     ----------
     block_cbor : bytes
         CBOR-encoded block body bytes.  We keep it as opaque bytes at
@@ -184,12 +184,12 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
     cbor_bytes : bytes
         Raw CBOR payload (one complete message).
 
-    Returns
+    Returns:
     -------
     ServerMessage
         One of: MsgStartBatch, MsgNoBlocks, MsgBlock, MsgBatchDone.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.
@@ -243,12 +243,12 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
 def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
     """Decode a client-to-server block-fetch message from CBOR bytes.
 
-    Returns
+    Returns:
     -------
     ClientMessage
         One of: MsgRequestRange, MsgClientDone.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.

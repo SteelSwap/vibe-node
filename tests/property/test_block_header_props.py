@@ -96,9 +96,9 @@ class TestBlockHashDeterministicProperty:
         h2 = block_hash(data)
 
         # Same input must produce identical output
-        assert (
-            h1 == h2
-        ), f"block_hash produced different results for same input: {h1.hex()} != {h2.hex()}"
+        assert h1 == h2, (
+            f"block_hash produced different results for same input: {h1.hex()} != {h2.hex()}"
+        )
 
         # Output must always be exactly 32 bytes
         assert len(h1) == 32, f"block_hash produced {len(h1)} bytes, expected 32"
@@ -114,7 +114,8 @@ class TestBlockHashDeterministicProperty:
 
 class TestRoundtripHashStability:
     """For any valid header CBOR, block_hash is deterministic and stable
-    across re-computation."""
+    across re-computation.
+    """
 
     @given(
         slot=st.integers(min_value=0, max_value=2**32 - 1),

@@ -567,7 +567,8 @@ class TestMakeDecisionsAcknowledged:
 
     def test_decisions_include_ack_count(self) -> None:
         """When tx IDs have been acknowledged, the ack_count in decisions
-        reflects the number of acknowledged IDs."""
+        reflects the number of acknowledged IDs.
+        """
         state = SharedTxState()
         state.add_peer("peer_0")
 

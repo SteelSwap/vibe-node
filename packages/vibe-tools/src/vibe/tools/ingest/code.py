@@ -175,7 +175,7 @@ class CodeIngestor:
         progress:
             Optional Rich ``Progress`` instance for progress bars.
 
-        Returns
+        Returns:
         -------
         int
             Number of code chunks inserted.
@@ -493,7 +493,8 @@ class CodeIngestor:
         to fix gaps from partial indexing.
         """
         # Use a subquery with ROW_NUMBER to deduplicate before inserting
-        result = await session.execute(text("""
+        result = await session.execute(
+            text("""
                 INSERT INTO code_tag_manifest (repo, release_tag, file_path, function_name, content_hash)
                 SELECT repo, release_tag, file_path, function_name, content_hash
                 FROM (
@@ -507,7 +508,8 @@ class CodeIngestor:
                 WHERE rn = 1
                 ON CONFLICT (repo, release_tag, file_path, function_name)
                 DO UPDATE SET content_hash = EXCLUDED.content_hash
-            """))
+            """)
+        )
         await session.commit()
         count_result = await session.execute(text("SELECT count(*) FROM code_tag_manifest"))
         return count_result.scalar()
@@ -527,7 +529,8 @@ class CodeIngestor:
         from vibe.tools.ingest.config import CODE_REPOS
 
         # Get all tags with data, grouped by repo
-        result = await session.execute(text("""
+        result = await session.execute(
+            text("""
                 SELECT repo, release_tag,
                        COUNT(*) as chunk_count,
                        COUNT(DISTINCT file_path) as db_file_count,
@@ -535,15 +538,18 @@ class CodeIngestor:
                 FROM code_chunks
                 GROUP BY repo, release_tag
                 ORDER BY repo, release_tag
-            """))
+            """)
+        )
         tag_rows = result.fetchall()
 
         # Get manifest file counts per tag
-        manifest_result = await session.execute(text("""
+        manifest_result = await session.execute(
+            text("""
                 SELECT repo, release_tag, COUNT(DISTINCT file_path) as manifest_file_count
                 FROM code_tag_manifest
                 GROUP BY repo, release_tag
-            """))
+            """)
+        )
         manifest_map = {(row[0], row[1]): row[2] for row in manifest_result.fetchall()}
 
         project_root = Path(__file__).resolve().parents[6]
@@ -685,7 +691,7 @@ class CodeIngestor:
         progress:
             Optional Rich ``Progress`` instance.
 
-        Returns
+        Returns:
         -------
         dict[str, int]
             Mapping of repo name to number of chunks inserted.

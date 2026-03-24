@@ -110,9 +110,9 @@ class TestCostModelParamNames:
         if len(names) == 0:
             pytest.skip("uplc cost model config files not available")
         on_chain_count = COST_MODEL_PARAM_COUNTS[version]
-        assert (
-            len(names) >= on_chain_count
-        ), f"{version.name} has {len(names)} param names, but on-chain count is {on_chain_count}"
+        assert len(names) >= on_chain_count, (
+            f"{version.name} has {len(names)} param names, but on-chain count is {on_chain_count}"
+        )
 
     @pytest.mark.parametrize("version", [PlutusVersion.V1, PlutusVersion.V2, PlutusVersion.V3])
     def test_param_names_are_unique(self, version: PlutusVersion) -> None:
@@ -161,9 +161,9 @@ class TestPlutusVersionAvailability:
         """No Plutus version should be available before Alonzo (PV < 5)."""
         for pv in range(0, 5):
             for version in PlutusVersion:
-                assert not is_plutus_version_available(
-                    version, pv
-                ), f"{version.name} should not be available at PV {pv}"
+                assert not is_plutus_version_available(version, pv), (
+                    f"{version.name} should not be available at PV {pv}"
+                )
 
 
 class TestBuiltinAvailability:
@@ -325,9 +325,9 @@ class TestFixturePlutusFields:
             for tx in block["transactions"]:
                 for redeemer in tx.get("redeemers", []):
                     purpose = redeemer["validator"]["purpose"]
-                    assert (
-                        purpose in valid_purposes
-                    ), f"Invalid redeemer purpose '{purpose}' in {era}"
+                    assert purpose in valid_purposes, (
+                        f"Invalid redeemer purpose '{purpose}' in {era}"
+                    )
 
 
 # ===================================================================
@@ -376,6 +376,6 @@ class TestLivePlutusScriptPresence:
 
             # Protocol parameters should include cost model data
             # The exact key depends on Ogmios version, but it should exist
-            assert (
-                "plutusCostModels" in params or "costModels" in params
-            ), f"No cost model data in protocol parameters. Keys: {list(params.keys())}"
+            assert "plutusCostModels" in params or "costModels" in params, (
+                f"No cost model data in protocol parameters. Keys: {list(params.keys())}"
+            )

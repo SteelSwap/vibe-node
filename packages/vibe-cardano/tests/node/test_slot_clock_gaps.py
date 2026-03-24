@@ -177,9 +177,9 @@ class TestSlotMonotonicity:
                 mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
                 current = clock.current_slot()
 
-            assert (
-                current >= prev_slot
-            ), f"Slot went backwards: {current} < {prev_slot} at offset {i * 0.5}s"
+            assert current >= prev_slot, (
+                f"Slot went backwards: {current} < {prev_slot} at offset {i * 0.5}s"
+            )
             prev_slot = current
 
     @pytest.mark.asyncio

@@ -89,7 +89,8 @@ def _block_responses(blocks: list[bytes]) -> list:
 
 class TestNoOverlap:
     """Two peers have non-overlapping block ranges; verify both ranges
-    fetched completely with no gaps."""
+    fetched completely with no gaps.
+    """
 
     @pytest.mark.asyncio
     async def test_two_peers_non_overlapping_ranges(self) -> None:

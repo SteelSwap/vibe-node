@@ -307,9 +307,9 @@ class TestPlutusVersionAvailability:
         """No Plutus versions are available before Alonzo (PV < 5)."""
         for pv in range(1, 5):
             for version in PlutusVersion:
-                assert not is_plutus_version_available(
-                    version, pv
-                ), f"{version.name} should not be available at PV {pv}"
+                assert not is_plutus_version_available(version, pv), (
+                    f"{version.name} should not be available at PV {pv}"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -360,9 +360,9 @@ class TestBuiltinAvailability:
         """V2 should be a superset of V1 builtins."""
         v1_builtins = builtins_available_at(PlutusVersion.V1)
         v2_builtins = builtins_available_at(PlutusVersion.V2)
-        assert v1_builtins.issubset(
-            v2_builtins
-        ), f"V1 builtins not in V2: {v1_builtins - v2_builtins}"
+        assert v1_builtins.issubset(v2_builtins), (
+            f"V1 builtins not in V2: {v1_builtins - v2_builtins}"
+        )
 
     def test_v2_does_not_have_v3_builtins(self) -> None:
         """V2 should NOT have V3-introduced builtins."""
@@ -406,9 +406,9 @@ class TestBuiltinAvailability:
         """V3 should be a superset of V2 builtins."""
         v2_builtins = builtins_available_at(PlutusVersion.V2)
         v3_builtins = builtins_available_at(PlutusVersion.V3)
-        assert v2_builtins.issubset(
-            v3_builtins
-        ), f"V2 builtins not in V3: {v2_builtins - v3_builtins}"
+        assert v2_builtins.issubset(v3_builtins), (
+            f"V2 builtins not in V3: {v2_builtins - v3_builtins}"
+        )
 
     def test_v2_adds_exactly_3_builtins_over_v1(self) -> None:
         """V2 adds exactly 3 builtins over V1."""
@@ -474,9 +474,9 @@ class TestCostModelParamNames:
             for name in [names[0], names[len(names) // 2], names[-1]]:
                 idx = param_name_to_index(version, name)
                 recovered = param_index_to_name(version, idx)
-                assert (
-                    recovered == name
-                ), f"Round-trip failed for {version.name}: {name} -> {idx} -> {recovered}"
+                assert recovered == name, (
+                    f"Round-trip failed for {version.name}: {name} -> {idx} -> {recovered}"
+                )
 
     def test_index_to_name_round_trip(self) -> None:
         """Converting index -> name -> index should return the original index."""
@@ -487,9 +487,9 @@ class TestCostModelParamNames:
             for idx in [0, len(names) // 2, len(names) - 1]:
                 name = param_index_to_name(version, idx)
                 recovered = param_name_to_index(version, name)
-                assert (
-                    recovered == idx
-                ), f"Round-trip failed for {version.name}: {idx} -> {name} -> {recovered}"
+                assert recovered == idx, (
+                    f"Round-trip failed for {version.name}: {idx} -> {name} -> {recovered}"
+                )
 
     def test_known_parameter_name_exists(self) -> None:
         """A known parameter name should be present and resolvable."""
@@ -497,9 +497,9 @@ class TestCostModelParamNames:
         # present in all versions.
         for version in PlutusVersion:
             names = cost_model_param_names(version)
-            assert (
-                "addInteger-cpu-arguments-intercept" in names
-            ), f"Expected addInteger-cpu-arguments-intercept in {version.name}"
+            assert "addInteger-cpu-arguments-intercept" in names, (
+                f"Expected addInteger-cpu-arguments-intercept in {version.name}"
+            )
 
     def test_invalid_name_raises_key_error(self) -> None:
         """An invalid parameter name should raise KeyError."""

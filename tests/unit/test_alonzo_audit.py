@@ -741,7 +741,8 @@ class TestMultipleScriptLanguages:
 
     def test_native_and_plutus_scripts_coexist_in_integrity_hash(self):
         """Script integrity hash should work when Plutus scripts are present
-        alongside native scripts (native scripts don't affect the hash)."""
+        alongside native scripts (native scripts don't affect the hash).
+        """
         # Native scripts don't have redeemers or contribute to script integrity
         # hash. Only Plutus scripts do. Verify the hash only covers Plutus.
 
@@ -768,7 +769,8 @@ class TestMultipleScriptLanguages:
 
     def test_native_script_evaluation_alongside_plutus_context(self):
         """A native timelock script should evaluate correctly even when
-        Plutus scripts are also being used in the same transaction."""
+        Plutus scripts are also being used in the same transaction.
+        """
         # Timelock: require signature from key hash
         key_hash = hashlib.blake2b(b"signer_key", digest_size=28).digest()
 
@@ -786,7 +788,8 @@ class TestMultipleScriptLanguages:
 
     def test_time_based_native_script_with_plutus(self):
         """A time-based native script (RequireTimeBefore) should work in
-        a transaction that also uses Plutus scripts."""
+        a transaction that also uses Plutus scripts.
+        """
         # RequireTimeBefore slot 200: valid only before slot 200
         time_script = Timelock(
             type=TimelockType.REQUIRE_TIME_BEFORE,
@@ -872,7 +875,8 @@ class TestMultipleScriptLanguages:
 
     def test_m_of_n_timelock_with_plutus_context(self):
         """A complex MOfN native script should evaluate correctly in a
-        Plutus-enabled transaction context."""
+        Plutus-enabled transaction context.
+        """
         key1 = hashlib.blake2b(b"key1", digest_size=28).digest()
         key2 = hashlib.blake2b(b"key2", digest_size=28).digest()
         key3 = hashlib.blake2b(b"key3", digest_size=28).digest()

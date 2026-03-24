@@ -208,9 +208,9 @@ def test_agency_alternation_property(choices: list[str]) -> None:
     for i in range(1, len(agencies)):
         if agencies[i] == agencies[i - 1]:
             # This is only valid for self-transitions (Server -> Server via AwaitReply)
-            assert (
-                agencies[i] == Agency.Server
-            ), f"Non-server agency repeated at index {i}: {agencies}"
+            assert agencies[i] == Agency.Server, (
+                f"Non-server agency repeated at index {i}: {agencies}"
+            )
 
 
 @given(choices=_message_choices)
@@ -258,9 +258,9 @@ def test_chainsync_all_traces_valid(choices: list[str]) -> None:
 
         # Invariant 3: agency is not Nobody (can't send from terminal)
         agency = protocol.agency(state)
-        assert (
-            agency != Agency.Nobody
-        ), f"Sending message in terminal state {state}. Trace: {trace}"
+        assert agency != Agency.Nobody, (
+            f"Sending message in terminal state {state}. Trace: {trace}"
+        )
 
         trace.append(f"{type(msg).__name__}: {state} -> {msg.to_state}")
         state = msg.to_state

@@ -1284,21 +1284,21 @@ class TestAcceptableSymmetric:
 
             if result_ab is None:
                 # Both must refuse
-                assert (
-                    result_ba is None
-                ), f"acceptable(a, b) refused but acceptable(b, a) accepted: a={a}, b={b}"
+                assert result_ba is None, (
+                    f"acceptable(a, b) refused but acceptable(b, a) accepted: a={a}, b={b}"
+                )
             else:
                 # Both must accept
-                assert (
-                    result_ba is not None
-                ), f"acceptable(a, b) accepted but acceptable(b, a) refused: a={a}, b={b}"
+                assert result_ba is not None, (
+                    f"acceptable(a, b) accepted but acceptable(b, a) refused: a={a}, b={b}"
+                )
                 # Merged data must be equal (Haskell's Eq for
                 # ArbitraryNodeToNodeVersionData ignores query, but
                 # our _acceptable_version uses || which is commutative,
                 # so full equality holds)
-                assert (
-                    result_ab == result_ba
-                ), f"Asymmetric merge: acceptable(a,b)={result_ab}, acceptable(b,a)={result_ba}"
+                assert result_ab == result_ba, (
+                    f"Asymmetric merge: acceptable(a,b)={result_ab}, acceptable(b,a)={result_ba}"
+                )
 
         check()
 

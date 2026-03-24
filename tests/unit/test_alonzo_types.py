@@ -185,7 +185,7 @@ class TestExUnitsProperties:
     @given(a=ex_units_st, b=ex_units_st)
     @settings(max_examples=100)
     def test_le_reflexive(self, a: ExUnits, b: ExUnits):
-        """a <= a should always hold."""
+        """A <= a should always hold."""
         assert a <= a
 
     @given(a=ex_units_st)

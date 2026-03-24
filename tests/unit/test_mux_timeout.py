@@ -198,9 +198,9 @@ class TestConcurrentTimeouts:
         # All three should have timed out
         for idx, elapsed in results:
             expected = timeouts[idx]
-            assert (
-                elapsed >= expected * 0.8
-            ), f"Timeout {idx} fired too early: {elapsed:.3f}s < {expected}s"
+            assert elapsed >= expected * 0.8, (
+                f"Timeout {idx} fired too early: {elapsed:.3f}s < {expected}s"
+            )
 
     async def test_mixed_timeout_and_success(self) -> None:
         """One fast and one hung bearer — only the hung one times out."""

@@ -107,7 +107,7 @@ class N2CMsgRollForward:
     Unlike the N2N variant (which carries a block header), the N2C local
     chain-sync MsgRollForward carries the **full serialised block**.
 
-    Attributes
+    Attributes:
     ----------
     block : bytes
         CBOR-encoded full block bytes. For N2C chain-sync this is the
@@ -172,13 +172,13 @@ def decode_n2c_server_message(cbor_bytes: bytes) -> N2CServerMessage:
     cbor_bytes : bytes
         Raw CBOR payload (one complete message).
 
-    Returns
+    Returns:
     -------
     N2CServerMessage
         One of: MsgAwaitReply, N2CMsgRollForward, MsgRollBackward,
         MsgIntersectFound, MsgIntersectNotFound.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.

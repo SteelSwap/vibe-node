@@ -664,7 +664,7 @@ def create_local_chainsync_server(
     chaindb : ChainDB
         The chain database to serve blocks from.
 
-    Returns
+    Returns:
     -------
     LocalChainSyncServer
         Ready-to-run server instance.

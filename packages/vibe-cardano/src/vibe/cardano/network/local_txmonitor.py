@@ -79,7 +79,7 @@ class MsgAcquired:
 
     Wire format: ``[1, slot]``
 
-    Attributes
+    Attributes:
     ----------
     slot : int
         The slot number at which the mempool snapshot was taken.
@@ -130,7 +130,7 @@ class MsgReplyNextTx:
         Nothing: ``[5, []]``
         Just:    ``[5, [era_id, tx_bytes]]``
 
-    Attributes
+    Attributes:
     ----------
     tx : tuple[int, bytes] | None
         If not None, a (era_id, tx_bytes) pair for the next transaction.
@@ -147,7 +147,7 @@ class MsgHasTx:
 
     Wire format: ``[6, tx_id]``
 
-    Attributes
+    Attributes:
     ----------
     tx_id : bytes
         Transaction ID (hash) to look up.
@@ -163,7 +163,7 @@ class MsgReplyHasTx:
 
     Wire format: ``[7, bool]``
 
-    Attributes
+    Attributes:
     ----------
     has_tx : bool
         True if the transaction is in the mempool snapshot.
@@ -189,7 +189,7 @@ class MsgReplyGetSizes:
 
     Wire format: ``[9, num_txs, total_size, num_bytes]``
 
-    Attributes
+    Attributes:
     ----------
     num_txs : int
         Number of transactions in the mempool.
@@ -336,12 +336,12 @@ def decode_message(cbor_bytes: bytes) -> LocalTxMonitorMessage:
     cbor_bytes : bytes
         Raw CBOR payload (one complete message).
 
-    Returns
+    Returns:
     -------
     LocalTxMonitorMessage
         The decoded message.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.
@@ -454,7 +454,7 @@ def decode_message(cbor_bytes: bytes) -> LocalTxMonitorMessage:
 def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
     """Decode a client-to-server local tx-monitor message.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message is not a valid client message.
@@ -471,7 +471,7 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
 def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
     """Decode a server-to-client local tx-monitor message.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message is not a valid server message.

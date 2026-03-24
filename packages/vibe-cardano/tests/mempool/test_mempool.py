@@ -543,9 +543,9 @@ async def test_property_size_never_exceeds_capacity(tx_sizes: list[int], capacit
         except MempoolCapacityError, MempoolValidationError, MempoolDuplicateError:
             pass
 
-        assert (
-            pool.total_size_bytes <= capacity
-        ), f"Invariant violated: total_size_bytes={pool.total_size_bytes} > capacity={capacity}"
+        assert pool.total_size_bytes <= capacity, (
+            f"Invariant violated: total_size_bytes={pool.total_size_bytes} > capacity={capacity}"
+        )
 
 
 # ---------------------------------------------------------------------------

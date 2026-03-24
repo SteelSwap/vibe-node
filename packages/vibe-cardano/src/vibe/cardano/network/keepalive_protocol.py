@@ -278,12 +278,12 @@ class KeepAliveClient:
         cookie : int | None
             The cookie to send. If None, a random uint16 is generated.
 
-        Returns
+        Returns:
         -------
         int
             The cookie echoed by the server.
 
-        Raises
+        Raises:
         ------
         ProtocolError
             If not in StClient state, or if the server sends an
@@ -344,7 +344,7 @@ async def run_keep_alive_client(
     stop_event : asyncio.Event | None
         If provided, the loop exits when this event is set.
 
-    Raises
+    Raises:
     ------
     asyncio.TimeoutError
         If a pong is not received within ``timeout`` seconds.

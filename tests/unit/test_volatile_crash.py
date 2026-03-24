@@ -498,7 +498,6 @@ class TestImmutableDBIndexMismatch:
         """Simulate a consistency check: primary index offsets should
         match what secondary index entries claim.
         """
-
         # Build a fake chunk with 3 blocks
         blocks = [b"block-0" * 10, b"block-1" * 20, b"block-2" * 5]
 

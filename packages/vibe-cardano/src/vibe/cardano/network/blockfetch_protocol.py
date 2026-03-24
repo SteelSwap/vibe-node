@@ -418,13 +418,13 @@ class BlockFetchClient:
         point_to : PointOrOrigin
             End of the range (inclusive).
 
-        Returns
+        Returns:
         -------
         list[bytes] | None
             List of block CBOR bytes if the server had blocks, or None
             if the server responded with MsgNoBlocks.
 
-        Raises
+        Raises:
         ------
         ProtocolError
             If not in BFIdle state or server sends unexpected messages.

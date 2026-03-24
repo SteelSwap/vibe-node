@@ -62,7 +62,7 @@ class MsgSubmitTx:
     The era_id tells the server which era deserializer to use.
     tx_bytes is the CBOR-encoded transaction body.
 
-    Attributes
+    Attributes:
     ----------
     era_id : int
         Era identifier (e.g. 5 = Babbage, 6 = Conway).
@@ -95,7 +95,7 @@ class MsgRejectTx:
     We store it as raw bytes so clients can decode it according to the
     era they're working with.
 
-    Attributes
+    Attributes:
     ----------
     reason : bytes
         CBOR-encoded rejection reason (era-specific).
@@ -140,7 +140,7 @@ def encode_submit_tx(era_id: int, tx_bytes: bytes) -> bytes:
     tx_bytes : bytes
         CBOR-encoded transaction body.
 
-    Returns
+    Returns:
     -------
     bytes
         CBOR-encoded message ready for the multiplexer.
@@ -151,7 +151,7 @@ def encode_submit_tx(era_id: int, tx_bytes: bytes) -> bytes:
 def encode_accept_tx() -> bytes:
     """Encode MsgAcceptTx: ``[1]``.
 
-    Returns
+    Returns:
     -------
     bytes
         CBOR-encoded message ready for the multiplexer.
@@ -167,7 +167,7 @@ def encode_reject_tx(reason: bytes) -> bytes:
     reason : bytes
         CBOR-encoded rejection reason.
 
-    Returns
+    Returns:
     -------
     bytes
         CBOR-encoded message ready for the multiplexer.
@@ -182,7 +182,7 @@ def encode_reject_tx(reason: bytes) -> bytes:
 def encode_done() -> bytes:
     """Encode MsgDone: ``[3]``.
 
-    Returns
+    Returns:
     -------
     bytes
         CBOR-encoded message ready for the multiplexer.
@@ -203,12 +203,12 @@ def decode_message(cbor_bytes: bytes) -> LocalTxSubmissionMessage:
     cbor_bytes : bytes
         Raw CBOR payload (one complete message).
 
-    Returns
+    Returns:
     -------
     LocalTxSubmissionMessage
         One of: MsgSubmitTx, MsgAcceptTx, MsgRejectTx, MsgDone.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.
@@ -264,12 +264,12 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
     cbor_bytes : bytes
         Raw CBOR payload.
 
-    Returns
+    Returns:
     -------
     ClientMessage
         One of: MsgSubmitTx, MsgDone.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message is not a valid client message.
@@ -292,12 +292,12 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
     cbor_bytes : bytes
         Raw CBOR payload.
 
-    Returns
+    Returns:
     -------
     ServerMessage
         One of: MsgAcceptTx, MsgRejectTx.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message is not a valid server message.

@@ -375,7 +375,7 @@ class TestVRFEndToEnd:
         assert len(proof) == VRF_PROOF_SIZE
 
     def test_prove_verify_roundtrip(self) -> None:
-        """prove then verify succeeds and returns 64-byte output."""
+        """Prove then verify succeeds and returns 64-byte output."""
         pk, sk = vrf_keypair()
         alpha = b"slot 12345 nonce"
         proof = vrf_prove(sk, alpha)

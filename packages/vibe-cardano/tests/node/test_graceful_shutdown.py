@@ -274,9 +274,9 @@ async def test_no_task_destroyed_warnings() -> None:
         captured_warnings = [str(warning.message) for warning in w]
 
     for msg in captured_warnings:
-        assert (
-            "Task was destroyed but it is pending" not in msg
-        ), f"Got task-destroyed warning: {msg}"
+        assert "Task was destroyed but it is pending" not in msg, (
+            f"Got task-destroyed warning: {msg}"
+        )
 
 
 @pytest.mark.asyncio
@@ -320,9 +320,9 @@ async def test_shutdown_during_sync() -> None:
     # At least the first block should have been fully processed
     assert len(blocks_processed) >= 1, "No blocks were processed before shutdown"
     # Should have stopped before processing all 100 blocks
-    assert (
-        len(blocks_processed) < 100
-    ), f"Sync processed all {len(blocks_processed)} blocks — didn't respect shutdown"
+    assert len(blocks_processed) < 100, (
+        f"Sync processed all {len(blocks_processed)} blocks — didn't respect shutdown"
+    )
 
 
 @pytest.mark.asyncio

@@ -932,7 +932,7 @@ class TestBlockBodyValidation:
             assert not r.ex_units.exceeds(TEST_PARAMS.max_tx_ex_units)
 
     def test_pp_max_block_ex_units_enforcement(self):
-        """ppMaxBlockExUnits enforcement — block total ExUnits exceeds limit.
+        """PpMaxBlockExUnits enforcement — block total ExUnits exceeds limit.
 
         When the aggregate ExUnits across all transactions in a block exceed
         ppMaxBlockExUnits, the block must be rejected.

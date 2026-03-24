@@ -225,9 +225,9 @@ class TestNestedStructureRoundtrip:
         decoded = cbor2.loads(encoded)
 
         # cbor2 auto-decodes tag 258 -> frozenset
-        assert isinstance(
-            decoded, (set, frozenset)
-        ), f"Expected set/frozenset for tag 258, got {type(decoded).__name__}"
+        assert isinstance(decoded, (set, frozenset)), (
+            f"Expected set/frozenset for tag 258, got {type(decoded).__name__}"
+        )
         assert set(decoded) == unique_elements
 
         # Verify re-encoding a set produces tag 258
@@ -371,9 +371,9 @@ class TestTagPreservation:
 
         # Wire-level verification: tag 258 is present in the encoding
         # Verify the raw bytes start with tag 258 marker (0xd9 0x01 0x02)
-        assert (
-            encoded[:3] == b"\xd9\x01\x02"
-        ), f"Expected tag 258 prefix d90102, got {encoded[:3].hex()}"
+        assert encoded[:3] == b"\xd9\x01\x02", (
+            f"Expected tag 258 prefix d90102, got {encoded[:3].hex()}"
+        )
 
     def test_tag258_empty_set(self) -> None:
         """Tag 258 with empty list round-trips as empty set."""
@@ -711,7 +711,8 @@ class TestIndefiniteBytestringLongEncoding:
     @settings(max_examples=200)
     def test_indefinite_bytestring_chunk_structure(self, data: bytes) -> None:
         """Verify all interior chunks in the indefinite encoding are exactly 64 bytes
-        except possibly the last."""
+        except possibly the last.
+        """
         # Build chunks the way Cardano does it
         chunks = []
         offset = 0
@@ -818,9 +819,9 @@ class TestBoundedBytestring65Rejected:
         assert decoded == data
 
         # But our validation logic must reject it
-        assert (
-            len(decoded) > self.PLUTUS_MAX_BYTESTRING_LEN
-        ), f"Expected bytestring > {self.PLUTUS_MAX_BYTESTRING_LEN} bytes, got {len(decoded)}"
+        assert len(decoded) > self.PLUTUS_MAX_BYTESTRING_LEN, (
+            f"Expected bytestring > {self.PLUTUS_MAX_BYTESTRING_LEN} bytes, got {len(decoded)}"
+        )
 
         # Simulate the dBlock validation check
         is_valid = len(decoded) <= self.PLUTUS_MAX_BYTESTRING_LEN
@@ -908,9 +909,9 @@ class TestPlutusDataRoundtrip:
 
         # For CBORTag objects, compare structurally
         if isinstance(data, cbor2.CBORTag):
-            assert isinstance(
-                decoded, cbor2.CBORTag
-            ), f"Expected CBORTag, got {type(decoded).__name__}"
+            assert isinstance(decoded, cbor2.CBORTag), (
+                f"Expected CBORTag, got {type(decoded).__name__}"
+            )
             assert decoded.tag == data.tag
             assert decoded.value == data.value
         else:
@@ -925,9 +926,9 @@ class TestPlutusDataRoundtrip:
         re_encoded = cbor2.dumps(decoded, canonical=True)
 
         # Canonical encoding must be deterministic
-        assert (
-            encoded == re_encoded
-        ), f"Canonical re-encoding differs: {encoded.hex()} != {re_encoded.hex()}"
+        assert encoded == re_encoded, (
+            f"Canonical re-encoding differs: {encoded.hex()} != {re_encoded.hex()}"
+        )
 
     @given(
         alt=st.integers(min_value=0, max_value=6),

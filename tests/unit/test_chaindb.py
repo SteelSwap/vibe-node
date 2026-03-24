@@ -629,9 +629,9 @@ async def test_concurrent_add_blocks(chain_db):
                 found_count += 1
 
     # At minimum, one complete chain's blocks should be accessible
-    assert (
-        found_count >= BLOCKS_PER_CHAIN
-    ), f"Expected at least {BLOCKS_PER_CHAIN} blocks retrievable, got {found_count}"
+    assert found_count >= BLOCKS_PER_CHAIN, (
+        f"Expected at least {BLOCKS_PER_CHAIN} blocks retrievable, got {found_count}"
+    )
 
     # The chain tip must point to a real block
     tip_block = await chain_db.get_block(tip[1])

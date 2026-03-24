@@ -213,7 +213,8 @@ class TestEncodeProposeVersions:
 
     def test_fits_single_mux_segment(self) -> None:
         """test_handshake_message_fits_single_mux_segment:
-        Encoded ProposeVersions must be < 65535 bytes."""
+        Encoded ProposeVersions must be < 65535 bytes.
+        """
         vt = build_version_table(MAINNET_NETWORK_MAGIC)
         raw = encode_propose_versions(vt)
         assert len(raw) < 65535
@@ -275,7 +276,8 @@ class TestDecodeAcceptVersion:
 
     def test_accept_version_single_segment(self) -> None:
         """test_handshake_accept_version_single_segment:
-        Encoded AcceptVersion fits in one MUX segment."""
+        Encoded AcceptVersion fits in one MUX segment.
+        """
         raw = self._make_accept_bytes(magic=MAINNET_NETWORK_MAGIC)
         assert len(raw) < 65535
 

@@ -67,9 +67,9 @@ async def test_volatiledb_max_blocks_per_file(tmp_path: Path) -> None:
 
     # Count .block files on disk.
     block_files = list(db_dir.glob("*.block"))
-    assert (
-        len(block_files) == num_blocks
-    ), f"Expected {num_blocks} .block files, found {len(block_files)}"
+    assert len(block_files) == num_blocks, (
+        f"Expected {num_blocks} .block files, found {len(block_files)}"
+    )
 
     # Each file should contain exactly its block's CBOR data.
     for i, bh in enumerate(hashes, 1):

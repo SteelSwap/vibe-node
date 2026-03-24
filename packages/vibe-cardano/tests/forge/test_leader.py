@@ -44,7 +44,7 @@ class TestMkInputVrf:
     """Test the Praos mkInputVRF seed construction (Babbage/Conway)."""
 
     def test_output_length(self) -> None:
-        """mkInputVRF produces 32 bytes (blake2b-256, no XOR)."""
+        """MkInputVRF produces 32 bytes (blake2b-256, no XOR)."""
         nonce = b"\xab" * 32
         seed = _make_vrf_input(nonce, 12345)
         assert len(seed) == 32
@@ -64,7 +64,7 @@ class TestMkInputVrf:
         assert _make_vrf_input(nonce, slot) == _mk_input_vrf(slot, nonce)
 
     def test_mk_seed_differs_from_mk_input_vrf(self) -> None:
-        """mkSeed (TPraos) differs from mkInputVRF (Praos) due to XOR."""
+        """MkSeed (TPraos) differs from mkInputVRF (Praos) due to XOR."""
         nonce = b"\xaa" * 32
         slot = 100
         praos_input = _mk_input_vrf(slot, nonce)
@@ -72,7 +72,7 @@ class TestMkInputVrf:
         assert praos_input != tpraos_input
 
     def test_seed_constants(self) -> None:
-        """seedEta = blake2b(0_u64), seedL = blake2b(1_u64)."""
+        """SeedEta = blake2b(0_u64), seedL = blake2b(1_u64)."""
         assert SEED_ETA == hashlib.blake2b(struct.pack(">Q", 0), digest_size=32).digest()
         assert SEED_L == hashlib.blake2b(struct.pack(">Q", 1), digest_size=32).digest()
         assert SEED_ETA != SEED_L

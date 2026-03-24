@@ -577,7 +577,8 @@ class TestChainSyncClient:
     @pytest.mark.asyncio
     async def test_recv_after_await_roll_forward(self, setup):
         """test_await_reply_followed_by_roll_forward:
-        After AwaitReply, server sends RollForward."""
+        After AwaitReply, server sends RollForward.
+        """
         client, channel = setup
 
         # Intersect
@@ -726,7 +727,8 @@ class TestRunChainSync:
     @pytest.mark.asyncio
     async def test_sync_loop_handles_await_reply(self):
         """test_msg_request_next_await_reply_then_response:
-        The sync loop handles AwaitReply followed by RollForward."""
+        The sync loop handles AwaitReply followed by RollForward.
+        """
         channel = FakeChannel()
         stop = asyncio.Event()
 

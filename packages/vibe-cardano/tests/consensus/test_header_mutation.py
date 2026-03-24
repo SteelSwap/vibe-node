@@ -280,7 +280,8 @@ class TestValidBaseline:
 
 class TestMutateKesSignature:
     """Flipping a byte in the KES signature must produce OCERT_INVALID
-    with INVALID_KES_SIGNATURE sub-error."""
+    with INVALID_KES_SIGNATURE sub-error.
+    """
 
     def test_flipped_kes_sig_byte(self) -> None:
         fix = ValidHeaderFixture()
@@ -305,7 +306,8 @@ class TestMutateKesSignature:
 
 class TestMutateKesPeriodTooEarly:
     """Setting the OCert kes_period_start AFTER the current slot's KES period
-    triggers KES_BEFORE_START."""
+    triggers KES_BEFORE_START.
+    """
 
     def test_kes_before_start(self) -> None:
         # Current slot=150, slots_per_kes=100 => current_kes_period=1
@@ -328,7 +330,8 @@ class TestMutateKesPeriodTooEarly:
 
 class TestMutateKesPeriodTooLate:
     """Setting the slot far enough ahead that current_kes_period >= c_0 + max_kes_evo
-    triggers KES_AFTER_END."""
+    triggers KES_AFTER_END.
+    """
 
     def test_kes_after_end(self) -> None:
         # Build a valid fixture, then mutate the slot to be very large,
@@ -356,7 +359,8 @@ class TestMutateKesPeriodTooLate:
 
 class TestMutateOcertCounter:
     """Setting cert counter below the on-chain counter triggers
-    COUNTER_TOO_SMALL."""
+    COUNTER_TOO_SMALL.
+    """
 
     def test_counter_too_small(self) -> None:
         # Build fixture with on_chain_counter=5, ocert_counter=10
@@ -488,7 +492,8 @@ class TestMutateSlotDecrease:
 
 class TestMutateBlockNumber:
     """Setting block_number to something other than prev + 1 triggers
-    BLOCK_NUMBER_MISMATCH."""
+    BLOCK_NUMBER_MISMATCH.
+    """
 
     def test_block_number_gap(self) -> None:
         fix = ValidHeaderFixture()
@@ -549,7 +554,8 @@ class TestMutatePrevHash:
 
 class TestMutateProtocolVersion:
     """Setting protocol major version above max triggers
-    PROTOCOL_VERSION_INVALID."""
+    PROTOCOL_VERSION_INVALID.
+    """
 
     def test_protocol_version_too_high(self) -> None:
         fix = ValidHeaderFixture()
@@ -579,7 +585,8 @@ class TestMutateProtocolVersion:
 
 class TestMutatePoolId:
     """Using an issuer_vkey whose pool_id is not in the stake distribution
-    triggers POOL_NOT_IN_STAKE_DISTRIBUTION."""
+    triggers POOL_NOT_IN_STAKE_DISTRIBUTION.
+    """
 
     def test_unknown_pool(self) -> None:
         fix = ValidHeaderFixture()
@@ -680,9 +687,9 @@ class TestHypothesisSingleMutation:
         fix = ValidHeaderFixture()
         # Sanity: baseline is valid
         baseline_errors = fix.validate()
-        assert (
-            baseline_errors == []
-        ), f"Baseline failed: {[(e.failure.name, e.detail) for e in baseline_errors]}"
+        assert baseline_errors == [], (
+            f"Baseline failed: {[(e.failure.name, e.detail) for e in baseline_errors]}"
+        )
 
         field = _MUTATION_FIELDS[field_idx]
         h = fix.deep_copy_header()
@@ -694,9 +701,9 @@ class TestHypothesisSingleMutation:
             params=TEST_PARAMS,
             prev_header=fix.prev_header,
         )
-        assert (
-            len(errors) > 0
-        ), f"Mutation of field '{field}' was not detected — header passed validation silently!"
+        assert len(errors) > 0, (
+            f"Mutation of field '{field}' was not detected — header passed validation silently!"
+        )
 
 
 # ===================================================================

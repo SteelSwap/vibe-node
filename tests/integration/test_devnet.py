@@ -169,7 +169,7 @@ class TestShelleyGenesis:
         assert "keyDeposit" in pp
 
     def test_has_system_start_placeholder(self, shelley_genesis: dict) -> None:
-        """systemStart should exist (patched at runtime by genesis-init)."""
+        """SystemStart should exist (patched at runtime by genesis-init)."""
         assert "systemStart" in shelley_genesis
 
     def test_has_staking_section(self, shelley_genesis: dict) -> None:
@@ -194,7 +194,7 @@ class TestByronGenesis:
         assert byron_genesis["protocolConsts"]["protocolMagic"] == 42
 
     def test_security_param(self, byron_genesis: dict) -> None:
-        """k must be 10."""
+        """K must be 10."""
         assert byron_genesis["protocolConsts"]["k"] == 10
 
     def test_slot_duration(self, byron_genesis: dict) -> None:

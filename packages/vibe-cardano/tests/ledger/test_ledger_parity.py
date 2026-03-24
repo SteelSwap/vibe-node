@@ -250,7 +250,7 @@ class TestShelleyUTxOInputExistence:
         assert any("InputSetEmptyUTxO" in e for e in errors)
 
     def test_double_spend_same_utxo_in_set(self) -> None:
-        """pycardano deduplicates inputs as a set, so the same input
+        """Pycardano deduplicates inputs as a set, so the same input
         listed twice only appears once. This is Shelley's implicit
         double-spend prevention via set-based inputs.
 

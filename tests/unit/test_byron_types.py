@@ -719,9 +719,9 @@ class TestByronCBORSizeEstimates:
             cbor_bytes = txin.to_cbor()
             # Minimum: ~42 bytes (tag overhead + 32-byte hash + small int)
             # Maximum: ~55 bytes (large index takes more CBOR space)
-            assert (
-                40 <= len(cbor_bytes) <= 60
-            ), f"TxIn CBOR size {len(cbor_bytes)} outside expected range for index={idx}"
+            assert 40 <= len(cbor_bytes) <= 60, (
+                f"TxIn CBOR size {len(cbor_bytes)} outside expected range for index={idx}"
+            )
 
     def test_txout_cbor_size_bounded(self):
         """TxOut CBOR is within expected size range.
@@ -783,6 +783,6 @@ class TestByronCBORSizeEstimates:
 
         # Linearity check: 4x growth should be roughly 2x of 2x growth
         # Allow 50% tolerance for CBOR array length encoding differences
-        assert (
-            delta_4_2 >= delta_2_1 * 1.0
-        ), f"Size growth should be roughly linear: delta(2-1)={delta_2_1}, delta(4-2)={delta_4_2}"
+        assert delta_4_2 >= delta_2_1 * 1.0, (
+            f"Size growth should be roughly linear: delta(2-1)={delta_2_1}, delta(4-2)={delta_4_2}"
+        )

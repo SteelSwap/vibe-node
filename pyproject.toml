@@ -85,7 +85,7 @@ target-version = "py314"
 exclude = ["vendor/", ".venv/", "build/", "dist/", "*.egg-info"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "W"]
+select = ["D", "E", "F", "I", "UP", "W"]
 ignore = [
     "E402",   # module-import-not-at-top (lazy imports in functions)
     "E501",   # line length (handled by formatter)
@@ -95,7 +95,22 @@ ignore = [
     "UP042",  # replace-str-enum (adopt incrementally)
     "UP046",  # non-pep695-generic-class (adopt incrementally)
     "UP047",  # non-pep695-generic-function (adopt incrementally)
+    "D100",   # undocumented-public-module (adopt incrementally)
+    "D101",   # undocumented-public-class (adopt incrementally)
+    "D102",   # undocumented-public-method (adopt incrementally)
+    "D103",   # undocumented-public-function (adopt incrementally)
+    "D104",   # undocumented-public-package (adopt incrementally)
+    "D105",   # undocumented-magic-method
+    "D106",   # undocumented-public-nested-class
+    "D107",   # undocumented-public-init (adopt incrementally)
+    "D205",   # missing-blank-line-after-summary (adopt incrementally)
+    "D301",   # escape-sequence-in-docstring (adopt incrementally)
+    "D415",   # missing-terminal-punctuation (adopt incrementally)
+    "D417",   # undocumented-param (adopt incrementally)
 ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.lint.isort]
 known-first-party = ["vibe"]

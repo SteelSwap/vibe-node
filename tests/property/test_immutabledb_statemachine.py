@@ -135,9 +135,9 @@ class ImmutableDBStateMachine(RuleBasedStateMachine):
             collected.append((slot, data))
         it.close()
 
-        assert len(collected) == len(
-            self._model
-        ), f"Block count mismatch: DB has {len(collected)}, model has {len(self._model)}"
+        assert len(collected) == len(self._model), (
+            f"Block count mismatch: DB has {len(collected)}, model has {len(self._model)}"
+        )
 
         for (db_slot, db_data), (model_slot, _, model_data) in zip(collected, self._model):
             assert db_slot == model_slot, f"Slot mismatch: {db_slot} vs {model_slot}"
@@ -197,9 +197,9 @@ class ImmutableDBStateMachine(RuleBasedStateMachine):
         """The number of blocks in hash index matches the model."""
         if self._closed:
             return
-        assert len(self._db._hash_index) == len(
-            self._model
-        ), f"Hash index has {len(self._db._hash_index)} entries, model has {len(self._model)}"
+        assert len(self._db._hash_index) == len(self._model), (
+            f"Hash index has {len(self._db._hash_index)} entries, model has {len(self._model)}"
+        )
 
 
 # Wrap as a pytest test with reasonable settings

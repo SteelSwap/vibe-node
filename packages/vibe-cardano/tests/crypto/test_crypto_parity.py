@@ -213,18 +213,18 @@ class TestKESEvolutionCorrectness:
 
         # Sign at the target period
         sig = kes_sign(evolved_sk, period, msg)
-        assert kes_verify(
-            vk, depth, period, sig, msg
-        ), f"Evolved key failed to sign at period {period}"
+        assert kes_verify(vk, depth, period, sig, msg), (
+            f"Evolved key failed to sign at period {period}"
+        )
 
         # Evolve one more step
         evolved_sk = kes_update(evolved_sk, period)
         if evolved_sk is not None and period + 1 < total:
             # Sign at the NEW period should succeed
             sig_new = kes_sign(evolved_sk, period + 1, msg)
-            assert kes_verify(
-                vk, depth, period + 1, sig_new, msg
-            ), f"Evolved key failed to sign at period {period + 1}"
+            assert kes_verify(vk, depth, period + 1, sig_new, msg), (
+                f"Evolved key failed to sign at period {period + 1}"
+            )
 
     @given(
         depth=st.integers(min_value=1, max_value=3),
@@ -249,9 +249,9 @@ class TestKESEvolutionCorrectness:
             assert sk is not None
 
         # The old signature at period 0 still verifies
-        assert kes_verify(
-            vk, depth, 0, sig0, msg
-        ), "Old signature must still verify after key evolution"
+        assert kes_verify(vk, depth, 0, sig0, msg), (
+            "Old signature must still verify after key evolution"
+        )
 
     @given(
         depth=st.integers(min_value=1, max_value=3),
@@ -270,16 +270,16 @@ class TestKESEvolutionCorrectness:
         sig_0 = kes_sign(sk, 0, msg)
 
         # Must NOT verify at period 1
-        assert not kes_verify(
-            vk, depth, 1, sig_0, msg
-        ), "Period-0 signature must not verify at period 1"
+        assert not kes_verify(vk, depth, 1, sig_0, msg), (
+            "Period-0 signature must not verify at period 1"
+        )
 
         # Sign at last period, must NOT verify at period 0
         total = 1 << depth
         sig_last = kes_sign(sk, total - 1, msg)
-        assert not kes_verify(
-            vk, depth, 0, sig_last, msg
-        ), "Last-period signature must not verify at period 0"
+        assert not kes_verify(vk, depth, 0, sig_last, msg), (
+            "Last-period signature must not verify at period 0"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -447,7 +447,8 @@ class TestVRFLeaderCheckIntegration:
     @settings(max_examples=30, deadline=10000)
     def test_verified_output_matches_hash_for_leader_check(self, sigma: float) -> None:
         """Both vrf_verify and vrf_proof_to_hash produce the same
-        leader election result."""
+        leader election result.
+        """
         pk, sk = vrf_keypair()
         alpha = b"leader integration test"
         proof = vrf_prove(sk, alpha)

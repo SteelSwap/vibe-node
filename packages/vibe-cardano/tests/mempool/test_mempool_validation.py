@@ -80,9 +80,9 @@ class TestLedgerTxValidator:
 
         # Should not contain CBOR decode errors
         for err in errors:
-            assert (
-                "CBOR decode error" not in err
-            ), f"Well-formed tx should not produce CBOR decode errors, got: {err}"
+            assert "CBOR decode error" not in err, (
+                f"Well-formed tx should not produce CBOR decode errors, got: {err}"
+            )
 
     def test_invalid_cbor_rejected(self) -> None:
         """Garbage bytes are rejected with a CBOR decode error."""
@@ -91,9 +91,9 @@ class TestLedgerTxValidator:
         errors = validator.validate_tx(garbage, current_slot=0)
 
         assert len(errors) > 0, "Garbage bytes should produce errors"
-        assert any(
-            "CBOR decode error" in e or "Validation error" in e for e in errors
-        ), f"Expected CBOR/validation error, got: {errors}"
+        assert any("CBOR decode error" in e or "Validation error" in e for e in errors), (
+            f"Expected CBOR/validation error, got: {errors}"
+        )
 
     def test_malformed_tx_rejected(self) -> None:
         """Valid CBOR but not a transaction structure is rejected."""
