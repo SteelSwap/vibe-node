@@ -88,7 +88,11 @@ class ChainFollower:
         Haskell ref: instructionSTM in Follower.hs
             Uses AF.successorBlock(pt, curChain) to find next block.
         """
-        tip = self._chain_db.get_tip_as_tip()
+        # Snapshot shared state under read lock (thread-safe)
+        with self._chain_db._lock.read():
+            tip = self._chain_db.get_tip_as_tip()
+            fragment = list(self._chain_db._chain_fragment)  # snapshot
+            fragment_index = dict(self._chain_db._fragment_index)  # snapshot
 
         # 1. Check for pending rollback (fork switch happened)
         if self._pending_rollback is not None:
@@ -96,9 +100,6 @@ class ChainFollower:
             self._pending_rollback = None
             self.client_point = rollback_point
             return ("roll_backward", None, rollback_point, tip)
-
-        fragment = self._chain_db._chain_fragment
-        fragment_index = self._chain_db._fragment_index
 
         if not fragment:
             return ("await", None, None, tip)
@@ -146,8 +147,10 @@ class ChainFollower:
             pass
         self._last_seen_generation = self._chain_db._tip_generation
 
-        # Re-check after wake
-        tip = self._chain_db.get_tip_as_tip()
+        # Re-check after wake (snapshot under read lock)
+        with self._chain_db._lock.read():
+            tip = self._chain_db.get_tip_as_tip()
+            fragment = list(self._chain_db._chain_fragment)
 
         # Check rollback again (fork switch during wait)
         if self._pending_rollback is not None:
@@ -156,7 +159,6 @@ class ChainFollower:
             self.client_point = rollback_point
             return ("roll_backward", None, rollback_point, tip)
 
-        fragment = self._chain_db._chain_fragment
         if next_idx < len(fragment):
             entry = fragment[next_idx]
             point = Point(slot=entry.slot, hash=entry.block_hash)

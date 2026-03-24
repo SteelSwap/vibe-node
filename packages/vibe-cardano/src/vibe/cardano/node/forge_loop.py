@@ -209,25 +209,26 @@ def forge_loop(
             _current_kes_period = new_kes_period
 
         # --- Read current chain state (read lock) ---
+        # With header-first processing, the tip may be at or ahead of
+        # the current slot. That's fine — we build on whatever tip
+        # is current.
         if chain_db is not None:
             with chain_db._lock.read():
                 tip = chain_db._tip
                 if tip is not None:
-                    if tip.slot >= slot:
-                        continue
                     if slot - tip.slot > 10:
+                        # Still syncing — too far behind
                         continue
                     prev_header_hash = tip.block_hash
                     prev_block_number = tip.block_number
                 elif slot > 10:
                     continue
 
-        # --- Tick epoch + read nonce (kernel lock) ---
+        # --- Read nonce + stake (kernel read lock) ---
+        # Epoch boundary tick is handled by on_block_adopted in the
+        # receive thread when headers are processed (WI-3/WI-5).
+        # The forge loop just reads the current state.
         if node_kernel is not None:
-            with node_kernel._lock.write():
-                current_epoch = slot // config.epoch_length if config.epoch_length > 0 else 0
-                if current_epoch > node_kernel.current_epoch:
-                    node_kernel.on_epoch_boundary(current_epoch)
             with node_kernel._lock.read():
                 epoch_nonce = node_kernel.epoch_nonce.value
                 if node_kernel.stake_distribution:
