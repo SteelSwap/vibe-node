@@ -64,10 +64,10 @@ values = ["dev", "rel"]
 first_value = 0
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "packages/vibe-cardano/tests"]
+testpaths = ["tests", "packages/vibe-cardano/tests", "packages/vibe-core/tests"]
 asyncio_mode = "auto"
 timeout = 300
-addopts = "-m 'not tcp'"
+addopts = "-m 'not tcp' --import-mode=importlib"
 markers = [
     "unit: Unit tests — isolated function/module correctness",
     "property: Property tests — invariant verification via Hypothesis",
