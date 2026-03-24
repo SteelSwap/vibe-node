@@ -382,7 +382,7 @@ class PeerManager:
                     try:
                         fetch_queue.put_nowait(point)
                     except asyncio.QueueFull:
-                        pass  # Drop if queue full -- backpressure
+                        pass
 
                     if _headers_received % 100 == 1 or _headers_received <= 5:
                         logger.info("Chain-sync header #%d at slot %d from %s", _headers_received, slot, peer.address, extra={"event": "chainsync.header", "peer": str(peer.address), "header_num": _headers_received, "slot": slot, "hash": blk_hash.hex()[:16]})
@@ -588,7 +588,6 @@ class PeerManager:
 
                     # --- Store in ChainDB (includes chain selection + follower notification) ---
                     if chain_db is not None:
-                        # HFC era index: cbor_tag >= 2 → hfc_index = cbor_tag - 1
                         header_cbor_wrapped = [
                             max(0, era_tag - 1) if era_tag >= 2 else 0,
                             cbor2.CBORTag(24, hdr_cbor),
@@ -604,7 +603,6 @@ class PeerManager:
                             vrf_output=hdr_vrf_out,
                         )
 
-                        # Signal forge thread that a new block arrived
                         if result.adopted and self._block_received_event is not None:
                             self._block_received_event.set()
 
