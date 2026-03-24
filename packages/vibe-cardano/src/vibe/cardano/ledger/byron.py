@@ -29,7 +29,6 @@ import cbor2pure as cbor2
 from cbor2pure import CBORTag
 from pycardano.address import Address
 
-
 # ---------------------------------------------------------------------------
 # Lovelace
 # ---------------------------------------------------------------------------
@@ -62,8 +61,7 @@ class ByronTxId:
     def __post_init__(self) -> None:
         if len(self.digest) != self.HASH_SIZE:
             raise ValueError(
-                f"ByronTxId digest must be {self.HASH_SIZE} bytes, "
-                f"got {len(self.digest)}"
+                f"ByronTxId digest must be {self.HASH_SIZE} bytes, got {len(self.digest)}"
             )
 
     @classmethod
@@ -302,10 +300,7 @@ class ByronTx:
         return [bytes(txout.address), txout.value]
 
     def __repr__(self) -> str:
-        return (
-            f"ByronTx(inputs={len(self.inputs)}, "
-            f"outputs={len(self.outputs)})"
-        )
+        return f"ByronTx(inputs={len(self.inputs)}, outputs={len(self.outputs)})"
 
 
 # ---------------------------------------------------------------------------
@@ -464,7 +459,4 @@ class ByronTxAux:
         return cls(tx=tx, witnesses=witnesses)
 
     def __repr__(self) -> str:
-        return (
-            f"ByronTxAux(tx={self.tx!r}, "
-            f"witnesses={len(self.witnesses)})"
-        )
+        return f"ByronTxAux(tx={self.tx!r}, witnesses={len(self.witnesses)})"

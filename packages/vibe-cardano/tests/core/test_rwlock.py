@@ -81,7 +81,8 @@ class TestRWLockBasic:
 
     def test_reentrant_read_not_supported(self):
         """Read lock is NOT reentrant — same thread acquiring twice deadlocks.
-        This documents the behavior, not a feature to rely on."""
+        This documents the behavior, not a feature to rely on.
+        """
         # Just verify single acquire/release works
         lock = RWLock()
         with lock.read():

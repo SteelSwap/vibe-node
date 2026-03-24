@@ -15,14 +15,12 @@ Tests cover:
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Any
 
 import pytest
-from hypothesis import given, settings, HealthCheck
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from vibe.cardano.mempool.types import MempoolConfig, MempoolSnapshot
 from vibe.cardano.mempool.mempool import (
     Mempool,
     MempoolCapacityError,
@@ -30,7 +28,7 @@ from vibe.cardano.mempool.mempool import (
     MempoolValidationError,
     _compute_tx_id,
 )
-
+from vibe.cardano.mempool.types import MempoolConfig
 
 # ---------------------------------------------------------------------------
 # Mock validator
@@ -532,9 +530,7 @@ async def test_ticket_numbers_are_monotonic():
     capacity=st.integers(min_value=100, max_value=5000),
 )
 @pytest.mark.asyncio
-async def test_property_size_never_exceeds_capacity(
-    tx_sizes: list[int], capacity: int
-):
+async def test_property_size_never_exceeds_capacity(tx_sizes: list[int], capacity: int):
     """Hypothesis property: mempool total_size_bytes never exceeds capacity."""
     validator = MockValidator()
     config = MempoolConfig(capacity_bytes=capacity)
@@ -544,12 +540,11 @@ async def test_property_size_never_exceeds_capacity(
         tx = make_tx(i, size)
         try:
             await pool.add_tx(tx)
-        except (MempoolCapacityError, MempoolValidationError, MempoolDuplicateError):
+        except MempoolCapacityError, MempoolValidationError, MempoolDuplicateError:
             pass
 
         assert pool.total_size_bytes <= capacity, (
-            f"Invariant violated: total_size_bytes={pool.total_size_bytes} "
-            f"> capacity={capacity}"
+            f"Invariant violated: total_size_bytes={pool.total_size_bytes} > capacity={capacity}"
         )
 
 

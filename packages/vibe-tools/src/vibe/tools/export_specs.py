@@ -90,8 +90,21 @@ def export_specs(
     # Query the database for (era, source_repo, source_path, document_title, commit_hash)
     result = subprocess.run(
         [
-            "docker", "compose", "exec", "-T", "paradedb",
-            "psql", "-U", "vibenode", "-d", "vibenode", "-t", "-A", "-F", "\t", "-c",
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "paradedb",
+            "psql",
+            "-U",
+            "vibenode",
+            "-d",
+            "vibenode",
+            "-t",
+            "-A",
+            "-F",
+            "\t",
+            "-c",
             "SELECT DISTINCT era, source_repo, source_path, document_title, commit_hash "
             "FROM spec_documents ORDER BY era, source_repo, source_path",
         ],

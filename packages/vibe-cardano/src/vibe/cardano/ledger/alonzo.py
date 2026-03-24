@@ -32,21 +32,17 @@ Haskell references:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from pycardano import (
-    MultiAsset,
     TransactionBody,
     TransactionInput,
     TransactionOutput,
     Value,
 )
-from pycardano.hash import ScriptHash
 from pycardano.witness import TransactionWitnessSet
 
 from vibe.cardano.ledger.allegra_mary import (
-    MaryProtocolParams,
     Timelock,
     ValidityInterval,
     _multi_asset_is_empty,
@@ -58,8 +54,8 @@ from vibe.cardano.ledger.allegra_mary import (
 )
 from vibe.cardano.ledger.alonzo_types import (
     AlonzoProtocolParams,
-    ExUnits,
     ExUnitPrices,
+    ExUnits,
     Language,
     Redeemer,
     RedeemerTag,
@@ -181,8 +177,7 @@ def _too_many_collateral_inputs(
     """
     if len(collateral_inputs) > max_collateral_inputs:
         return [
-            f"TooManyCollateralInputs: count={len(collateral_inputs)}, "
-            f"max={max_collateral_inputs}"
+            f"TooManyCollateralInputs: count={len(collateral_inputs)}, max={max_collateral_inputs}"
         ]
     return []
 
@@ -293,9 +288,7 @@ def _script_integrity_hash_mismatch(
                 else:
                     normalized[lang] = cm
 
-            computed = compute_script_integrity_hash(
-                redeemers, datums, normalized, languages_used
-            )
+            computed = compute_script_integrity_hash(redeemers, datums, normalized, languages_used)
             if computed != tx_body_script_integrity_hash:
                 errors.append(
                     f"ScriptIntegrityHashMismatch: computed={computed.hex()[:16]}..., "
@@ -398,7 +391,7 @@ def alonzo_min_utxo_value(
             val_size = max(2, (size_bytes + 7) // 8)
 
     # Check for datum hash
-    has_datum_hash = hasattr(txout, 'datum_hash') and txout.datum_hash is not None
+    has_datum_hash = hasattr(txout, "datum_hash") and txout.datum_hash is not None
     datum_size = DATUM_HASH_SIZE if has_datum_hash else 0
 
     total_words = UTXO_ENTRY_SIZE_WITHOUT_VAL + val_size + datum_size
@@ -485,27 +478,19 @@ def validate_alonzo_utxo(
 
     # --- Tx size within limits ---
     if tx_size > params.max_tx_size:
-        errors.append(
-            f"MaxTxSizeUTxO: tx_size={tx_size}, max={params.max_tx_size}"
-        )
+        errors.append(f"MaxTxSizeUTxO: tx_size={tx_size}, max={params.max_tx_size}")
 
     # --- Fee >= minimum fee ---
     min_fee = shelley_min_fee(tx_size, params)
     if tx_body.fee < min_fee:
-        errors.append(
-            f"FeeTooSmallUTxO: fee={tx_body.fee}, min_fee={min_fee} "
-            f"(tx_size={tx_size})"
-        )
+        errors.append(f"FeeTooSmallUTxO: fee={tx_body.fee}, min_fee={min_fee} (tx_size={tx_size})")
 
     # --- Min UTxO value (Alonzo: coinsPerUTxOWord based) ---
     for i, txout in enumerate(tx_body.outputs):
         min_value = alonzo_min_utxo_value(txout, params.coins_per_utxo_word)
         out_lovelace = _output_lovelace(txout)
         if out_lovelace < min_value:
-            errors.append(
-                f"OutputTooSmallUTxO: output[{i}] value={out_lovelace}, "
-                f"min={min_value}"
-            )
+            errors.append(f"OutputTooSmallUTxO: output[{i}] value={out_lovelace}, min={min_value}")
 
     # --- Value preservation (multi-asset, inherited from Mary) ---
     if not missing_inputs:
@@ -532,9 +517,7 @@ def validate_alonzo_utxo(
         produced = produced + Value(coin=tx_body.fee)
 
         if not _value_eq(consumed, produced):
-            errors.append(
-                f"ValueNotConservedUTxO: consumed={consumed}, produced={produced}"
-            )
+            errors.append(f"ValueNotConservedUTxO: consumed={consumed}, produced={produced}")
 
     # ===== Alonzo-specific rules =====
 
@@ -544,9 +527,7 @@ def validate_alonzo_utxo(
         errors.extend(_collateral_contains_non_ada(collateral_inputs, utxo_set))
 
         # TooManyCollateralInputs
-        errors.extend(
-            _too_many_collateral_inputs(collateral_inputs, params.max_collateral_inputs)
-        )
+        errors.extend(_too_many_collateral_inputs(collateral_inputs, params.max_collateral_inputs))
 
         # InsufficientCollateral
         script_fees = calculate_script_fee(redeemers, params.execution_unit_prices)
@@ -655,9 +636,7 @@ def _missing_redeemers(
     errors: list[str] = []
 
     # Build set of Spend redeemer indices
-    spend_redeemer_indices = {
-        r.index for r in redeemers if r.tag == RedeemerTag.SPEND
-    }
+    spend_redeemer_indices = {r.index for r in redeemers if r.tag == RedeemerTag.SPEND}
 
     # Sorted inputs determine the index mapping
     sorted_inputs = sorted(
@@ -727,7 +706,7 @@ def _not_allowed_supplemental_datums(
 
     # From outputs being created (datum hashes on tx outputs)
     for txout in tx_body.outputs:
-        datum_hash = getattr(txout, 'datum_hash', None)
+        datum_hash = getattr(txout, "datum_hash", None)
         if datum_hash is not None:
             dh_bytes = bytes(datum_hash) if not isinstance(datum_hash, bytes) else datum_hash
             needed_datum_hashes.add(dh_bytes)
@@ -736,7 +715,7 @@ def _not_allowed_supplemental_datums(
     for txin in tx_body.inputs:
         if txin in utxo_set:
             txout = utxo_set[txin]
-            datum_hash = getattr(txout, 'datum_hash', None)
+            datum_hash = getattr(txout, "datum_hash", None)
             if datum_hash is not None:
                 dh_bytes = bytes(datum_hash) if not isinstance(datum_hash, bytes) else datum_hash
                 needed_datum_hashes.add(dh_bytes)
@@ -791,7 +770,7 @@ def _unspendable_utxo_no_datum_hash(
             continue
         payment_hash = bytes(payment_part)
         if len(payment_hash) == 28 and payment_hash in script_hashes:
-            datum_hash = getattr(txout, 'datum_hash', None)
+            datum_hash = getattr(txout, "datum_hash", None)
             if datum_hash is None:
                 errors.append(
                     f"UnspendableUTxONoDatumHash: output[{i}] is locked by "
@@ -998,7 +977,7 @@ def _missing_required_datums(
 
     # Check each output for datum hashes
     for i, txout in enumerate(tx_body.outputs):
-        datum_hash = getattr(txout, 'datum_hash', None)
+        datum_hash = getattr(txout, "datum_hash", None)
         if datum_hash is not None:
             dh_bytes = bytes(datum_hash) if not isinstance(datum_hash, bytes) else datum_hash
             if dh_bytes not in witnessed_datum_hashes:
@@ -1042,12 +1021,12 @@ def _validate_metadata_hash(
 
     errors: list[str] = []
 
-    body_hash = getattr(tx_body, 'auxiliary_data_hash', None)
+    body_hash = getattr(tx_body, "auxiliary_data_hash", None)
     # pycardano stores auxiliary_data on the Transaction, not the witness set.
     # For our validation interface, we check if the tx_body has the hash field.
     # The actual metadata content would normally come from Transaction.auxiliary_data.
     # Since we receive the witness_set, we check for auxiliary_data there too.
-    aux_data = getattr(witness_set, 'auxiliary_data', None)
+    aux_data = getattr(witness_set, "auxiliary_data", None)
 
     if body_hash is not None and aux_data is None:
         # Hash declared but no metadata provided
@@ -1145,8 +1124,11 @@ def validate_alonzo_witnesses(
                 signers.add(_hashlib.blake2b(wit.vkey.payload, digest_size=28).digest())
         errors.extend(
             _validate_native_scripts(
-                tx_body, utxo_set, native_scripts,
-                frozenset(signers), current_slot,
+                tx_body,
+                utxo_set,
+                native_scripts,
+                frozenset(signers),
+                current_slot,
             )
         )
 
@@ -1166,9 +1148,7 @@ def validate_alonzo_witnesses(
     # Every Plutus script input must have a matching redeemer.
     # Spec ref: Alonzo formal spec, ``missingRedeemers``
     # Haskell ref: ``missingRedeemers`` in Alonzo.Rules.Utxow
-    errors.extend(
-        _missing_redeemers(tx_body, utxo_set, redeemers, script_hashes)
-    )
+    errors.extend(_missing_redeemers(tx_body, utxo_set, redeemers, script_hashes))
 
     # --- Not-allowed supplemental datums ---
     # Datums in the witness set must be referenced by an input or output.
@@ -1177,17 +1157,13 @@ def validate_alonzo_witnesses(
     # Spec ref: Alonzo formal spec, ``notAllowedSupplementalDatums``
     # Haskell ref: ``validateNotAllowedSupplementalDatums`` in Alonzo.Rules.Utxow
     if has_plutus_scripts:
-        errors.extend(
-            _not_allowed_supplemental_datums(tx_body, utxo_set, datums, script_hashes)
-        )
+        errors.extend(_not_allowed_supplemental_datums(tx_body, utxo_set, datums, script_hashes))
 
     # --- Unspendable UTxO without datum hash ---
     # Script-addressed outputs must include a datum hash.
     # Spec ref: Alonzo formal spec, ``UnspendableUTxONoDatumHash``
     # Haskell ref: ``validateOutputMissingDatumHash`` in Alonzo.Rules.Utxo
-    errors.extend(
-        _unspendable_utxo_no_datum_hash(tx_body, script_hashes)
-    )
+    errors.extend(_unspendable_utxo_no_datum_hash(tx_body, script_hashes))
 
     # --- Missing script witnesses ---
     # Every referenced Plutus script must be in the witness set.
@@ -1201,18 +1177,14 @@ def validate_alonzo_witnesses(
     # All redeemers must point to valid script purposes.
     # Spec ref: Alonzo formal spec, ``extraRedeemers``
     # Haskell ref: ``validateExtraRedeemers`` in Alonzo.Rules.Utxow
-    errors.extend(
-        _extra_redeemers(tx_body, utxo_set, redeemers, script_hashes)
-    )
+    errors.extend(_extra_redeemers(tx_body, utxo_set, redeemers, script_hashes))
 
     # --- Datum witness completeness ---
     # Every datum hash referenced in outputs being spent by Plutus scripts
     # must have a matching datum witness in the witness set.
     # Spec ref: Alonzo formal spec, ``missingRequiredDatums``
     # Haskell ref: ``missingRequiredDatums`` in Alonzo.Rules.Utxow
-    errors.extend(
-        _missing_required_datums(tx_body, datums)
-    )
+    errors.extend(_missing_required_datums(tx_body, datums))
 
     # --- Metadata hash validation ---
     # If the tx body includes an auxiliary_data_hash, it must match the
@@ -1220,9 +1192,7 @@ def validate_alonzo_witnesses(
     # Spec ref: Shelley formal spec, ``txADhash``
     # Haskell ref: ``validateMissingOrIncorrectAuxiliaryDataHash`` in
     #     Cardano.Ledger.Shelley.Rules.Utxow (inherited through Alonzo)
-    errors.extend(
-        _validate_metadata_hash(tx_body, witness_set)
-    )
+    errors.extend(_validate_metadata_hash(tx_body, witness_set))
 
     return errors
 

@@ -1,12 +1,14 @@
 """find_similar tool — pure vector similarity search."""
+
 from __future__ import annotations
+
 import uuid as _uuid
 
+from vibe.tools.db.search import build_vector_query
+from vibe.tools.db.search_config import get_available_configs
 from vibe.tools.mcp.app import mcp
 from vibe.tools.mcp.db import get_pool
 from vibe.tools.mcp.embed import embed_query
-from vibe.tools.db.search import build_vector_query
-from vibe.tools.db.search_config import get_available_configs
 
 
 @mcp.tool()

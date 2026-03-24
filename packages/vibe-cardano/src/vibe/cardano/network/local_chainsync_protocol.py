@@ -30,44 +30,44 @@ from __future__ import annotations
 
 import enum
 import logging
-from typing import Protocol as TypingProtocol, runtime_checkable
-
-from vibe.core.protocols.agency import (
-    Agency,
-    Message,
-    Protocol,
-    ProtocolError,
-    PeerRole,
-)
-from vibe.core.protocols.codec import Codec, CodecError
-from vibe.core.protocols.runner import ProtocolRunner
+from typing import Protocol as TypingProtocol
+from typing import runtime_checkable
 
 from vibe.cardano.network.chainsync import (
-    MsgRequestNext,
+    ORIGIN,
     MsgAwaitReply,
-    MsgRollBackward,
+    MsgDone,
     MsgFindIntersect,
     MsgIntersectFound,
     MsgIntersectNotFound,
-    MsgDone,
+    MsgRequestNext,
+    MsgRollBackward,
     Point,
-    ORIGIN,
-    Tip,
     PointOrOrigin,
-    encode_request_next,
-    encode_find_intersect,
-    encode_done,
+    Tip,
+    decode_client_message,
     encode_await_reply,
-    encode_roll_backward,
+    encode_done,
+    encode_find_intersect,
     encode_intersect_found,
     encode_intersect_not_found,
-    decode_client_message,
+    encode_request_next,
+    encode_roll_backward,
 )
 from vibe.cardano.network.local_chainsync import (
     N2CMsgRollForward,
-    encode_n2c_roll_forward,
     decode_n2c_server_message,
+    encode_n2c_roll_forward,
 )
+from vibe.core.protocols.agency import (
+    Agency,
+    Message,
+    PeerRole,
+    Protocol,
+    ProtocolError,
+)
+from vibe.core.protocols.codec import CodecError
+from vibe.core.protocols.runner import ProtocolRunner
 
 __all__ = [
     "LocalChainSyncState",
@@ -370,9 +370,7 @@ class LocalChainSyncCodec:
         elif isinstance(message, LcsMsgIntersectNotFound):
             return encode_intersect_not_found(message.tip)
         else:
-            raise CodecError(
-                f"Unknown local chain-sync message type: {type(message).__name__}"
-            )
+            raise CodecError(f"Unknown local chain-sync message type: {type(message).__name__}")
 
     def decode(self, data: bytes) -> Message[LocalChainSyncState]:
         """Decode CBOR bytes into a typed local chain-sync message.
@@ -387,9 +385,7 @@ class LocalChainSyncCodec:
             return self._decode_client(data)
         except ValueError:
             pass
-        raise CodecError(
-            f"Failed to decode local chain-sync message ({len(data)} bytes)"
-        )
+        raise CodecError(f"Failed to decode local chain-sync message ({len(data)} bytes)")
 
     def _decode_server(self, data: bytes) -> Message[LocalChainSyncState]:
         """Decode a server-to-client message (N2C variant)."""
@@ -561,13 +557,9 @@ class LocalChainSyncServer:
 
         if intersect is not None:
             self._client_point = intersect
-            await self._runner.send_message(
-                LcsMsgIntersectFound(point=intersect, tip=tip)
-            )
+            await self._runner.send_message(LcsMsgIntersectFound(point=intersect, tip=tip))
         else:
-            await self._runner.send_message(
-                LcsMsgIntersectNotFound(tip=tip)
-            )
+            await self._runner.send_message(LcsMsgIntersectNotFound(tip=tip))
 
     async def handle_request_next(self) -> None:
         """Handle a MsgRequestNext from the client.
@@ -582,9 +574,7 @@ class LocalChainSyncServer:
         if fork_point is not None:
             tip = self._chaindb.get_tip()
             self._client_point = fork_point
-            await self._runner.send_message(
-                LcsMsgRollBackward(point=fork_point, tip=tip)
-            )
+            await self._runner.send_message(LcsMsgRollBackward(point=fork_point, tip=tip))
             return
 
         # Try to read the next block after the client's position.
@@ -594,9 +584,7 @@ class LocalChainSyncServer:
             block_cbor, block_point = result
             tip = self._chaindb.get_tip()
             self._client_point = block_point
-            await self._runner.send_message(
-                LcsMsgRollForward(block=block_cbor, tip=tip)
-            )
+            await self._runner.send_message(LcsMsgRollForward(block=block_cbor, tip=tip))
         else:
             # Client is caught up to the tip — send AwaitReply, then
             # wait for a new block and serve it.
@@ -610,9 +598,7 @@ class LocalChainSyncServer:
             if fork_point is not None:
                 tip = self._chaindb.get_tip()
                 self._client_point = fork_point
-                await self._runner.send_message(
-                    LcsMsgRollBackward(point=fork_point, tip=tip)
-                )
+                await self._runner.send_message(LcsMsgRollBackward(point=fork_point, tip=tip))
                 return
 
             # Serve the new block.
@@ -621,9 +607,7 @@ class LocalChainSyncServer:
                 block_cbor, block_point = result
                 tip = self._chaindb.get_tip()
                 self._client_point = block_point
-                await self._runner.send_message(
-                    LcsMsgRollForward(block=block_cbor, tip=tip)
-                )
+                await self._runner.send_message(LcsMsgRollForward(block=block_cbor, tip=tip))
             else:
                 # Edge case: woke up but no new block. Send rollforward
                 # with current tip. In practice this shouldn't happen if
@@ -659,9 +643,7 @@ class LocalChainSyncServer:
                 return
 
             else:
-                raise ProtocolError(
-                    f"Unexpected message in StIdle: {type(msg).__name__}"
-                )
+                raise ProtocolError(f"Unexpected message in StIdle: {type(msg).__name__}")
 
 
 # ---------------------------------------------------------------------------
@@ -682,7 +664,7 @@ def create_local_chainsync_server(
     chaindb : ChainDB
         The chain database to serve blocks from.
 
-    Returns
+    Returns:
     -------
     LocalChainSyncServer
         Ready-to-run server instance.

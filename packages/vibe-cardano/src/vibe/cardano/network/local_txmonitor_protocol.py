@@ -33,43 +33,42 @@ from __future__ import annotations
 
 import enum
 import logging
-from typing import Awaitable, Callable
-
-from vibe.core.protocols.agency import (
-    Agency,
-    Message,
-    Protocol,
-    ProtocolError,
-    PeerRole,
-)
-from vibe.core.protocols.codec import Codec, CodecError
-from vibe.core.protocols.runner import ProtocolRunner
+from collections.abc import Awaitable, Callable
 
 from vibe.cardano.network.local_txmonitor import (
     MsgAcquire,
     MsgAcquired,
     MsgAwaitAcquire,
-    MsgRelease,
-    MsgNextTx,
-    MsgReplyNextTx,
-    MsgHasTx,
-    MsgReplyHasTx,
-    MsgGetSizes,
-    MsgReplyGetSizes,
     MsgDone,
+    MsgGetSizes,
+    MsgHasTx,
+    MsgNextTx,
+    MsgRelease,
+    MsgReplyGetSizes,
+    MsgReplyHasTx,
+    MsgReplyNextTx,
+    decode_message,
     encode_acquire,
     encode_acquired,
     encode_await_acquire,
-    encode_release,
-    encode_next_tx,
-    encode_reply_next_tx,
-    encode_has_tx,
-    encode_reply_has_tx,
-    encode_get_sizes,
-    encode_reply_get_sizes,
     encode_done,
-    decode_message,
+    encode_get_sizes,
+    encode_has_tx,
+    encode_next_tx,
+    encode_release,
+    encode_reply_get_sizes,
+    encode_reply_has_tx,
+    encode_reply_next_tx,
 )
+from vibe.core.protocols.agency import (
+    Agency,
+    Message,
+    PeerRole,
+    Protocol,
+    ProtocolError,
+)
+from vibe.core.protocols.codec import CodecError
+from vibe.core.protocols.runner import ProtocolRunner
 
 __all__ = [
     "LocalTxMonitorState",
@@ -325,16 +324,12 @@ class LtmMsgReplyGetSizes(Message[LocalTxMonitorState]):
 
     __slots__ = ("inner",)
 
-    def __init__(
-        self, num_txs: int, total_size: int, num_bytes: int
-    ) -> None:
+    def __init__(self, num_txs: int, total_size: int, num_bytes: int) -> None:
         super().__init__(
             from_state=LocalTxMonitorState.StBusyGetSizes,
             to_state=LocalTxMonitorState.StAcquired,
         )
-        self.inner = MsgReplyGetSizes(
-            num_txs=num_txs, total_size=total_size, num_bytes=num_bytes
-        )
+        self.inner = MsgReplyGetSizes(num_txs=num_txs, total_size=total_size, num_bytes=num_bytes)
 
     @property
     def num_txs(self) -> int:
@@ -373,12 +368,9 @@ class LtmMsgDone(Message[LocalTxMonitorState]):
 _IDLE_MESSAGES: frozenset[type[Message[LocalTxMonitorState]]] = frozenset(
     {LtmMsgAcquire, LtmMsgAwaitAcquireIdle, LtmMsgDone}
 )
-_ACQUIRING_MESSAGES: frozenset[type[Message[LocalTxMonitorState]]] = frozenset(
-    {LtmMsgAcquired}
-)
+_ACQUIRING_MESSAGES: frozenset[type[Message[LocalTxMonitorState]]] = frozenset({LtmMsgAcquired})
 _ACQUIRED_MESSAGES: frozenset[type[Message[LocalTxMonitorState]]] = frozenset(
-    {LtmMsgRelease, LtmMsgNextTx, LtmMsgHasTx, LtmMsgGetSizes,
-     LtmMsgAwaitAcquire}
+    {LtmMsgRelease, LtmMsgNextTx, LtmMsgHasTx, LtmMsgGetSizes, LtmMsgAwaitAcquire}
 )
 _BUSY_NEXT_TX_MESSAGES: frozenset[type[Message[LocalTxMonitorState]]] = frozenset(
     {LtmMsgReplyNextTx}
@@ -438,9 +430,7 @@ class LocalTxMonitorProtocol(Protocol[LocalTxMonitorState]):
         try:
             return self._AGENCY_MAP[state]
         except KeyError:
-            raise ProtocolError(
-                f"Unknown local tx-monitor state: {state!r}"
-            )
+            raise ProtocolError(f"Unknown local tx-monitor state: {state!r}")
 
     def valid_messages(
         self, state: LocalTxMonitorState
@@ -448,9 +438,7 @@ class LocalTxMonitorProtocol(Protocol[LocalTxMonitorState]):
         try:
             return self._VALID_MESSAGES[state]
         except KeyError:
-            raise ProtocolError(
-                f"Unknown local tx-monitor state: {state!r}"
-            )
+            raise ProtocolError(f"Unknown local tx-monitor state: {state!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -488,16 +476,11 @@ class LocalTxMonitorCodec:
         elif isinstance(message, LtmMsgGetSizes):
             return encode_get_sizes()
         elif isinstance(message, LtmMsgReplyGetSizes):
-            return encode_reply_get_sizes(
-                message.num_txs, message.total_size, message.num_bytes
-            )
+            return encode_reply_get_sizes(message.num_txs, message.total_size, message.num_bytes)
         elif isinstance(message, LtmMsgDone):
             return encode_done()
         else:
-            raise CodecError(
-                f"Unknown local tx-monitor message type: "
-                f"{type(message).__name__}"
-            )
+            raise CodecError(f"Unknown local tx-monitor message type: {type(message).__name__}")
 
     def decode(self, data: bytes) -> Message[LocalTxMonitorState]:
         """Decode CBOR bytes into a typed local tx-monitor message.
@@ -546,10 +529,7 @@ class LocalTxMonitorCodec:
         elif isinstance(msg, MsgDone):
             return LtmMsgDone()
         else:
-            raise CodecError(
-                f"Failed to decode local tx-monitor message "
-                f"({len(data)} bytes)"
-            )
+            raise CodecError(f"Failed to decode local tx-monitor message ({len(data)} bytes)")
 
     def decode_for_state(
         self, data: bytes, state: LocalTxMonitorState
@@ -614,9 +594,7 @@ class LocalTxMonitorServer:
 
     __slots__ = ("_runner",)
 
-    def __init__(
-        self, runner: ProtocolRunner[LocalTxMonitorState]
-    ) -> None:
+    def __init__(self, runner: ProtocolRunner[LocalTxMonitorState]) -> None:
         self._runner = runner
 
     @property
@@ -635,9 +613,7 @@ class LocalTxMonitorServer:
         """Send MsgAcquired with the snapshot slot."""
         await self._runner.send_message(LtmMsgAcquired(slot=slot))
 
-    async def send_reply_next_tx(
-        self, tx: tuple[int, bytes] | None
-    ) -> None:
+    async def send_reply_next_tx(self, tx: tuple[int, bytes] | None) -> None:
         """Send MsgReplyNextTx with a transaction or Nothing."""
         await self._runner.send_message(LtmMsgReplyNextTx(tx=tx))
 
@@ -645,9 +621,7 @@ class LocalTxMonitorServer:
         """Send MsgReplyHasTx."""
         await self._runner.send_message(LtmMsgReplyHasTx(has_tx=has_tx))
 
-    async def send_reply_get_sizes(
-        self, num_txs: int, total_size: int, num_bytes: int
-    ) -> None:
+    async def send_reply_get_sizes(self, num_txs: int, total_size: int, num_bytes: int) -> None:
         """Send MsgReplyGetSizes."""
         await self._runner.send_message(
             LtmMsgReplyGetSizes(
@@ -702,8 +676,7 @@ async def run_local_tx_monitor_server(
             logger.debug("Local tx-monitor: client sent MsgDone, terminating")
             return
 
-        elif isinstance(client_msg, (LtmMsgAcquire, LtmMsgAwaitAcquireIdle,
-                                      LtmMsgAwaitAcquire)):
+        elif isinstance(client_msg, (LtmMsgAcquire, LtmMsgAwaitAcquireIdle, LtmMsgAwaitAcquire)):
             slot = await acquire_snapshot()
             await server.send_acquired(slot)
             logger.debug("Local tx-monitor: acquired snapshot at slot %d", slot)
@@ -726,6 +699,5 @@ async def run_local_tx_monitor_server(
 
         else:
             raise ProtocolError(
-                f"Unexpected message in tx-monitor server: "
-                f"{type(client_msg).__name__}"
+                f"Unexpected message in tx-monitor server: {type(client_msg).__name__}"
             )

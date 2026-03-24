@@ -18,7 +18,8 @@ Spec ref:
 from __future__ import annotations
 
 import logging
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import cbor2pure
 
@@ -66,9 +67,7 @@ def _check_depth(obj: Any, max_depth: int, _current: int = 0) -> None:
     failures.
     """
     if _current > max_depth:
-        raise cbor2pure.CBORDecodeError(
-            f"CBOR nesting depth exceeds limit of {max_depth}"
-        )
+        raise cbor2pure.CBORDecodeError(f"CBOR nesting depth exceeds limit of {max_depth}")
     if isinstance(obj, (list, tuple)):
         for item in obj:
             _check_depth(item, max_depth, _current + 1)
@@ -109,12 +108,12 @@ def safe_cbor_loads(
     max_depth:
         Maximum allowed nesting depth.  Defaults to :data:`MAX_CBOR_DEPTH`.
 
-    Returns
+    Returns:
     -------
     Any
         The decoded Python object.
 
-    Raises
+    Raises:
     ------
     ValueError
         If ``len(data)`` exceeds *max_size*.
@@ -157,7 +156,7 @@ def validate_protocol_message(
     expected_types:
         Sequence of types that are acceptable at this point in the protocol.
 
-    Returns
+    Returns:
     -------
     The original *msg* if its type matches, or ``None`` with a logged warning.
     """

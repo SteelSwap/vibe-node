@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 
 import pytest
 
-from vibe.core.multiplexer.bearer import connect, Bearer
-from vibe.core.multiplexer.segment import MuxSegment
 from vibe.cardano.network.handshake import (
-    encode_propose_versions,
-    decode_handshake_response,
-    build_version_table,
     PREPROD_NETWORK_MAGIC,
+    build_version_table,
+    decode_handshake_response,
+    encode_propose_versions,
 )
-
+from vibe.core.multiplexer.bearer import Bearer, connect
+from vibe.core.multiplexer.segment import MuxSegment
 
 CARDANO_NODE_HOST = os.environ.get("CARDANO_NODE_HOST", "localhost")
 CARDANO_NODE_PORT = int(os.environ.get("CARDANO_NODE_PORT", "3001"))
@@ -27,12 +25,10 @@ def cardano_node_available() -> bool:
     import socket
 
     try:
-        sock = socket.create_connection(
-            (CARDANO_NODE_HOST, CARDANO_NODE_PORT), timeout=3
-        )
+        sock = socket.create_connection((CARDANO_NODE_HOST, CARDANO_NODE_PORT), timeout=3)
         sock.close()
         return True
-    except (ConnectionRefusedError, TimeoutError, OSError):
+    except ConnectionRefusedError, TimeoutError, OSError:
         return False
 
 
@@ -61,9 +57,7 @@ async def handshaken_bearer() -> Bearer:
 
     versions = build_version_table(PREPROD_NETWORK_MAGIC)
     propose = encode_propose_versions(versions)
-    seg = MuxSegment(
-        timestamp=0, protocol_id=0, is_initiator=True, payload=propose
-    )
+    seg = MuxSegment(timestamp=0, protocol_id=0, is_initiator=True, payload=propose)
     await b.write_segment(seg)
     resp = await b.read_segment()
     decode_handshake_response(resp.payload)  # verify it parses

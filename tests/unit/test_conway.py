@@ -61,7 +61,6 @@ from vibe.cardano.ledger.conway_types import (
     VotingProcedure,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
 # ---------------------------------------------------------------------------
@@ -92,9 +91,7 @@ def make_tx_id_bytes(seed: int = 0) -> bytes:
 
 def make_anchor(seed: int = 0) -> Anchor:
     """Create a test anchor."""
-    data_hash = hashlib.blake2b(
-        f"anchor-{seed}".encode(), digest_size=32
-    ).digest()
+    data_hash = hashlib.blake2b(f"anchor-{seed}".encode(), digest_size=32).digest()
     return Anchor(url=f"https://example.com/proposal-{seed}", data_hash=data_hash)
 
 
@@ -375,9 +372,7 @@ class TestDelegVote:
         drep = DRep(drep_type=DRepType.KEY_HASH, credential=drep_cred)
         cert = DelegVote(credential=delegator_cred, drep=drep)
 
-        new_state = process_deleg_vote(
-            cert, state, registered_credentials={delegator_cred}
-        )
+        new_state = process_deleg_vote(cert, state, registered_credentials={delegator_cred})
         assert delegator_cred in new_state.drep_delegations
         assert new_state.drep_delegations[delegator_cred] == drep
 
@@ -403,9 +398,7 @@ class TestDelegVote:
         cert = DelegVote(credential=delegator_cred, drep=drep)
 
         with pytest.raises(ConwayGovernanceError, match="DRepNotRegistered"):
-            process_deleg_vote(
-                cert, state, registered_credentials={delegator_cred}
-            )
+            process_deleg_vote(cert, state, registered_credentials={delegator_cred})
 
     def test_delegate_to_always_abstain(self):
         """Delegating to AlwaysAbstain should succeed without DRep registration."""
@@ -414,9 +407,7 @@ class TestDelegVote:
         drep = DRep(drep_type=DRepType.ALWAYS_ABSTAIN)
         cert = DelegVote(credential=delegator_cred, drep=drep)
 
-        new_state = process_deleg_vote(
-            cert, state, registered_credentials={delegator_cred}
-        )
+        new_state = process_deleg_vote(cert, state, registered_credentials={delegator_cred})
         assert new_state.drep_delegations[delegator_cred].drep_type == DRepType.ALWAYS_ABSTAIN
 
     def test_delegate_to_always_no_confidence(self):
@@ -426,12 +417,9 @@ class TestDelegVote:
         drep = DRep(drep_type=DRepType.ALWAYS_NO_CONFIDENCE)
         cert = DelegVote(credential=delegator_cred, drep=drep)
 
-        new_state = process_deleg_vote(
-            cert, state, registered_credentials={delegator_cred}
-        )
+        new_state = process_deleg_vote(cert, state, registered_credentials={delegator_cred})
         assert (
-            new_state.drep_delegations[delegator_cred].drep_type
-            == DRepType.ALWAYS_NO_CONFIDENCE
+            new_state.drep_delegations[delegator_cred].drep_type == DRepType.ALWAYS_NO_CONFIDENCE
         )
 
 
@@ -446,9 +434,7 @@ class TestCertificateDispatch:
     def test_dispatch_drep_registration(self):
         """Should route DRepRegistration correctly."""
         cred = make_credential(1)
-        cert = DRepRegistration(
-            credential=cred, deposit=TEST_PARAMS.drep_deposit
-        )
+        cert = DRepRegistration(credential=cred, deposit=TEST_PARAMS.drep_deposit)
         state = GovernanceState()
         new_state = process_conway_certificate(cert, state, TEST_PARAMS)
         assert cred in new_state.dreps
@@ -521,7 +507,10 @@ class TestVotingValidation:
         }
 
         errors = validate_voting_procedures(
-            procedures, state, 10, TEST_PARAMS  # current epoch 10 > expiry 5
+            procedures,
+            state,
+            10,
+            TEST_PARAMS,  # current epoch 10 > expiry 5
         )
         assert any("VoterExpired" in e for e in errors)
 
@@ -616,9 +605,9 @@ class TestRatification:
             Voter(VoterRole.DREP, drep3): VotingProcedure(vote=Vote.NO),
         }
         for cc_cred in cc_members:
-            state.votes[action_id][
-                Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)] = (
+                VotingProcedure(vote=Vote.YES)
+            )
 
         assert check_ratification(action_id, state, TEST_PARAMS)
 
@@ -763,9 +752,7 @@ class TestConwayProperties:
         denom=st.integers(min_value=1, max_value=100),
     )
     @settings(max_examples=200)
-    def test_threshold_monotonic_in_yes_votes(
-        self, yes: int, total: int, num: int, denom: int
-    ):
+    def test_threshold_monotonic_in_yes_votes(self, yes: int, total: int, num: int, denom: int):
         """More yes votes should never reduce threshold satisfaction."""
         if yes >= total:
             return  # Skip invalid cases
@@ -791,10 +778,7 @@ class TestConwayProperties:
         Each proposal is validated independently — reordering the list
         should produce the same set of errors.
         """
-        proposals = [
-            make_proposal(seed=i, action_type=at)
-            for i, at in enumerate(action_types)
-        ]
+        proposals = [make_proposal(seed=i, action_type=at) for i, at in enumerate(action_types)]
         state = GovernanceState()
 
         errors_forward = validate_proposals(proposals, TEST_PARAMS, state)

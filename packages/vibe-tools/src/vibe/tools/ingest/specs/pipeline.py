@@ -19,12 +19,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from vibe.tools.embed.client import EmbeddingClient
 from vibe.tools.ingest.specs.chunker import chunk_cddl, chunk_markdown
-from vibe.tools.ingest.specs.git_history import discover_spec_commits, get_file_at_commit
 from vibe.tools.ingest.specs.converters.agda import convert_agda
 from vibe.tools.ingest.specs.converters.cddl import convert_cddl
 from vibe.tools.ingest.specs.converters.latex import convert_latex
 from vibe.tools.ingest.specs.converters.markdown import convert_markdown
 from vibe.tools.ingest.specs.converters.pdf import convert_pdf
+from vibe.tools.ingest.specs.git_history import discover_spec_commits, get_file_at_commit
 from vibe.tools.ingest.specs.sources import SPEC_SOURCES, SpecSource
 
 logger = logging.getLogger(__name__)
@@ -98,6 +98,7 @@ def _ensure_papers_downloaded() -> None:
 
     try:
         import httpx
+
         from vibe.tools.ingest.papers import PAPERS
 
         for paper in PAPERS:
@@ -131,6 +132,7 @@ class SpecIngestor:
 
         commit_hash, commit_date_str = _get_submodule_head(source.submodule_path)
         from datetime import datetime
+
         commit_date = datetime.fromisoformat(commit_date_str)
 
         if limit:
@@ -287,7 +289,10 @@ class SpecIngestor:
             progress.update(task, completed=len(files))
         logger.info(
             "Completed %s (%s): %d chunks from %d files",
-            source.source_repo, source.format, total_chunks, len(files),
+            source.source_repo,
+            source.format,
+            total_chunks,
+            len(files),
         )
         return total_chunks
 
@@ -318,7 +323,8 @@ class SpecIngestor:
         if source_filter:
             sf = source_filter.lower()
             sources = [
-                s for s in sources
+                s
+                for s in sources
                 if sf in s.source_repo.lower() or sf in s.era.lower() or sf in s.spec_glob.lower()
             ]
 
@@ -326,8 +332,11 @@ class SpecIngestor:
         for source in sources:
             key = f"{source.source_repo} ({source.format}/{source.era})"
             results[key] = await self.ingest_source(
-                source, session, embed_client,
-                limit=limit, progress=progress,
+                source,
+                session,
+                embed_client,
+                limit=limit,
+                progress=progress,
             )
 
         return results
@@ -356,7 +365,8 @@ class SpecIngestor:
         if source_filter:
             sf = source_filter.lower()
             sources = [
-                s for s in sources
+                s
+                for s in sources
                 if sf in s.source_repo.lower() or sf in s.era.lower() or sf in s.spec_glob.lower()
             ]
 
@@ -414,6 +424,7 @@ class SpecIngestor:
                     # Convert
                     if source.format == "latex":
                         from vibe.tools.ingest.specs.converters.latex import convert_latex
+
                         converted = convert_latex(content)
                     elif source.format in CONVERTERS:
                         converted = CONVERTERS[source.format](content)
@@ -484,7 +495,9 @@ class SpecIngestor:
             results[key] = total_chunks
             logger.info(
                 "History %s: %d chunks from %d commits",
-                key, total_chunks, len(commits),
+                key,
+                total_chunks,
+                len(commits),
             )
 
         return results

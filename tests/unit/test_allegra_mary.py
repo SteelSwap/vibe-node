@@ -29,30 +29,29 @@ from pycardano import (
     Value,
 )
 from pycardano.address import Address
-from pycardano.hash import ScriptHash, TransactionId, VerificationKeyHash
+from pycardano.hash import ScriptHash, TransactionId
 from pycardano.key import PaymentSigningKey, PaymentVerificationKey
 from pycardano.network import Network
 from pycardano.witness import TransactionWitnessSet
 
 from vibe.cardano.ledger.allegra_mary import (
+    MARY_MAINNET_PARAMS,
     AllegraValidationError,
     MaryProtocolParams,
-    MARY_MAINNET_PARAMS,
     Timelock,
     TimelockType,
     ValidityInterval,
+    _output_value,
+    _sum_values,
+    _value_eq,
     evaluate_timelock,
     mary_min_utxo_value,
     validate_allegra_utxo,
     validate_mary_tx,
     validate_mary_value_preservation,
     validate_validity_interval,
-    _output_value,
-    _sum_values,
-    _value_eq,
 )
-from vibe.cardano.ledger.shelley import ShelleyProtocolParams, ShelleyUTxO
-
+from vibe.cardano.ledger.shelley import ShelleyUTxO
 
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
@@ -352,9 +351,7 @@ class TestTimelock:
                 Timelock(type=TimelockType.REQUIRE_SIGNATURE, key_hash=kh2),
             ),
         )
-        assert evaluate_timelock(
-            script, frozenset({kh0, kh1, kh2}), current_slot=0
-        )
+        assert evaluate_timelock(script, frozenset({kh0, kh1, kh2}), current_slot=0)
 
     def test_require_time_after_satisfied(self):
         """RequireTimeAfter passes when current_slot >= slot."""
@@ -438,9 +435,7 @@ class TestMaryValuePreservation:
             coin=4_000_000,
             multi_asset=MultiAsset({pid: Asset({asset_name: 40})}),
         )
-        errors = validate_mary_value_preservation(
-            [input_val], [out1, out2], fee=2_000_000
-        )
+        errors = validate_mary_value_preservation([input_val], [out1, out2], fee=2_000_000)
         assert errors == []
 
     def test_multi_asset_unbalanced_token(self):
@@ -458,9 +453,7 @@ class TestMaryValuePreservation:
             coin=8_000_000,
             multi_asset=MultiAsset({pid: Asset({asset_name: 80})}),
         )
-        errors = validate_mary_value_preservation(
-            [input_val], [out], fee=2_000_000
-        )
+        errors = validate_mary_value_preservation([input_val], [out], fee=2_000_000)
         assert any("ValueNotConservedUTxO" in e for e in errors)
 
     def test_minting_balanced(self):
@@ -470,16 +463,12 @@ class TestMaryValuePreservation:
 
         asset_name = AssetName(b"coin")
         input_val = Value(coin=10_000_000)
-        mint_val = Value(
-            coin=0, multi_asset=MultiAsset({pid: Asset({asset_name: 500})})
-        )
+        mint_val = Value(coin=0, multi_asset=MultiAsset({pid: Asset({asset_name: 500})}))
         out = Value(
             coin=8_000_000,
             multi_asset=MultiAsset({pid: Asset({asset_name: 500})}),
         )
-        errors = validate_mary_value_preservation(
-            [input_val], [out], fee=2_000_000, mint=mint_val
-        )
+        errors = validate_mary_value_preservation([input_val], [out], fee=2_000_000, mint=mint_val)
         assert errors == []
 
     def test_burning_balanced(self):
@@ -493,16 +482,12 @@ class TestMaryValuePreservation:
             multi_asset=MultiAsset({pid: Asset({asset_name: 100})}),
         )
         # Burn 30 tokens
-        mint_val = Value(
-            coin=0, multi_asset=MultiAsset({pid: Asset({asset_name: -30})})
-        )
+        mint_val = Value(coin=0, multi_asset=MultiAsset({pid: Asset({asset_name: -30})}))
         out = Value(
             coin=8_000_000,
             multi_asset=MultiAsset({pid: Asset({asset_name: 70})}),
         )
-        errors = validate_mary_value_preservation(
-            [input_val], [out], fee=2_000_000, mint=mint_val
-        )
+        errors = validate_mary_value_preservation([input_val], [out], fee=2_000_000, mint=mint_val)
         assert errors == []
 
     def test_multiple_policies_balanced(self):
@@ -515,10 +500,12 @@ class TestMaryValuePreservation:
         an2 = AssetName(b"beta")
         input_val = Value(
             coin=10_000_000,
-            multi_asset=MultiAsset({
-                pid1: Asset({an1: 50}),
-                pid2: Asset({an2: 200}),
-            }),
+            multi_asset=MultiAsset(
+                {
+                    pid1: Asset({an1: 50}),
+                    pid2: Asset({an2: 200}),
+                }
+            ),
         )
         out1 = Value(
             coin=4_000_000,
@@ -526,14 +513,14 @@ class TestMaryValuePreservation:
         )
         out2 = Value(
             coin=4_000_000,
-            multi_asset=MultiAsset({
-                pid1: Asset({an1: 20}),
-                pid2: Asset({an2: 200}),
-            }),
+            multi_asset=MultiAsset(
+                {
+                    pid1: Asset({an1: 20}),
+                    pid2: Asset({an2: 200}),
+                }
+            ),
         )
-        errors = validate_mary_value_preservation(
-            [input_val], [out1, out2], fee=2_000_000
-        )
+        errors = validate_mary_value_preservation([input_val], [out1, out2], fee=2_000_000)
         assert errors == []
 
     def test_empty_inputs_and_outputs(self):
@@ -596,11 +583,13 @@ class TestMaryMinUtxoValue:
         # Three policies
         val3 = Value(
             coin=2_000_000,
-            multi_asset=MultiAsset({
-                make_policy_id(0): Asset({an: 1}),
-                make_policy_id(1): Asset({an: 1}),
-                make_policy_id(2): Asset({an: 1}),
-            }),
+            multi_asset=MultiAsset(
+                {
+                    make_policy_id(0): Asset({an: 1}),
+                    make_policy_id(1): Asset({an: 1}),
+                    make_policy_id(2): Asset({an: 1}),
+                }
+            ),
         )
         txout3 = TransactionOutput(addr, val3)
         min3 = mary_min_utxo_value(txout3, TEST_PARAMS)
@@ -635,8 +624,11 @@ class TestAllegraUtxo:
         )
         interval = ValidityInterval(invalid_before=10, invalid_hereafter=100)
         errors = validate_allegra_utxo(
-            tx_body, utxo_set, TEST_PARAMS,
-            current_slot=50, tx_size=200,
+            tx_body,
+            utxo_set,
+            TEST_PARAMS,
+            current_slot=50,
+            tx_size=200,
             validity_interval=interval,
         )
         assert errors == []
@@ -652,8 +644,11 @@ class TestAllegraUtxo:
         )
         interval = ValidityInterval(invalid_before=60, invalid_hereafter=100)
         errors = validate_allegra_utxo(
-            tx_body, utxo_set, TEST_PARAMS,
-            current_slot=50, tx_size=200,
+            tx_body,
+            utxo_set,
+            TEST_PARAMS,
+            current_slot=50,
+            tx_size=200,
             validity_interval=interval,
         )
         assert any("OutsideValidityIntervalUTxO" in e for e in errors)
@@ -669,8 +664,11 @@ class TestAllegraUtxo:
             ttl=50,
         )
         errors = validate_allegra_utxo(
-            tx_body, utxo_set, TEST_PARAMS,
-            current_slot=100, tx_size=200,
+            tx_body,
+            utxo_set,
+            TEST_PARAMS,
+            current_slot=100,
+            tx_size=200,
         )
         assert any("ExpiredUTxO" in e for e in errors)
 
@@ -694,8 +692,12 @@ class TestMaryTx:
         )
         witness_set = TransactionWitnessSet()
         errors = validate_mary_tx(
-            tx_body, witness_set, utxo_set, TEST_PARAMS,
-            current_slot=50, tx_size=200,
+            tx_body,
+            witness_set,
+            utxo_set,
+            TEST_PARAMS,
+            current_slot=50,
+            tx_size=200,
         )
         assert errors == []
 
@@ -722,8 +724,12 @@ class TestMaryTx:
         )
         witness_set = TransactionWitnessSet()
         errors = validate_mary_tx(
-            tx_body, witness_set, utxo_set, TEST_PARAMS,
-            current_slot=50, tx_size=200,
+            tx_body,
+            witness_set,
+            utxo_set,
+            TEST_PARAMS,
+            current_slot=50,
+            tx_size=200,
         )
         assert errors == []
 
@@ -751,8 +757,12 @@ class TestMaryTx:
         )
         witness_set = TransactionWitnessSet()
         errors = validate_mary_tx(
-            tx_body, witness_set, utxo_set, TEST_PARAMS,
-            current_slot=50, tx_size=200,
+            tx_body,
+            witness_set,
+            utxo_set,
+            TEST_PARAMS,
+            current_slot=50,
+            tx_size=200,
         )
         assert any("ValueNotConservedUTxO" in e for e in errors)
 
@@ -768,9 +778,7 @@ class TestMaryTx:
             coin=8_000_000,
             multi_asset=MultiAsset({pid: Asset({asset_name: 1000})}),
         )
-        mint_val = Value(
-            coin=0, multi_asset=MultiAsset({pid: Asset({asset_name: 1000})})
-        )
+        mint_val = Value(coin=0, multi_asset=MultiAsset({pid: Asset({asset_name: 1000})}))
         tx_body = TransactionBody(
             inputs=[txin],
             outputs=[TransactionOutput(dest_addr, out_val)],
@@ -778,8 +786,12 @@ class TestMaryTx:
         )
         witness_set = TransactionWitnessSet()
         errors = validate_mary_tx(
-            tx_body, witness_set, utxo_set, TEST_PARAMS,
-            current_slot=50, tx_size=200,
+            tx_body,
+            witness_set,
+            utxo_set,
+            TEST_PARAMS,
+            current_slot=50,
+            tx_size=200,
             mint=mint_val,
         )
         assert errors == []
@@ -795,8 +807,12 @@ class TestMaryTx:
         )
         witness_set = TransactionWitnessSet()
         errors = validate_mary_tx(
-            tx_body, witness_set, utxo_set, TEST_PARAMS,
-            current_slot=50, tx_size=200,
+            tx_body,
+            witness_set,
+            utxo_set,
+            TEST_PARAMS,
+            current_slot=50,
+            tx_size=200,
         )
         assert any("OutputTooSmallUTxO" in e for e in errors)
 
@@ -812,8 +828,12 @@ class TestMaryTx:
         )
         witness_set = TransactionWitnessSet()
         errors = validate_mary_tx(
-            tx_body, witness_set, utxo_set, TEST_PARAMS,
-            current_slot=50, tx_size=200,
+            tx_body,
+            witness_set,
+            utxo_set,
+            TEST_PARAMS,
+            current_slot=50,
+            tx_size=200,
         )
         assert any("InputsNotInUTxO" in e for e in errors)
 
@@ -829,8 +849,12 @@ class TestMaryTx:
         interval = ValidityInterval(invalid_before=100, invalid_hereafter=200)
         witness_set = TransactionWitnessSet()
         errors = validate_mary_tx(
-            tx_body, witness_set, utxo_set, TEST_PARAMS,
-            current_slot=50, tx_size=200,
+            tx_body,
+            witness_set,
+            utxo_set,
+            TEST_PARAMS,
+            current_slot=50,
+            tx_size=200,
             validity_interval=interval,
         )
         assert any("OutsideValidityIntervalUTxO" in e for e in errors)
@@ -999,7 +1023,10 @@ class TestMaryMintingPreservation:
 
         # This should pass: input(10M, 50t) + mint(0, 100t) = output(8M, 150t) + fee(2M)
         errors = validate_mary_value_preservation(
-            [input_val], [output_val], fee=fee, mint=mint_val,
+            [input_val],
+            [output_val],
+            fee=fee,
+            mint=mint_val,
         )
         assert errors == [], f"Expected no errors, got: {errors}"
 
@@ -1028,7 +1055,10 @@ class TestMaryMintingPreservation:
         )
 
         errors = validate_mary_value_preservation(
-            [input_val], [output_val], fee=2_000_000, mint=mint_val,
+            [input_val],
+            [output_val],
+            fee=2_000_000,
+            mint=mint_val,
         )
         assert any("ValueNotConservedUTxO" in e for e in errors)
 
@@ -1072,20 +1102,14 @@ class TestTimelockDeterminism:
         signers = frozenset({kh})
 
         # Evaluate 100 times at the same slot — must all be identical
-        results_at_100 = [
-            evaluate_timelock(script, signers, current_slot=100)
-            for _ in range(100)
-        ]
+        results_at_100 = [evaluate_timelock(script, signers, current_slot=100) for _ in range(100)]
         assert all(r == results_at_100[0] for r in results_at_100), (
             "Timelock evaluation is not deterministic"
         )
         assert results_at_100[0] is True
 
         # And at a failing slot
-        results_at_99 = [
-            evaluate_timelock(script, signers, current_slot=99)
-            for _ in range(100)
-        ]
+        results_at_99 = [evaluate_timelock(script, signers, current_slot=99) for _ in range(100)]
         assert all(r == results_at_99[0] for r in results_at_99)
         assert results_at_99[0] is False
 
@@ -1096,14 +1120,9 @@ class TestTimelockDeterminism:
         # AllOf short-circuits.
         script = Timelock(
             type=TimelockType.REQUIRE_ALL_OF,
-            scripts=(
-                Timelock(type=TimelockType.REQUIRE_ANY_OF, scripts=()),
-            ),
+            scripts=(Timelock(type=TimelockType.REQUIRE_ANY_OF, scripts=()),),
         )
-        results = [
-            evaluate_timelock(script, frozenset(), current_slot=0)
-            for _ in range(50)
-        ]
+        results = [evaluate_timelock(script, frozenset(), current_slot=0) for _ in range(50)]
         assert all(r == results[0] for r in results)
         # AnyOf() is false, so AllOf(AnyOf()) is false
         assert results[0] is False

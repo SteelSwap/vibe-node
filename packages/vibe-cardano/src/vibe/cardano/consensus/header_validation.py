@@ -41,10 +41,11 @@ from typing import Any
 
 from vibe.cardano.crypto.ocert import (
     OperationalCert as CryptoOperationalCert,
+)
+from vibe.cardano.crypto.ocert import (
     validate_ocert,
 )
 from vibe.cardano.crypto.vrf import certified_nat_max_check
-
 
 # ---------------------------------------------------------------------------
 # Validation error types
@@ -238,8 +239,7 @@ def validate_header(
             errors.append(
                 HeaderValidationError(
                     HeaderValidationFailure.BLOCK_NUMBER_MISMATCH,
-                    f"Header block_number {header.block_number} != "
-                    f"expected {expected_bn}",
+                    f"Header block_number {header.block_number} != expected {expected_bn}",
                 )
             )
 

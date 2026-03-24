@@ -14,12 +14,10 @@ from __future__ import annotations
 
 import asyncio
 import enum
-from dataclasses import dataclass
-from typing import Any
 
 import pytest
 
-from vibe.core.multiplexer.mux import MiniProtocolChannel, MuxClosedError
+from vibe.core.multiplexer.mux import MuxClosedError
 from vibe.core.protocols import (
     Agency,
     Message,
@@ -29,7 +27,6 @@ from vibe.core.protocols import (
 )
 from vibe.core.protocols.codec import Codec, CodecError
 from vibe.core.protocols.runner import ProtocolRunner
-
 
 # ---------------------------------------------------------------------------
 # Ping/Pong test protocol (same as test_protocol_framework.py)
@@ -71,9 +68,7 @@ class PingPongProtocol(Protocol[PingPongState]):
                 return Agency.Nobody
         raise ValueError(f"Unknown state: {state}")  # pragma: no cover
 
-    def valid_messages(
-        self, state: PingPongState
-    ) -> frozenset[type[Message[PingPongState]]]:
+    def valid_messages(self, state: PingPongState) -> frozenset[type[Message[PingPongState]]]:
         match state:
             case PingPongState.StIdle:
                 return frozenset({MsgPing, MsgDone})
@@ -177,9 +172,7 @@ def make_channel_pair() -> tuple[MockChannel, MockChannel]:
     return client, server
 
 
-def make_runners() -> tuple[
-    ProtocolRunner[PingPongState], ProtocolRunner[PingPongState]
-]:
+def make_runners() -> tuple[ProtocolRunner[PingPongState], ProtocolRunner[PingPongState]]:
     """Create a connected client/server ProtocolRunner pair."""
     proto = PingPongProtocol()
     codec = PingPongCodec()

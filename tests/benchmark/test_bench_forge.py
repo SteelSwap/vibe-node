@@ -12,7 +12,6 @@ Run: uv run pytest tests/benchmark/test_bench_forge.py -v --benchmark-only
 from __future__ import annotations
 
 import hashlib
-import os
 
 import cbor2pure as cbor2
 import pytest
@@ -28,14 +27,15 @@ from vibe.cardano.crypto.ocert import OperationalCert
 from vibe.cardano.forge.block import forge_block
 from vibe.cardano.forge.leader import LeaderProof
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _random_bytes(n: int, seed: int = 0) -> bytes:
     """Deterministic pseudo-random bytes."""
     import random
+
     rng = random.Random(seed)
     return bytes(rng.getrandbits(8) for _ in range(n))
 
@@ -107,6 +107,7 @@ def sample_txs() -> list[bytes]:
 # Forge sub-component benchmarks
 # ---------------------------------------------------------------------------
 
+
 class TestForgeComponents:
     """Benchmark individual components of the forge loop."""
 
@@ -123,25 +124,23 @@ class TestForgeComponents:
     def test_header_body_cbor_encode(self, benchmark, vrf_vk, pool_vk, ocert) -> None:
         """CBOR encode the header body (Babbage format)."""
         header_body = [
-            101,                          # block_number
-            1000,                         # slot
-            _random_bytes(32, seed=1),    # prev_hash
-            pool_vk,                      # issuer_vk
-            vrf_vk,                       # vrf_vk
+            101,  # block_number
+            1000,  # slot
+            _random_bytes(32, seed=1),  # prev_hash
+            pool_vk,  # issuer_vk
+            vrf_vk,  # vrf_vk
             [_random_bytes(64, 10), _random_bytes(80, 11)],  # vrf_result
-            128,                          # body_size
-            _random_bytes(32, seed=4),    # body_hash
+            128,  # body_size
+            _random_bytes(32, seed=4),  # body_hash
             [ocert.kes_vk, ocert.cert_count, ocert.kes_period_start, ocert.cold_sig],
-            [10, 0],                      # protocol_version
+            [10, 0],  # protocol_version
         ]
         benchmark.pedantic(cbor2.dumps, args=(header_body,), rounds=100)
 
     def test_kes_sign_header(self, benchmark, kes_key) -> None:
         """KES sign the header body (the hot path in forge)."""
         header_body_cbor = _random_bytes(256, seed=99)
-        benchmark.pedantic(
-            kes_sign, args=(kes_key, 0, header_body_cbor), rounds=100
-        )
+        benchmark.pedantic(kes_sign, args=(kes_key, 0, header_body_cbor), rounds=100)
 
     def test_full_block_cbor_encode(self, benchmark, sample_txs) -> None:
         """CBOR encode a complete block array (header + body)."""
@@ -159,6 +158,7 @@ class TestForgeComponents:
 # ---------------------------------------------------------------------------
 # End-to-end forge benchmark
 # ---------------------------------------------------------------------------
+
 
 class TestForgeEndToEnd:
     """Benchmark the complete forge_block function.
@@ -183,9 +183,9 @@ class TestForgeEndToEnd:
                 leader_proof,
                 100,  # prev_block_number
                 prev_header_hash,
-                [],   # mempool_txs (empty)
+                [],  # mempool_txs (empty)
                 kes_key,
-                0,    # kes_period
+                0,  # kes_period
                 ocert,
                 pool_vk,
                 vrf_vk,

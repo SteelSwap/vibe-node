@@ -27,26 +27,20 @@ Spec references:
 from __future__ import annotations
 
 import hashlib
-from copy import deepcopy
 from fractions import Fraction
 
 import pytest
-from nacl.signing import SigningKey as NaClSigningKey
-
 from pycardano import (
     TransactionBody,
     TransactionInput,
     TransactionOutput,
-    Transaction,
 )
 from pycardano.address import Address
 from pycardano.certificate import (
     PoolParams,
     PoolRegistration,
-    PoolRetirement,
     StakeCredential,
     StakeDelegation,
-    StakeRegistration,
 )
 from pycardano.hash import (
     PoolKeyHash,
@@ -56,8 +50,8 @@ from pycardano.hash import (
     VerificationKeyHash,
 )
 from pycardano.key import PaymentSigningKey, PaymentVerificationKey
-from pycardano.network import Network
 from pycardano.nativescript import ScriptPubkey
+from pycardano.network import Network
 from pycardano.pool_params import PoolMetadata
 from pycardano.witness import TransactionWitnessSet, VerificationKeyWitness
 
@@ -66,15 +60,12 @@ from vibe.cardano.ledger.shelley import (
     ShelleyUTxO,
     validate_shelley_utxo,
     validate_shelley_witnesses,
-    validate_shelley_tx,
 )
 from vibe.cardano.ledger.shelley_delegation import (
     DelegationError,
     DelegationState,
     process_certificate,
-    process_certificates,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -304,7 +295,8 @@ class TestExtraneousScriptWitnesses:
 
     def test_extraneous_script_in_witness_set_accepted(self):
         """Tx includes a native script that no input references -- still valid
-        in Shelley."""
+        in Shelley.
+        """
         sk, vk = _make_key_pair(seed=50)
         addr = _make_address(vk, network=Network.TESTNET)
         tx_id = _make_tx_id(300)
@@ -370,9 +362,7 @@ class TestEpochBoundaryCrossing:
 
         # Current slot is in epoch 0 -- well before TTL
         current_slot = self.EPOCH_LENGTH - 1000
-        errors = validate_shelley_utxo(
-            tx_body, utxo_set, TEST_PARAMS, current_slot, tx_size=200
-        )
+        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot, tx_size=200)
         # Should not have ExpiredUTxO
         expired = [e for e in errors if "ExpiredUTxO" in e]
         assert expired == [], f"Tx should be valid before TTL, got: {expired}"
@@ -395,9 +385,7 @@ class TestEpochBoundaryCrossing:
 
         # Current slot is past TTL
         current_slot = self.EPOCH_LENGTH + 100  # exactly at TTL (>= means expired)
-        errors = validate_shelley_utxo(
-            tx_body, utxo_set, TEST_PARAMS, current_slot, tx_size=200
-        )
+        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot, tx_size=200)
         expired = [e for e in errors if "ExpiredUTxO" in e]
         assert len(expired) == 1, f"Tx should be expired at TTL, got: {errors}"
 
@@ -440,7 +428,8 @@ class TestInstantStakeDistribution:
     def test_delegation_not_in_original_state(self):
         """The original state is not mutated -- the new delegation only exists
         in the returned state, simulating that the snapshot for the current
-        epoch was already taken from the old state."""
+        epoch was already taken from the old state.
+        """
         params = TEST_PARAMS
         pool_hash = _fake_hash(0xBB)
         cred_hash = _fake_hash(0xAA)
@@ -503,9 +492,7 @@ class TestPoolMetadataHashSize:
         pp = _pool_params(operator_prefix=0xB2, pool_metadata=metadata)
         cert = PoolRegistration(pp)
 
-        new_state = process_certificate(
-            cert, DelegationState(), TEST_PARAMS, current_epoch=200
-        )
+        new_state = process_certificate(cert, DelegationState(), TEST_PARAMS, current_epoch=200)
         assert _fake_hash(0xB2) in new_state.pools
 
 
@@ -570,7 +557,8 @@ class TestPoolWrongNetworkId:
 
     def test_wrong_network_in_reward_address_rejected(self):
         """Pool reward address with mainnet network_id=1 on a testnet
-        (network_id=0) chain is rejected."""
+        (network_id=0) chain is rejected.
+        """
         # Mainnet reward address: header 0xE1 (VKey, mainnet)
         mainnet_reward = bytes([0xE1]) + _fake_hash(0xDD)
         pp = _pool_params(
@@ -592,9 +580,7 @@ class TestPoolWrongNetworkId:
         )
         cert = PoolRegistration(pp)
 
-        new_state = process_certificate(
-            cert, DelegationState(), TEST_PARAMS, current_epoch=200
-        )
+        new_state = process_certificate(cert, DelegationState(), TEST_PARAMS, current_epoch=200)
         assert _fake_hash(0xB4) in new_state.pools
 
 
@@ -641,9 +627,7 @@ class TestPoolMetadataUrlTooLong:
         pp = _pool_params(operator_prefix=0xB6, pool_metadata=metadata)
         cert = PoolRegistration(pp)
 
-        new_state = process_certificate(
-            cert, DelegationState(), TEST_PARAMS, current_epoch=200
-        )
+        new_state = process_certificate(cert, DelegationState(), TEST_PARAMS, current_epoch=200)
         assert _fake_hash(0xB6) in new_state.pools
 
 
@@ -725,7 +709,8 @@ class TestVrfReuseAfterRetirement:
 
     def test_vrf_available_after_pool_removed(self):
         """After manually removing a retired pool from state, its VRF key
-        can be reused by a new pool registration."""
+        can be reused by a new pool registration.
+        """
         params = TEST_PARAMS
         old_pool_hash = _fake_hash(0xA3)
         old_pool = _pool_params(operator_prefix=0xA3, vrf_prefix=0xC3)
@@ -743,7 +728,8 @@ class TestVrfReuseAfterRetirement:
 
     def test_vrf_still_blocked_before_pool_removal(self):
         """If the retired pool is still in the pools map (retirement scheduled
-        but epoch boundary not yet processed), the VRF key is still locked."""
+        but epoch boundary not yet processed), the VRF key is still locked.
+        """
         params = TEST_PARAMS
         old_pool_hash = _fake_hash(0xA3)
         old_pool = _pool_params(operator_prefix=0xA3, vrf_prefix=0xC3)

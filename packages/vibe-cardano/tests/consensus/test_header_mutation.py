@@ -24,14 +24,11 @@ import hashlib
 import os
 import struct
 from dataclasses import dataclass
-from typing import Optional
-
-import pytest
-from hypothesis import given, settings
-from hypothesis import strategies as st
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from vibe.cardano.consensus.header_validation import (
     HeaderValidationError,
@@ -46,13 +43,10 @@ from vibe.cardano.crypto.kes import (
     kes_derive_vk,
     kes_keygen,
     kes_sign,
-    kes_sig_size,
 )
 from vibe.cardano.crypto.ocert import (
-    OCertFailure,
     ocert_signed_payload,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test parameters — use small KES depth for speed
@@ -98,12 +92,12 @@ class MockOperationalCert:
 class MockBlockHeader:
     slot: int = 100
     block_number: int = 10
-    prev_hash: Optional[bytes] = None
+    prev_hash: bytes | None = None
     issuer_vkey: bytes = b"\x00" * 32
     header_cbor: bytes = b"\x00" * 100
     protocol_version: MockProtocolVersion = None  # type: ignore
     operational_cert: MockOperationalCert = None  # type: ignore
-    vrf_output: Optional[bytes] = None
+    vrf_output: bytes | None = None
     header_body_cbor: bytes = b""
     kes_signature: bytes = b""
 
@@ -150,9 +144,7 @@ class ValidHeaderFixture:
     ) -> None:
         # --- Generate cold key pair (Ed25519) ---
         self.cold_sk = Ed25519PrivateKey.generate()
-        self.cold_vk_bytes = self.cold_sk.public_key().public_bytes(
-            Encoding.Raw, PublicFormat.Raw
-        )
+        self.cold_vk_bytes = self.cold_sk.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
 
         # --- Generate KES key pair ---
         self.kes_sk = kes_keygen(TEST_KES_DEPTH)
@@ -165,9 +157,7 @@ class ValidHeaderFixture:
         self.relative_kes_period = current_kes_period - kes_period_start
 
         # --- Sign OCert payload with cold key ---
-        ocert_payload = ocert_signed_payload(
-            self.kes_vk, ocert_counter, kes_period_start
-        )
+        ocert_payload = ocert_signed_payload(self.kes_vk, ocert_counter, kes_period_start)
         cold_sig = self.cold_sk.sign(ocert_payload)
 
         # --- Build the operational cert ---
@@ -254,9 +244,7 @@ def _errors_of_type(
     return [e for e in errors if e.failure == failure]
 
 
-def _has_error(
-    errors: list[HeaderValidationError], failure: HeaderValidationFailure
-) -> bool:
+def _has_error(errors: list[HeaderValidationError], failure: HeaderValidationFailure) -> bool:
     return len(_errors_of_type(errors, failure)) > 0
 
 
@@ -292,7 +280,8 @@ class TestValidBaseline:
 
 class TestMutateKesSignature:
     """Flipping a byte in the KES signature must produce OCERT_INVALID
-    with INVALID_KES_SIGNATURE sub-error."""
+    with INVALID_KES_SIGNATURE sub-error.
+    """
 
     def test_flipped_kes_sig_byte(self) -> None:
         fix = ValidHeaderFixture()
@@ -317,7 +306,8 @@ class TestMutateKesSignature:
 
 class TestMutateKesPeriodTooEarly:
     """Setting the OCert kes_period_start AFTER the current slot's KES period
-    triggers KES_BEFORE_START."""
+    triggers KES_BEFORE_START.
+    """
 
     def test_kes_before_start(self) -> None:
         # Current slot=150, slots_per_kes=100 => current_kes_period=1
@@ -340,7 +330,8 @@ class TestMutateKesPeriodTooEarly:
 
 class TestMutateKesPeriodTooLate:
     """Setting the slot far enough ahead that current_kes_period >= c_0 + max_kes_evo
-    triggers KES_AFTER_END."""
+    triggers KES_AFTER_END.
+    """
 
     def test_kes_after_end(self) -> None:
         # Build a valid fixture, then mutate the slot to be very large,
@@ -368,7 +359,8 @@ class TestMutateKesPeriodTooLate:
 
 class TestMutateOcertCounter:
     """Setting cert counter below the on-chain counter triggers
-    COUNTER_TOO_SMALL."""
+    COUNTER_TOO_SMALL.
+    """
 
     def test_counter_too_small(self) -> None:
         # Build fixture with on_chain_counter=5, ocert_counter=10
@@ -456,16 +448,12 @@ class TestMutateVrfKey:
 
         # Use a completely different issuer key
         wrong_sk = Ed25519PrivateKey.generate()
-        h.issuer_vkey = wrong_sk.public_key().public_bytes(
-            Encoding.Raw, PublicFormat.Raw
-        )
+        h.issuer_vkey = wrong_sk.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
 
         errors = validate_header(
             h, fix.stake_distribution, params=TEST_PARAMS, prev_header=fix.prev_header
         )
-        assert _has_error(
-            errors, HeaderValidationFailure.POOL_NOT_IN_STAKE_DISTRIBUTION
-        )
+        assert _has_error(errors, HeaderValidationFailure.POOL_NOT_IN_STAKE_DISTRIBUTION)
 
 
 # ===================================================================
@@ -504,7 +492,8 @@ class TestMutateSlotDecrease:
 
 class TestMutateBlockNumber:
     """Setting block_number to something other than prev + 1 triggers
-    BLOCK_NUMBER_MISMATCH."""
+    BLOCK_NUMBER_MISMATCH.
+    """
 
     def test_block_number_gap(self) -> None:
         fix = ValidHeaderFixture()
@@ -565,7 +554,8 @@ class TestMutatePrevHash:
 
 class TestMutateProtocolVersion:
     """Setting protocol major version above max triggers
-    PROTOCOL_VERSION_INVALID."""
+    PROTOCOL_VERSION_INVALID.
+    """
 
     def test_protocol_version_too_high(self) -> None:
         fix = ValidHeaderFixture()
@@ -595,23 +585,20 @@ class TestMutateProtocolVersion:
 
 class TestMutatePoolId:
     """Using an issuer_vkey whose pool_id is not in the stake distribution
-    triggers POOL_NOT_IN_STAKE_DISTRIBUTION."""
+    triggers POOL_NOT_IN_STAKE_DISTRIBUTION.
+    """
 
     def test_unknown_pool(self) -> None:
         fix = ValidHeaderFixture()
         h = fix.deep_copy_header()
         # Generate a fresh key not in the stake distribution
         fresh_sk = Ed25519PrivateKey.generate()
-        h.issuer_vkey = fresh_sk.public_key().public_bytes(
-            Encoding.Raw, PublicFormat.Raw
-        )
+        h.issuer_vkey = fresh_sk.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
 
         errors = validate_header(
             h, fix.stake_distribution, params=TEST_PARAMS, prev_header=fix.prev_header
         )
-        assert _has_error(
-            errors, HeaderValidationFailure.POOL_NOT_IN_STAKE_DISTRIBUTION
-        )
+        assert _has_error(errors, HeaderValidationFailure.POOL_NOT_IN_STAKE_DISTRIBUTION)
 
     def test_empty_stake_distribution(self) -> None:
         fix = ValidHeaderFixture()
@@ -621,9 +608,7 @@ class TestMutatePoolId:
             params=TEST_PARAMS,
             prev_header=fix.prev_header,
         )
-        assert _has_error(
-            errors, HeaderValidationFailure.POOL_NOT_IN_STAKE_DISTRIBUTION
-        )
+        assert _has_error(errors, HeaderValidationFailure.POOL_NOT_IN_STAKE_DISTRIBUTION)
 
 
 # ===================================================================
@@ -681,9 +666,7 @@ def _apply_mutation(header: MockBlockHeader, field: str, rng_bytes: bytes) -> No
         header.protocol_version.major = 999
     elif field == "issuer_vkey":
         fresh_sk = Ed25519PrivateKey.generate()
-        header.issuer_vkey = fresh_sk.public_key().public_bytes(
-            Encoding.Raw, PublicFormat.Raw
-        )
+        header.issuer_vkey = fresh_sk.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
 
 
 class TestHypothesisSingleMutation:
@@ -700,9 +683,7 @@ class TestHypothesisSingleMutation:
         rng_bytes=st.binary(min_size=32, max_size=64),
     )
     @settings(max_examples=50, deadline=None)
-    def test_single_mutation_always_detected(
-        self, field_idx: int, rng_bytes: bytes
-    ) -> None:
+    def test_single_mutation_always_detected(self, field_idx: int, rng_bytes: bytes) -> None:
         fix = ValidHeaderFixture()
         # Sanity: baseline is valid
         baseline_errors = fix.validate()
@@ -721,8 +702,7 @@ class TestHypothesisSingleMutation:
             prev_header=fix.prev_header,
         )
         assert len(errors) > 0, (
-            f"Mutation of field '{field}' was not detected — "
-            f"header passed validation silently!"
+            f"Mutation of field '{field}' was not detected — header passed validation silently!"
         )
 
 

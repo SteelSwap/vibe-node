@@ -8,7 +8,7 @@ Haskell references:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -20,7 +20,6 @@ from vibe.cardano.consensus.slot_arithmetic import (
 )
 from vibe.cardano.node.config import NodeConfig
 from vibe.cardano.node.run import SlotClock
-
 
 # ---------------------------------------------------------------------------
 # Startup config validation
@@ -131,7 +130,7 @@ class TestSlotClockAccuracy:
 
     def test_current_slot_returns_positive(self) -> None:
         config = SlotConfig(
-            system_start=datetime(2022, 9, 6, tzinfo=timezone.utc),
+            system_start=datetime(2022, 9, 6, tzinfo=UTC),
             slot_length=1.0,
             epoch_length=432000,
         )
@@ -141,7 +140,7 @@ class TestSlotClockAccuracy:
 
     def test_stop_sets_flag(self) -> None:
         config = SlotConfig(
-            system_start=datetime(2022, 9, 6, tzinfo=timezone.utc),
+            system_start=datetime(2022, 9, 6, tzinfo=UTC),
             slot_length=1.0,
             epoch_length=432000,
         )
@@ -152,7 +151,7 @@ class TestSlotClockAccuracy:
 
     def test_slot_config_property(self) -> None:
         config = SlotConfig(
-            system_start=datetime(2022, 9, 6, tzinfo=timezone.utc),
+            system_start=datetime(2022, 9, 6, tzinfo=UTC),
             slot_length=1.0,
             epoch_length=432000,
         )
@@ -162,7 +161,7 @@ class TestSlotClockAccuracy:
     def test_wall_clock_to_slot_roundtrip(self) -> None:
         """Slot → wall clock → slot should be identity."""
         config = SlotConfig(
-            system_start=datetime(2022, 9, 6, tzinfo=timezone.utc),
+            system_start=datetime(2022, 9, 6, tzinfo=UTC),
             slot_length=1.0,
             epoch_length=432000,
         )
@@ -174,12 +173,12 @@ class TestSlotClockAccuracy:
     def test_monotonic_slots(self) -> None:
         """Later wall clock time → higher slot."""
         config = SlotConfig(
-            system_start=datetime(2022, 9, 6, tzinfo=timezone.utc),
+            system_start=datetime(2022, 9, 6, tzinfo=UTC),
             slot_length=1.0,
             epoch_length=432000,
         )
-        t1 = datetime(2023, 1, 1, tzinfo=timezone.utc)
-        t2 = datetime(2023, 6, 1, tzinfo=timezone.utc)
+        t1 = datetime(2023, 1, 1, tzinfo=UTC)
+        t2 = datetime(2023, 6, 1, tzinfo=UTC)
         s1 = wall_clock_to_slot(t1, config)
         s2 = wall_clock_to_slot(t2, config)
         assert s2 > s1

@@ -37,25 +37,20 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from vibe.cardano.crypto.kes import (
-    CARDANO_KES_DEPTH,
     kes_derive_vk,
     kes_keygen,
-    kes_sign,
     kes_verify,
 )
 from vibe.cardano.crypto.ocert import OperationalCert
 from vibe.cardano.crypto.vrf import VRF_OUTPUT_SIZE, VRF_PROOF_SIZE
 from vibe.cardano.forge.block import (
-    DEFAULT_MAX_BLOCK_BODY_SIZE,
     DEFAULT_PROTOCOL_VERSION,
-    Block,
     ForgedBlock,
     _build_block_body,
     _build_header_body,
     forge_block,
 )
 from vibe.cardano.forge.leader import LeaderProof
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

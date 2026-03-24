@@ -27,20 +27,17 @@ Haskell references:
 
 from __future__ import annotations
 
-from copy import deepcopy
 from fractions import Fraction
 
 import pytest
-
 from pycardano import (
+    Asset,
+    MultiAsset,
     TransactionBody,
     TransactionInput,
     TransactionOutput,
     Value,
-    MultiAsset,
-    Asset,
 )
-from pycardano.transaction import AssetName
 from pycardano.address import Address
 from pycardano.certificate import (
     PoolParams,
@@ -59,50 +56,28 @@ from pycardano.hash import (
     VrfKeyHash,
 )
 from pycardano.network import Network
-from pycardano.witness import TransactionWitnessSet
+from pycardano.transaction import AssetName
 
-from vibe.cardano.ledger.shelley import (
-    ShelleyProtocolParams,
-    ShelleyUTxO,
-    ShelleyValidationError,
-    _output_lovelace,
-    shelley_min_fee,
-    validate_shelley_utxo,
-)
 from vibe.cardano.ledger.allegra_mary import (
     MaryProtocolParams,
     Timelock,
     TimelockType,
     ValidityInterval,
-    _value_eq,
     evaluate_timelock,
-    mary_min_utxo_value,
-    validate_allegra_utxo,
     validate_mary_tx,
     validate_validity_interval,
 )
-from vibe.cardano.ledger.shelley_delegation import (
-    DelegationError,
-    DelegationState,
-    _credential_hash,
-    _pool_key_hash,
-    process_certificate,
-    process_certificates,
-    compute_certificate_deposits,
-)
 from vibe.cardano.ledger.conway import (
     ConwayGovernanceError,
-    ConwayValidationError,
-    apply_conway_tx,
     check_ratification,
     expire_proposals,
     process_conway_certificate,
     process_drep_deregistration,
     process_drep_registration,
-    validate_proposal,
-    validate_voting_procedures,
     validate_hard_fork_initiation,
+    validate_proposal,
     validate_treasury_withdrawals,
+    validate_voting_procedures,
     validate_withdrawal_delegation,
 )
 from vibe.cardano.ledger.conway_types import (
@@ -113,7 +88,6 @@ from vibe.cardano.ledger.conway_types import (
     DRepDeregistration,
     DRepRegistration,
     DRepType,
-    DRepUpdate,
     GovAction,
     GovActionId,
     GovActionType,
@@ -124,7 +98,18 @@ from vibe.cardano.ledger.conway_types import (
     VoterRole,
     VotingProcedure,
 )
-
+from vibe.cardano.ledger.shelley import (
+    ShelleyProtocolParams,
+    ShelleyUTxO,
+    shelley_min_fee,
+    validate_shelley_utxo,
+)
+from vibe.cardano.ledger.shelley_delegation import (
+    DelegationError,
+    DelegationState,
+    compute_certificate_deposits,
+    process_certificate,
+)
 
 # ===========================================================================
 # Test fixtures
@@ -265,7 +250,7 @@ class TestShelleyUTxOInputExistence:
         assert any("InputSetEmptyUTxO" in e for e in errors)
 
     def test_double_spend_same_utxo_in_set(self) -> None:
-        """pycardano deduplicates inputs as a set, so the same input
+        """Pycardano deduplicates inputs as a set, so the same input
         listed twice only appears once. This is Shelley's implicit
         double-spend prevention via set-based inputs.
 
@@ -447,7 +432,11 @@ class TestShelleyMaxTxSize:
             fee=2_000_000,
         )
         errors = validate_shelley_utxo(
-            tx_body, utxo, _default_params(), 0, 20000  # > 16384
+            tx_body,
+            utxo,
+            _default_params(),
+            0,
+            20000,  # > 16384
         )
         assert any("MaxTxSize" in e for e in errors)
 
@@ -626,18 +615,14 @@ class TestStrictPoolRegistration:
         """Pool cost below minPoolCost raises StakePoolCostTooLowPOOL."""
         state = DelegationState()
         # minPoolCost defaults to 340 ADA
-        cert = PoolRegistration(
-            _make_pool_params(POOL_1, cost=100_000_000)  # 100 ADA < 340 ADA
-        )
+        cert = PoolRegistration(_make_pool_params(POOL_1, cost=100_000_000))  # 100 ADA < 340 ADA
         with pytest.raises(DelegationError, match="StakePoolCostTooLowPOOL"):
             process_certificate(cert, state, _default_params(), 0)
 
     def test_pool_reregistration_updates_params(self) -> None:
         state = DelegationState()
         state.pools[POOL_1] = _make_pool_params(POOL_1, pledge=100_000_000)
-        cert = PoolRegistration(
-            _make_pool_params(POOL_1, pledge=200_000_000)
-        )
+        cert = PoolRegistration(_make_pool_params(POOL_1, pledge=200_000_000))
         new_state = process_certificate(cert, state, _default_params(), 0)
         assert new_state.pools[POOL_1].pledge == 200_000_000
 
@@ -653,9 +638,7 @@ class TestStrictPoolRegistration:
         """Two different pools cannot share the same VRF key."""
         state = DelegationState()
         state.pools[POOL_1] = _make_pool_params(POOL_1, vrf_key=VRF_KEY_1)
-        cert = PoolRegistration(
-            _make_pool_params(POOL_2, vrf_key=VRF_KEY_1)
-        )
+        cert = PoolRegistration(_make_pool_params(POOL_2, vrf_key=VRF_KEY_1))
         with pytest.raises(DelegationError, match="StakePoolDuplicateVrfKeyPOOL"):
             process_certificate(cert, state, _default_params(), 0)
 
@@ -822,9 +805,7 @@ class TestMaryMultiAssetValuePreservation:
         )
 
         params = MaryProtocolParams()
-        errors = validate_mary_tx(
-            tx_body, None, utxo, params, 0, tx_size=200, mint=mint_value
-        )
+        errors = validate_mary_tx(tx_body, None, utxo, params, 0, tx_size=200, mint=mint_value)
         assert not any("ValueNotConserved" in e for e in errors)
 
     def test_burn_preserves_value(self) -> None:
@@ -861,9 +842,7 @@ class TestMaryMultiAssetValuePreservation:
         )
 
         params = MaryProtocolParams()
-        errors = validate_mary_tx(
-            tx_body, None, utxo, params, 0, tx_size=200, mint=mint_value
-        )
+        errors = validate_mary_tx(tx_body, None, utxo, params, 0, tx_size=200, mint=mint_value)
         assert not any("ValueNotConserved" in e for e in errors)
 
     def test_unbalanced_multi_asset_rejected(self) -> None:
@@ -988,10 +967,7 @@ class TestTimelockEvaluation:
         script = Timelock(
             type=TimelockType.REQUIRE_M_OF_N,
             required=2,
-            scripts=tuple(
-                Timelock(type=TimelockType.REQUIRE_SIGNATURE, key_hash=k)
-                for k in keys
-            ),
+            scripts=tuple(Timelock(type=TimelockType.REQUIRE_SIGNATURE, key_hash=k) for k in keys),
         )
         assert evaluate_timelock(script, frozenset([keys[0], keys[2]]), 0) is True
 
@@ -1001,10 +977,7 @@ class TestTimelockEvaluation:
         script = Timelock(
             type=TimelockType.REQUIRE_M_OF_N,
             required=2,
-            scripts=tuple(
-                Timelock(type=TimelockType.REQUIRE_SIGNATURE, key_hash=k)
-                for k in keys
-            ),
+            scripts=tuple(Timelock(type=TimelockType.REQUIRE_SIGNATURE, key_hash=k) for k in keys),
         )
         assert evaluate_timelock(script, frozenset([keys[0]]), 0) is False
 

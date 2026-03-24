@@ -8,17 +8,16 @@ from __future__ import annotations
 
 import pytest
 
-from vibe.core.multiplexer.segment import MuxSegment
 from vibe.cardano.network.handshake import (
+    MAINNET_NETWORK_MAGIC,
+    PREPROD_NETWORK_MAGIC,
     MsgAcceptVersion,
     MsgRefuse,
-    encode_propose_versions,
-    decode_handshake_response,
     build_version_table,
-    PREPROD_NETWORK_MAGIC,
-    MAINNET_NETWORK_MAGIC,
+    decode_handshake_response,
+    encode_propose_versions,
 )
-
+from vibe.core.multiplexer.segment import MuxSegment
 
 pytestmark = pytest.mark.integration
 

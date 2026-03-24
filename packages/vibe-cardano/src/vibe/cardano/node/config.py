@@ -16,7 +16,7 @@ Spec references:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -103,7 +103,7 @@ class NodeConfig:
     epoch_length: int = 432000
     security_param: int = 2160
     active_slot_coeff: float = 0.05
-    system_start: datetime = datetime(2017, 9, 23, 21, 44, 51, tzinfo=timezone.utc)
+    system_start: datetime = datetime(2017, 9, 23, 21, 44, 51, tzinfo=UTC)
     host: str = "0.0.0.0"
     port: int = 3001
     socket_path: str | None = None
@@ -140,10 +140,7 @@ class NodeConfig:
             pool_keys = PoolKeys(**pool_keys_raw)
 
         peers_raw = d.get("peers", [])
-        peers = [
-            PeerAddress(host=p["host"], port=p["port"])
-            for p in peers_raw
-        ]
+        peers = [PeerAddress(host=p["host"], port=p["port"]) for p in peers_raw]
 
         system_start = d.get("system_start")
         if isinstance(system_start, str):
@@ -167,5 +164,7 @@ class NodeConfig:
             permissive_validation=d.get("permissive_validation", False),
             slots_per_kes_period=d.get("slots_per_kes_period", 129600),
             initial_pool_stakes=d.get("initial_pool_stakes", {}),
-            mithril_snapshot_path=Path(d["mithril_snapshot_path"]) if d.get("mithril_snapshot_path") else None,
+            mithril_snapshot_path=(
+                Path(d["mithril_snapshot_path"]) if d.get("mithril_snapshot_path") else None
+            ),
         )

@@ -39,7 +39,6 @@ from uplc.cost_model import (
     Budget,
     BuiltinCostModel,
     CekMachineCostModel,
-    default_budget,
     default_builtin_cost_model_plutus_v1,
     default_builtin_cost_model_plutus_v2,
     default_builtin_cost_model_plutus_v3,
@@ -117,9 +116,8 @@ def _get_uplc_cost_models(
     if cost_model is not None:
         try:
             from uplc.cost_model import updated_builtin_cost_model_from_network_config
-            builtin = updated_builtin_cost_model_from_network_config(
-                builtin, cost_model
-            )
+
+            builtin = updated_builtin_cost_model_from_network_config(builtin, cost_model)
             _LOGGER.debug(
                 "Applied on-chain cost model override for Plutus %s",
                 version.name,
@@ -127,7 +125,8 @@ def _get_uplc_cost_models(
         except Exception as exc:
             _LOGGER.warning(
                 "Failed to apply on-chain cost model for Plutus %s: %s",
-                version.name, exc,
+                version.name,
+                exc,
             )
 
     return cek, builtin
@@ -425,9 +424,7 @@ def evaluate_script(
 
     # --- 3. Set up the CEK machine budget and cost models ---
     budget = Budget(cpu=ex_units.steps, memory=ex_units.mem)
-    cek_cost_model, builtin_cost_model = _get_uplc_cost_models(
-        version, cost_model=cost_model
-    )
+    cek_cost_model, builtin_cost_model = _get_uplc_cost_models(version, cost_model=cost_model)
 
     # --- 4. Run the CEK machine ---
     try:

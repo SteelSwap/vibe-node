@@ -25,7 +25,6 @@ from vibe.core.protocols import (
     ProtocolError,
 )
 
-
 # ---------------------------------------------------------------------------
 # Test protocol definition: Ping/Pong
 # ---------------------------------------------------------------------------
@@ -66,9 +65,7 @@ class PingPongProtocol(Protocol[PingPongState]):
                 return Agency.Nobody
         raise ValueError(f"Unknown state: {state}")  # pragma: no cover
 
-    def valid_messages(
-        self, state: PingPongState
-    ) -> frozenset[type[Message[PingPongState]]]:
+    def valid_messages(self, state: PingPongState) -> frozenset[type[Message[PingPongState]]]:
         match state:
             case PingPongState.StIdle:
                 return frozenset({MsgPing, MsgDone})

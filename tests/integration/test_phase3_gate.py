@@ -15,16 +15,14 @@ import os
 import resource
 import sys
 import time
-from pathlib import Path
 
 import pytest
 
-from vibe.cardano.storage.immutable import ImmutableDB
-from vibe.cardano.storage.volatile import VolatileDB
-from vibe.cardano.storage.ledger import LedgerDB, BlockDiff
 from vibe.cardano.storage.chaindb import ChainDB
-from vibe.cardano.storage.recovery import write_snapshot, recover, write_diff_log_entry
-
+from vibe.cardano.storage.immutable import ImmutableDB
+from vibe.cardano.storage.ledger import BlockDiff, LedgerDB
+from vibe.cardano.storage.recovery import recover, write_diff_log_entry, write_snapshot
+from vibe.cardano.storage.volatile import VolatileDB
 
 pytestmark = pytest.mark.integration
 
@@ -34,6 +32,7 @@ GENESIS_HASH = b"\x00" * 32
 # ---------------------------------------------------------------------------
 # Gate 1: Storage engine handles chain data
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.timeout(30)
 async def test_storage_engine_with_synthetic_chain(tmp_path, cardano_node_available):
@@ -63,8 +62,11 @@ async def test_storage_engine_with_synthetic_chain(tmp_path, cardano_node_availa
         bh = i.to_bytes(32, "big")
         block_data = f"block-{i}".encode().ljust(64, b"\x00")
         await chain_db.add_block(
-            slot=i, block_hash=bh, predecessor_hash=prev,
-            block_number=i, cbor_bytes=block_data,
+            slot=i,
+            block_hash=bh,
+            predecessor_hash=prev,
+            block_number=i,
+            cbor_bytes=block_data,
         )
         prev = bh
 
@@ -81,6 +83,7 @@ async def test_storage_engine_with_synthetic_chain(tmp_path, cardano_node_availa
 # Gate 2: Crash recovery within 3 seconds
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.timeout(15)
 def test_crash_recovery_within_3_seconds(tmp_path):
     """Write snapshot + diffs, simulate crash, recover, verify speed."""
@@ -91,13 +94,16 @@ def test_crash_recovery_within_3_seconds(tmp_path):
     entries = []
     for i in range(100):
         key = i.to_bytes(34, "big")
-        entry = (key, {
-            "tx_hash": i.to_bytes(32, "big"),
-            "tx_index": i % 100,
-            "address": f"addr_{i}",
-            "value": (i + 1) * 1_000_000,
-            "datum_hash": b"",
-        })
+        entry = (
+            key,
+            {
+                "tx_hash": i.to_bytes(32, "big"),
+                "tx_index": i % 100,
+                "address": f"addr_{i}",
+                "value": (i + 1) * 1_000_000,
+                "datum_hash": b"",
+            },
+        )
         entries.append(entry)
     db.apply_block(consumed=[], created=entries, block_slot=1)
 
@@ -109,13 +115,18 @@ def test_crash_recovery_within_3_seconds(tmp_path):
     for slot in range(2, 12):
         consumed_key = entries[slot - 2][0]
         new_key = (200 + slot).to_bytes(34, "big")
-        created = [(new_key, {
-            "tx_hash": (200 + slot).to_bytes(32, "big"),
-            "tx_index": 0,
-            "address": f"addr_new_{slot}",
-            "value": slot * 2_000_000,
-            "datum_hash": b"",
-        })]
+        created = [
+            (
+                new_key,
+                {
+                    "tx_hash": (200 + slot).to_bytes(32, "big"),
+                    "tx_index": 0,
+                    "address": f"addr_new_{slot}",
+                    "value": slot * 2_000_000,
+                    "datum_hash": b"",
+                },
+            )
+        ]
         db.apply_block(consumed=[consumed_key], created=created, block_slot=slot)
 
         diff = BlockDiff(
@@ -140,6 +151,7 @@ def test_crash_recovery_within_3_seconds(tmp_path):
 # Gate 3: Memory footprint
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.timeout(30)
 def test_memory_footprint_under_target():
     """10K UTxOs should use well under 500 MiB."""
@@ -148,13 +160,16 @@ def test_memory_footprint_under_target():
     entries = []
     for i in range(10_000):
         key = i.to_bytes(34, "big")
-        entry = (key, {
-            "tx_hash": i.to_bytes(32, "big"),
-            "tx_index": i % 65536,
-            "address": f"addr1q{i:040d}",
-            "value": (i + 1) * 1_000_000,
-            "datum_hash": b"\x00" * 32,
-        })
+        entry = (
+            key,
+            {
+                "tx_hash": i.to_bytes(32, "big"),
+                "tx_index": i % 65536,
+                "address": f"addr1q{i:040d}",
+                "value": (i + 1) * 1_000_000,
+                "datum_hash": b"\x00" * 32,
+            },
+        )
         entries.append(entry)
 
     db.apply_block(consumed=[], created=entries, block_slot=1)
@@ -171,6 +186,7 @@ def test_memory_footprint_under_target():
 # Gate 4: Real blocks from Ogmios stored in ImmutableDB
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.timeout(30)
 async def test_ogmios_blocks_stored_in_immutabledb(tmp_path, cardano_node_available):
     """Fetch real blocks from Ogmios and store in our ImmutableDB."""
@@ -178,15 +194,22 @@ async def test_ogmios_blocks_stored_in_immutabledb(tmp_path, cardano_node_availa
         pytest.skip("cardano-node not available")
 
     import json
+
     import websockets
 
     ogmios_url = os.environ.get("OGMIOS_URL", "ws://localhost:1337")
 
     async with websockets.connect(ogmios_url) as ws:
-        await ws.send(json.dumps({
-            "jsonrpc": "2.0", "method": "findIntersection",
-            "params": {"points": ["origin"]}, "id": "find"
-        }))
+        await ws.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "findIntersection",
+                    "params": {"points": ["origin"]},
+                    "id": "find",
+                }
+            )
+        )
         await ws.recv()
 
         await ws.send(json.dumps({"jsonrpc": "2.0", "method": "nextBlock", "id": "n0"}))
@@ -194,7 +217,7 @@ async def test_ogmios_blocks_stored_in_immutabledb(tmp_path, cardano_node_availa
 
         blocks = []
         for i in range(10):
-            await ws.send(json.dumps({"jsonrpc": "2.0", "method": "nextBlock", "id": f"n{i+1}"}))
+            await ws.send(json.dumps({"jsonrpc": "2.0", "method": "nextBlock", "id": f"n{i + 1}"}))
             resp = json.loads(await ws.recv())
             result = resp.get("result", {})
             if result.get("direction") == "forward":

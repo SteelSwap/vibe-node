@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import struct
 
 import cbor2
 import pytest
@@ -48,7 +47,6 @@ from vibe.cardano.ledger.byron import (
     ByronTxOut,
 )
 from vibe.cardano.serialization.block import OperationalCert, ProtocolVersion
-
 
 # ===========================================================================
 # Crypto types (~15 tests)
@@ -494,9 +492,9 @@ class TestShelleyLedgerRoundtrips:
 
         tx_body_map = {
             0: CBORTag(258, [tx_input]),  # inputs as set (tag 258)
-            1: [tx_output],               # outputs
-            2: 200_000,                    # fee
-            3: 50_000_000,                 # ttl
+            1: [tx_output],  # outputs
+            2: 200_000,  # fee
+            3: 50_000_000,  # ttl
         }
 
         encoded = cbor2.dumps(tx_body_map)
@@ -849,7 +847,7 @@ class TestDuplicateDetection:
         # Map(2) { 0: "first", 0: "second" }
         # CBOR: A2 (map of 2) 00 (key 0) 65 6669727374 (text "first")
         #       00 (key 0) 66 7365636F6E64 (text "second")
-        raw = bytes.fromhex("a2006566697273740066736563" "6f6e64")
+        raw = bytes.fromhex("a20065666972737400667365636f6e64")
         decoded = cbor2.loads(raw)
         # Standard Python dict behavior: last value wins
         assert isinstance(decoded, dict)

@@ -22,7 +22,6 @@ from vibe.core.storage.memory import (
     MemoryStateStore,
 )
 
-
 # ---------------------------------------------------------------------------
 # Protocol conformance — structural subtyping checks
 # ---------------------------------------------------------------------------
@@ -60,9 +59,7 @@ class TestAppendStore:
         await store.append(b"\x01", b"block-1")
         assert await store.get(b"\x01") == b"block-1"
 
-    async def test_get_missing_key_returns_none(
-        self, store: MemoryAppendStore
-    ) -> None:
+    async def test_get_missing_key_returns_none(self, store: MemoryAppendStore) -> None:
         assert await store.get(b"\xff") is None
 
     async def test_tip_tracks_latest(self, store: MemoryAppendStore) -> None:
@@ -76,9 +73,7 @@ class TestAppendStore:
         with pytest.raises(ValueError, match="greater than"):
             await store.append(b"\x01", b"b")
 
-    async def test_append_rejects_duplicate_key(
-        self, store: MemoryAppendStore
-    ) -> None:
+    async def test_append_rejects_duplicate_key(self, store: MemoryAppendStore) -> None:
         await store.append(b"\x01", b"a")
         with pytest.raises(ValueError, match="greater than"):
             await store.append(b"\x01", b"b")
@@ -91,9 +86,7 @@ class TestAppendStore:
         result = [(k, v) async for k, v in store.iter_from(b"\x02")]
         assert result == [(b"\x02", b"b"), (b"\x03", b"c")]
 
-    async def test_iter_from_missing_key_starts_at_next(
-        self, store: MemoryAppendStore
-    ) -> None:
+    async def test_iter_from_missing_key_starts_at_next(self, store: MemoryAppendStore) -> None:
         await store.append(b"\x01", b"a")
         await store.append(b"\x03", b"c")
 
@@ -101,9 +94,7 @@ class TestAppendStore:
         result = [(k, v) async for k, v in store.iter_from(b"\x02")]
         assert result == [(b"\x03", b"c")]
 
-    async def test_iter_from_past_end_yields_nothing(
-        self, store: MemoryAppendStore
-    ) -> None:
+    async def test_iter_from_past_end_yields_nothing(self, store: MemoryAppendStore) -> None:
         await store.append(b"\x01", b"a")
         result = [(k, v) async for k, v in store.iter_from(b"\xff")]
         assert result == []
@@ -128,9 +119,7 @@ class TestKeyValueStore:
     def store(self) -> MemoryKeyValueStore:
         return MemoryKeyValueStore()
 
-    async def test_get_missing_returns_none(
-        self, store: MemoryKeyValueStore
-    ) -> None:
+    async def test_get_missing_returns_none(self, store: MemoryKeyValueStore) -> None:
         assert await store.get(b"nope") is None
 
     async def test_put_and_get(self, store: MemoryKeyValueStore) -> None:
@@ -147,9 +136,7 @@ class TestKeyValueStore:
         assert await store.delete(b"k1") is True
         assert await store.get(b"k1") is None
 
-    async def test_delete_missing_returns_false(
-        self, store: MemoryKeyValueStore
-    ) -> None:
+    async def test_delete_missing_returns_false(self, store: MemoryKeyValueStore) -> None:
         assert await store.delete(b"nope") is False
 
     async def test_contains(self, store: MemoryKeyValueStore) -> None:
@@ -193,9 +180,7 @@ class TestStateStore:
         assert await store.get(b"k2") == b"v2"
         assert await store.get(b"k3") is None
 
-    async def test_batch_delete_ignores_missing(
-        self, store: MemoryStateStore
-    ) -> None:
+    async def test_batch_delete_ignores_missing(self, store: MemoryStateStore) -> None:
         # Should not raise.
         await store.batch_delete([b"nonexistent"])
 
@@ -217,9 +202,7 @@ class TestStateStore:
         assert isinstance(handle, SnapshotHandle)
         assert isinstance(handle.snapshot_id, str)
 
-    async def test_restore_unknown_handle_raises(
-        self, store: MemoryStateStore
-    ) -> None:
+    async def test_restore_unknown_handle_raises(self, store: MemoryStateStore) -> None:
         bogus = SnapshotHandle(snapshot_id="does-not-exist")
         with pytest.raises(KeyError, match="does-not-exist"):
             await store.restore(bogus)
@@ -239,9 +222,7 @@ class TestStateStore:
         await store.restore(snap2)
         assert await store.get(b"k1") == b"v2"
 
-    async def test_snapshot_is_isolated_from_mutations(
-        self, store: MemoryStateStore
-    ) -> None:
+    async def test_snapshot_is_isolated_from_mutations(self, store: MemoryStateStore) -> None:
         """Snapshot data must not be affected by subsequent writes."""
         await store.batch_put([(b"k1", b"v1")])
         handle = await store.snapshot()

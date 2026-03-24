@@ -36,7 +36,6 @@ from .kes import (
     kes_verify_block_signature,
 )
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -128,9 +127,7 @@ class OCertError:
 # ---------------------------------------------------------------------------
 
 
-def ocert_signed_payload(
-    kes_vk: bytes, cert_count: int, kes_period_start: int
-) -> bytes:
+def ocert_signed_payload(kes_vk: bytes, cert_count: int, kes_period_start: int) -> bytes:
     """Construct the payload that the cold key signs in an OCert.
 
     The cold key signature ``tau`` covers:
@@ -198,9 +195,7 @@ def verify_ocert_cold_sig(
     Returns:
         True if the cold signature is valid.
     """
-    payload = ocert_signed_payload(
-        ocert.kes_vk, ocert.cert_count, ocert.kes_period_start
-    )
+    payload = ocert_signed_payload(ocert.kes_vk, ocert.cert_count, ocert.kes_period_start)
     try:
         vk = Ed25519PublicKey.from_public_bytes(cold_vk)
         vk.verify(ocert.cold_sig, payload)
@@ -270,8 +265,7 @@ def validate_ocert(
         errors.append(
             OCertError(
                 OCertFailure.KES_AFTER_END,
-                f"KES period {current_kes_period} >= "
-                f"cert end {c_0 + max_kes_evo}",
+                f"KES period {current_kes_period} >= cert end {c_0 + max_kes_evo}",
             )
         )
 
@@ -288,8 +282,7 @@ def validate_ocert(
         errors.append(
             OCertError(
                 OCertFailure.COUNTER_TOO_SMALL,
-                f"On-chain counter {current_issue_no} > "
-                f"cert counter {ocert.cert_count}",
+                f"On-chain counter {current_issue_no} > cert counter {ocert.cert_count}",
             )
         )
 
@@ -327,9 +320,7 @@ def validate_ocert(
 # ---------------------------------------------------------------------------
 
 
-def slot_to_kes_period(
-    slot: int, *, slots_per_kes_period: int = SLOTS_PER_KES_PERIOD
-) -> int:
+def slot_to_kes_period(slot: int, *, slots_per_kes_period: int = SLOTS_PER_KES_PERIOD) -> int:
     """Convert a slot number to a KES period.
 
     ``kesPeriod(s) = s / SlotsPerKESPeriod`` (integer division)

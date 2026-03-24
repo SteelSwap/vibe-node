@@ -25,14 +25,8 @@ from vibe.cardano.storage.immutable import (
     AppendBlockNotNewerThanTipError,
     ClosedDBError,
     ImmutableDB,
-    ImmutableDBIterator,
-    _PRI_ENTRY_FMT,
-    _PRI_ENTRY_SIZE,
-    _SEC_ENTRY_FMT,
-    _SEC_ENTRY_SIZE,
 )
 from vibe.core.storage.interfaces import AppendStore
-
 
 # ---------------------------------------------------------------------------
 # Helpers

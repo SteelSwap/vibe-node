@@ -38,7 +38,6 @@ from vibe.cardano.ledger.alonzo_types import (
     compute_script_integrity_hash,
 )
 
-
 # ---------------------------------------------------------------------------
 # ExUnits tests
 # ---------------------------------------------------------------------------
@@ -186,7 +185,7 @@ class TestExUnitsProperties:
     @given(a=ex_units_st, b=ex_units_st)
     @settings(max_examples=100)
     def test_le_reflexive(self, a: ExUnits, b: ExUnits):
-        """a <= a should always hold."""
+        """A <= a should always hold."""
         assert a <= a
 
     @given(a=ex_units_st)
@@ -254,9 +253,7 @@ class TestRedeemer:
 
     def test_frozen(self):
         """Redeemer should be immutable."""
-        r = Redeemer(
-            tag=RedeemerTag.SPEND, index=0, data=b"\xa0", ex_units=ExUnits()
-        )
+        r = Redeemer(tag=RedeemerTag.SPEND, index=0, data=b"\xa0", ex_units=ExUnits())
         with pytest.raises(AttributeError):
             r.index = 5  # type: ignore[misc]
 
@@ -356,9 +353,7 @@ class TestCollateralMonotonicity:
         percentage=st.integers(min_value=100, max_value=500),
     )
     @settings(max_examples=100)
-    def test_higher_fees_need_more_collateral(
-        self, fee_a: int, fee_b: int, percentage: int
-    ):
+    def test_higher_fees_need_more_collateral(self, fee_a: int, fee_b: int, percentage: int):
         """If fee_a <= fee_b, then required collateral for a <= required for b."""
         required_a = (fee_a * percentage + 99) // 100
         required_b = (fee_b * percentage + 99) // 100

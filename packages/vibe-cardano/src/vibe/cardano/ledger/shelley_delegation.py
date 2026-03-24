@@ -202,8 +202,7 @@ def _process_dereg_key(
 
     if cred_hash not in state.rewards:
         raise DelegationError(
-            f"StakeKeyNotRegisteredDELEG: credential {cred_hash.hex()[:16]}... "
-            f"is not registered"
+            f"StakeKeyNotRegisteredDELEG: credential {cred_hash.hex()[:16]}... is not registered"
         )
 
     if state.rewards[cred_hash] != 0:
@@ -246,8 +245,7 @@ def _process_delegate(
 
     if pool_hash not in state.pools:
         raise DelegationError(
-            f"StakeDelegationImpossibleDELEG: pool {pool_hash.hex()[:16]}... "
-            f"is not registered"
+            f"StakeDelegationImpossibleDELEG: pool {pool_hash.hex()[:16]}... is not registered"
         )
 
     new_state = deepcopy(state)

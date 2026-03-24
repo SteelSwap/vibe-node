@@ -6,6 +6,8 @@ within the valid parameter space defined by the wire format.
 
 from __future__ import annotations
 
+import struct
+
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -16,8 +18,6 @@ from vibe.core.multiplexer.segment import (
     decode_segment,
     encode_segment,
 )
-
-import struct
 
 # Strategies matching the wire format constraints
 timestamps = st.integers(min_value=0, max_value=0xFFFFFFFF)

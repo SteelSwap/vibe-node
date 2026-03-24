@@ -1,4 +1,5 @@
 """coverage tool — spec coverage dashboard."""
+
 from __future__ import annotations
 
 from vibe.tools.mcp.app import mcp
@@ -54,8 +55,7 @@ async def coverage(
             else "FALSE"
         )
         test_check = (
-            "EXISTS (SELECT 1 FROM test_specifications ts"
-            " WHERE ts.spec_section_id = ss.id)"
+            "EXISTS (SELECT 1 FROM test_specifications ts WHERE ts.spec_section_id = ss.id)"
             if has_tests
             else "FALSE"
         )

@@ -17,13 +17,10 @@ from __future__ import annotations
 import hashlib
 
 import cbor2
-import pytest
 from pycardano import (
     Asset,
     AssetName,
     MultiAsset,
-    TransactionBody,
-    TransactionInput,
     TransactionOutput,
     Value,
 )
@@ -32,18 +29,14 @@ from pycardano.hash import ScriptHash, TransactionId
 from pycardano.network import Network
 
 from vibe.cardano.ledger.allegra_mary import (
-    MaryProtocolParams,
     MARY_MAINNET_PARAMS,
     _multi_asset_is_empty,
     _multi_asset_num_assets,
-    _multi_asset_num_policies,
     _output_value,
-    _sum_values,
     _value_eq,
     mary_min_utxo_value,
     validate_mary_value_preservation,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -101,8 +94,7 @@ class TestInvalidMetadataSize:
         huge_metadata = {0: "x" * (max_tx_size + 1)}
         metadata_cbor = cbor2.dumps(huge_metadata)
         assert len(metadata_cbor) > max_tx_size, (
-            f"Metadata CBOR size {len(metadata_cbor)} should exceed "
-            f"MaxTxSize {max_tx_size}"
+            f"Metadata CBOR size {len(metadata_cbor)} should exceed MaxTxSize {max_tx_size}"
         )
 
     def test_small_metadata_within_bounds(self) -> None:
@@ -272,9 +264,7 @@ class TestTokenMintingValuePreservation:
             multi_asset=MultiAsset({pid: Asset({asset_name: 1000})}),
         )
 
-        errors = validate_mary_value_preservation(
-            input_values, output_values, fee, mint
-        )
+        errors = validate_mary_value_preservation(input_values, output_values, fee, mint)
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_multiple_policies_mint_preserves_value(self) -> None:
@@ -288,24 +278,26 @@ class TestTokenMintingValuePreservation:
         output_values = [
             Value(
                 coin=9_800_000,
-                multi_asset=MultiAsset({
-                    pid1: Asset({asset_a: 500}),
-                    pid2: Asset({asset_b: 300}),
-                }),
+                multi_asset=MultiAsset(
+                    {
+                        pid1: Asset({asset_a: 500}),
+                        pid2: Asset({asset_b: 300}),
+                    }
+                ),
             )
         ]
         fee = 200_000
         mint = Value(
             coin=0,
-            multi_asset=MultiAsset({
-                pid1: Asset({asset_a: 500}),
-                pid2: Asset({asset_b: 300}),
-            }),
+            multi_asset=MultiAsset(
+                {
+                    pid1: Asset({asset_a: 500}),
+                    pid2: Asset({asset_b: 300}),
+                }
+            ),
         )
 
-        errors = validate_mary_value_preservation(
-            input_values, output_values, fee, mint
-        )
+        errors = validate_mary_value_preservation(input_values, output_values, fee, mint)
         assert errors == [], f"Unexpected errors: {errors}"
 
     def test_mint_without_corresponding_output_fails(self) -> None:
@@ -321,9 +313,7 @@ class TestTokenMintingValuePreservation:
             multi_asset=MultiAsset({pid: Asset({asset_name: 1000})}),
         )
 
-        errors = validate_mary_value_preservation(
-            input_values, output_values, fee, mint
-        )
+        errors = validate_mary_value_preservation(input_values, output_values, fee, mint)
         assert len(errors) > 0, "Should fail: minted tokens not in outputs"
         assert any("ValueNotConserved" in e for e in errors)
 
@@ -369,11 +359,13 @@ class TestAssetCountLimitEnforcement:
 
         # 10 assets across 3 policies
         pids = [_make_policy_id(i) for i in range(3)]
-        big_ma = MultiAsset({
-            pids[0]: Asset({_make_asset_name(f"a{i}"): 1 for i in range(4)}),
-            pids[1]: Asset({_make_asset_name(f"b{i}"): 1 for i in range(3)}),
-            pids[2]: Asset({_make_asset_name(f"c{i}"): 1 for i in range(3)}),
-        })
+        big_ma = MultiAsset(
+            {
+                pids[0]: Asset({_make_asset_name(f"a{i}"): 1 for i in range(4)}),
+                pids[1]: Asset({_make_asset_name(f"b{i}"): 1 for i in range(3)}),
+                pids[2]: Asset({_make_asset_name(f"c{i}"): 1 for i in range(3)}),
+            }
+        )
         txout_10 = TransactionOutput(addr, Value(coin=1_000_000, multi_asset=big_ma))
         min_10 = mary_min_utxo_value(txout_10, params)
 
@@ -389,22 +381,16 @@ class TestAssetCountLimitEnforcement:
 
         # Short asset name
         short_ma = MultiAsset({pid: Asset({_make_asset_name("x"): 1})})
-        txout_short = TransactionOutput(
-            addr, Value(coin=1_000_000, multi_asset=short_ma)
-        )
+        txout_short = TransactionOutput(addr, Value(coin=1_000_000, multi_asset=short_ma))
         min_short = mary_min_utxo_value(txout_short, params)
 
         # Long asset name (32 bytes)
         long_name = _make_asset_name("x" * 32)
         long_ma = MultiAsset({pid: Asset({long_name: 1})})
-        txout_long = TransactionOutput(
-            addr, Value(coin=1_000_000, multi_asset=long_ma)
-        )
+        txout_long = TransactionOutput(addr, Value(coin=1_000_000, multi_asset=long_ma))
         min_long = mary_min_utxo_value(txout_long, params)
 
-        assert min_long >= min_short, (
-            "Longer asset name should require >= min UTxO"
-        )
+        assert min_long >= min_short, "Longer asset name should require >= min UTxO"
 
 
 # ---------------------------------------------------------------------------

@@ -158,7 +158,7 @@ class PipelinedRunner:
         message : Message
             The typed protocol message to send.
 
-        Raises
+        Raises:
         ------
         RuntimeError
             If the pipeline is closed or not started.
@@ -193,12 +193,12 @@ class PipelinedRunner:
         to arrive in the same order as the requests were sent (TCP
         ordering + single channel).
 
-        Returns
+        Returns:
         -------
         Message
             The decoded response message.
 
-        Raises
+        Raises:
         ------
         RuntimeError
             If no requests are in flight or pipeline is closed.
@@ -228,7 +228,7 @@ class PipelinedRunner:
         chain-sync receives a rollback and must process all pending
         responses before handling the rollback point.
 
-        Returns
+        Returns:
         -------
         list[Message]
             All pending responses, in order.

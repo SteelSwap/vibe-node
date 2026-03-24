@@ -36,16 +36,6 @@ import logging
 from fractions import Fraction
 from typing import Any
 
-from vibe.core.protocols.agency import (
-    Agency,
-    Message,
-    Protocol,
-    ProtocolError,
-    PeerRole,
-)
-from vibe.core.protocols.codec import Codec, CodecError
-from vibe.core.protocols.runner import ProtocolRunner
-
 from vibe.cardano.network.local_statequery import (
     AcquireFailureReason,
     MsgAcquire,
@@ -69,6 +59,15 @@ from vibe.cardano.network.local_statequery import (
     encode_release,
     encode_result,
 )
+from vibe.core.protocols.agency import (
+    Agency,
+    Message,
+    PeerRole,
+    Protocol,
+    ProtocolError,
+)
+from vibe.core.protocols.codec import CodecError
+from vibe.core.protocols.runner import ProtocolRunner
 
 __all__ = [
     "LocalStateQueryState",
@@ -283,9 +282,7 @@ _ACQUIRING_MESSAGES: frozenset[type[Message[LocalStateQueryState]]] = frozenset(
 _ACQUIRED_MESSAGES: frozenset[type[Message[LocalStateQueryState]]] = frozenset(
     {LsqMsgQuery, LsqMsgReAcquire, LsqMsgRelease}
 )
-_QUERYING_MESSAGES: frozenset[type[Message[LocalStateQueryState]]] = frozenset(
-    {LsqMsgResult}
-)
+_QUERYING_MESSAGES: frozenset[type[Message[LocalStateQueryState]]] = frozenset({LsqMsgResult})
 _DONE_MESSAGES: frozenset[type[Message[LocalStateQueryState]]] = frozenset()
 
 
@@ -373,10 +370,7 @@ class LocalStateQueryCodec:
         elif isinstance(message, LsqMsgDone):
             return encode_done()
         else:
-            raise CodecError(
-                f"Unknown local state-query message type: "
-                f"{type(message).__name__}"
-            )
+            raise CodecError(f"Unknown local state-query message type: {type(message).__name__}")
 
     def decode(self, data: bytes) -> Message[LocalStateQueryState]:
         """Decode CBOR bytes into a typed local state-query message.
@@ -405,10 +399,7 @@ class LocalStateQueryCodec:
         elif isinstance(msg, MsgDone):
             return LsqMsgDone()
         else:
-            raise CodecError(
-                f"Failed to decode local state-query message "
-                f"({len(data)} bytes)"
-            )
+            raise CodecError(f"Failed to decode local state-query message ({len(data)} bytes)")
 
 
 # ---------------------------------------------------------------------------
@@ -530,10 +521,7 @@ class LocalStateQueryServer:
                     logger.debug("Local state-query: client sent MsgDone")
                     return
                 else:
-                    raise ProtocolError(
-                        f"Unexpected message in StIdle: "
-                        f"{type(msg).__name__}"
-                    )
+                    raise ProtocolError(f"Unexpected message in StIdle: {type(msg).__name__}")
 
             elif state == LocalStateQueryState.StAcquired:
                 # Wait for client query, re-acquire, or release
@@ -547,18 +535,13 @@ class LocalStateQueryServer:
                     self._acquired_ledger = None
                     logger.debug("Local state-query: released acquired state")
                 else:
-                    raise ProtocolError(
-                        f"Unexpected message in StAcquired: "
-                        f"{type(msg).__name__}"
-                    )
+                    raise ProtocolError(f"Unexpected message in StAcquired: {type(msg).__name__}")
 
             else:
                 # StAcquiring and StQuerying are server-agency states
                 # — we should never be waiting to recv in these states.
                 # StDone is terminal.
-                raise ProtocolError(
-                    f"Server should not recv in state: {state!r}"
-                )
+                raise ProtocolError(f"Server should not recv in state: {state!r}")
 
     async def _handle_acquire(self, point: Point | None) -> None:
         """Handle MsgAcquire or MsgReAcquire.
@@ -579,23 +562,21 @@ class LocalStateQueryServer:
             return
 
         # Check if the point matches our chain tip
-        if (self._chain_tip is not None
-                and point.slot == self._chain_tip.slot
-                and point.block_hash == self._chain_tip.block_hash):
+        if (
+            self._chain_tip is not None
+            and point.slot == self._chain_tip.slot
+            and point.block_hash == self._chain_tip.block_hash
+        ):
             self._acquired_ledger = self._ledgerdb
             await self._runner.send_message(LsqMsgAcquired())
-            logger.debug(
-                "Local state-query: acquired at tip slot=%d", point.slot
-            )
+            logger.debug("Local state-query: acquired at tip slot=%d", point.slot)
             return
 
         # Point not found — send failure
         await self._runner.send_message(
             LsqMsgFailure(AcquireFailureReason.AcquireFailurePointNotOnChain)
         )
-        logger.debug(
-            "Local state-query: acquisition failed for slot=%d", point.slot
-        )
+        logger.debug("Local state-query: acquisition failed for slot=%d", point.slot)
 
     async def _handle_query(self, query: Query) -> None:
         """Dispatch a query to the appropriate handler and send the result."""
@@ -623,9 +604,7 @@ class LocalStateQueryServer:
         elif qt == QueryType.GovernanceState:
             result = self._query_governance_state()
         else:
-            logger.warning(
-                "Local state-query: unsupported query type %s", qt
-            )
+            logger.warning("Local state-query: unsupported query type %s", qt)
             result = None
 
         await self._runner.send_message(LsqMsgResult(result))
@@ -729,7 +708,8 @@ class LocalStateQueryServer:
         for pool_id, fraction in self._stake_distribution.items():
             if isinstance(fraction, Fraction):
                 result[pool_id.hex() if isinstance(pool_id, bytes) else pool_id] = [
-                    fraction.numerator, fraction.denominator
+                    fraction.numerator,
+                    fraction.denominator,
                 ]
             else:
                 result[pool_id.hex() if isinstance(pool_id, bytes) else pool_id] = fraction

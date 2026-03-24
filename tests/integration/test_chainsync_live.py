@@ -6,22 +6,19 @@ handshake, run chain-sync, sync block headers, verify hashes.
 
 from __future__ import annotations
 
-import hashlib
-
 import pytest
 
-from vibe.core.multiplexer.segment import MuxSegment
 from vibe.cardano.network.chainsync import (
-    MsgRollForward,
-    MsgRollBackward,
+    MsgAwaitReply,
     MsgIntersectFound,
     MsgIntersectNotFound,
-    MsgAwaitReply,
+    MsgRollBackward,
+    MsgRollForward,
+    decode_server_message,
     encode_find_intersect,
     encode_request_next,
-    decode_server_message,
 )
-
+from vibe.core.multiplexer.segment import MuxSegment
 
 pytestmark = pytest.mark.integration
 
@@ -30,8 +27,10 @@ CHAINSYNC_PROTOCOL_ID = 2
 
 async def _send_chainsync(bearer, payload: bytes):
     seg = MuxSegment(
-        timestamp=0, protocol_id=CHAINSYNC_PROTOCOL_ID,
-        is_initiator=True, payload=payload,
+        timestamp=0,
+        protocol_id=CHAINSYNC_PROTOCOL_ID,
+        is_initiator=True,
+        payload=payload,
     )
     await bearer.write_segment(seg)
 
@@ -113,7 +112,7 @@ async def test_sync_100_headers(handshaken_bearer):
 
     assert len(headers) == 100
     # Tips should be monotonically advancing or stable
-    tip_slots = [h.tip.point.slot for h in headers if hasattr(h.tip.point, 'slot')]
+    tip_slots = [h.tip.point.slot for h in headers if hasattr(h.tip.point, "slot")]
     for i in range(1, len(tip_slots)):
         assert tip_slots[i] >= tip_slots[i - 1]
 
@@ -150,6 +149,4 @@ async def test_sync_1000_headers_gate(handshaken_bearer):
             # At tip, wait for new block — shouldn't happen at origin
             pytest.fail(f"Got AwaitReply after only {forward_count} blocks")
 
-    assert forward_count == 1000, (
-        f"Expected 1000 RollForward messages, got {forward_count}"
-    )
+    assert forward_count == 1000, f"Expected 1000 RollForward messages, got {forward_count}"

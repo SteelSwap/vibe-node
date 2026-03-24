@@ -32,42 +32,41 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
-from typing import Any, Callable, Awaitable
-
-from vibe.core.protocols.agency import (
-    Agency,
-    Message,
-    Protocol,
-    ProtocolError,
-)
-from vibe.core.protocols.codec import Codec, CodecError
-from vibe.core.protocols.runner import ProtocolRunner
-from vibe.core.protocols.agency import PeerRole
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from vibe.cardano.network.chainsync import (
-    MsgRequestNext,
+    ORIGIN,
     MsgAwaitReply,
-    MsgRollForward,
-    MsgRollBackward,
+    MsgDone,
     MsgFindIntersect,
     MsgIntersectFound,
     MsgIntersectNotFound,
-    MsgDone,
-    Origin,
-    ORIGIN,
-    Tip,
+    MsgRequestNext,
+    MsgRollBackward,
+    MsgRollForward,
     PointOrOrigin,
-    encode_request_next,
-    encode_find_intersect,
-    encode_done,
+    Tip,
+    decode_client_message,
+    decode_server_message,
     encode_await_reply,
-    encode_roll_forward,
-    encode_roll_backward,
+    encode_done,
+    encode_find_intersect,
     encode_intersect_found,
     encode_intersect_not_found,
-    decode_server_message,
-    decode_client_message,
+    encode_request_next,
+    encode_roll_backward,
+    encode_roll_forward,
 )
+from vibe.core.protocols.agency import (
+    Agency,
+    Message,
+    PeerRole,
+    Protocol,
+    ProtocolError,
+)
+from vibe.core.protocols.codec import CodecError
+from vibe.core.protocols.runner import ProtocolRunner
 
 __all__ = [
     "ChainSyncState",
@@ -343,9 +342,7 @@ class ChainSyncProtocol(Protocol[ChainSyncState]):
         except KeyError:
             raise ProtocolError(f"Unknown chain-sync state: {state!r}")
 
-    def valid_messages(
-        self, state: ChainSyncState
-    ) -> frozenset[type[Message[ChainSyncState]]]:
+    def valid_messages(self, state: ChainSyncState) -> frozenset[type[Message[ChainSyncState]]]:
         try:
             return self._VALID_MESSAGES[state]
         except KeyError:
@@ -389,9 +386,7 @@ class ChainSyncCodec:
         elif isinstance(message, CsMsgIntersectNotFound):
             return encode_intersect_not_found(message.tip)
         else:
-            raise CodecError(
-                f"Unknown chain-sync message type: {type(message).__name__}"
-            )
+            raise CodecError(f"Unknown chain-sync message type: {type(message).__name__}")
 
     def decode(self, data: bytes) -> Message[ChainSyncState]:
         """Decode CBOR bytes into a typed chain-sync message.
@@ -485,13 +480,13 @@ class ChainSyncClient:
         points : list[PointOrOrigin]
             Candidate intersection points, highest slot first.
 
-        Returns
+        Returns:
         -------
         tuple[PointOrOrigin | None, Tip]
             The intersection point (or None if not found) and the
             server's current tip.
 
-        Raises
+        Raises:
         ------
         ProtocolError
             If not in StIdle state.
@@ -504,10 +499,7 @@ class ChainSyncClient:
         elif isinstance(response, CsMsgIntersectNotFound):
             return (None, response.tip)
         else:
-            raise ProtocolError(
-                f"Unexpected response to FindIntersect: "
-                f"{type(response).__name__}"
-            )
+            raise ProtocolError(f"Unexpected response to FindIntersect: {type(response).__name__}")
 
     async def request_next(
         self,
@@ -518,7 +510,7 @@ class ChainSyncClient:
         with the AwaitReply message. The caller can then wait and call
         recv_after_await() to get the actual roll forward/backward.
 
-        Returns
+        Returns:
         -------
         CsMsgRollForward | CsMsgRollBackward | CsMsgAwaitReply
             The server's response.
@@ -529,10 +521,7 @@ class ChainSyncClient:
         if isinstance(response, (CsMsgRollForward, CsMsgRollBackward, CsMsgAwaitReply)):
             return response
         else:
-            raise ProtocolError(
-                f"Unexpected response to RequestNext: "
-                f"{type(response).__name__}"
-            )
+            raise ProtocolError(f"Unexpected response to RequestNext: {type(response).__name__}")
 
     async def recv_after_await(self) -> CsMsgRollForward | CsMsgRollBackward:
         """Receive the server's response after an AwaitReply.
@@ -541,12 +530,12 @@ class ChainSyncClient:
         server MUST send RollForward or RollBackward. No further
         AwaitReply is permitted.
 
-        Returns
+        Returns:
         -------
         CsMsgRollForward | CsMsgRollBackward
             The server's response with chain data.
 
-        Raises
+        Raises:
         ------
         ProtocolError
             If the server sends an unexpected message (including another
@@ -563,10 +552,7 @@ class ChainSyncClient:
                 "must respond with RollForward or RollBackward."
             )
         else:
-            raise ProtocolError(
-                f"Unexpected message after AwaitReply: "
-                f"{type(response).__name__}"
-            )
+            raise ProtocolError(f"Unexpected message after AwaitReply: {type(response).__name__}")
 
     async def done(self) -> None:
         """Send Done to terminate the protocol.
@@ -618,7 +604,7 @@ async def run_chain_sync(
     stop_event : asyncio.Event | None
         If provided, the loop exits when this event is set.
 
-    Raises
+    Raises:
     ------
     ProtocolError
         If intersection is not found (no common point with the server).
@@ -644,7 +630,16 @@ async def run_chain_sync(
             "known points do not overlap with the producer's chain."
         )
 
-    logger.info("Chain-sync intersection at %s (server tip: block #%d)", intersection, tip.block_number, extra={"event": "chainsync.intersect", "point": str(intersection), "tip_block": tip.block_number})
+    logger.info(
+        "Chain-sync intersection at %s (server tip: block #%d)",
+        intersection,
+        tip.block_number,
+        extra={
+            "event": "chainsync.intersect",
+            "point": str(intersection),
+            "tip_block": tip.block_number,
+        },
+    )
 
     # Step 2: Sync loop
     while True:
@@ -780,9 +775,7 @@ async def run_chain_sync_server(
                 intersect, tip = await chain_provider.find_intersect(msg.points)
             if intersect is not None:
                 client_point = intersect
-                await runner.send_message(
-                    CsMsgIntersectFound(point=intersect, tip=tip)
-                )
+                await runner.send_message(CsMsgIntersectFound(point=intersect, tip=tip))
             else:
                 await runner.send_message(CsMsgIntersectNotFound(tip=tip))
 
@@ -791,22 +784,16 @@ async def run_chain_sync_server(
             if follower is not None:
                 action, header, point, tip = await follower.instruction()
             else:
-                action, header, point, tip = await chain_provider.next_block(
-                    client_point
-                )
+                action, header, point, tip = await chain_provider.next_block(client_point)
 
             if action == "roll_forward" and header is not None:
                 if follower is None:
                     client_point = point  # type: ignore[assignment]
-                await runner.send_message(
-                    CsMsgRollForward(header=header, tip=tip)
-                )
+                await runner.send_message(CsMsgRollForward(header=header, tip=tip))
             elif action == "roll_backward" and point is not None:
                 if follower is None:
                     client_point = point
-                await runner.send_message(
-                    CsMsgRollBackward(point=point, tip=tip)
-                )
+                await runner.send_message(CsMsgRollBackward(point=point, tip=tip))
             elif action == "await":
                 # Send AwaitReply, then block until new data.
                 await runner.send_message(CsMsgAwaitReply())
@@ -823,26 +810,20 @@ async def run_chain_sync_server(
                         if stop_event is not None and stop_event.is_set():
                             return
                         if follower is not None:
-                            action2, header2, point2, tip2 = (
-                                await follower.instruction()
-                            )
+                            action2, header2, point2, tip2 = await follower.instruction()
                         else:
-                            action2, header2, point2, tip2 = (
-                                await chain_provider.next_block(client_point)
+                            action2, header2, point2, tip2 = await chain_provider.next_block(
+                                client_point
                             )
                         if action2 == "roll_forward" and header2 is not None:
                             if follower is None:
                                 client_point = point2  # type: ignore[assignment]
-                            await runner.send_message(
-                                CsMsgRollForward(header=header2, tip=tip2)
-                            )
+                            await runner.send_message(CsMsgRollForward(header=header2, tip=tip2))
                             break
                         elif action2 == "roll_backward" and point2 is not None:
                             if follower is None:
                                 client_point = point2
-                            await runner.send_message(
-                                CsMsgRollBackward(point=point2, tip=tip2)
-                            )
+                            await runner.send_message(CsMsgRollBackward(point=point2, tip=tip2))
                             break
                         # Still no data — brief sleep to avoid busy-wait.
                         await asyncio.sleep(0.1)
@@ -851,8 +832,8 @@ async def run_chain_sync_server(
                     # waiting for new blocks. This is expected — the client
                     # may send MsgDone (closing the channel) at any time.
                     logger.debug(
-                        "Chain-sync server: client disconnected during "
-                        "await: %s", exc,
+                        "Chain-sync server: client disconnected during await: %s",
+                        exc,
                     )
                     return
 

@@ -35,7 +35,6 @@ import logging
 import os
 import platform
 import resource
-import sys
 from dataclasses import dataclass
 
 from vibe.cardano.storage.volatile import VolatileDB
@@ -120,8 +119,7 @@ class MemoryMonitor:
 
         if rss >= self.soft_limit:
             logger.warning(
-                "MemoryMonitor: RSS %d bytes >= soft limit %d bytes -- "
-                "memory pressure is HIGH",
+                "MemoryMonitor: RSS %d bytes >= soft limit %d bytes -- memory pressure is HIGH",
                 rss,
                 self.soft_limit,
             )
@@ -189,8 +187,7 @@ class FDTracker:
 
         if count >= warn_at:
             logger.warning(
-                "FDTracker: %d open FDs >= warning threshold %d "
-                "(%.0f%% of %d limit)",
+                "FDTracker: %d open FDs >= warning threshold %d (%.0f%% of %d limit)",
                 count,
                 warn_at,
                 100 * count / limit if limit > 0 else 0,
@@ -246,8 +243,7 @@ class VolatilePruner:
         removed = await self._volatile_db.gc(immutable_slot)
         if removed > 0:
             logger.info(
-                "VolatilePruner: pruned %d blocks at or below slot %d "
-                "(tip slot %d, k=%d)",
+                "VolatilePruner: pruned %d blocks at or below slot %d (tip slot %d, k=%d)",
                 removed,
                 immutable_slot,
                 max_slot,

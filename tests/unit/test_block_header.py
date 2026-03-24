@@ -10,9 +10,7 @@ import cbor2
 import pytest
 
 from vibe.cardano.serialization.block import (
-    BlockHeader,
     Era,
-    OperationalCert,
     ProtocolVersion,
     block_hash,
     decode_block_header,
@@ -461,25 +459,21 @@ class TestBlake2b256KnownVectors:
             # (input, expected blake2b-256 hex digest)
             (
                 b"",
-                "0e5751c026e543b2e8ab2eb06099daa1d1"
-                "e5df47778f7787faab45cdf12fe3a8",
+                "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8",
             ),
             (
                 b"abc",
-                "bddd813c634239723171ef3fee98579b94"
-                "964e3bb1cb3e427262c8c068d52319",
+                "bddd813c634239723171ef3fee98579b94964e3bb1cb3e427262c8c068d52319",
             ),
             (
                 b"\x00",
-                "03170a2e7597b7b7e3d84c05391d139a62"
-                "b157e78786d8c082f29dcf4c111314",
+                "03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314",
             ),
         ]
         for input_bytes, expected_hex in vectors:
             digest = hashlib.blake2b(input_bytes, digest_size=32).digest()
             assert digest.hex() == expected_hex, (
-                f"blake2b-256({input_bytes!r}) = {digest.hex()}, "
-                f"expected {expected_hex}"
+                f"blake2b-256({input_bytes!r}) = {digest.hex()}, expected {expected_hex}"
             )
             # Also verify block_hash produces the same result
             assert block_hash(input_bytes).hex() == expected_hex
@@ -502,8 +496,7 @@ class TestBlake2b256KnownVectors:
         for data in inputs:
             digest = block_hash(data)
             assert len(digest) == 32, (
-                f"block_hash({data[:20]!r}...) produced {len(digest)} bytes, "
-                f"expected 32"
+                f"block_hash({data[:20]!r}...) produced {len(digest)} bytes, expected 32"
             )
             assert isinstance(digest, bytes)
 
@@ -524,9 +517,7 @@ class TestBlake2b224KnownVector:
         digest = hashlib.blake2b(b"", digest_size=28).digest()
         assert len(digest) == 28
         # Known blake2b-224 of empty input
-        expected_hex = (
-            "836cc68931c2e4e3e838602eca1902591d216837bafddfe6f0c8cb07"
-        )
+        expected_hex = "836cc68931c2e4e3e838602eca1902591d216837bafddfe6f0c8cb07"
         assert digest.hex() == expected_hex, (
             f"blake2b-224(b'') = {digest.hex()}, expected {expected_hex}"
         )
@@ -666,17 +657,13 @@ class TestByronGoldenHeader:
         """
         golden_bytes = bytes.fromhex(_BYRON_GOLDEN_HEADER_HEX)
         decoded = cbor2.loads(golden_bytes)
-        assert len(decoded) == 5, (
-            f"Byron header should be 5-element array, got {len(decoded)}"
-        )
+        assert len(decoded) == 5, f"Byron header should be 5-element array, got {len(decoded)}"
 
     def test_protocol_magic_id(self):
         """First element is ProtocolMagicId = 7 (from exampleHeader construction)."""
         golden_bytes = bytes.fromhex(_BYRON_GOLDEN_HEADER_HEX)
         decoded = cbor2.loads(golden_bytes)
-        assert decoded[0] == 7, (
-            f"Expected ProtocolMagicId 7, got {decoded[0]}"
-        )
+        assert decoded[0] == 7, f"Expected ProtocolMagicId 7, got {decoded[0]}"
 
     def test_prev_hash_is_32_bytes(self):
         """Second element is a 32-byte previous block hash."""
@@ -686,9 +673,7 @@ class TestByronGoldenHeader:
         assert isinstance(prev_hash, bytes), (
             f"prev_hash should be bytes, got {type(prev_hash).__name__}"
         )
-        assert len(prev_hash) == 32, (
-            f"prev_hash should be 32 bytes, got {len(prev_hash)}"
-        )
+        assert len(prev_hash) == 32, f"prev_hash should be 32 bytes, got {len(prev_hash)}"
 
     def test_body_proof_is_array(self):
         """Third element (body_proof) is a CBOR array.
@@ -791,21 +776,21 @@ class TestShelleyBHBGoldenStructure:
           kes_period = 0, sigma, proto_major = 0, proto_minor = 0
         """
         return [
-            44,                     # block_number (BlockNo 44)
-            33,                     # slot (SlotNo 33)
-            HASH32,                 # prev_hash (testHeaderHash)
-            VKEY32,                 # issuer_vkey
-            VKEY32,                 # vrf_vkey
-            VRF_CERT,               # nonce_vrf (bheaderEta)
-            VRF_CERT,               # leader_vrf (bheaderL)
-            0,                      # block_body_size (bsize = 0)
-            HASH32,                 # block_body_hash (bbHash of empty TxSeq)
-            VKEY32,                 # op_cert hot_vkey
-            0,                      # op_cert sequence_number
-            0,                      # op_cert kes_period (KESPeriod 0)
-            SIG64,                  # op_cert sigma
-            0,                      # protocol_version major (ProtVer 0 0)
-            0,                      # protocol_version minor
+            44,  # block_number (BlockNo 44)
+            33,  # slot (SlotNo 33)
+            HASH32,  # prev_hash (testHeaderHash)
+            VKEY32,  # issuer_vkey
+            VKEY32,  # vrf_vkey
+            VRF_CERT,  # nonce_vrf (bheaderEta)
+            VRF_CERT,  # leader_vrf (bheaderL)
+            0,  # block_body_size (bsize = 0)
+            HASH32,  # block_body_hash (bbHash of empty TxSeq)
+            VKEY32,  # op_cert hot_vkey
+            0,  # op_cert sequence_number
+            0,  # op_cert kes_period (KESPeriod 0)
+            SIG64,  # op_cert sigma
+            0,  # protocol_version major (ProtVer 0 0)
+            0,  # protocol_version minor
         ]
 
     def test_header_body_field_count(self):

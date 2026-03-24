@@ -15,13 +15,11 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 import pytest
 
 from vibe.cardano.consensus.header_validation import (
     HeaderValidationFailure,
-    HeaderValidationParams,
     PoolInfo,
     _pool_id_from_vkey,
 )
@@ -37,7 +35,6 @@ from vibe.cardano.crypto.ocert import (
     OperationalCert,
     validate_ocert,
 )
-
 
 # ---------------------------------------------------------------------------
 # Mock header (reused from test_header_validation)
@@ -62,12 +59,12 @@ class MockOperationalCert:
 class MockBlockHeader:
     slot: int = 100
     block_number: int = 10
-    prev_hash: Optional[bytes] = None
+    prev_hash: bytes | None = None
     issuer_vkey: bytes = b"\x00" * 32
     header_cbor: bytes = b"\x00" * 100
     protocol_version: MockProtocolVersion = None  # type: ignore
     operational_cert: MockOperationalCert = None  # type: ignore
-    vrf_output: Optional[bytes] = None
+    vrf_output: bytes | None = None
     header_body_cbor: bytes = b""
     kes_signature: bytes = b""
 
@@ -184,9 +181,7 @@ class TestPraosState:
 
 
 class TestApplyHeader:
-    def _make_state_with_pool(
-        self, issuer_vkey: bytes
-    ) -> PraosState:
+    def _make_state_with_pool(self, issuer_vkey: bytes) -> PraosState:
         """Create a PraosState with a pool in the stake distribution."""
         pool_id = _pool_id_from_vkey(issuer_vkey)
         dist = {
@@ -249,21 +244,15 @@ class TestApplyHeader:
         # OCert errors expected (mock signatures are invalid), but the
         # structural checks (slot, block_number, prev_hash) should pass.
         # With mock crypto, we expect OCERT_INVALID errors.
-        ocert_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.OCERT_INVALID
-        ]
+        ocert_errors = [e for e in errors if e.failure == HeaderValidationFailure.OCERT_INVALID]
         slot_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
+            e for e in errors if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
         ]
         bn_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.BLOCK_NUMBER_MISMATCH
+            e for e in errors if e.failure == HeaderValidationFailure.BLOCK_NUMBER_MISMATCH
         ]
         hash_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.PREV_HASH_MISMATCH
+            e for e in errors if e.failure == HeaderValidationFailure.PREV_HASH_MISMATCH
         ]
 
         # Structural checks should pass
@@ -295,8 +284,7 @@ class TestApplyHeader:
 
         _, errors = apply_header(state, header, prev_header=prev)
         slot_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
+            e for e in errors if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
         ]
         assert len(slot_errors) == 1
 
@@ -320,7 +308,8 @@ class TestOCertSequenceMonotonicity:
 
     def test_same_counter_is_valid(self) -> None:
         """Two blocks with the same OCert counter should not trigger
-        COUNTER_TOO_SMALL (m <= n is satisfied when m == n)."""
+        COUNTER_TOO_SMALL (m <= n is satisfied when m == n).
+        """
         ocert = OperationalCert(
             kes_vk=b"\x00" * 32,
             cert_count=5,
@@ -337,9 +326,7 @@ class TestOCertSequenceMonotonicity:
             kes_sig=b"",
             max_kes_evo=62,
         )
-        counter_errors = [
-            e for e in errors if e.failure == OCertFailure.COUNTER_TOO_SMALL
-        ]
+        counter_errors = [e for e in errors if e.failure == OCertFailure.COUNTER_TOO_SMALL]
         assert len(counter_errors) == 0
 
     def test_increasing_counter_is_valid(self) -> None:
@@ -360,9 +347,7 @@ class TestOCertSequenceMonotonicity:
             kes_sig=b"",
             max_kes_evo=62,
         )
-        counter_errors = [
-            e for e in errors if e.failure == OCertFailure.COUNTER_TOO_SMALL
-        ]
+        counter_errors = [e for e in errors if e.failure == OCertFailure.COUNTER_TOO_SMALL]
         assert len(counter_errors) == 0
 
     def test_decreasing_counter_is_rejected(self) -> None:
@@ -387,9 +372,7 @@ class TestOCertSequenceMonotonicity:
             kes_sig=b"",
             max_kes_evo=62,
         )
-        counter_errors = [
-            e for e in errors if e.failure == OCertFailure.COUNTER_TOO_SMALL
-        ]
+        counter_errors = [e for e in errors if e.failure == OCertFailure.COUNTER_TOO_SMALL]
         assert len(counter_errors) == 1
 
     def test_monotonicity_sequence_of_three_blocks(self) -> None:
@@ -417,10 +400,7 @@ class TestOCertSequenceMonotonicity:
                 kes_sig=b"",
                 max_kes_evo=62,
             )
-            counter_errors = [
-                e for e in errors
-                if e.failure == OCertFailure.COUNTER_TOO_SMALL
-            ]
+            counter_errors = [e for e in errors if e.failure == OCertFailure.COUNTER_TOO_SMALL]
             assert len(counter_errors) == 0, (
                 f"on_chain={on_chain}, cert={cert_count} should be valid"
             )
@@ -467,9 +447,7 @@ class TestKESPeriodExpiration:
             kes_sig=b"",
             max_kes_evo=max_kes_evo,
         )
-        kes_after_errors = [
-            e for e in errors if e.failure == OCertFailure.KES_AFTER_END
-        ]
+        kes_after_errors = [e for e in errors if e.failure == OCertFailure.KES_AFTER_END]
         assert len(kes_after_errors) == 0
 
     def test_one_past_max_is_rejected(self) -> None:
@@ -497,9 +475,7 @@ class TestKESPeriodExpiration:
             kes_sig=b"",
             max_kes_evo=max_kes_evo,
         )
-        kes_after_errors = [
-            e for e in errors if e.failure == OCertFailure.KES_AFTER_END
-        ]
+        kes_after_errors = [e for e in errors if e.failure == OCertFailure.KES_AFTER_END]
         assert len(kes_after_errors) == 1
 
     def test_well_past_max_is_rejected(self) -> None:
@@ -523,9 +499,7 @@ class TestKESPeriodExpiration:
             kes_sig=b"",
             max_kes_evo=max_kes_evo,
         )
-        kes_after_errors = [
-            e for e in errors if e.failure == OCertFailure.KES_AFTER_END
-        ]
+        kes_after_errors = [e for e in errors if e.failure == OCertFailure.KES_AFTER_END]
         assert len(kes_after_errors) == 1
 
     def test_at_start_is_valid(self) -> None:
@@ -545,12 +519,8 @@ class TestKESPeriodExpiration:
             kes_sig=b"",
             max_kes_evo=62,
         )
-        kes_before_errors = [
-            e for e in errors if e.failure == OCertFailure.KES_BEFORE_START
-        ]
-        kes_after_errors = [
-            e for e in errors if e.failure == OCertFailure.KES_AFTER_END
-        ]
+        kes_before_errors = [e for e in errors if e.failure == OCertFailure.KES_BEFORE_START]
+        kes_after_errors = [e for e in errors if e.failure == OCertFailure.KES_AFTER_END]
         assert len(kes_before_errors) == 0
         assert len(kes_after_errors) == 0
 
@@ -614,19 +584,11 @@ class TestLeaderScheduleStatistics:
 
         rng = random.Random(999)
         n_trials = 5000
-        vrf_outputs = [
-            bytes(rng.getrandbits(8) for _ in range(64))
-            for _ in range(n_trials)
-        ]
+        vrf_outputs = [bytes(rng.getrandbits(8) for _ in range(64)) for _ in range(n_trials)]
 
-        low_stake_wins = sum(
-            1 for v in vrf_outputs if leader_check(v, 0.1, 0.05)
-        )
-        high_stake_wins = sum(
-            1 for v in vrf_outputs if leader_check(v, 0.9, 0.05)
-        )
+        low_stake_wins = sum(1 for v in vrf_outputs if leader_check(v, 0.1, 0.05))
+        high_stake_wins = sum(1 for v in vrf_outputs if leader_check(v, 0.9, 0.05))
 
         assert high_stake_wins > low_stake_wins, (
-            f"High stake ({high_stake_wins} wins) should exceed "
-            f"low stake ({low_stake_wins} wins)"
+            f"High stake ({high_stake_wins} wins) should exceed low stake ({low_stake_wins} wins)"
         )

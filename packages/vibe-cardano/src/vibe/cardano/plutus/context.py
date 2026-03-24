@@ -37,7 +37,7 @@ Haskell references:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum
 from typing import TYPE_CHECKING
 
 from uplc.ast import (
@@ -50,8 +50,7 @@ from uplc.ast import (
 )
 
 if TYPE_CHECKING:
-    from pycardano import TransactionBody, TransactionInput, TransactionOutput
-    from pycardano.hash import ScriptHash, TransactionId
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -179,10 +178,20 @@ def address_to_data(address_bytes: bytes) -> PlutusConstr:
     # Extract payment credential (first 28 bytes after header)
     if len(address_bytes) < 29:
         # Bootstrap address or other format -- encode as raw bytes
-        return PlutusConstr(0, [
-            PlutusConstr(0, [PlutusByteString(address_bytes[1:29] if len(address_bytes) >= 29 else address_bytes[1:])]),
-            PlutusConstr(1, []),  # Nothing
-        ])
+        return PlutusConstr(
+            0,
+            [
+                PlutusConstr(
+                    0,
+                    [
+                        PlutusByteString(
+                            address_bytes[1:29] if len(address_bytes) >= 29 else address_bytes[1:]
+                        )
+                    ],
+                ),
+                PlutusConstr(1, []),  # Nothing
+            ],
+        )
 
     payment_hash = address_bytes[1:29]
 
@@ -200,14 +209,18 @@ def address_to_data(address_bytes: bytes) -> PlutusConstr:
             staking_cred = PlutusConstr(0, [PlutusByteString(staking_hash)])
         else:
             staking_cred = PlutusConstr(1, [PlutusByteString(staking_hash)])
-        maybe_staking = PlutusConstr(0, [PlutusConstr(0, [staking_cred])])  # Just (StakingHash cred)
+        maybe_staking = PlutusConstr(
+            0, [PlutusConstr(0, [staking_cred])]
+        )  # Just (StakingHash cred)
     else:
         maybe_staking = PlutusConstr(1, [])  # Nothing
 
     return PlutusConstr(0, [payment_cred, maybe_staking])
 
 
-def value_to_data(coin: int, multi_asset: dict[bytes, dict[bytes, int]] | None = None) -> PlutusData:
+def value_to_data(
+    coin: int, multi_asset: dict[bytes, dict[bytes, int]] | None = None
+) -> PlutusData:
     """Encode a Value as Plutus Data.
 
     Value is a map: CurrencySymbol -> Map TokenName -> Integer.
@@ -457,18 +470,21 @@ class TxInfoBuilder:
         Haskell ref: ``TxInfo`` in ``PlutusLedgerApi.V1.Contexts``
         """
         tx_id_constr = PlutusConstr(0, [self.tx_id])
-        return PlutusConstr(0, [
-            PlutusList(self.inputs),
-            PlutusList(self.outputs),
-            self.fee,
-            self.minted,
-            PlutusList(self.dcerts),
-            self.withdrawals,
-            self.valid_range,
-            PlutusList(self.signatories),
-            self.data_map,
-            tx_id_constr,
-        ])
+        return PlutusConstr(
+            0,
+            [
+                PlutusList(self.inputs),
+                PlutusList(self.outputs),
+                self.fee,
+                self.minted,
+                PlutusList(self.dcerts),
+                self.withdrawals,
+                self.valid_range,
+                PlutusList(self.signatories),
+                self.data_map,
+                tx_id_constr,
+            ],
+        )
 
     def build_v2(self) -> PlutusConstr:
         """Build PlutusV2 TxInfo.
@@ -491,20 +507,23 @@ class TxInfoBuilder:
         Haskell ref: ``TxInfo`` in ``PlutusLedgerApi.V2.Contexts``
         """
         tx_id_constr = PlutusConstr(0, [self.tx_id])
-        return PlutusConstr(0, [
-            PlutusList(self.inputs),
-            PlutusList(self.reference_inputs),
-            PlutusList(self.outputs),
-            self.fee,
-            self.minted,
-            PlutusList(self.dcerts),
-            self.withdrawals,
-            self.valid_range,
-            PlutusList(self.signatories),
-            self.redeemers,
-            self.data_map,
-            tx_id_constr,
-        ])
+        return PlutusConstr(
+            0,
+            [
+                PlutusList(self.inputs),
+                PlutusList(self.reference_inputs),
+                PlutusList(self.outputs),
+                self.fee,
+                self.minted,
+                PlutusList(self.dcerts),
+                self.withdrawals,
+                self.valid_range,
+                PlutusList(self.signatories),
+                self.redeemers,
+                self.data_map,
+                tx_id_constr,
+            ],
+        )
 
     def build_v3(self) -> PlutusConstr:
         """Build PlutusV3 TxInfo.
@@ -544,24 +563,27 @@ class TxInfoBuilder:
             else PlutusConstr(1, [])
         )
 
-        return PlutusConstr(0, [
-            PlutusList(self.inputs),
-            PlutusList(self.reference_inputs),
-            PlutusList(self.outputs),
-            self.fee,
-            self.minted,
-            PlutusList(self.dcerts),
-            self.withdrawals,
-            self.valid_range,
-            PlutusList(self.signatories),
-            self.redeemers,
-            self.data_map,
-            tx_id_constr,
-            self.voting_procedures,
-            PlutusList(self.proposal_procedures),
-            treasury,
-            donation,
-        ])
+        return PlutusConstr(
+            0,
+            [
+                PlutusList(self.inputs),
+                PlutusList(self.reference_inputs),
+                PlutusList(self.outputs),
+                self.fee,
+                self.minted,
+                PlutusList(self.dcerts),
+                self.withdrawals,
+                self.valid_range,
+                PlutusList(self.signatories),
+                self.redeemers,
+                self.data_map,
+                tx_id_constr,
+                self.voting_procedures,
+                PlutusList(self.proposal_procedures),
+                treasury,
+                donation,
+            ],
+        )
 
 
 # ---------------------------------------------------------------------------

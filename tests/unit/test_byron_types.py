@@ -30,10 +30,8 @@ from vibe.cardano.ledger.byron import (
     ByronTxIn,
     ByronTxOut,
     ByronVKWitness,
-    _witness_from_primitive,
     witness_from_cbor,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
@@ -41,16 +39,12 @@ from vibe.cardano.ledger.byron import (
 
 # A well-known mainnet Byron address (Daedalus genesis).  The base58 string
 # decodes to valid Byron CBOR.
-BYRON_MAINNET_ADDR = (
-    "Ae2tdPwUPEZFRbyhz3cpfC2CumGzNkFBN2L42rcUc2yjQpEkxDbkPodpMAi"
-)
+BYRON_MAINNET_ADDR = "Ae2tdPwUPEZFRbyhz3cpfC2CumGzNkFBN2L42rcUc2yjQpEkxDbkPodpMAi"
 
 
 def make_dummy_txid(seed: int = 0) -> ByronTxId:
     """Create a deterministic 32-byte TxId from a seed."""
-    digest = hashlib.blake2b(
-        seed.to_bytes(4, "big"), digest_size=32
-    ).digest()
+    digest = hashlib.blake2b(seed.to_bytes(4, "big"), digest_size=32).digest()
     return ByronTxId(digest)
 
 
@@ -326,7 +320,7 @@ class TestByronTx:
         assert len(raw) == 3
         assert len(raw[0]) == 1  # one input
         assert len(raw[1]) == 1  # one output
-        assert raw[2] == {}      # empty attributes
+        assert raw[2] == {}  # empty attributes
 
         # Verify the input structure matches Byron CBOR wire format
         inp = raw[0][0]
@@ -578,10 +572,9 @@ class TestGoldenByronCBOR:
 
         # Pin exact byte length — VKWitness with 64-byte vk + 64-byte sig
         # is deterministic and should not change.
-        assert len(golden) == len(cbor2.dumps([
-            0,
-            CBORTag(24, cbor2.dumps([self._VK, self._SIG]))
-        ]))
+        assert len(golden) == len(
+            cbor2.dumps([0, CBORTag(24, cbor2.dumps([self._VK, self._SIG]))])
+        )
 
         # Roundtrip must recover identical bytes
         decoded = witness_from_cbor(golden)
@@ -600,10 +593,7 @@ class TestGoldenByronCBOR:
         golden = wit.to_cbor()
 
         # Pin exact bytes
-        expected = cbor2.dumps([
-            2,
-            CBORTag(24, cbor2.dumps([self._REDEEM_KEY, self._REDEEM_SIG]))
-        ])
+        expected = cbor2.dumps([2, CBORTag(24, cbor2.dumps([self._REDEEM_KEY, self._REDEEM_SIG]))])
         assert golden == expected
 
         # Roundtrip
@@ -679,7 +669,8 @@ class TestGoldenByronCBOR:
         tx = make_dummy_tx()
         vk_wit = ByronVKWitness(verification_key=b"\xaa" * 64, signature=b"\xbb" * 64)
         redeem_wit = ByronRedeemWitness(
-            redeem_key=b"\xcc" * 32, redeem_signature=b"\xdd" * 64,
+            redeem_key=b"\xcc" * 32,
+            redeem_signature=b"\xdd" * 64,
         )
         txaux = ByronTxAux(tx=tx, witnesses=[vk_wit, redeem_wit])
         golden = txaux.to_cbor()
@@ -729,8 +720,7 @@ class TestByronCBORSizeEstimates:
             # Minimum: ~42 bytes (tag overhead + 32-byte hash + small int)
             # Maximum: ~55 bytes (large index takes more CBOR space)
             assert 40 <= len(cbor_bytes) <= 60, (
-                f"TxIn CBOR size {len(cbor_bytes)} outside expected range "
-                f"for index={idx}"
+                f"TxIn CBOR size {len(cbor_bytes)} outside expected range for index={idx}"
             )
 
     def test_txout_cbor_size_bounded(self):
@@ -794,6 +784,5 @@ class TestByronCBORSizeEstimates:
         # Linearity check: 4x growth should be roughly 2x of 2x growth
         # Allow 50% tolerance for CBOR array length encoding differences
         assert delta_4_2 >= delta_2_1 * 1.0, (
-            f"Size growth should be roughly linear: "
-            f"delta(2-1)={delta_2_1}, delta(4-2)={delta_4_2}"
+            f"Size growth should be roughly linear: delta(2-1)={delta_2_1}, delta(4-2)={delta_4_2}"
         )

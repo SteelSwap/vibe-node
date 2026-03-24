@@ -21,23 +21,25 @@ import asyncio
 import logging
 import signal
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from vibe.cardano.consensus.slot_arithmetic import SlotConfig, slot_to_wall_clock, wall_clock_to_slot
+from vibe.cardano.consensus.slot_arithmetic import (
+    SlotConfig,
+    slot_to_wall_clock,
+    wall_clock_to_slot,
+)
 from vibe.core.rwlock import RWLock
 
-from .config import NodeConfig, PeerAddress
+from .config import NodeConfig
 from .forge_loop import forge_loop
 from .inbound_server import (
-    N2N_PROTOCOL_IDS,
-    N2C_PROTOCOL_IDS,
-    setup_n2n_mux as _setup_n2n_mux,
-    setup_n2c_mux as _setup_n2c_mux,
-    run_n2n_server as _run_n2n_server,
     run_n2c_server as _run_n2c_server,
 )
-from .peer_manager import PeerManager, _PeerConnection
+from .inbound_server import (
+    run_n2n_server as _run_n2n_server,
+)
+from .peer_manager import PeerManager
 
 __all__ = ["PeerManager", "SlotClock", "run_node"]
 
@@ -67,12 +69,12 @@ class SlotClock:
         return self._config
 
     def current_slot(self) -> int:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return wall_clock_to_slot(now, self._config)
 
     async def wait_for_slot(self, target_slot: int) -> int:
         target_time = slot_to_wall_clock(target_slot, self._config)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         delay = (target_time - now).total_seconds()
         if delay > 0 and not self._stopped:
             await asyncio.sleep(delay)
@@ -109,7 +111,9 @@ async def _snapshot_loop(
             return
         if shutdown_event.is_set():
             return
-        current = slot_clock.current_slot() if callable(getattr(slot_clock, "current_slot", None)) else 0
+        current = (
+            slot_clock.current_slot() if callable(getattr(slot_clock, "current_slot", None)) else 0
+        )
         if current - last_slot >= interval_slots:
             try:
                 await ledger_db.snapshot()
@@ -223,8 +227,12 @@ def _run_serve_thread(
         tasks.append(
             asyncio.create_task(
                 _run_n2n_server(
-                    config.host, config.port, config.network_magic,
-                    node_kernel, mempool, async_shutdown,
+                    config.host,
+                    config.port,
+                    config.network_magic,
+                    node_kernel,
+                    mempool,
+                    async_shutdown,
                     chain_db=chain_db,
                 ),
                 name="n2n-server",
@@ -255,7 +263,7 @@ def _run_serve_thread(
                 task.cancel()
                 try:
                     await task
-                except (asyncio.CancelledError, Exception):
+                except asyncio.CancelledError, Exception:
                     pass
 
     try:
@@ -285,8 +293,11 @@ async def _async_init(config: NodeConfig) -> dict:
 
     logger.info(
         "Starting vibe-node (magic=%d, %s:%d, producer=%s, %d peers)",
-        config.network_magic, config.host, config.port,
-        config.is_block_producer, len(config.peers),
+        config.network_magic,
+        config.host,
+        config.port,
+        config.is_block_producer,
+        len(config.peers),
     )
 
     # --- Storage (async init for Mithril/snapshots) ---
@@ -321,6 +332,7 @@ async def _async_init(config: NodeConfig) -> dict:
             logger.info("Importing Mithril snapshot from %s", config.mithril_snapshot_path)
             try:
                 from vibe.cardano.sync import import_mithril_snapshot
+
                 await import_mithril_snapshot(
                     snapshot_dir=config.mithril_snapshot_path,
                     immutable_db=immutable_db,
@@ -336,6 +348,7 @@ async def _async_init(config: NodeConfig) -> dict:
         if snapshots:
             try:
                 from vibe.cardano.storage.ledger import SnapshotHandle
+
                 handle = SnapshotHandle(
                     snapshot_id="restore",
                     metadata={"path": str(snapshots[0])},
@@ -363,11 +376,13 @@ async def _async_init(config: NodeConfig) -> dict:
 
     # --- NodeKernel ---
     node_kernel = NodeKernel(chain_db=chain_db, lock=kernel_lock)
-    nonce_seed = config.genesis_hash or hashlib.blake2b(
-        config.network_magic.to_bytes(4, "big"), digest_size=32
-    ).digest()
+    nonce_seed = (
+        config.genesis_hash
+        or hashlib.blake2b(config.network_magic.to_bytes(4, "big"), digest_size=32).digest()
+    )
     node_kernel.init_nonce(
-        nonce_seed, config.epoch_length,
+        nonce_seed,
+        config.epoch_length,
         security_param=config.security_param,
         active_slot_coeff=config.active_slot_coeff,
     )
@@ -403,18 +418,19 @@ def _preimport_modules() -> None:
     try to import the same module simultaneously at startup.
     Pre-importing resolves all lazy imports on the main thread.
     """
-    import vibe.cardano.network.chainsync_protocol  # noqa: F401
-    import vibe.cardano.network.blockfetch_protocol  # noqa: F401
-    import vibe.cardano.network.handshake_protocol  # noqa: F401
-    import vibe.cardano.network.keepalive_protocol  # noqa: F401
-    import vibe.cardano.network.chainsync  # noqa: F401
-    import vibe.cardano.network.blockfetch  # noqa: F401
-    import vibe.cardano.serialization.block  # noqa: F401
-    import vibe.cardano.forge.block  # noqa: F401
-    import vibe.cardano.forge.leader  # noqa: F401
     import vibe.cardano.crypto.kes  # noqa: F401
     import vibe.cardano.crypto.vrf  # noqa: F401
+    import vibe.cardano.forge.block  # noqa: F401
+    import vibe.cardano.forge.leader  # noqa: F401
+    import vibe.cardano.network.blockfetch  # noqa: F401
+    import vibe.cardano.network.blockfetch_protocol  # noqa: F401
+    import vibe.cardano.network.chainsync  # noqa: F401
+    import vibe.cardano.network.chainsync_protocol  # noqa: F401
+    import vibe.cardano.network.handshake_protocol  # noqa: F401
+    import vibe.cardano.network.keepalive_protocol  # noqa: F401
+    import vibe.cardano.serialization.block  # noqa: F401
     import vibe.core.multiplexer  # noqa: F401
+
     try:
         import vibe.core.protocols.runner  # noqa: F401
     except ImportError:
@@ -453,8 +469,7 @@ def run_node(config: NodeConfig) -> None:
 
     receive_thread = threading.Thread(
         target=_run_receive_thread,
-        args=(config, chain_db, node_kernel, block_received, shutdown,
-              slot_clock, ledger_db),
+        args=(config, chain_db, node_kernel, block_received, shutdown, slot_clock, ledger_db),
         daemon=True,
         name="vibe-receive",
     )

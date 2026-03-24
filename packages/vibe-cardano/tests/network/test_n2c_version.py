@@ -25,18 +25,15 @@ import pytest
 
 from vibe.cardano.network.handshake import (
     MAINNET_NETWORK_MAGIC,
-    PREPROD_NETWORK_MAGIC,
-    PREVIEW_NETWORK_MAGIC,
     N2N_V14,
     N2N_V15,
+    PREPROD_NETWORK_MAGIC,
+    PREVIEW_NETWORK_MAGIC,
     NodeToNodeVersionData,
     PeerSharing,
-    _encode_version_data,
     _decode_version_data,
-    encode_propose_versions,
-    decode_handshake_response,
+    _encode_version_data,
 )
-
 
 # ---------------------------------------------------------------------------
 # N2C version data encoding (what N2C uses)
@@ -67,9 +64,7 @@ def _decode_n2c_version_data(term: list) -> tuple[int, bool]:
     Raises ValueError if the format doesn't match N2C expectations.
     """
     if not isinstance(term, list) or len(term) != 2:
-        raise ValueError(
-            f"N2C version data must be a 2-element list, got: {term!r}"
-        )
+        raise ValueError(f"N2C version data must be a 2-element list, got: {term!r}")
 
     network_magic = term[0]
     if not isinstance(network_magic, int) or network_magic < 0:
@@ -199,8 +194,7 @@ class TestN2CNotN2NVersion:
         n2n_versions = {N2N_V14, N2N_V15}
         n2c_versions = {N2C_V16, N2C_V17, N2C_V18, N2C_V19}
         assert n2n_versions.isdisjoint(n2c_versions), (
-            f"N2N and N2C version numbers overlap: "
-            f"{n2n_versions & n2c_versions}"
+            f"N2N and N2C version numbers overlap: {n2n_versions & n2c_versions}"
         )
 
     def test_cbor_roundtrip_preserves_isolation(self) -> None:
@@ -322,14 +316,8 @@ class TestN2CVersionNegotiation:
 
     def test_full_n2c_version_range(self) -> None:
         """Negotiate across the full range of known N2C versions."""
-        client = {
-            v: (MAINNET_NETWORK_MAGIC, False)
-            for v in [N2C_V16, N2C_V17, N2C_V18, N2C_V19]
-        }
-        server = {
-            v: (MAINNET_NETWORK_MAGIC, False)
-            for v in [N2C_V16, N2C_V17, N2C_V18, N2C_V19]
-        }
+        client = {v: (MAINNET_NETWORK_MAGIC, False) for v in [N2C_V16, N2C_V17, N2C_V18, N2C_V19]}
+        server = {v: (MAINNET_NETWORK_MAGIC, False) for v in [N2C_V16, N2C_V17, N2C_V18, N2C_V19]}
         result = self._negotiate_n2c(client, server)
         assert result is not None
         ver, _, _ = result

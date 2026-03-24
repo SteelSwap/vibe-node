@@ -15,28 +15,18 @@ Spec references:
 
 from __future__ import annotations
 
-import json
-import os
 import struct
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
 
-import pyarrow as pa
 import pytest
 
-from vibe.cardano.storage import BlockDiff, LedgerDB
+from vibe.cardano.storage import LedgerDB
 from vibe.cardano.storage.recovery import (
-    _DIFF_HEADER_FMT,
-    _DIFF_HEADER_SIZE,
-    _DIFF_MAGIC,
-    _read_diff_log,
     recover,
-    write_diff_log_entry,
     write_snapshot,
 )
-from vibe.cardano.storage.volatile import BlockInfo, ClosedVolatileDBError, VolatileDB
-
+from vibe.cardano.storage.volatile import BlockInfo, VolatileDB
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -100,9 +90,7 @@ class TestDiskErrorDuringPutBlock:
     Test spec: test_crash_during_put_block_loses_block_but_db_remains_consistent
     """
 
-    async def test_disk_write_failure_leaves_consistent_state(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_disk_write_failure_leaves_consistent_state(self, tmp_path: Path) -> None:
         """If _write_file raises, the block should still be in-memory
         (since VolatileDB updates memory first, then persists).
         But on recovery, only persisted blocks survive.
@@ -250,9 +238,7 @@ class TestDuplicateBlockDifferentOrigin:
         succs = await db.get_successors(pred)
         assert succs == [h]
 
-    async def test_duplicate_block_on_disk_is_idempotent(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_duplicate_block_on_disk_is_idempotent(self, tmp_path: Path) -> None:
         """Re-adding a block to a persistent DB overwrites the file."""
         db = VolatileDB(db_dir=tmp_path)
         h = _hash(1)
@@ -512,11 +498,6 @@ class TestImmutableDBIndexMismatch:
         """Simulate a consistency check: primary index offsets should
         match what secondary index entries claim.
         """
-        from vibe.cardano.storage.immutable import (
-            _PRI_ENTRY_FMT,
-            _SEC_ENTRY_FMT,
-        )
-
         # Build a fake chunk with 3 blocks
         blocks = [b"block-0" * 10, b"block-1" * 20, b"block-2" * 5]
 
@@ -568,10 +549,10 @@ class TestImmutableDBIndexMismatch:
         entry = struct.pack(
             _SEC_ENTRY_FMT,
             b"\x00" * 32,  # hash
-            0,              # chunk
-            0,              # offset
-            100,            # size
-            0,              # slot
+            0,  # chunk
+            0,  # offset
+            100,  # size
+            0,  # slot
         )
 
         with open(sec_index_path, "wb") as f:

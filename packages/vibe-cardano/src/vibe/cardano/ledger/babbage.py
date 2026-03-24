@@ -29,7 +29,6 @@ Haskell references:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from pycardano import (
@@ -38,12 +37,10 @@ from pycardano import (
     TransactionOutput,
     Value,
 )
-from pycardano.hash import ScriptHash
 from pycardano.witness import TransactionWitnessSet
 
 from vibe.cardano.ledger.allegra_mary import (
     ValidityInterval,
-    _multi_asset_is_empty,
     _output_value,
     _sum_values,
     _value_eq,
@@ -53,23 +50,17 @@ from vibe.cardano.ledger.alonzo import (
     _collateral_contains_non_ada,
     _ex_units_too_big,
     _insufficient_collateral,
-    _missing_required_datums,
-    _script_integrity_hash_mismatch,
     _too_many_collateral_inputs,
-    _total_ex_units,
     calculate_script_fee,
     validate_alonzo_witnesses,
 )
 from vibe.cardano.ledger.alonzo_types import (
-    ExUnits,
-    ExUnitPrices,
     Language,
     Redeemer,
 )
 from vibe.cardano.ledger.babbage_types import (
     BabbageOutputExtension,
     BabbageProtocolParams,
-    DatumOption,
     DatumOptionTag,
     ReferenceScript,
 )
@@ -77,7 +68,6 @@ from vibe.cardano.ledger.shelley import (
     ShelleyUTxO,
     _output_lovelace,
     shelley_min_fee,
-    validate_shelley_witnesses,
 )
 
 if TYPE_CHECKING:
@@ -152,14 +142,14 @@ def estimate_output_size(txout: TransactionOutput) -> int:
                     size += len(bytes(an)) + 9  # asset name + quantity
 
     # Datum hash if present (Alonzo-style)
-    if hasattr(txout, 'datum_hash') and txout.datum_hash is not None:
+    if hasattr(txout, "datum_hash") and txout.datum_hash is not None:
         size += 34  # 32-byte hash + CBOR overhead
 
     # Inline datum or script_ref from pycardano (if available)
-    if hasattr(txout, 'datum') and txout.datum is not None:
+    if hasattr(txout, "datum") and txout.datum is not None:
         # Inline datum — approximate CBOR size
         size += 40  # rough estimate for datum
-    if hasattr(txout, 'script') and txout.script is not None:
+    if hasattr(txout, "script") and txout.script is not None:
         size += 100  # rough estimate for reference script
 
     return size
@@ -341,8 +331,7 @@ def _validate_inline_datums(
             if ext.datum_option.tag == DatumOptionTag.INLINE:
                 if not ext.datum_option.data:
                     errors.append(
-                        f"InlineDatumEmpty: output[{idx}] has inline datum "
-                        f"tag but empty data"
+                        f"InlineDatumEmpty: output[{idx}] has inline datum tag but empty data"
                     )
             elif ext.datum_option.tag == DatumOptionTag.HASH:
                 if len(ext.datum_option.data) != 32:
@@ -390,8 +379,8 @@ def _validate_reference_script_size(
     for txin in reference_inputs:
         if txin in utxo_set:
             txout = utxo_set[txin]
-            if hasattr(txout, 'script') and txout.script is not None:
-                script_bytes = getattr(txout.script, 'to_cbor', None)
+            if hasattr(txout, "script") and txout.script is not None:
+                script_bytes = getattr(txout.script, "to_cbor", None)
                 if callable(script_bytes):
                     total_size += len(script_bytes())
                 else:
@@ -406,8 +395,7 @@ def _validate_reference_script_size(
 
     if total_size > max_ref_script_size:
         errors.append(
-            f"TotalReferenceScriptSizeTooBig: total_size={total_size}, "
-            f"max={max_ref_script_size}"
+            f"TotalReferenceScriptSizeTooBig: total_size={total_size}, max={max_ref_script_size}"
         )
 
     return errors
@@ -469,7 +457,7 @@ def validate_babbage_utxo(
     if reference_inputs is None:
         reference_inputs = (
             list(tx_body.reference_inputs)
-            if hasattr(tx_body, 'reference_inputs') and tx_body.reference_inputs
+            if hasattr(tx_body, "reference_inputs") and tx_body.reference_inputs
             else []
         )
 
@@ -508,17 +496,12 @@ def validate_babbage_utxo(
 
     # --- Tx size within limits ---
     if tx_size > params.max_tx_size:
-        errors.append(
-            f"MaxTxSizeUTxO: tx_size={tx_size}, max={params.max_tx_size}"
-        )
+        errors.append(f"MaxTxSizeUTxO: tx_size={tx_size}, max={params.max_tx_size}")
 
     # --- Fee >= minimum fee ---
     min_fee = shelley_min_fee(tx_size, params)
     if tx_body.fee < min_fee:
-        errors.append(
-            f"FeeTooSmallUTxO: fee={tx_body.fee}, min_fee={min_fee} "
-            f"(tx_size={tx_size})"
-        )
+        errors.append(f"FeeTooSmallUTxO: fee={tx_body.fee}, min_fee={min_fee} (tx_size={tx_size})")
 
     # --- Min UTxO value (Babbage: coinsPerUTxOByte) ---
     for i, txout in enumerate(tx_body.outputs):
@@ -556,18 +539,14 @@ def validate_babbage_utxo(
         produced = produced + Value(coin=tx_body.fee)
 
         if not _value_eq(consumed, produced):
-            errors.append(
-                f"ValueNotConservedUTxO: consumed={consumed}, produced={produced}"
-            )
+            errors.append(f"ValueNotConservedUTxO: consumed={consumed}, produced={produced}")
 
     # ===== Alonzo-inherited Plutus rules =====
 
     # --- Collateral rules (only apply when Plutus scripts are present) ---
     if has_plutus_scripts:
         errors.extend(_collateral_contains_non_ada(collateral_inputs, utxo_set))
-        errors.extend(
-            _too_many_collateral_inputs(collateral_inputs, params.max_collateral_inputs)
-        )
+        errors.extend(_too_many_collateral_inputs(collateral_inputs, params.max_collateral_inputs))
 
         script_fees = calculate_script_fee(redeemers, params.execution_unit_prices)
         errors.extend(
@@ -602,7 +581,7 @@ def validate_babbage_utxo(
                 reference_inputs,
                 utxo_set,
                 output_extensions,
-                getattr(params, 'max_ref_script_size_per_tx', 204800),
+                getattr(params, "max_ref_script_size_per_tx", 204800),
             )
         )
 

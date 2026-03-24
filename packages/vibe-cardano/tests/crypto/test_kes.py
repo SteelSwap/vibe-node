@@ -14,8 +14,6 @@ Spec references:
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -31,7 +29,6 @@ from vibe.cardano.crypto.kes import (
     kes_update,
     kes_verify,
 )
-
 
 # ---------------------------------------------------------------------------
 # Signature size tests
@@ -272,9 +269,7 @@ class TestKesUpdate:
 
         for period in range(4):
             sig = kes_sign(sk, period, msg)
-            assert kes_verify(vk, 2, period, sig, msg), (
-                f"Failed at period {period}"
-            )
+            assert kes_verify(vk, 2, period, sig, msg), f"Failed at period {period}"
             if period < 3:
                 sk = kes_update(sk, period)
                 assert sk is not None

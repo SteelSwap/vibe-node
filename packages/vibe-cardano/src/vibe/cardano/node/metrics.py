@@ -23,7 +23,6 @@ import asyncio
 import json
 import math
 import os
-import time
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from typing import ClassVar
@@ -105,7 +104,17 @@ class Gauge:
 
 # Default histogram buckets mirroring Prometheus client_golang defaults
 _DEFAULT_BUCKETS = (
-    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.5,
+    5.0,
+    10.0,
     float("inf"),
 )
 
@@ -207,9 +216,11 @@ def _try_read_rss() -> int | None:
     """Best-effort RSS read via /proc/self/status or resource module."""
     try:
         import resource  # Unix only
+
         # ru_maxrss is in KB on Linux, bytes on macOS
         ru = resource.getrusage(resource.RUSAGE_SELF)
         import sys
+
         if sys.platform == "darwin":
             return ru.ru_maxrss  # already bytes on macOS
         return ru.ru_maxrss * 1024  # KB -> bytes on Linux
@@ -265,7 +276,9 @@ class MetricsServer:
                     break
 
             if method != "GET":
-                self._send_response(writer, HTTPStatus.METHOD_NOT_ALLOWED, "text/plain", "Method Not Allowed\n")
+                self._send_response(
+                    writer, HTTPStatus.METHOD_NOT_ALLOWED, "text/plain", "Method Not Allowed\n"
+                )
             elif path == "/metrics":
                 self._handle_metrics(writer)
             elif path == "/health":

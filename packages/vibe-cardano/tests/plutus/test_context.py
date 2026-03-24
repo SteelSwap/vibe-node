@@ -12,20 +12,15 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
-
 from uplc.ast import (
     PlutusByteString,
     PlutusConstr,
-    PlutusData,
     PlutusInteger,
     PlutusList,
     PlutusMap,
 )
 
 from vibe.cardano.plutus.context import (
-    ScriptPurpose,
-    ScriptPurposeTag,
     TxInfoBuilder,
     address_to_data,
     build_script_context_v1,
@@ -39,7 +34,6 @@ from vibe.cardano.plutus.context import (
     tx_out_ref_to_data,
     value_to_data,
 )
-
 
 # ---------------------------------------------------------------------------
 # ScriptPurpose

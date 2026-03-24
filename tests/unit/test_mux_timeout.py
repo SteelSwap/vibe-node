@@ -26,10 +26,8 @@ import time
 
 import pytest
 
-from vibe.core.multiplexer.bearer import Bearer
-from vibe.core.multiplexer.mux import MiniProtocolChannel, Multiplexer, MuxClosedError
-from vibe.core.multiplexer.segment import MuxSegment, encode_segment
-
+from vibe.core.multiplexer.mux import MiniProtocolChannel, Multiplexer
+from vibe.core.multiplexer.segment import MuxSegment
 
 # ---------------------------------------------------------------------------
 # Helpers — mock bearers that simulate hung/slow connections
@@ -372,14 +370,10 @@ class TestTimeoutWithTaskGroup:
 
         with pytest.raises(ExceptionGroup) as exc_info:
             async with asyncio.TaskGroup() as tg:
-                tg.create_task(
-                    asyncio.wait_for(bearer.read_segment(), timeout=0.03)
-                )
+                tg.create_task(asyncio.wait_for(bearer.read_segment(), timeout=0.03))
 
         # The ExceptionGroup should contain a TimeoutError
-        assert any(
-            isinstance(e, TimeoutError) for e in exc_info.value.exceptions
-        )
+        assert any(isinstance(e, TimeoutError) for e in exc_info.value.exceptions)
 
     async def test_taskgroup_timeout_cancels_siblings(self) -> None:
         """When one task times out in a TaskGroup, siblings are cancelled."""
@@ -396,9 +390,7 @@ class TestTimeoutWithTaskGroup:
 
         with pytest.raises(ExceptionGroup):
             async with asyncio.TaskGroup() as tg:
-                tg.create_task(
-                    asyncio.wait_for(hung.read_segment(), timeout=0.03)
-                )
+                tg.create_task(asyncio.wait_for(hung.read_segment(), timeout=0.03))
                 tg.create_task(sibling_task())
 
         assert sibling_cancelled, "Sibling task should have been cancelled"

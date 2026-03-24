@@ -12,7 +12,6 @@ from pathlib import Path
 
 import websockets
 
-
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -32,6 +31,7 @@ ERA_FIXTURE_FILES: dict[str, str] = {
 # ---------------------------------------------------------------------------
 # Ogmios JSON-RPC helpers
 # ---------------------------------------------------------------------------
+
 
 async def ogmios_rpc(
     ws: websockets.ClientConnection,
@@ -97,6 +97,7 @@ async def fetch_blocks_from_origin(
 # Fixture-file loaders
 # ---------------------------------------------------------------------------
 
+
 def load_fixture(era: str) -> dict:
     """Load a pre-cached block fixture from the fixtures directory.
 
@@ -124,6 +125,7 @@ def load_fixture(era: str) -> dict:
 # ---------------------------------------------------------------------------
 # Metadata extraction
 # ---------------------------------------------------------------------------
+
 
 def extract_block_metadata(block: dict) -> dict:
     """Extract key metadata fields from an Ogmios block JSON for comparison.

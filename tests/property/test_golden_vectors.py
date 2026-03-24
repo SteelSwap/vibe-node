@@ -30,9 +30,6 @@ from __future__ import annotations
 import cbor2
 from cbor2 import CBORTag
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -41,7 +38,7 @@ import pytest
 ZERO_HASH = b"\x00" * 32
 ONE_HASH = b"\x01" * 32
 FF_HASH = b"\xff" * 32
-DEAD_HASH = (b"\xde\xad" * 16)  # 32 bytes of 0xdead repeated
+DEAD_HASH = b"\xde\xad" * 16  # 32 bytes of 0xdead repeated
 
 # Fixed 64-byte signature
 ZERO_SIG = b"\x00" * 64
@@ -73,6 +70,7 @@ def _hex(obj: object, *, canonical: bool = False) -> str:
 # We test a minimal Byron-style header structure.
 # ---------------------------------------------------------------------------
 
+
 class TestByronBlockHeader:
     """Golden vectors for Byron-era block header encoding."""
 
@@ -93,9 +91,7 @@ class TestByronBlockHeader:
         # 5820 + 00*32 = 32-byte bstr of zeros
         expected = "821a2d964a095820" + "00" * 32
         assert result.hex() == expected, (
-            f"Byron header encoding mismatch:\n"
-            f"  got:      {result.hex()}\n"
-            f"  expected: {expected}"
+            f"Byron header encoding mismatch:\n  got:      {result.hex()}\n  expected: {expected}"
         )
 
     def test_byron_ebb_tag(self):
@@ -132,6 +128,7 @@ class TestByronBlockHeader:
 # Inputs use tag 258 (set) in the Haskell node for canonical ordering.
 # ---------------------------------------------------------------------------
 
+
 class TestShelleyTxBody:
     """Golden vectors for Shelley-era transaction body encoding."""
 
@@ -149,10 +146,10 @@ class TestShelleyTxBody:
         output = [address, 2000000]  # 2 ADA
 
         tx_body = {
-            0: inputs,      # inputs (set)
-            1: [output],    # outputs
-            2: 170000,      # fee
-            3: 50000000,    # ttl (slot)
+            0: inputs,  # inputs (set)
+            1: [output],  # outputs
+            2: 170000,  # fee
+            3: 50000000,  # ttl (slot)
         }
 
         result = cbor2.dumps(tx_body)
@@ -224,29 +221,30 @@ class TestShelleyTxBody:
 #   $vrf_cert = [bytes, bytes .size 80]
 # ---------------------------------------------------------------------------
 
+
 class TestShelleyBlockHeaderBody:
     """Golden vectors for Shelley block header body encoding."""
 
     def test_header_body_structure(self):
         """Shelley header_body is a 15-element array (with inline ocert fields)."""
         header_body = [
-            1000,               # block_number
-            50000,              # slot
-            ZERO_HASH,          # prev_hash
-            ZERO_HASH,          # issuer_vkey (32 bytes)
-            ZERO_VRF_VK,        # vrf_vkey (32 bytes)
-            ZERO_VRF_CERT,      # nonce_vrf: [bytes, bytes]
-            ZERO_VRF_CERT,      # leader_vrf: [bytes, bytes]
-            1024,               # block_body_size
-            ZERO_HASH,          # block_body_hash
+            1000,  # block_number
+            50000,  # slot
+            ZERO_HASH,  # prev_hash
+            ZERO_HASH,  # issuer_vkey (32 bytes)
+            ZERO_VRF_VK,  # vrf_vkey (32 bytes)
+            ZERO_VRF_CERT,  # nonce_vrf: [bytes, bytes]
+            ZERO_VRF_CERT,  # leader_vrf: [bytes, bytes]
+            1024,  # block_body_size
+            ZERO_HASH,  # block_body_hash
             # operational_cert inline (4 fields):
-            ZERO_HASH,          # hot_vkey (kes_vkey)
-            0,                  # sequence_number (counter)
-            0,                  # kes_period
-            ZERO_SIG,           # sigma (cold_sig)
+            ZERO_HASH,  # hot_vkey (kes_vkey)
+            0,  # sequence_number (counter)
+            0,  # kes_period
+            ZERO_SIG,  # sigma (cold_sig)
             # protocol_version inline (2 fields):
-            7,                  # major
-            0,                  # minor
+            7,  # major
+            0,  # minor
         ]
 
         result = cbor2.dumps(header_body)
@@ -263,21 +261,21 @@ class TestShelleyBlockHeaderBody:
     def test_header_body_with_null_prev_hash(self):
         """Genesis block has null prev_hash (first Shelley block)."""
         header_body = [
-            0,                  # block_number
-            0,                  # slot
-            None,               # prev_hash = null (genesis)
-            ZERO_HASH,          # issuer_vkey
-            ZERO_VRF_VK,        # vrf_vkey
-            ZERO_VRF_CERT,      # nonce_vrf
-            ZERO_VRF_CERT,      # leader_vrf
-            0,                  # block_body_size
-            ZERO_HASH,          # block_body_hash
-            ZERO_HASH,          # hot_vkey
-            0,                  # sequence_number
-            0,                  # kes_period
-            ZERO_SIG,           # sigma
-            0,                  # protocol_version major
-            0,                  # minor
+            0,  # block_number
+            0,  # slot
+            None,  # prev_hash = null (genesis)
+            ZERO_HASH,  # issuer_vkey
+            ZERO_VRF_VK,  # vrf_vkey
+            ZERO_VRF_CERT,  # nonce_vrf
+            ZERO_VRF_CERT,  # leader_vrf
+            0,  # block_body_size
+            ZERO_HASH,  # block_body_hash
+            ZERO_HASH,  # hot_vkey
+            0,  # sequence_number
+            0,  # kes_period
+            ZERO_SIG,  # sigma
+            0,  # protocol_version major
+            0,  # minor
         ]
 
         result = cbor2.dumps(header_body)
@@ -313,6 +311,7 @@ class TestShelleyBlockHeaderBody:
 # Key 3 remains as invalid_hereafter (optional uint, was mandatory ttl in Shelley)
 # ---------------------------------------------------------------------------
 
+
 class TestAllegraValidityInterval:
     """Golden vectors for Allegra validity interval encoding."""
 
@@ -320,10 +319,10 @@ class TestAllegraValidityInterval:
         """TxBody with both invalid_before (key 8) and invalid_hereafter (key 3)."""
         tx_body = {
             0: CBORTag(258, [[ZERO_HASH, 0]]),  # inputs
-            1: [[b"\x00" * 29, 1000000]],        # outputs
-            2: 170000,                            # fee
-            3: 60000000,                          # invalid_hereafter (was ttl)
-            8: 50000000,                          # invalid_before (Allegra addition)
+            1: [[b"\x00" * 29, 1000000]],  # outputs
+            2: 170000,  # fee
+            3: 60000000,  # invalid_hereafter (was ttl)
+            8: 50000000,  # invalid_before (Allegra addition)
         }
 
         result = cbor2.dumps(tx_body)
@@ -378,6 +377,7 @@ class TestAllegraValidityInterval:
 #   [coin, {policy_id: {asset_name: quantity}}]
 # ---------------------------------------------------------------------------
 
+
 class TestMaryMultiAssetValue:
     """Golden vectors for Mary-era multi-asset Value encoding."""
 
@@ -391,7 +391,7 @@ class TestMaryMultiAssetValue:
     def test_multiasset_value(self):
         """Multi-asset value is [coin, {policy: {asset: qty}}]."""
         policy_id = b"\xaa" * 28  # 28-byte policy hash
-        asset_name = b"TOKEN"     # 5-byte asset name
+        asset_name = b"TOKEN"  # 5-byte asset name
         quantity = 1000
 
         value = [
@@ -400,7 +400,7 @@ class TestMaryMultiAssetValue:
                 policy_id: {
                     asset_name: quantity,
                 }
-            }
+            },
         ]
 
         result = cbor2.dumps(value)
@@ -417,10 +417,7 @@ class TestMaryMultiAssetValue:
         empty_name = b""
         quantity = 42
 
-        value = [
-            1000000,
-            {policy_id: {empty_name: quantity}}
-        ]
+        value = [1000000, {policy_id: {empty_name: quantity}}]
 
         result = cbor2.dumps(value)
 
@@ -440,7 +437,7 @@ class TestMaryMultiAssetValue:
                     token_a: 100,
                     token_b: 200,
                 }
-            }
+            },
         ]
 
         result = cbor2.dumps(value)
@@ -464,6 +461,7 @@ class TestMaryMultiAssetValue:
 # Here we test the encoding of the hash field itself in a tx body.
 # ---------------------------------------------------------------------------
 
+
 class TestAlonzoScriptIntegrityHash:
     """Golden vectors for Alonzo script integrity hash in TxBody."""
 
@@ -474,9 +472,9 @@ class TestAlonzoScriptIntegrityHash:
         # Minimal Alonzo tx body with script_data_hash
         tx_body = {
             0: CBORTag(258, [[ZERO_HASH, 0]]),  # inputs
-            1: [[b"\x00" * 29, 2000000]],        # outputs
-            2: 200000,                            # fee
-            11: script_data_hash,                 # script_data_hash
+            1: [[b"\x00" * 29, 2000000]],  # outputs
+            2: 200000,  # fee
+            11: script_data_hash,  # script_data_hash
         }
 
         result = cbor2.dumps(tx_body)
@@ -487,7 +485,7 @@ class TestAlonzoScriptIntegrityHash:
         # Key 11 = 0x0b, then 5820 + dead*16
         expected_fragment = "0b5820" + "dead" * 16
         assert expected_fragment in result.hex(), (
-            f"Expected key(11) + bstr(32) fragment in encoding"
+            "Expected key(11) + bstr(32) fragment in encoding"
         )
 
     def test_hash32_encoding(self):
@@ -510,6 +508,7 @@ class TestAlonzoScriptIntegrityHash:
 # Here we test the Alonzo (list) format.
 # ---------------------------------------------------------------------------
 
+
 class TestAlonzoRedeemer:
     """Golden vectors for Alonzo-era Redeemer encoding."""
 
@@ -520,9 +519,9 @@ class TestAlonzoRedeemer:
         # data = simple integer (Plutus data: constr or int)
         # ExUnits = [mem, steps]
         redeemer = [
-            0,                 # Spend tag
-            0,                 # index
-            42,                # plutus data (integer)
+            0,  # Spend tag
+            0,  # index
+            42,  # plutus data (integer)
             [500000, 200000],  # ex_units: [mem, steps]
         ]
 
@@ -536,10 +535,10 @@ class TestAlonzoRedeemer:
     def test_mint_redeemer(self):
         """Mint redeemer (tag=1)."""
         redeemer = [
-            1,                    # Mint tag
-            0,                    # index
-            CBORTag(121, []),     # Plutus constr 0 (empty fields)
-            [1000000, 500000],    # ex_units
+            1,  # Mint tag
+            0,  # index
+            CBORTag(121, []),  # Plutus constr 0 (empty fields)
+            [1000000, 500000],  # ex_units
         ]
 
         result = cbor2.dumps(redeemer)
@@ -574,6 +573,7 @@ class TestAlonzoRedeemer:
 # cost model parameter list preserves the exact ordering from the protocol
 # parameters.
 # ---------------------------------------------------------------------------
+
 
 class TestAlonzoCostModelEncoding:
     """Golden vectors for Alonzo CostModel canonical CBOR encoding."""
@@ -610,8 +610,8 @@ class TestAlonzoCostModelEncoding:
     def test_canonical_multi_language(self):
         """Cost models for multiple Plutus versions, canonically ordered."""
         cost_models = {
-            1: [10, 20],   # PlutusV2
-            0: [30, 40],   # PlutusV1
+            1: [10, 20],  # PlutusV2
+            0: [30, 40],  # PlutusV1
         }
 
         result = cbor2.dumps(cost_models, canonical=True)
@@ -653,6 +653,7 @@ class TestAlonzoCostModelEncoding:
 #     (embedded CBOR / CBOR-in-CBOR)
 # ---------------------------------------------------------------------------
 
+
 class TestBabbageTxOutInlineDatum:
     """Golden vectors for Babbage TxOut with inline datum."""
 
@@ -660,9 +661,9 @@ class TestBabbageTxOutInlineDatum:
         """Babbage TxOut with datum hash reference: datum_option = [0, hash32]."""
         datum_hash = ZERO_HASH
         txout = {
-            0: b"\x00" * 29,        # address
-            1: 2000000,              # value (ADA only)
-            2: [0, datum_hash],      # datum_option: [0, hash] = datum hash ref
+            0: b"\x00" * 29,  # address
+            1: 2000000,  # value (ADA only)
+            2: [0, datum_hash],  # datum_option: [0, hash] = datum hash ref
         }
 
         result = cbor2.dumps(txout)
@@ -679,9 +680,9 @@ class TestBabbageTxOutInlineDatum:
         inline_datum = CBORTag(24, plutus_data_cbor)
 
         txout = {
-            0: b"\x00" * 29,        # address
-            1: 2000000,              # value
-            2: [1, inline_datum],    # datum_option: [1, tag24(datum_cbor)]
+            0: b"\x00" * 29,  # address
+            1: 2000000,  # value
+            2: [1, inline_datum],  # datum_option: [1, tag24(datum_cbor)]
         }
 
         result = cbor2.dumps(txout)
@@ -717,6 +718,7 @@ class TestBabbageTxOutInlineDatum:
 # Reference scripts are stored inline in TxOuts, wrapped in tag 24.
 # ---------------------------------------------------------------------------
 
+
 class TestBabbageTxOutReferenceScript:
     """Golden vectors for Babbage TxOut with reference script."""
 
@@ -732,9 +734,9 @@ class TestBabbageTxOutReferenceScript:
         script_ref = CBORTag(24, script_cbor)
 
         txout = {
-            0: b"\x00" * 29,    # address
-            1: 5000000,          # value
-            3: script_ref,       # reference script
+            0: b"\x00" * 29,  # address
+            1: 5000000,  # value
+            3: script_ref,  # reference script
         }
 
         result = cbor2.dumps(txout)
@@ -782,6 +784,7 @@ class TestBabbageTxOutReferenceScript:
 #   no_confidence = [3, gov_action_id / null]
 #   treasury_withdrawals_action = [2, { reward_account => coin }, policy_hash / null]
 # ---------------------------------------------------------------------------
+
 
 class TestConwayGovAction:
     """Golden vectors for Conway governance action encoding."""
@@ -839,6 +842,7 @@ class TestConwayGovAction:
 #   vote = 0 / 1 / 2  ; No / Yes / Abstain
 # ---------------------------------------------------------------------------
 
+
 class TestConwayVote:
     """Golden vectors for Conway voting procedure encoding."""
 
@@ -883,9 +887,9 @@ class TestConwayVote:
 
     def test_full_voting_procedures_map(self):
         """Full voting_procedures map: {voter => {gov_action_id => procedure}}."""
-        voter = [2, b"\xdd" * 28]   # DRep key voter
+        voter = [2, b"\xdd" * 28]  # DRep key voter
         gov_action_id = [ZERO_HASH, 0]
-        procedure = [1, None]        # Yes, no anchor
+        procedure = [1, None]  # Yes, no anchor
 
         # The outer map uses complex keys (arrays as map keys via CBOR)
         # This matches the CDDL: { voter => { gov_action_id => voting_procedure } }
@@ -917,16 +921,17 @@ class TestConwayVote:
 # But for standalone testing, we encode the 4 fields as an array.
 # ---------------------------------------------------------------------------
 
+
 class TestOCertEncoding:
     """Golden vectors for Operational Certificate encoding."""
 
     def test_ocert_standalone(self):
         """OCert as a standalone 4-element array."""
         ocert = [
-            ZERO_HASH,    # kes_vkey (32 bytes)
-            0,            # counter (sequence_number)
-            100,          # kes_period
-            ZERO_SIG,     # cold_sig (64 bytes)
+            ZERO_HASH,  # kes_vkey (32 bytes)
+            0,  # counter (sequence_number)
+            100,  # kes_period
+            ZERO_SIG,  # cold_sig (64 bytes)
         ]
 
         result = cbor2.dumps(ocert)
@@ -938,20 +943,22 @@ class TestOCertEncoding:
         # 5840 00*64 = cold_sig
         expected = (
             "84"
-            + "5820" + "00" * 32    # kes_vkey
-            + "00"                   # counter = 0
-            + "1864"                 # kes_period = 100
-            + "5840" + "00" * 64    # cold_sig
+            + "5820"
+            + "00" * 32  # kes_vkey
+            + "00"  # counter = 0
+            + "1864"  # kes_period = 100
+            + "5840"
+            + "00" * 64  # cold_sig
         )
         assert result.hex() == expected
 
     def test_ocert_large_counter(self):
         """OCert with a large sequence number (multi-byte uint)."""
         ocert = [
-            ONE_HASH,      # kes_vkey
-            1000,          # counter = 1000
-            200,           # kes_period
-            ZERO_SIG,      # cold_sig
+            ONE_HASH,  # kes_vkey
+            1000,  # counter = 1000
+            200,  # kes_period
+            ZERO_SIG,  # cold_sig
         ]
 
         result = cbor2.dumps(ocert)
@@ -968,23 +975,23 @@ class TestOCertEncoding:
         are placed directly in the header_body array at indices 9-12.
         """
         header_body = [
-            42,              # [0] block_number
-            1000,            # [1] slot
-            ZERO_HASH,       # [2] prev_hash
-            ZERO_HASH,       # [3] issuer_vkey
-            ZERO_VRF_VK,     # [4] vrf_vkey
-            ZERO_VRF_CERT,   # [5] nonce_vrf
-            ZERO_VRF_CERT,   # [6] leader_vrf
-            256,             # [7] block_body_size
-            ZERO_HASH,       # [8] block_body_hash
+            42,  # [0] block_number
+            1000,  # [1] slot
+            ZERO_HASH,  # [2] prev_hash
+            ZERO_HASH,  # [3] issuer_vkey
+            ZERO_VRF_VK,  # [4] vrf_vkey
+            ZERO_VRF_CERT,  # [5] nonce_vrf
+            ZERO_VRF_CERT,  # [6] leader_vrf
+            256,  # [7] block_body_size
+            ZERO_HASH,  # [8] block_body_hash
             # OCert fields (inlined, NOT a sub-array):
-            ZERO_HASH,       # [9] hot_vkey (kes_vkey)
-            5,               # [10] sequence_number
-            62,              # [11] kes_period
-            ZERO_SIG,        # [12] sigma (cold_sig)
+            ZERO_HASH,  # [9] hot_vkey (kes_vkey)
+            5,  # [10] sequence_number
+            62,  # [11] kes_period
+            ZERO_SIG,  # [12] sigma (cold_sig)
             # Protocol version:
-            7,               # [13] major
-            0,               # [14] minor
+            7,  # [13] major
+            0,  # [14] minor
         ]
 
         result = cbor2.dumps(header_body)
@@ -998,6 +1005,7 @@ class TestOCertEncoding:
 #
 # These aren't era-specific but are critical for Cardano interoperability.
 # ---------------------------------------------------------------------------
+
 
 class TestCborEncodingInvariants:
     """Cross-cutting CBOR encoding invariants for Cardano."""

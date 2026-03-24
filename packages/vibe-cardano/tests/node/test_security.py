@@ -18,7 +18,6 @@ from vibe.cardano.security import (
     validate_protocol_message,
 )
 
-
 # ---------------------------------------------------------------------------
 # safe_cbor_loads
 # ---------------------------------------------------------------------------
@@ -145,17 +144,13 @@ class TestValidateProtocolMessageRejectsInvalid:
         assert "Unexpected protocol message type" in caplog.text
         assert "str" in caplog.text
 
-    def test_rejects_none_when_not_expected(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_rejects_none_when_not_expected(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING):
             result = validate_protocol_message(None, [list, dict])
         assert result is None
         assert "NoneType" in caplog.text
 
-    def test_rejects_int_when_list_expected(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_rejects_int_when_list_expected(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING):
             result = validate_protocol_message(42, [list])
         assert result is None

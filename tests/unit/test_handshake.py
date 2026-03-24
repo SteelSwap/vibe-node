@@ -30,7 +30,6 @@ from vibe.cardano.network.handshake import (
     PREPROD_NETWORK_MAGIC,
     PREVIEW_NETWORK_MAGIC,
     MsgAcceptVersion,
-    MsgProposeVersions,
     MsgRefuse,
     NodeToNodeVersionData,
     PeerSharing,
@@ -41,7 +40,6 @@ from vibe.cardano.network.handshake import (
     decode_handshake_response,
     encode_propose_versions,
 )
-
 
 # -----------------------------------------------------------------------
 # Constants
@@ -215,7 +213,8 @@ class TestEncodeProposeVersions:
 
     def test_fits_single_mux_segment(self) -> None:
         """test_handshake_message_fits_single_mux_segment:
-        Encoded ProposeVersions must be < 65535 bytes."""
+        Encoded ProposeVersions must be < 65535 bytes.
+        """
         vt = build_version_table(MAINNET_NETWORK_MAGIC)
         raw = encode_propose_versions(vt)
         assert len(raw) < 65535
@@ -277,7 +276,8 @@ class TestDecodeAcceptVersion:
 
     def test_accept_version_single_segment(self) -> None:
         """test_handshake_accept_version_single_segment:
-        Encoded AcceptVersion fits in one MUX segment."""
+        Encoded AcceptVersion fits in one MUX segment.
+        """
         raw = self._make_accept_bytes(magic=MAINNET_NETWORK_MAGIC)
         assert len(raw) < 65535
 
@@ -301,16 +301,18 @@ class TestDecodeAcceptVersion:
         vd = vt[highest]
 
         # Server encodes AcceptVersion
-        accept_bytes = cbor2.dumps([
-            1,
-            highest,
+        accept_bytes = cbor2.dumps(
             [
-                vd.network_magic,
-                vd.initiator_only_diffusion_mode,
-                int(vd.peer_sharing),
-                vd.query,
-            ],
-        ])
+                1,
+                highest,
+                [
+                    vd.network_magic,
+                    vd.initiator_only_diffusion_mode,
+                    int(vd.peer_sharing),
+                    vd.query,
+                ],
+            ]
+        )
 
         result = decode_handshake_response(accept_bytes)
         assert isinstance(result, MsgAcceptVersion)

@@ -25,7 +25,6 @@ from __future__ import annotations
 import hashlib
 from fractions import Fraction
 
-import pytest
 from pycardano import TransactionBody, TransactionInput, TransactionOutput
 from pycardano.address import Address
 from pycardano.certificate import (
@@ -34,13 +33,11 @@ from pycardano.certificate import (
     PoolRetirement,
     StakeCredential,
     StakeDelegation,
-    StakeDeregistration,
     StakeRegistration,
 )
 from pycardano.hash import (
     PoolKeyHash,
     PoolMetadataHash,
-    ScriptHash,
     TransactionId,
     VerificationKeyHash,
 )
@@ -50,13 +47,11 @@ from pycardano.pool_params import PoolMetadata
 from pycardano.witness import TransactionWitnessSet, VerificationKeyWitness
 
 from vibe.cardano.consensus.epoch_boundary import (
-    StakeSnapshot,
     compute_stake_distribution,
     process_epoch_boundary,
 )
-from vibe.cardano.consensus.nonce import NEUTRAL_NONCE, EpochNonce
+from vibe.cardano.consensus.nonce import NEUTRAL_NONCE
 from vibe.cardano.consensus.rewards import (
-    MemberRewardResult,
     PoolRewardParams,
     member_rewards,
     pool_reward,
@@ -65,18 +60,14 @@ from vibe.cardano.consensus.rewards import (
 from vibe.cardano.ledger.shelley import (
     ShelleyProtocolParams,
     ShelleyUTxO,
-    ShelleyValidationError,
-    validate_shelley_tx,
     validate_shelley_utxo,
     validate_shelley_witnesses,
 )
 from vibe.cardano.ledger.shelley_delegation import (
-    DelegationError,
     DelegationState,
     process_certificate,
     process_certificates,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -137,9 +128,7 @@ def _make_tx_id(seed: int = 0) -> TransactionId:
     return TransactionId(digest)
 
 
-def _sign_tx_body(
-    tx_body: TransactionBody, sk: PaymentSigningKey
-) -> VerificationKeyWitness:
+def _sign_tx_body(tx_body: TransactionBody, sk: PaymentSigningKey) -> VerificationKeyWitness:
     tx_body_hash = tx_body.hash()
     signature = sk.sign(tx_body_hash)
     vk = sk.to_verification_key()
@@ -215,13 +204,23 @@ class TestPoolLifecycleEndToEnd:
 
         # Full performance: 100 blocks made, 100 expected
         reward_full = pool_reward(
-            prp, total_stake, rewards_pot, n_opt=500, a0=Fraction(3, 10),
-            blocks_made=100, expected_blocks=100,
+            prp,
+            total_stake,
+            rewards_pot,
+            n_opt=500,
+            a0=Fraction(3, 10),
+            blocks_made=100,
+            expected_blocks=100,
         )
         # Partial performance: 50 blocks made, 100 expected
         reward_half = pool_reward(
-            prp, total_stake, rewards_pot, n_opt=500, a0=Fraction(3, 10),
-            blocks_made=50, expected_blocks=100,
+            prp,
+            total_stake,
+            rewards_pot,
+            n_opt=500,
+            a0=Fraction(3, 10),
+            blocks_made=50,
+            expected_blocks=100,
         )
         assert reward_full > 0
         assert reward_half > 0
@@ -238,9 +237,9 @@ class TestPoolLifecycleEndToEnd:
 
         pot = total_reward_pot(
             reserves=10_000_000_000_000,  # 10M ADA reserves
-            rho=Fraction(3, 1000),        # 0.3% expansion
-            tau=Fraction(2, 10),          # 20% treasury
-            fees=500_000_000,             # 500 ADA fees
+            rho=Fraction(3, 1000),  # 0.3% expansion
+            tau=Fraction(2, 10),  # 20% treasury
+            fees=500_000_000,  # 500 ADA fees
         )
 
         assert pot.monetary_expansion > 0
@@ -256,24 +255,24 @@ class TestPoolLifecycleEndToEnd:
         With k=500 and total_stake=500B ADA, saturation = 1B ADA per pool.
         We place pools well below that threshold so sigma' = sigma (uncapped).
         """
-        total_stake = 500_000_000_000_000     # 500B lovelace = 500K ADA total
-        rewards_pot = 100_000_000_000_000     # 100B lovelace pot
+        total_stake = 500_000_000_000_000  # 500B lovelace = 500K ADA total
+        rewards_pot = 100_000_000_000_000  # 100B lovelace pot
         n_opt = 500
         # Saturation threshold: 500K ADA / 500 = 1K ADA per pool
 
         small_pool = PoolRewardParams(
             pool_id=_fake_hash(0x01),
-            pledge=10_000_000,               # 10 ADA
+            pledge=10_000_000,  # 10 ADA
             cost=340_000_000,
             margin=Fraction(1, 100),
-            pool_stake=100_000_000_000,      # 100 ADA — well below 1K saturation
+            pool_stake=100_000_000_000,  # 100 ADA — well below 1K saturation
         )
         large_pool = PoolRewardParams(
             pool_id=_fake_hash(0x02),
-            pledge=10_000_000,               # same pledge
+            pledge=10_000_000,  # same pledge
             cost=340_000_000,
             margin=Fraction(1, 100),
-            pool_stake=400_000_000_000,      # 400 ADA — 4x stake, still below 1K
+            pool_stake=400_000_000_000,  # 400 ADA — 4x stake, still below 1K
         )
 
         r_small = pool_reward(small_pool, total_stake, rewards_pot, n_opt, Fraction(3, 10))
@@ -289,10 +288,10 @@ class TestPoolLifecycleEndToEnd:
         """Delegators get proportional share of (reward - cost - margin)."""
         pool = PoolRewardParams(
             pool_id=_fake_hash(0xBB),
-            pledge=100_000_000,      # 100 ADA pledge (operator)
-            cost=340_000_000,         # 340 ADA cost
-            margin=Fraction(10, 100), # 10% margin
-            pool_stake=1_000_000_000, # 1000 ADA total
+            pledge=100_000_000,  # 100 ADA pledge (operator)
+            cost=340_000_000,  # 340 ADA cost
+            margin=Fraction(10, 100),  # 10% margin
+            pool_stake=1_000_000_000,  # 1000 ADA total
         )
 
         total_pool_reward = 1_000_000_000  # 1000 ADA reward
@@ -400,13 +399,13 @@ class TestTwoPoolRewardDistribution:
         Haskell ref: ``mkPoolRewardInfo`` uses a0 in the optimal reward formula.
         """
         total_stake = 10_000_000_000_000  # 10M ADA
-        rewards_pot = 5_000_000_000       # 5K ADA
-        a0 = Fraction(3, 10)              # 0.3 pledge influence
+        rewards_pot = 5_000_000_000  # 5K ADA
+        a0 = Fraction(3, 10)  # 0.3 pledge influence
 
         # Pool A: high pledge (10% of its stake)
         pool_a = PoolRewardParams(
             pool_id=_fake_hash(0x01),
-            pledge=100_000_000_000,        # 100K ADA pledge
+            pledge=100_000_000_000,  # 100K ADA pledge
             cost=340_000_000,
             margin=Fraction(1, 100),
             pool_stake=1_000_000_000_000,  # 1M ADA
@@ -415,7 +414,7 @@ class TestTwoPoolRewardDistribution:
         # Pool B: low pledge (1% of its stake), same total stake
         pool_b = PoolRewardParams(
             pool_id=_fake_hash(0x02),
-            pledge=10_000_000_000,         # 10K ADA pledge
+            pledge=10_000_000_000,  # 10K ADA pledge
             cost=340_000_000,
             margin=Fraction(1, 100),
             pool_stake=1_000_000_000_000,  # 1M ADA
@@ -674,18 +673,15 @@ class TestShelleyWitnessGaps:
         pp2 = _pool_params(0xB2, vrf_prefix=0xC2)
 
         state = DelegationState()
-        state = process_certificate(
-            PoolRegistration(pp1), state, TEST_PARAMS, current_epoch=10
-        )
-        state = process_certificate(
-            PoolRegistration(pp2), state, TEST_PARAMS, current_epoch=10
-        )
+        state = process_certificate(PoolRegistration(pp1), state, TEST_PARAMS, current_epoch=10)
+        state = process_certificate(PoolRegistration(pp2), state, TEST_PARAMS, current_epoch=10)
 
         assert _fake_hash(0xB1) in state.pools
         assert _fake_hash(0xB2) in state.pools
         # Verify different VRF keys
-        assert state.pools[_fake_hash(0xB1)].vrf_keyhash != \
-               state.pools[_fake_hash(0xB2)].vrf_keyhash
+        assert (
+            state.pools[_fake_hash(0xB1)].vrf_keyhash != state.pools[_fake_hash(0xB2)].vrf_keyhash
+        )
 
     # -- 18. Tx validity across epoch boundary --
 
@@ -764,8 +760,13 @@ class TestRewardInvariants:
             pool_stake=1_000_000_000_000,
         )
         r = pool_reward(
-            prp, 10_000_000_000_000, 5_000_000_000, 500, Fraction(3, 10),
-            blocks_made=0, expected_blocks=100,
+            prp,
+            10_000_000_000_000,
+            5_000_000_000,
+            500,
+            Fraction(3, 10),
+            blocks_made=0,
+            expected_blocks=100,
         )
         assert r == 0
 
@@ -785,10 +786,7 @@ class TestRewardInvariants:
         total_pool_reward = 3_000_000_000
 
         # Many delegators to stress the floor rounding
-        delegator_stakes = {
-            _fake_hash(i): 100_000_000 + i * 1_000_000
-            for i in range(20)
-        }
+        delegator_stakes = {_fake_hash(i): 100_000_000 + i * 1_000_000 for i in range(20)}
 
         result = member_rewards(pool, total_pool_reward, delegator_stakes)
         total = result.operator_reward + sum(result.member_rewards.values())
@@ -867,6 +865,4 @@ class TestRewardInvariants:
         r_oversat = pool_reward(oversaturated, total_stake, 5_000_000_000, n_opt, Fraction(3, 10))
 
         # Over-saturated pool should NOT get more than saturated pool
-        assert r_oversat == r_sat, (
-            f"Over-saturated pool should be capped: {r_oversat} vs {r_sat}"
-        )
+        assert r_oversat == r_sat, f"Over-saturated pool should be capped: {r_oversat} vs {r_sat}"

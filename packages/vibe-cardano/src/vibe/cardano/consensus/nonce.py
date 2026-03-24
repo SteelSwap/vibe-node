@@ -76,9 +76,7 @@ class EpochNonce:
 
     def __post_init__(self) -> None:
         if len(self.value) != 32:
-            raise ValueError(
-                f"EpochNonce must be exactly 32 bytes, got {len(self.value)}"
-            )
+            raise ValueError(f"EpochNonce must be exactly 32 bytes, got {len(self.value)}")
 
     def __repr__(self) -> str:
         return f"EpochNonce({self.value.hex()[:16]}...)"
@@ -235,14 +233,10 @@ def evolve_nonce(
         The new epoch nonce for the next epoch.
     """
     # Step 1: Combine previous nonce with accumulated VRF outputs
-    new_value = hashlib.blake2b(
-        prev_nonce.value + eta_v, digest_size=32
-    ).digest()
+    new_value = hashlib.blake2b(prev_nonce.value + eta_v, digest_size=32).digest()
 
     # Step 2: Mix in extra entropy if present
     if extra_entropy is not None:
-        new_value = hashlib.blake2b(
-            new_value + extra_entropy, digest_size=32
-        ).digest()
+        new_value = hashlib.blake2b(new_value + extra_entropy, digest_size=32).digest()
 
     return EpochNonce(new_value)

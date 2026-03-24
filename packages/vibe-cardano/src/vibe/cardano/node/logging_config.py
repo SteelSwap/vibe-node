@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -24,21 +24,38 @@ class JsonFormatter(logging.Formatter):
     """
 
     # Fields that are part of the standard LogRecord — not user extras
-    _BUILTIN_ATTRS = frozenset({
-        "args", "created", "exc_info", "exc_text", "filename",
-        "funcName", "levelname", "levelno", "lineno", "message",
-        "module", "msecs", "msg", "name", "pathname", "process",
-        "processName", "relativeCreated", "stack_info", "thread",
-        "threadName", "taskName",
-    })
+    _BUILTIN_ATTRS = frozenset(
+        {
+            "args",
+            "created",
+            "exc_info",
+            "exc_text",
+            "filename",
+            "funcName",
+            "levelname",
+            "levelno",
+            "lineno",
+            "message",
+            "module",
+            "msecs",
+            "msg",
+            "name",
+            "pathname",
+            "process",
+            "processName",
+            "relativeCreated",
+            "stack_info",
+            "thread",
+            "threadName",
+            "taskName",
+        }
+    )
 
     def format(self, record: logging.LogRecord) -> str:
         record.message = record.getMessage()
 
         obj: dict[str, Any] = {
-            "timestamp": datetime.fromtimestamp(
-                record.created, tz=timezone.utc
-            ).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.message,
@@ -77,9 +94,7 @@ def configure_logging(
     if log_format == "json":
         handler.setFormatter(JsonFormatter())
     else:
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
 
     root = logging.getLogger()
     root.setLevel(level)

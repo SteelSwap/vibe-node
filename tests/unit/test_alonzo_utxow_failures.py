@@ -32,7 +32,6 @@ from __future__ import annotations
 import hashlib
 
 import cbor2
-import pytest
 from pycardano import (
     Asset,
     AssetName,
@@ -51,7 +50,6 @@ from pycardano.witness import TransactionWitnessSet, VerificationKeyWitness
 from vibe.cardano.ledger.allegra_mary import (
     Timelock,
     TimelockType,
-    ValidityInterval,
 )
 from vibe.cardano.ledger.alonzo import (
     _extra_redeemers,
@@ -63,16 +61,12 @@ from vibe.cardano.ledger.alonzo import (
     validate_alonzo_witnesses,
 )
 from vibe.cardano.ledger.alonzo_types import (
-    AlonzoProtocolParams,
-    ExUnitPrices,
     ExUnits,
     Language,
     Redeemer,
     RedeemerTag,
-    compute_script_integrity_hash,
 )
 from vibe.cardano.ledger.shelley import ShelleyUTxO
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -111,9 +105,7 @@ def _make_script_address(script_hash: ScriptHash) -> Address:
     return Address(payment_part=script_hash, network=Network.TESTNET)
 
 
-def _sign_tx_body(
-    tx_body: TransactionBody, sk: PaymentSigningKey
-) -> VerificationKeyWitness:
+def _sign_tx_body(tx_body: TransactionBody, sk: PaymentSigningKey) -> VerificationKeyWitness:
     """Sign a transaction body and return a VKey witness."""
     tx_body_hash = tx_body.hash()
     signature = sk.sign(tx_body_hash)
@@ -171,12 +163,11 @@ class TestPhase1NativeScriptFailure:
 
     def test_native_timelock_fails_evaluation(self):
         """Native timelock script requiring a signature that is missing
-        should produce a NativeScriptFailure error."""
+        should produce a NativeScriptFailure error.
+        """
         # Create a native script requiring a specific key hash
         required_key_hash = hashlib.blake2b(b"missing_signer", digest_size=28).digest()
-        script_hash_bytes = hashlib.blake2b(
-            b"native_script_hash", digest_size=28
-        ).digest()
+        script_hash_bytes = hashlib.blake2b(b"native_script_hash", digest_size=28).digest()
         script_hash = ScriptHash(script_hash_bytes)
 
         timelock = Timelock(
@@ -204,12 +195,14 @@ class TestPhase1NativeScriptFailure:
 
         native_scripts = {script_hash_bytes: timelock}
         # The signer set won't include required_key_hash
-        signers = frozenset([
-            hashlib.blake2b(vk.payload, digest_size=28).digest()
-        ])
+        signers = frozenset([hashlib.blake2b(vk.payload, digest_size=28).digest()])
 
         errors = _validate_native_scripts(
-            tx_body, utxo, native_scripts, signers, current_slot=100,
+            tx_body,
+            utxo,
+            native_scripts,
+            signers,
+            current_slot=100,
         )
 
         assert len(errors) == 1
@@ -236,7 +229,9 @@ class TestMissingRedeemers:
         datum_hash = hashlib.blake2b(cbor2.dumps(42), digest_size=32).digest()
 
         utxo, txin = _make_script_utxo(
-            script_hash, tx_id_seed=20, datum_hash=datum_hash,
+            script_hash,
+            tx_id_seed=20,
+            datum_hash=datum_hash,
         )
 
         sk, vk = _make_key_pair(seed=2)
@@ -250,7 +245,9 @@ class TestMissingRedeemers:
 
         # No redeemers at all
         errors = _missing_redeemers(
-            tx_body, utxo, redeemers=[],
+            tx_body,
+            utxo,
+            redeemers=[],
             script_hashes={script_hash_bytes},
         )
 
@@ -292,7 +289,9 @@ class TestNotAllowedSupplementalDatums:
         extra_datum = cbor2.dumps(999)
 
         errors = _not_allowed_supplemental_datums(
-            tx_body, utxo, datums=[extra_datum],
+            tx_body,
+            utxo,
+            datums=[extra_datum],
         )
 
         assert len(errors) == 1
@@ -319,7 +318,9 @@ class TestNotAllowedSupplementalDatums:
         }
 
         errors = _not_allowed_supplemental_datums(
-            tx_body, utxo, datums=[datum_cbor],
+            tx_body,
+            utxo,
+            datums=[datum_cbor],
         )
 
         assert errors == []
@@ -353,15 +354,14 @@ class TestPPViewHashesDontMatchMismatched:
 
         redeemers = [
             Redeemer(
-                tag=RedeemerTag.SPEND, index=0,
+                tag=RedeemerTag.SPEND,
+                index=0,
                 data=cbor2.dumps(42),
                 ex_units=ExUnits(mem=100, steps=200),
             )
         ]
         datums = [cbor2.dumps(99)]
-        cost_models: dict[Language, dict[str, int]] = {
-            Language.PLUTUS_V1: {"a": 1}
-        }
+        cost_models: dict[Language, dict[str, int]] = {Language.PLUTUS_V1: {"a": 1}}
         languages = {Language.PLUTUS_V1}
 
         # Intentionally wrong hash
@@ -451,7 +451,8 @@ class TestUnspendableUTxONoDatumHash:
         )
 
         errors = _unspendable_utxo_no_datum_hash(
-            tx_body, script_hashes={script_hash_bytes},
+            tx_body,
+            script_hashes={script_hash_bytes},
         )
 
         assert len(errors) == 1
@@ -470,7 +471,8 @@ class TestUnspendableUTxONoDatumHash:
             inputs=[TransactionInput(_make_tx_id(61), 0)],
             outputs=[
                 TransactionOutput(
-                    script_addr, 5_000_000,
+                    script_addr,
+                    5_000_000,
                     datum_hash=DatumHash(datum_hash),
                 ),
             ],
@@ -478,7 +480,8 @@ class TestUnspendableUTxONoDatumHash:
         )
 
         errors = _unspendable_utxo_no_datum_hash(
-            tx_body, script_hashes={script_hash_bytes},
+            tx_body,
+            script_hashes={script_hash_bytes},
         )
 
         assert errors == []
@@ -504,7 +507,9 @@ class TestMissingPhase2ScriptWitness:
         datum_hash = hashlib.blake2b(cbor2.dumps(42), digest_size=32).digest()
 
         utxo, txin = _make_script_utxo(
-            script_hash, tx_id_seed=70, datum_hash=datum_hash,
+            script_hash,
+            tx_id_seed=70,
+            datum_hash=datum_hash,
         )
 
         sk, vk = _make_key_pair(seed=7)
@@ -517,7 +522,8 @@ class TestMissingPhase2ScriptWitness:
         )
 
         errors = _missing_script_witnesses(
-            tx_body, utxo,
+            tx_body,
+            utxo,
             witnessed_script_hashes=set(),  # Script NOT in witness set
             script_hashes={script_hash_bytes},
         )
@@ -532,7 +538,9 @@ class TestMissingPhase2ScriptWitness:
         datum_hash = hashlib.blake2b(cbor2.dumps(42), digest_size=32).digest()
 
         utxo, txin = _make_script_utxo(
-            script_hash, tx_id_seed=71, datum_hash=datum_hash,
+            script_hash,
+            tx_id_seed=71,
+            datum_hash=datum_hash,
         )
 
         sk, vk = _make_key_pair(seed=7)
@@ -545,7 +553,8 @@ class TestMissingPhase2ScriptWitness:
         )
 
         errors = _missing_script_witnesses(
-            tx_body, utxo,
+            tx_body,
+            utxo,
             witnessed_script_hashes={script_hash_bytes},
             script_hashes={script_hash_bytes},
         )
@@ -572,7 +581,8 @@ class TestRedeemerIncorrectPurpose:
     def test_spend_redeemer_for_mint_policy(self):
         """Spend redeemer at index 0 but the only Plutus script is a
         minting policy (no Plutus-locked inputs), so the redeemer tag
-        is wrong."""
+        is wrong.
+        """
         sk, vk = _make_key_pair(seed=8)
         addr = _make_address(vk)
 
@@ -587,9 +597,11 @@ class TestRedeemerIncorrectPurpose:
             inputs=[txin],
             outputs=[TransactionOutput(addr, 8_000_000)],
             fee=2_000_000,
-            mint=MultiAsset({
-                mint_script_hash: Asset({AssetName(b"token"): 100}),
-            }),
+            mint=MultiAsset(
+                {
+                    mint_script_hash: Asset({AssetName(b"token"): 100}),
+                }
+            ),
         )
 
         # Spend redeemer at index 0 — but input 0 is VKey-locked, not Plutus
@@ -601,7 +613,9 @@ class TestRedeemerIncorrectPurpose:
         )
 
         errors = _extra_redeemers(
-            tx_body, utxo, redeemers=[wrong_redeemer],
+            tx_body,
+            utxo,
+            redeemers=[wrong_redeemer],
             script_hashes={mint_hash_bytes},
         )
 
@@ -723,7 +737,9 @@ class TestExtraRedeemerMinting:
         )
 
         errors = _extra_redeemers(
-            tx_body, utxo, redeemers=[extra_redeemer],
+            tx_body,
+            utxo,
+            redeemers=[extra_redeemer],
             script_hashes={bytes(_make_script_hash(seed=100))},
         )
 
@@ -751,7 +767,9 @@ class TestExtraRedeemerSpending:
         datum_hash = hashlib.blake2b(cbor2.dumps(42), digest_size=32).digest()
 
         utxo, txin = _make_script_utxo(
-            script_hash, tx_id_seed=110, datum_hash=datum_hash,
+            script_hash,
+            tx_id_seed=110,
+            datum_hash=datum_hash,
         )
 
         sk, vk = _make_key_pair(seed=11)
@@ -765,18 +783,21 @@ class TestExtraRedeemerSpending:
 
         # Valid redeemer at index 0 + extra redeemer at index 5
         valid_redeemer = Redeemer(
-            tag=RedeemerTag.SPEND, index=0,
+            tag=RedeemerTag.SPEND,
+            index=0,
             data=cbor2.dumps(42),
             ex_units=ExUnits(mem=100, steps=200),
         )
         extra_redeemer = Redeemer(
-            tag=RedeemerTag.SPEND, index=5,
+            tag=RedeemerTag.SPEND,
+            index=5,
             data=cbor2.dumps(99),
             ex_units=ExUnits(mem=100, steps=200),
         )
 
         errors = _extra_redeemers(
-            tx_body, utxo,
+            tx_body,
+            utxo,
             redeemers=[valid_redeemer, extra_redeemer],
             script_hashes={script_hash_bytes},
         )
@@ -805,7 +826,8 @@ class TestNoExtraRedeemersSameScriptCerts:
     def test_single_cert_redeemer_for_multiple_same_script_certs(self):
         """Two certificates referencing the same Plutus script need a
         redeemer at each cert index. A redeemer at index 0 + index 1
-        should both be valid (no extra redeemers error)."""
+        should both be valid (no extra redeemers error).
+        """
         script_hash = _make_script_hash(seed=120)
         script_hash_bytes = bytes(script_hash)
 
@@ -831,18 +853,21 @@ class TestNoExtraRedeemersSameScriptCerts:
 
         # Two Cert redeemers for both cert indices
         redeemer_0 = Redeemer(
-            tag=RedeemerTag.CERT, index=0,
+            tag=RedeemerTag.CERT,
+            index=0,
             data=cbor2.dumps(0),
             ex_units=ExUnits(mem=100, steps=200),
         )
         redeemer_1 = Redeemer(
-            tag=RedeemerTag.CERT, index=1,
+            tag=RedeemerTag.CERT,
+            index=1,
             data=cbor2.dumps(0),
             ex_units=ExUnits(mem=100, steps=200),
         )
 
         errors = _extra_redeemers(
-            tx_body, utxo,
+            tx_body,
+            utxo,
             redeemers=[redeemer_0, redeemer_1],
             script_hashes={script_hash_bytes},
         )
@@ -868,7 +893,8 @@ class TestMultipleEqualPlutusLockedCerts:
         """Two identical delegation certs using the same Plutus script
         should each need a redeemer at their respective indices. Missing
         one redeemer means we can still validate the other without
-        ExtraRedeemers firing."""
+        ExtraRedeemers firing.
+        """
         script_hash = _make_script_hash(seed=130)
         script_hash_bytes = bytes(script_hash)
 
@@ -889,13 +915,15 @@ class TestMultipleEqualPlutusLockedCerts:
 
         # Redeemer for only cert index 0 — this is valid for that cert
         redeemer = Redeemer(
-            tag=RedeemerTag.CERT, index=0,
+            tag=RedeemerTag.CERT,
+            index=0,
             data=cbor2.dumps(0),
             ex_units=ExUnits(mem=100, steps=200),
         )
 
         errors = _extra_redeemers(
-            tx_body, utxo,
+            tx_body,
+            utxo,
             redeemers=[redeemer],
             script_hashes={script_hash_bytes},
         )
@@ -913,11 +941,13 @@ class TestMultipleEqualPlutusLockedCerts:
 
 class TestUTXOWIntegration:
     """Integration tests verifying multiple UTXOW failures fire through
-    the top-level validate_alonzo_witnesses function."""
+    the top-level validate_alonzo_witnesses function.
+    """
 
     def test_multiple_utxow_failures_accumulated(self):
         """A transaction with multiple UTXOW violations should report
-        all of them, not just the first."""
+        all of them, not just the first.
+        """
         script_hash = _make_script_hash(seed=200)
         script_hash_bytes = bytes(script_hash)
         script_addr = _make_script_address(script_hash)
@@ -927,11 +957,13 @@ class TestUTXOWIntegration:
 
         # Script-locked UTxO WITHOUT datum hash (will trigger MissingRedeemers)
         utxo, script_txin = _make_script_utxo(
-            script_hash, tx_id_seed=200,
+            script_hash,
+            tx_id_seed=200,
         )
         # VKey-locked UTxO for funding
         fund_utxo, fund_txin, sk, vk = _make_simple_utxo(
-            tx_id_seed=201, seed=20,
+            tx_id_seed=201,
+            seed=20,
         )
         utxo.update(fund_utxo)
 

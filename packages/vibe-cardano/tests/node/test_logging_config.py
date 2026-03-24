@@ -7,8 +7,6 @@ import logging
 import os
 from unittest.mock import patch
 
-import pytest
-
 from vibe.cardano.node.logging_config import JsonFormatter, configure_logging
 
 
@@ -34,8 +32,13 @@ class TestJsonFormatter:
     def test_includes_extra_fields(self) -> None:
         formatter = JsonFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO,
-            pathname="", lineno=0, msg="test", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="test",
+            args=(),
+            exc_info=None,
         )
         record.slot = 42  # type: ignore[attr-defined]
         record.event = "forge.block"  # type: ignore[attr-defined]
@@ -50,9 +53,14 @@ class TestJsonFormatter:
             raise ValueError("boom")
         except ValueError:
             import sys
+
             record = logging.LogRecord(
-                name="test", level=logging.ERROR,
-                pathname="", lineno=0, msg="failed", args=(),
+                name="test",
+                level=logging.ERROR,
+                pathname="",
+                lineno=0,
+                msg="failed",
+                args=(),
                 exc_info=sys.exc_info(),
             )
         output = formatter.format(record)
@@ -63,8 +71,13 @@ class TestJsonFormatter:
     def test_non_serializable_extra(self) -> None:
         formatter = JsonFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO,
-            pathname="", lineno=0, msg="test", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="test",
+            args=(),
+            exc_info=None,
         )
         record.data = b"\x00\x01"  # type: ignore[attr-defined]
         output = formatter.format(record)

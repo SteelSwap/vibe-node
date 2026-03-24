@@ -112,9 +112,7 @@ def encode_keep_alive(cookie: int) -> bytes:
         ValueError: If the cookie is out of the uint16 range.
     """
     if not (COOKIE_MIN <= cookie <= COOKIE_MAX):
-        raise ValueError(
-            f"Cookie must be uint16 (0..65535), got: {cookie}"
-        )
+        raise ValueError(f"Cookie must be uint16 (0..65535), got: {cookie}")
     return cbor2.dumps([_MSG_KEEP_ALIVE, cookie])
 
 
@@ -131,9 +129,7 @@ def encode_keep_alive_response(cookie: int) -> bytes:
         ValueError: If the cookie is out of the uint16 range.
     """
     if not (COOKIE_MIN <= cookie <= COOKIE_MAX):
-        raise ValueError(
-            f"Cookie must be uint16 (0..65535), got: {cookie}"
-        )
+        raise ValueError(f"Cookie must be uint16 (0..65535), got: {cookie}")
     return cbor2.dumps([_MSG_KEEP_ALIVE_RESPONSE, cookie])
 
 
@@ -160,9 +156,7 @@ def _validate_cookie(cookie: object) -> int:
     if not isinstance(cookie, int) or isinstance(cookie, bool):
         raise ValueError(f"Cookie must be an integer, got: {cookie!r}")
     if not (COOKIE_MIN <= cookie <= COOKIE_MAX):
-        raise ValueError(
-            f"Cookie must be uint16 (0..65535), got: {cookie}"
-        )
+        raise ValueError(f"Cookie must be uint16 (0..65535), got: {cookie}")
     return cookie
 
 
@@ -190,25 +184,19 @@ def decode_message(cbor_bytes: bytes) -> KeepAliveMessage:
 
     if msg_id == _MSG_KEEP_ALIVE:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgKeepAlive: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgKeepAlive: expected 2 elements, got {len(msg)}")
         cookie = _validate_cookie(msg[1])
         return MsgKeepAlive(cookie=cookie)
 
     elif msg_id == _MSG_KEEP_ALIVE_RESPONSE:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgKeepAliveResponse: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgKeepAliveResponse: expected 2 elements, got {len(msg)}")
         cookie = _validate_cookie(msg[1])
         return MsgKeepAliveResponse(cookie=cookie)
 
     elif msg_id == _MSG_DONE:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgDone: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgDone: expected 1 element, got {len(msg)}")
         return MsgDone()
 
     else:
@@ -232,8 +220,7 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
     msg = decode_message(cbor_bytes)
     if not isinstance(msg, MsgKeepAliveResponse):
         raise ValueError(
-            f"Expected server message (MsgKeepAliveResponse), "
-            f"got: {type(msg).__name__}"
+            f"Expected server message (MsgKeepAliveResponse), got: {type(msg).__name__}"
         )
     return msg
 
@@ -255,7 +242,6 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
     msg = decode_message(cbor_bytes)
     if not isinstance(msg, (MsgKeepAlive, MsgDone)):
         raise ValueError(
-            f"Expected client message (MsgKeepAlive or MsgDone), "
-            f"got: {type(msg).__name__}"
+            f"Expected client message (MsgKeepAlive or MsgDone), got: {type(msg).__name__}"
         )
     return msg

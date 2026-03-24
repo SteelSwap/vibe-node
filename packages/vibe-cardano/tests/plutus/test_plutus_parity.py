@@ -9,7 +9,6 @@ Haskell references:
 from __future__ import annotations
 
 import cbor2pure as cbor2
-import pytest
 
 from vibe.cardano.plutus.cost_model import (
     BUILTINS_INTRODUCED_IN,
@@ -18,7 +17,6 @@ from vibe.cardano.plutus.cost_model import (
     PlutusVersion,
     builtins_available_at,
 )
-
 
 # ---------------------------------------------------------------------------
 # Cost model parameter counts
@@ -38,10 +36,14 @@ class TestCostModelParamCounts:
         assert COST_MODEL_PARAM_COUNTS[PlutusVersion.V3] == 233
 
     def test_v2_has_more_params_than_v1(self) -> None:
-        assert COST_MODEL_PARAM_COUNTS[PlutusVersion.V2] > COST_MODEL_PARAM_COUNTS[PlutusVersion.V1]
+        assert (
+            COST_MODEL_PARAM_COUNTS[PlutusVersion.V2] > COST_MODEL_PARAM_COUNTS[PlutusVersion.V1]
+        )
 
     def test_v3_has_more_params_than_v2(self) -> None:
-        assert COST_MODEL_PARAM_COUNTS[PlutusVersion.V3] > COST_MODEL_PARAM_COUNTS[PlutusVersion.V2]
+        assert (
+            COST_MODEL_PARAM_COUNTS[PlutusVersion.V3] > COST_MODEL_PARAM_COUNTS[PlutusVersion.V2]
+        )
 
 
 class TestBuiltinVersionEnforcement:

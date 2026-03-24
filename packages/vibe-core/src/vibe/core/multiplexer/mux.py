@@ -83,11 +83,10 @@ class MiniProtocolChannel:
     is_initiator: bool
     max_ingress_size: int = 0
     _inbound: asyncio.Queue[bytes | object] = field(
-        default=None, repr=False  # type: ignore[assignment]
+        default=None,
+        repr=False,  # type: ignore[assignment]
     )
-    _outbound: asyncio.Queue[bytes | object] = field(
-        default_factory=asyncio.Queue, repr=False
-    )
+    _outbound: asyncio.Queue[bytes | object] = field(default_factory=asyncio.Queue, repr=False)
     _closed: bool = field(default=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -104,9 +103,7 @@ class MiniProtocolChannel:
             MuxClosedError: If the channel has been closed.
         """
         if self._closed:
-            raise MuxClosedError(
-                f"channel for protocol {self.protocol_id} is closed"
-            )
+            raise MuxClosedError(f"channel for protocol {self.protocol_id} is closed")
         await self._outbound.put(payload)
 
     async def recv(self) -> bytes:
@@ -119,15 +116,11 @@ class MiniProtocolChannel:
             MuxClosedError: If the channel is closed (or closes while waiting).
         """
         if self._closed and self._inbound.empty():
-            raise MuxClosedError(
-                f"channel for protocol {self.protocol_id} is closed"
-            )
+            raise MuxClosedError(f"channel for protocol {self.protocol_id} is closed")
         item = await self._inbound.get()
         if item is _CHANNEL_CLOSED:
             self._closed = True
-            raise MuxClosedError(
-                f"channel for protocol {self.protocol_id} is closed"
-            )
+            raise MuxClosedError(f"channel for protocol {self.protocol_id} is closed")
         assert isinstance(item, bytes)
         return item
 
@@ -200,9 +193,7 @@ class Multiplexer:
     def is_closed(self) -> bool:
         return self._closed
 
-    def add_protocol(
-        self, protocol_id: int, max_ingress_size: int = 0
-    ) -> MiniProtocolChannel:
+    def add_protocol(self, protocol_id: int, max_ingress_size: int = 0) -> MiniProtocolChannel:
         """Register a miniprotocol and return its channel.
 
         Must be called before run(). Each protocol_id can only be registered
@@ -224,13 +215,9 @@ class Multiplexer:
         if self._closed:
             raise MuxClosedError("multiplexer is closed")
         if not (0 <= protocol_id <= 0x7FFF):
-            raise ValueError(
-                f"protocol_id must be 0..32767, got {protocol_id}"
-            )
+            raise ValueError(f"protocol_id must be 0..32767, got {protocol_id}")
         if protocol_id in self._channels:
-            raise ValueError(
-                f"protocol {protocol_id} is already registered"
-            )
+            raise ValueError(f"protocol {protocol_id} is already registered")
         channel = MiniProtocolChannel(
             protocol_id=protocol_id,
             is_initiator=self._is_initiator,
@@ -255,12 +242,8 @@ class Multiplexer:
             raise MuxError("multiplexer is already running")
 
         self._running = True
-        self._sender_task = asyncio.create_task(
-            self._sender_loop(), name="mux-sender"
-        )
-        self._receiver_task = asyncio.create_task(
-            self._receiver_loop(), name="mux-receiver"
-        )
+        self._sender_task = asyncio.create_task(self._sender_loop(), name="mux-sender")
+        self._receiver_task = asyncio.create_task(self._receiver_loop(), name="mux-receiver")
 
         try:
             # Wait for either task to complete (exception OR normal return).
@@ -275,7 +258,7 @@ class Multiplexer:
                 task.cancel()
                 try:
                     await task
-                except (asyncio.CancelledError, Exception):
+                except asyncio.CancelledError, Exception:
                     pass
 
             # Re-raise any exception from the completed task(s).
@@ -305,7 +288,7 @@ class Multiplexer:
                 task.cancel()
                 try:
                     await task
-                except (asyncio.CancelledError, Exception):
+                except asyncio.CancelledError, Exception:
                     pass
 
         await self._shutdown_channels()
@@ -387,9 +370,7 @@ class Multiplexer:
                 # responsive to shutdown. We race a short sleep against
                 # the stop event so close() wakes us immediately.
                 try:
-                    await asyncio.wait_for(
-                        self._stop_event.wait(), timeout=0.001
-                    )
+                    await asyncio.wait_for(self._stop_event.wait(), timeout=0.001)
                     # Stop event was set — exit the loop.
                     return
                 except TimeoutError:

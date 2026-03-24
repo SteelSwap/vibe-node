@@ -23,7 +23,6 @@ Haskell references:
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -38,11 +37,9 @@ if str(_THIS_DIR) not in sys.path:
 from helpers import (  # noqa: E402
     extract_block_metadata,
     fetch_blocks_from_origin,
-    fetch_blocks_from_point,
     load_fixture,
     ogmios_rpc,
 )
-
 
 # ---------------------------------------------------------------------------
 # Markers
@@ -184,8 +181,8 @@ class TestFixtureEraProgression:
         heights = [load_fixture(era)["height"] for era in eras]
         for i in range(1, len(heights)):
             assert heights[i] > heights[i - 1], (
-                f"{eras[i]} height ({heights[i]}) should be > {eras[i-1]} "
-                f"height ({heights[i-1]})"
+                f"{eras[i]} height ({heights[i]}) should be > {eras[i - 1]} "
+                f"height ({heights[i - 1]})"
             )
 
     def test_slots_increase_across_eras(self) -> None:
@@ -194,8 +191,7 @@ class TestFixtureEraProgression:
         slots = [load_fixture(era)["slot"] for era in eras]
         for i in range(1, len(slots)):
             assert slots[i] > slots[i - 1], (
-                f"{eras[i]} slot ({slots[i]}) should be > {eras[i-1]} "
-                f"slot ({slots[i-1]})"
+                f"{eras[i]} slot ({slots[i]}) should be > {eras[i - 1]} slot ({slots[i - 1]})"
             )
 
 
@@ -285,7 +281,9 @@ class TestFixtureTransactionStructure:
 class TestLiveByronConformance:
     """Byron-era conformance tests against live Ogmios."""
 
-    async def test_first_blocks_are_byron(self, ogmios_client: websockets.ClientConnection) -> None:
+    async def test_first_blocks_are_byron(
+        self, ogmios_client: websockets.ClientConnection
+    ) -> None:
         """Preprod genesis blocks should be Byron era."""
         blocks = await fetch_blocks_from_origin(ogmios_client, count=5)
         assert len(blocks) >= 5
@@ -293,7 +291,8 @@ class TestLiveByronConformance:
             assert block["era"] == "byron"
 
     async def test_byron_blocks_have_valid_structure(
-        self, ogmios_client: websockets.ClientConnection,
+        self,
+        ogmios_client: websockets.ClientConnection,
     ) -> None:
         """Byron blocks should have all expected metadata fields."""
         blocks = await fetch_blocks_from_origin(ogmios_client, count=5)
@@ -308,7 +307,8 @@ class TestLiveByronConformance:
             assert "size" in block
 
     async def test_byron_block_ids_are_unique(
-        self, ogmios_client: websockets.ClientConnection,
+        self,
+        ogmios_client: websockets.ClientConnection,
     ) -> None:
         """All Byron block IDs in a sequence should be unique."""
         blocks = await fetch_blocks_from_origin(ogmios_client, count=20)
@@ -316,18 +316,20 @@ class TestLiveByronConformance:
         assert len(ids) == len(set(ids)), "Duplicate block IDs found"
 
     async def test_byron_heights_are_monotonic(
-        self, ogmios_client: websockets.ClientConnection,
+        self,
+        ogmios_client: websockets.ClientConnection,
     ) -> None:
         """Byron block heights should increase monotonically."""
         blocks = await fetch_blocks_from_origin(ogmios_client, count=20)
         heights = [b["height"] for b in blocks]
         for i in range(1, len(heights)):
             assert heights[i] >= heights[i - 1], (
-                f"Height decreased: {heights[i-1]} -> {heights[i]}"
+                f"Height decreased: {heights[i - 1]} -> {heights[i]}"
             )
 
     async def test_byron_ancestor_chain(
-        self, ogmios_client: websockets.ClientConnection,
+        self,
+        ogmios_client: websockets.ClientConnection,
     ) -> None:
         """Each block's ancestor should match the previous block's ID."""
         blocks = await fetch_blocks_from_origin(ogmios_client, count=10)
@@ -371,7 +373,8 @@ class TestLiveMultiEraConformance:
     """
 
     async def test_block_metadata_consistency(
-        self, ogmios_client: websockets.ClientConnection,
+        self,
+        ogmios_client: websockets.ClientConnection,
     ) -> None:
         """Block metadata extraction should produce consistent results.
 
@@ -390,7 +393,8 @@ class TestLiveMultiEraConformance:
             assert meta["tx_count"] == len(block.get("transactions", []))
 
     async def test_fee_totals_are_non_negative(
-        self, ogmios_client: websockets.ClientConnection,
+        self,
+        ogmios_client: websockets.ClientConnection,
     ) -> None:
         """Fee totals across all transactions in a block must be >= 0."""
         blocks = await fetch_blocks_from_origin(ogmios_client, count=20)
@@ -401,7 +405,8 @@ class TestLiveMultiEraConformance:
             )
 
     async def test_block_size_is_reasonable(
-        self, ogmios_client: websockets.ClientConnection,
+        self,
+        ogmios_client: websockets.ClientConnection,
     ) -> None:
         """Block sizes should be within Cardano protocol limits.
 
@@ -439,7 +444,8 @@ class TestLiveFeeValidation:
     """
 
     async def test_byron_empty_blocks_have_zero_fees(
-        self, ogmios_client: websockets.ClientConnection,
+        self,
+        ogmios_client: websockets.ClientConnection,
     ) -> None:
         """Byron blocks with no transactions should sum to 0 fees."""
         blocks = await fetch_blocks_from_origin(ogmios_client, count=10)

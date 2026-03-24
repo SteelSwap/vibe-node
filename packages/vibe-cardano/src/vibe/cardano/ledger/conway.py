@@ -42,10 +42,9 @@ from copy import deepcopy
 from dataclasses import dataclass
 
 from vibe.cardano.ledger.conway_types import (
-    Anchor,
+    DEFAULT_RATIFICATION_THRESHOLDS,
     ConwayCertificate,
     ConwayProtocolParams,
-    DEFAULT_RATIFICATION_THRESHOLDS,
     DelegVote,
     DRep,
     DRepDeregistration,
@@ -61,10 +60,8 @@ from vibe.cardano.ledger.conway_types import (
     Vote,
     Voter,
     VoterRole,
-    VotingProcedure,
     VotingProcedures,
 )
-
 
 # ---------------------------------------------------------------------------
 # Proposal validation
@@ -178,8 +175,7 @@ def process_drep_registration(
 
     if cert.deposit != params.drep_deposit:
         raise ConwayGovernanceError(
-            f"DRepDepositMismatch: deposit={cert.deposit}, "
-            f"required={params.drep_deposit}"
+            f"DRepDepositMismatch: deposit={cert.deposit}, required={params.drep_deposit}"
         )
 
     new_state = deepcopy(gov_state)
@@ -206,8 +202,7 @@ def process_drep_deregistration(
     """
     if cert.credential not in gov_state.dreps:
         raise ConwayGovernanceError(
-            f"DRepNotRegistered: credential {cert.credential.hex()[:16]}... "
-            f"is not registered"
+            f"DRepNotRegistered: credential {cert.credential.hex()[:16]}... is not registered"
         )
 
     if cert.deposit_refund != gov_state.dreps[cert.credential]:
@@ -220,7 +215,8 @@ def process_drep_deregistration(
     del new_state.dreps[cert.credential]
     # Remove delegations pointing to this DRep
     new_state.drep_delegations = {
-        k: v for k, v in new_state.drep_delegations.items()
+        k: v
+        for k, v in new_state.drep_delegations.items()
         if not (v.credential == cert.credential)
     }
     return new_state
@@ -386,8 +382,7 @@ def validate_voting_procedures(
             # DRep must be registered
             if voter.credential not in gov_state.dreps:
                 errors.append(
-                    f"VoterNotAuthorized: DRep "
-                    f"{voter.credential.hex()[:16]}... not registered"
+                    f"VoterNotAuthorized: DRep {voter.credential.hex()[:16]}... not registered"
                 )
 
         elif voter.role == VoterRole.STAKE_POOL:
@@ -667,9 +662,7 @@ def check_ratification(
         # When denominator is 0 (all abstain), ratio is 0 -> threshold not met.
         # _threshold_met already returns False when total_count == 0, so we
         # can always call it.
-        if not _threshold_met(
-            spo_yes_stake, effective_denominator, thresholds.spo_threshold
-        ):
+        if not _threshold_met(spo_yes_stake, effective_denominator, thresholds.spo_threshold):
             return False
 
     # --- Committee min size check ---
@@ -874,10 +867,7 @@ def validate_treasury_withdrawals(
         return errors
 
     if action.payload is None:
-        errors.append(
-            "TreasuryWithdrawalsEmpty: "
-            "TreasuryWithdrawals must specify withdrawal map"
-        )
+        errors.append("TreasuryWithdrawalsEmpty: TreasuryWithdrawals must specify withdrawal map")
         return errors
 
     if not isinstance(action.payload, dict):
@@ -1023,9 +1013,7 @@ def reorder_gov_actions(
     """
     return sorted(
         proposals,
-        key=lambda p: GOV_ACTION_PRIORITY.get(
-            p.gov_action.action_type, 99
-        ),
+        key=lambda p: GOV_ACTION_PRIORITY.get(p.gov_action.action_type, 99),
     )
 
 
@@ -1058,8 +1046,7 @@ def validate_tx_ref_scripts_size(
     total = sum(ref_script_sizes)
     if total > max_ref_script_size:
         return [
-            f"TxRefScriptsSizeTooBig: total_ref_script_size={total}, "
-            f"max={max_ref_script_size}"
+            f"TxRefScriptsSizeTooBig: total_ref_script_size={total}, max={max_ref_script_size}"
         ]
     return []
 
@@ -1193,7 +1180,10 @@ def apply_conway_tx(
     # --- Validate and record votes ---
     if tx.voting_procedures:
         errors = validate_voting_procedures(
-            tx.voting_procedures, new_state, current_epoch, params,
+            tx.voting_procedures,
+            new_state,
+            current_epoch,
+            params,
         )
         if errors:
             raise ConwayValidationError(errors)
@@ -1207,7 +1197,10 @@ def apply_conway_tx(
     # --- Process certificates ---
     for cert in tx.certificates:
         new_state = process_conway_certificate(
-            cert, new_state, params, registered_credentials,
+            cert,
+            new_state,
+            params,
+            registered_credentials,
         )
 
     return new_state

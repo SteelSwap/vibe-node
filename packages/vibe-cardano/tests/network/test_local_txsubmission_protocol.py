@@ -18,8 +18,6 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vibe.core.protocols import Agency, Message, ProtocolError
-
 from vibe.cardano.network.local_txsubmission import (
     MsgAcceptTx,
     MsgDone,
@@ -36,7 +34,7 @@ from vibe.cardano.network.local_txsubmission_protocol import (
     LtsMsgRejectTx,
     LtsMsgSubmitTx,
 )
-
+from vibe.core.protocols import Agency
 
 # ---------------------------------------------------------------------------
 # Protocol state machine tests
@@ -53,22 +51,13 @@ class TestLocalTxSubmissionProtocol:
         assert self.protocol.initial_state() == LocalTxSubmissionState.StIdle
 
     def test_agency_idle(self) -> None:
-        assert (
-            self.protocol.agency(LocalTxSubmissionState.StIdle)
-            == Agency.Client
-        )
+        assert self.protocol.agency(LocalTxSubmissionState.StIdle) == Agency.Client
 
     def test_agency_busy(self) -> None:
-        assert (
-            self.protocol.agency(LocalTxSubmissionState.StBusy)
-            == Agency.Server
-        )
+        assert self.protocol.agency(LocalTxSubmissionState.StBusy) == Agency.Server
 
     def test_agency_done(self) -> None:
-        assert (
-            self.protocol.agency(LocalTxSubmissionState.StDone)
-            == Agency.Nobody
-        )
+        assert self.protocol.agency(LocalTxSubmissionState.StDone) == Agency.Nobody
 
     def test_valid_messages_idle(self) -> None:
         msgs = self.protocol.valid_messages(LocalTxSubmissionState.StIdle)
@@ -206,9 +195,7 @@ class TestLocalTxSubmissionCodec:
         tx_bytes=st.binary(min_size=1, max_size=500),
     )
     @settings(max_examples=200)
-    def test_hypothesis_round_trip_submit_tx(
-        self, era_id: int, tx_bytes: bytes
-    ) -> None:
+    def test_hypothesis_round_trip_submit_tx(self, era_id: int, tx_bytes: bytes) -> None:
         """Property: encode->decode is identity for submit messages."""
         original = LtsMsgSubmitTx(era_id=era_id, tx_bytes=tx_bytes)
         decoded = self.codec.decode(self.codec.encode(original))
@@ -263,14 +250,8 @@ class TestFSMTransitions:
         assert self.protocol.agency(msg.from_state) == Agency.Client
 
     def test_done_is_terminal(self) -> None:
-        assert (
-            self.protocol.agency(LocalTxSubmissionState.StDone)
-            == Agency.Nobody
-        )
-        assert (
-            len(self.protocol.valid_messages(LocalTxSubmissionState.StDone))
-            == 0
-        )
+        assert self.protocol.agency(LocalTxSubmissionState.StDone) == Agency.Nobody
+        assert len(self.protocol.valid_messages(LocalTxSubmissionState.StDone)) == 0
 
     def test_full_submit_accept_done_cycle(self) -> None:
         """Walk through submit -> accept -> done cycle."""
@@ -350,9 +331,7 @@ class TestLocalTxSubmissionServer:
     @pytest.mark.asyncio
     async def test_recv_submit_tx(self) -> None:
         server, runner = self._make_server()
-        runner.recv_message.return_value = LtsMsgSubmitTx(
-            era_id=6, tx_bytes=b"\x01"
-        )
+        runner.recv_message.return_value = LtsMsgSubmitTx(era_id=6, tx_bytes=b"\x01")
         msg = await server.recv_client_message()
         assert isinstance(msg, LtsMsgSubmitTx)
         assert msg.era_id == 6
@@ -434,13 +413,13 @@ class TestDirectClientServer:
     @pytest.mark.asyncio
     async def test_submit_accept_done(self) -> None:
         """Client submits a tx, server accepts, client sends done."""
-        from vibe.core.protocols.agency import PeerRole
-        from vibe.core.protocols.runner import ProtocolRunner
         from vibe.cardano.network.local_txsubmission_protocol import (
-            LocalTxSubmissionProtocol,
             LocalTxSubmissionCodec,
+            LocalTxSubmissionProtocol,
             LocalTxSubmissionServer,
         )
+        from vibe.core.protocols.agency import PeerRole
+        from vibe.core.protocols.runner import ProtocolRunner
 
         client_ch, server_ch = self._make_connected_channels()
 
@@ -473,9 +452,7 @@ class TestDirectClientServer:
         task = asyncio.create_task(server_task())
 
         # Client sends submit
-        await client_runner.send_message(
-            LtsMsgSubmitTx(era_id=6, tx_bytes=b"\x84\xa4")
-        )
+        await client_runner.send_message(LtsMsgSubmitTx(era_id=6, tx_bytes=b"\x84\xa4"))
         # Client receives accept
         response = await client_runner.recv_message()
         assert isinstance(response, LtsMsgAcceptTx)
@@ -488,13 +465,13 @@ class TestDirectClientServer:
     @pytest.mark.asyncio
     async def test_submit_reject_done(self) -> None:
         """Client submits a tx, server rejects, client sends done."""
-        from vibe.core.protocols.agency import PeerRole
-        from vibe.core.protocols.runner import ProtocolRunner
         from vibe.cardano.network.local_txsubmission_protocol import (
-            LocalTxSubmissionProtocol,
             LocalTxSubmissionCodec,
+            LocalTxSubmissionProtocol,
             LocalTxSubmissionServer,
         )
+        from vibe.core.protocols.agency import PeerRole
+        from vibe.core.protocols.runner import ProtocolRunner
 
         client_ch, server_ch = self._make_connected_channels()
 
@@ -524,9 +501,7 @@ class TestDirectClientServer:
 
         task = asyncio.create_task(server_task())
 
-        await client_runner.send_message(
-            LtsMsgSubmitTx(era_id=6, tx_bytes=b"\xff")
-        )
+        await client_runner.send_message(LtsMsgSubmitTx(era_id=6, tx_bytes=b"\xff"))
         response = await client_runner.recv_message()
         assert isinstance(response, LtsMsgRejectTx)
         assert cbor2.loads(response.reason) == "insufficient funds"
@@ -538,13 +513,13 @@ class TestDirectClientServer:
     @pytest.mark.asyncio
     async def test_immediate_done(self) -> None:
         """Client sends done immediately without submitting."""
-        from vibe.core.protocols.agency import PeerRole
-        from vibe.core.protocols.runner import ProtocolRunner
         from vibe.cardano.network.local_txsubmission_protocol import (
-            LocalTxSubmissionProtocol,
             LocalTxSubmissionCodec,
+            LocalTxSubmissionProtocol,
             LocalTxSubmissionServer,
         )
+        from vibe.core.protocols.agency import PeerRole
+        from vibe.core.protocols.runner import ProtocolRunner
 
         client_ch, server_ch = self._make_connected_channels()
 
@@ -585,17 +560,15 @@ class TestDirectClientServer:
     )
     @settings(max_examples=30)
     @pytest.mark.asyncio
-    async def test_hypothesis_multi_submit(
-        self, txs: list[tuple[int, bytes, bool]]
-    ) -> None:
+    async def test_hypothesis_multi_submit(self, txs: list[tuple[int, bytes, bool]]) -> None:
         """Property: any sequence of submits with accept/reject roundtrips."""
-        from vibe.core.protocols.agency import PeerRole
-        from vibe.core.protocols.runner import ProtocolRunner
         from vibe.cardano.network.local_txsubmission_protocol import (
-            LocalTxSubmissionProtocol,
             LocalTxSubmissionCodec,
+            LocalTxSubmissionProtocol,
             LocalTxSubmissionServer,
         )
+        from vibe.core.protocols.agency import PeerRole
+        from vibe.core.protocols.runner import ProtocolRunner
 
         client_ch, server_ch = self._make_connected_channels()
 
@@ -632,9 +605,7 @@ class TestDirectClientServer:
         task = asyncio.create_task(server_task())
 
         for era_id, tx_bytes, should_accept in txs:
-            await client_runner.send_message(
-                LtsMsgSubmitTx(era_id=era_id, tx_bytes=tx_bytes)
-            )
+            await client_runner.send_message(LtsMsgSubmitTx(era_id=era_id, tx_bytes=tx_bytes))
             response = await client_runner.recv_message()
             if should_accept:
                 assert isinstance(response, LtsMsgAcceptTx)

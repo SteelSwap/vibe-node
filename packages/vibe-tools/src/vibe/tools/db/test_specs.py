@@ -1,6 +1,6 @@
 """CRUD operations for test_specifications table."""
+
 import uuid
-from typing import Optional
 
 
 async def add_test_spec(
@@ -11,9 +11,9 @@ async def add_test_spec(
     description: str,
     priority: str,
     phase: str,
-    spec_section_id: Optional[uuid.UUID] = None,
-    hypothesis_strategy: Optional[str] = None,
-    metadata: Optional[dict] = None,
+    spec_section_id: uuid.UUID | None = None,
+    hypothesis_strategy: str | None = None,
+    metadata: dict | None = None,
 ) -> uuid.UUID:
     """Insert a test specification and return its ID."""
     row_id = uuid.uuid4()
@@ -27,19 +27,26 @@ async def add_test_spec(
             hypothesis_strategy = EXCLUDED.hypothesis_strategy,
             priority = EXCLUDED.priority
         """,
-        row_id, spec_section_id, subsystem, test_type,
-        test_name, description, hypothesis_strategy,
-        priority, phase, metadata,
+        row_id,
+        spec_section_id,
+        subsystem,
+        test_type,
+        test_name,
+        description,
+        hypothesis_strategy,
+        priority,
+        phase,
+        metadata,
     )
     return row_id
 
 
 async def list_test_specs(
     conn,
-    subsystem: Optional[str] = None,
-    phase: Optional[str] = None,
-    test_type: Optional[str] = None,
-    priority: Optional[str] = None,
+    subsystem: str | None = None,
+    phase: str | None = None,
+    test_type: str | None = None,
+    priority: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict], int]:
@@ -49,8 +56,10 @@ async def list_test_specs(
     idx = 1
 
     for col, val in [
-        ("subsystem", subsystem), ("phase", phase),
-        ("test_type", test_type), ("priority", priority),
+        ("subsystem", subsystem),
+        ("phase", phase),
+        ("test_type", test_type),
+        ("priority", priority),
     ]:
         if val:
             conditions.append(f"{col} = ${idx}")
@@ -59,9 +68,7 @@ async def list_test_specs(
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-    count = await conn.fetchval(
-        f"SELECT COUNT(*) FROM test_specifications {where}", *params
-    )
+    count = await conn.fetchval(f"SELECT COUNT(*) FROM test_specifications {where}", *params)
 
     params.extend([limit, offset])
     rows = await conn.fetch(

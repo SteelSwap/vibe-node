@@ -26,47 +26,37 @@ Haskell reference: Ouroboros/Network/Protocol/BlockFetch/Type.hs
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 
-from vibe.core.protocols.agency import Agency, PeerRole, ProtocolError, Message
-from vibe.core.protocols.codec import CodecError
-from vibe.cardano.network.chainsync import (
-    Point,
-    Origin,
-    ORIGIN,
-)
 from vibe.cardano.network.blockfetch import (
-    MsgRequestRange,
-    MsgClientDone,
-    MsgStartBatch,
-    MsgNoBlocks,
-    MsgBlock,
-    MsgBatchDone,
-    encode_request_range,
-    encode_client_done,
-    encode_start_batch,
-    encode_no_blocks,
-    encode_block,
     encode_batch_done,
+    encode_block,
+    encode_client_done,
+    encode_no_blocks,
+    encode_request_range,
+    encode_start_batch,
 )
 from vibe.cardano.network.blockfetch_protocol import (
-    BlockFetchState,
-    BlockFetchProtocol,
-    BlockFetchCodec,
-    BlockFetchClient,
-    BfMsgRequestRange,
-    BfMsgClientDone,
-    BfMsgStartBatch,
-    BfMsgNoBlocks,
-    BfMsgBlock,
-    BfMsgBatchDone,
     BLOCK_FETCH_SIZE_LIMITS,
     BLOCK_FETCH_TIME_LIMITS,
+    BfMsgBatchDone,
+    BfMsgBlock,
+    BfMsgClientDone,
+    BfMsgNoBlocks,
+    BfMsgRequestRange,
+    BfMsgStartBatch,
+    BlockFetchClient,
+    BlockFetchCodec,
+    BlockFetchProtocol,
+    BlockFetchState,
 )
-
+from vibe.cardano.network.chainsync import (
+    Point,
+)
+from vibe.core.protocols.agency import Agency, Message, ProtocolError
+from vibe.core.protocols.codec import CodecError
 
 # ---------------------------------------------------------------------------
 # Test fixtures

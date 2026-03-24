@@ -1,4 +1,5 @@
 """Query embedding via Ollama for the MCP server."""
+
 from vibe.tools.embed.client import EmbeddingClient
 
 _client: EmbeddingClient | None = None

@@ -63,7 +63,6 @@ from vibe.cardano.ledger.alonzo_types import (
 )
 from vibe.cardano.ledger.shelley import ShelleyUTxO
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers (reused from test_alonzo.py patterns)
 # ---------------------------------------------------------------------------
@@ -96,9 +95,7 @@ def _make_policy_id(seed: int = 0) -> ScriptHash:
     return ScriptHash(digest)
 
 
-def _sign_tx_body(
-    tx_body: TransactionBody, sk: PaymentSigningKey
-) -> VerificationKeyWitness:
+def _sign_tx_body(tx_body: TransactionBody, sk: PaymentSigningKey) -> VerificationKeyWitness:
     """Sign a transaction body and return a VKey witness."""
     tx_body_hash = tx_body.hash()
     signature = sk.sign(tx_body_hash)
@@ -591,12 +588,16 @@ class TestOutputTooSmallMinUTxO:
         ada_min = alonzo_min_utxo_value(ada_only_out, TEST_PARAMS.coins_per_utxo_word)
 
         policy_id = _make_policy_id(1)
-        ma = MultiAsset({
-            policy_id: Asset({
-                AssetName(b"token_a"): 100,
-                AssetName(b"token_b"): 200,
-            })
-        })
+        ma = MultiAsset(
+            {
+                policy_id: Asset(
+                    {
+                        AssetName(b"token_a"): 100,
+                        AssetName(b"token_b"): 200,
+                    }
+                )
+            }
+        )
         multi_out = TransactionOutput(addr, Value(coin=2_000_000, multi_asset=ma))
         multi_min = alonzo_min_utxo_value(multi_out, TEST_PARAMS.coins_per_utxo_word)
 
@@ -611,7 +612,7 @@ class TestOutputTooSmallMinUTxO:
             inputs=[txin],
             outputs=[
                 TransactionOutput(addr, 5_000_000),  # OK
-                TransactionOutput(addr, 1),           # Too small
+                TransactionOutput(addr, 1),  # Too small
             ],
             fee=10_000_000 - 5_000_001,
         )
@@ -740,7 +741,8 @@ class TestMultipleScriptLanguages:
 
     def test_native_and_plutus_scripts_coexist_in_integrity_hash(self):
         """Script integrity hash should work when Plutus scripts are present
-        alongside native scripts (native scripts don't affect the hash)."""
+        alongside native scripts (native scripts don't affect the hash).
+        """
         # Native scripts don't have redeemers or contribute to script integrity
         # hash. Only Plutus scripts do. Verify the hash only covers Plutus.
 
@@ -753,9 +755,7 @@ class TestMultipleScriptLanguages:
             )
         ]
         datums = [cbor2.dumps(99)]
-        cost_models: dict[Language, dict[str, int]] = {
-            Language.PLUTUS_V1: {"addInteger-cpu": 100}
-        }
+        cost_models: dict[Language, dict[str, int]] = {Language.PLUTUS_V1: {"addInteger-cpu": 100}}
         languages = {Language.PLUTUS_V1}
 
         # Compute hash with Plutus only (native scripts excluded)
@@ -769,7 +769,8 @@ class TestMultipleScriptLanguages:
 
     def test_native_script_evaluation_alongside_plutus_context(self):
         """A native timelock script should evaluate correctly even when
-        Plutus scripts are also being used in the same transaction."""
+        Plutus scripts are also being used in the same transaction.
+        """
         # Timelock: require signature from key hash
         key_hash = hashlib.blake2b(b"signer_key", digest_size=28).digest()
 
@@ -787,7 +788,8 @@ class TestMultipleScriptLanguages:
 
     def test_time_based_native_script_with_plutus(self):
         """A time-based native script (RequireTimeBefore) should work in
-        a transaction that also uses Plutus scripts."""
+        a transaction that also uses Plutus scripts.
+        """
         # RequireTimeBefore slot 200: valid only before slot 200
         time_script = Timelock(
             type=TimelockType.REQUIRE_TIME_BEFORE,
@@ -826,22 +828,21 @@ class TestMultipleScriptLanguages:
         ]
         datums = [cbor2.dumps(99)]
         datum_hash = hashlib.blake2b(datums[0], digest_size=32).digest()
-        cost_models: dict[Language, dict[str, int]] = {
-            Language.PLUTUS_V1: {"a": 1}
-        }
+        cost_models: dict[Language, dict[str, int]] = {Language.PLUTUS_V1: {"a": 1}}
         languages = {Language.PLUTUS_V1}
 
         # Compute correct script integrity hash
-        integrity_hash = compute_script_integrity_hash(
-            redeemers, datums, cost_models, languages
-        )
+        integrity_hash = compute_script_integrity_hash(redeemers, datums, cost_models, languages)
 
         tx_body = TransactionBody(
             inputs=[txin],
-            outputs=[TransactionOutput(
-                addr, 8_000_000,
-                datum_hash=DatumHash(datum_hash),
-            )],
+            outputs=[
+                TransactionOutput(
+                    addr,
+                    8_000_000,
+                    datum_hash=DatumHash(datum_hash),
+                )
+            ],
             fee=2_000_000,
             collateral=[coll_txin],
             validity_start=10,
@@ -874,7 +875,8 @@ class TestMultipleScriptLanguages:
 
     def test_m_of_n_timelock_with_plutus_context(self):
         """A complex MOfN native script should evaluate correctly in a
-        Plutus-enabled transaction context."""
+        Plutus-enabled transaction context.
+        """
         key1 = hashlib.blake2b(b"key1", digest_size=28).digest()
         key2 = hashlib.blake2b(b"key2", digest_size=28).digest()
         key3 = hashlib.blake2b(b"key3", digest_size=28).digest()

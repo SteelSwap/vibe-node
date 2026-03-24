@@ -17,6 +17,7 @@ Design follows the ouroboros-consensus Mempool module:
     - Thread-safe via asyncio.Lock for mutations
 """
 
+from vibe.cardano.mempool.mempool import Mempool
 from vibe.cardano.mempool.types import (
     MempoolConfig,
     MempoolSnapshot,
@@ -24,7 +25,6 @@ from vibe.cardano.mempool.types import (
     TxTicket,
     ValidatedTx,
 )
-from vibe.cardano.mempool.mempool import Mempool
 
 __all__ = [
     "Mempool",

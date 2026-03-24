@@ -32,37 +32,36 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
-from typing import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
-from vibe.core.protocols.agency import (
-    Agency,
-    Message,
-    Protocol,
-    ProtocolError,
-    PeerRole,
+from vibe.cardano.network.blockfetch import (
+    MsgBatchDone,
+    MsgBlock,
+    MsgClientDone,
+    MsgNoBlocks,
+    MsgRequestRange,
+    MsgStartBatch,
+    decode_client_message,
+    decode_server_message,
+    encode_batch_done,
+    encode_block,
+    encode_client_done,
+    encode_no_blocks,
+    encode_request_range,
+    encode_start_batch,
 )
-from vibe.core.protocols.codec import Codec, CodecError
-from vibe.core.protocols.runner import ProtocolRunner
-
 from vibe.cardano.network.chainsync import (
     PointOrOrigin,
 )
-from vibe.cardano.network.blockfetch import (
-    MsgRequestRange,
-    MsgClientDone,
-    MsgStartBatch,
-    MsgNoBlocks,
-    MsgBlock,
-    MsgBatchDone,
-    encode_request_range,
-    encode_client_done,
-    encode_start_batch,
-    encode_no_blocks,
-    encode_block,
-    encode_batch_done,
-    decode_server_message,
-    decode_client_message,
+from vibe.core.protocols.agency import (
+    Agency,
+    Message,
+    PeerRole,
+    Protocol,
+    ProtocolError,
 )
+from vibe.core.protocols.codec import CodecError
+from vibe.core.protocols.runner import ProtocolRunner
 
 __all__ = [
     "BlockFetchState",
@@ -294,9 +293,7 @@ class BlockFetchProtocol(Protocol[BlockFetchState]):
         except KeyError:
             raise ProtocolError(f"Unknown block-fetch state: {state!r}")
 
-    def valid_messages(
-        self, state: BlockFetchState
-    ) -> frozenset[type[Message[BlockFetchState]]]:
+    def valid_messages(self, state: BlockFetchState) -> frozenset[type[Message[BlockFetchState]]]:
         try:
             return self._VALID_MESSAGES[state]
         except KeyError:
@@ -332,9 +329,7 @@ class BlockFetchCodec:
         elif isinstance(message, BfMsgBatchDone):
             return encode_batch_done()
         else:
-            raise CodecError(
-                f"Unknown block-fetch message type: {type(message).__name__}"
-            )
+            raise CodecError(f"Unknown block-fetch message type: {type(message).__name__}")
 
     def decode(self, data: bytes) -> Message[BlockFetchState]:
         """Decode CBOR bytes into a typed block-fetch message.
@@ -371,9 +366,7 @@ class BlockFetchCodec:
         msg = decode_client_message(data)
 
         if isinstance(msg, MsgRequestRange):
-            return BfMsgRequestRange(
-                point_from=msg.point_from, point_to=msg.point_to
-            )
+            return BfMsgRequestRange(point_from=msg.point_from, point_to=msg.point_to)
         elif isinstance(msg, MsgClientDone):
             return BfMsgClientDone()
         else:
@@ -425,30 +418,25 @@ class BlockFetchClient:
         point_to : PointOrOrigin
             End of the range (inclusive).
 
-        Returns
+        Returns:
         -------
         list[bytes] | None
             List of block CBOR bytes if the server had blocks, or None
             if the server responded with MsgNoBlocks.
 
-        Raises
+        Raises:
         ------
         ProtocolError
             If not in BFIdle state or server sends unexpected messages.
         """
-        await self._runner.send_message(
-            BfMsgRequestRange(point_from, point_to)
-        )
+        await self._runner.send_message(BfMsgRequestRange(point_from, point_to))
         response = await self._runner.recv_message()
 
         if isinstance(response, BfMsgNoBlocks):
             return None
 
         if not isinstance(response, BfMsgStartBatch):
-            raise ProtocolError(
-                f"Unexpected response to RequestRange: "
-                f"{type(response).__name__}"
-            )
+            raise ProtocolError(f"Unexpected response to RequestRange: {type(response).__name__}")
 
         # Collect blocks until BatchDone
         blocks: list[bytes] = []
@@ -459,10 +447,7 @@ class BlockFetchClient:
             elif isinstance(msg, BfMsgBatchDone):
                 return blocks
             else:
-                raise ProtocolError(
-                    f"Unexpected message during streaming: "
-                    f"{type(msg).__name__}"
-                )
+                raise ProtocolError(f"Unexpected message during streaming: {type(msg).__name__}")
 
     async def done(self) -> None:
         """Send ClientDone to terminate the protocol.
@@ -589,9 +574,7 @@ async def run_block_fetch_continuous(
                 break
 
             try:
-                point_from, point_to = await asyncio.wait_for(
-                    range_queue.get(), timeout=1.0
-                )
+                point_from, point_to = await asyncio.wait_for(range_queue.get(), timeout=1.0)
             except TimeoutError:
                 continue
 
@@ -605,7 +588,7 @@ async def run_block_fetch_continuous(
     finally:
         try:
             await client.done()
-        except (ProtocolError, Exception):
+        except ProtocolError, Exception:
             pass  # Channel may already be closed on shutdown
 
 
@@ -684,16 +667,15 @@ async def run_block_fetch_server(
 
         if isinstance(msg, BfMsgRequestRange):
             # Fetch blocks for the requested range.
-            blocks = await block_provider.get_blocks(
-                msg.point_from, msg.point_to
-            )
+            blocks = await block_provider.get_blocks(msg.point_from, msg.point_to)
 
             if blocks is None or len(blocks) == 0:
                 # No blocks available for this range.
                 await runner.send_message(BfMsgNoBlocks())
                 logger.debug(
                     "Block-fetch server: NoBlocks for range %s -> %s",
-                    msg.point_from, msg.point_to,
+                    msg.point_from,
+                    msg.point_to,
                 )
             else:
                 # Stream the blocks.
@@ -703,7 +685,9 @@ async def run_block_fetch_server(
                 await runner.send_message(BfMsgBatchDone())
                 logger.debug(
                     "Block-fetch server: sent %d blocks for range %s -> %s",
-                    len(blocks), msg.point_from, msg.point_to,
+                    len(blocks),
+                    msg.point_from,
+                    msg.point_to,
                 )
 
         elif isinstance(msg, BfMsgClientDone):

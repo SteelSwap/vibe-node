@@ -10,7 +10,7 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 from hypothesis import given, settings
@@ -32,7 +32,6 @@ from vibe.cardano.consensus.slot_arithmetic import (
     slot_to_wall_clock,
     wall_clock_to_slot,
 )
-
 
 # ---------------------------------------------------------------------------
 # SlotConfig validation
@@ -256,9 +255,7 @@ class TestMonotonicity:
     @settings(max_examples=200)
     def test_slot_to_epoch_monotonic(self, a: int, b: int) -> None:
         if a <= b:
-            assert slot_to_epoch(a, SHELLEY_CONFIG) <= slot_to_epoch(
-                b, SHELLEY_CONFIG
-            )
+            assert slot_to_epoch(a, SHELLEY_CONFIG) <= slot_to_epoch(b, SHELLEY_CONFIG)
 
     @given(
         a=st.integers(min_value=0, max_value=100_000_000),
@@ -267,9 +264,7 @@ class TestMonotonicity:
     @settings(max_examples=200)
     def test_slot_to_wall_clock_monotonic(self, a: int, b: int) -> None:
         if a <= b:
-            assert slot_to_wall_clock(a, SHELLEY_CONFIG) <= slot_to_wall_clock(
-                b, SHELLEY_CONFIG
-            )
+            assert slot_to_wall_clock(a, SHELLEY_CONFIG) <= slot_to_wall_clock(b, SHELLEY_CONFIG)
 
     @given(
         a=st.integers(min_value=0, max_value=100_000_000),

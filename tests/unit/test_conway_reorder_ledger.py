@@ -22,10 +22,8 @@ import hashlib
 import pytest
 
 from vibe.cardano.ledger.conway import (
-    ConwayGovernanceError,
     ConwayTx,
     ConwayValidationError,
-    GOV_ACTION_PRIORITY,
     apply_conway_tx,
     reorder_gov_actions,
     validate_tx_ref_scripts_size,
@@ -34,7 +32,6 @@ from vibe.cardano.ledger.conway import (
 from vibe.cardano.ledger.conway_types import (
     Anchor,
     ConwayProtocolParams,
-    DelegVote,
     DRep,
     DRepRegistration,
     DRepType,
@@ -48,7 +45,6 @@ from vibe.cardano.ledger.conway_types import (
     VoterRole,
     VotingProcedure,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
@@ -80,9 +76,7 @@ def make_tx_id_bytes(seed: int = 0) -> bytes:
 
 def make_anchor(seed: int = 0) -> Anchor:
     """Create a test anchor."""
-    data_hash = hashlib.blake2b(
-        f"anchor-{seed}".encode(), digest_size=32
-    ).digest()
+    data_hash = hashlib.blake2b(f"anchor-{seed}".encode(), digest_size=32).digest()
     return Anchor(url=f"https://example.com/proposal-{seed}", data_hash=data_hash)
 
 
@@ -131,13 +125,15 @@ class TestReorderGovActions:
         """Reordering N proposals must produce exactly N proposals."""
         proposals = [
             make_proposal(seed=i, action_type=at)
-            for i, at in enumerate([
-                GovActionType.TREASURY_WITHDRAWALS,
-                GovActionType.HARD_FORK_INITIATION,
-                GovActionType.INFO_ACTION,
-                GovActionType.NO_CONFIDENCE,
-                GovActionType.PARAMETER_CHANGE,
-            ])
+            for i, at in enumerate(
+                [
+                    GovActionType.TREASURY_WITHDRAWALS,
+                    GovActionType.HARD_FORK_INITIATION,
+                    GovActionType.INFO_ACTION,
+                    GovActionType.NO_CONFIDENCE,
+                    GovActionType.PARAMETER_CHANGE,
+                ]
+            )
         ]
         reordered = reorder_gov_actions(proposals)
         assert len(reordered) == len(proposals)
@@ -276,7 +272,8 @@ class TestWithdrawalDelegation:
 
     def test_withdrawal_from_delegated_key_succeeds(self):
         """Withdrawal from a credential that has delegated to a DRep
-        should produce no errors."""
+        should produce no errors.
+        """
         cred = make_credential(1)
         drep_cred = make_credential(2)
         drep = DRep(drep_type=DRepType.KEY_HASH, credential=drep_cred)
@@ -330,7 +327,8 @@ class TestApplyConwayTx:
 
     def test_apply_tx_with_proposals_and_votes(self):
         """A full Conway tx with proposals and votes should update
-        governance state correctly: proposals added, votes recorded."""
+        governance state correctly: proposals added, votes recorded.
+        """
         drep_cred = make_credential(1)
         tx_id = make_tx_id_bytes(42)
 
@@ -359,7 +357,10 @@ class TestApplyConwayTx:
         )
 
         new_state = apply_conway_tx(
-            tx, gov_state, TEST_PARAMS, current_epoch=10,
+            tx,
+            gov_state,
+            TEST_PARAMS,
+            current_epoch=10,
         )
 
         # Verify: new proposal added
@@ -393,7 +394,10 @@ class TestApplyConwayTx:
         )
 
         new_state = apply_conway_tx(
-            tx, gov_state, TEST_PARAMS, current_epoch=10,
+            tx,
+            gov_state,
+            TEST_PARAMS,
+            current_epoch=10,
         )
 
         assert drep_cred in new_state.dreps
@@ -411,7 +415,10 @@ class TestApplyConwayTx:
 
         with pytest.raises(ConwayValidationError, match="ProposalDepositMismatch"):
             apply_conway_tx(
-                tx, GovernanceState(), TEST_PARAMS, current_epoch=10,
+                tx,
+                GovernanceState(),
+                TEST_PARAMS,
+                current_epoch=10,
             )
 
     def test_apply_tx_invalid_vote_raises(self):
@@ -434,5 +441,8 @@ class TestApplyConwayTx:
 
         with pytest.raises(ConwayValidationError, match="GovActionIdNotFound"):
             apply_conway_tx(
-                tx, gov_state, TEST_PARAMS, current_epoch=10,
+                tx,
+                gov_state,
+                TEST_PARAMS,
+                current_epoch=10,
             )

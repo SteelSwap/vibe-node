@@ -20,8 +20,8 @@ Haskell reference:
 from __future__ import annotations
 
 import threading
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 __all__ = ["RWLock"]
 
@@ -44,7 +44,7 @@ class RWLock:
         self._writer_active: bool = False
 
     @contextmanager
-    def read(self) -> Generator[None, None, None]:
+    def read(self) -> Generator[None]:
         """Acquire read lock. Multiple readers can hold simultaneously.
 
         Blocks if a writer is active or waiting (write-preferring).
@@ -62,7 +62,7 @@ class RWLock:
                     self._cond.notify_all()
 
     @contextmanager
-    def write(self) -> Generator[None, None, None]:
+    def write(self) -> Generator[None]:
         """Acquire write lock. Exclusive access, blocks all readers."""
         with self._cond:
             self._writers_waiting += 1

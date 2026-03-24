@@ -56,7 +56,6 @@ from vibe.cardano.network.local_txmonitor import (
     encode_reply_next_tx,
 )
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -279,9 +278,7 @@ class TestDecoding:
         assert isinstance(msg, MsgGetSizes)
 
     def test_decode_reply_get_sizes(self) -> None:
-        msg = decode_message(
-            cbor2.dumps([MSG_REPLY_GET_SIZES, 10, 5000, 6000])
-        )
+        msg = decode_message(cbor2.dumps([MSG_REPLY_GET_SIZES, 10, 5000, 6000]))
         assert isinstance(msg, MsgReplyGetSizes)
         assert msg.num_txs == 10
         assert msg.total_size == 5000
@@ -337,15 +334,11 @@ class TestDecoding:
 
     def test_decode_reply_get_sizes_not_int(self) -> None:
         with pytest.raises(ValueError, match="must be int"):
-            decode_message(
-                cbor2.dumps([MSG_REPLY_GET_SIZES, "ten", 5000, 6000])
-            )
+            decode_message(cbor2.dumps([MSG_REPLY_GET_SIZES, "ten", 5000, 6000]))
 
     def test_decode_reply_get_sizes_bool_rejected(self) -> None:
         with pytest.raises(ValueError, match="must be int"):
-            decode_message(
-                cbor2.dumps([MSG_REPLY_GET_SIZES, True, 5000, 6000])
-            )
+            decode_message(cbor2.dumps([MSG_REPLY_GET_SIZES, True, 5000, 6000]))
 
 
 # ---------------------------------------------------------------------------
@@ -517,9 +510,7 @@ class TestHypothesis:
     def test_reply_get_sizes_round_trip(
         self, num_txs: int, total_size: int, num_bytes: int
     ) -> None:
-        msg = decode_message(
-            encode_reply_get_sizes(num_txs, total_size, num_bytes)
-        )
+        msg = decode_message(encode_reply_get_sizes(num_txs, total_size, num_bytes))
         assert isinstance(msg, MsgReplyGetSizes)
         assert msg.num_txs == num_txs
         assert msg.total_size == total_size
@@ -530,9 +521,7 @@ class TestHypothesis:
         tx_bytes=st.binary(min_size=1, max_size=500),
     )
     @settings(max_examples=200)
-    def test_reply_next_tx_just_round_trip(
-        self, era_id: int, tx_bytes: bytes
-    ) -> None:
+    def test_reply_next_tx_just_round_trip(self, era_id: int, tx_bytes: bytes) -> None:
         msg = decode_message(encode_reply_next_tx((era_id, tx_bytes)))
         assert isinstance(msg, MsgReplyNextTx)
         assert msg.tx is not None

@@ -17,11 +17,8 @@ from __future__ import annotations
 
 import hashlib
 
-import pytest
-
 from vibe.cardano.ledger.conway import (
     _threshold_met,
-    apply_no_confidence,
     check_ratification,
     validate_hard_fork_initiation,
     validate_proposal,
@@ -29,9 +26,9 @@ from vibe.cardano.ledger.conway import (
     validate_treasury_withdrawals,
 )
 from vibe.cardano.ledger.conway_types import (
+    DEFAULT_RATIFICATION_THRESHOLDS,
     Anchor,
     ConwayProtocolParams,
-    DEFAULT_RATIFICATION_THRESHOLDS,
     GovAction,
     GovActionId,
     GovActionType,
@@ -43,7 +40,6 @@ from vibe.cardano.ledger.conway_types import (
     VoterRole,
     VotingProcedure,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
@@ -75,9 +71,7 @@ def _tx_id(seed: int = 0) -> bytes:
 
 def _anchor(seed: int = 0) -> Anchor:
     """Create a test anchor."""
-    data_hash = hashlib.blake2b(
-        f"anchor-{seed}".encode(), digest_size=32
-    ).digest()
+    data_hash = hashlib.blake2b(f"anchor-{seed}".encode(), digest_size=32).digest()
     return Anchor(url=f"https://example.com/proposal-{seed}", data_hash=data_hash)
 
 
@@ -141,25 +135,21 @@ def _gov_state_with_all_votes(
     )
     if drep_votes:
         for cred, vote in drep_votes.items():
-            state.votes[action_id][
-                Voter(VoterRole.DREP, cred)
-            ] = VotingProcedure(vote=vote)
+            state.votes[action_id][Voter(VoterRole.DREP, cred)] = VotingProcedure(vote=vote)
     if cc_votes:
         for cred, vote in cc_votes.items():
-            state.votes[action_id][
-                Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cred)
-            ] = VotingProcedure(vote=vote)
+            state.votes[action_id][Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cred)] = (
+                VotingProcedure(vote=vote)
+            )
     elif committee:
         # Default: all CC vote YES so CC threshold is not the thing we test
         for cred in committee:
-            state.votes[action_id][
-                Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cred)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cred)] = (
+                VotingProcedure(vote=Vote.YES)
+            )
     if spo_votes:
         for cred, vote in spo_votes.items():
-            state.votes[action_id][
-                Voter(VoterRole.STAKE_POOL, cred)
-            ] = VotingProcedure(vote=vote)
+            state.votes[action_id][Voter(VoterRole.STAKE_POOL, cred)] = VotingProcedure(vote=vote)
     return state
 
 
@@ -229,14 +219,10 @@ class TestGovernanceLifecycle:
         """
         state = GovernanceState(current_protocol_version=(9, 0))
 
-        ok_action = GovAction(
-            action_type=GovActionType.HARD_FORK_INITIATION, payload=(10, 0)
-        )
+        ok_action = GovAction(action_type=GovActionType.HARD_FORK_INITIATION, payload=(10, 0))
         assert validate_hard_fork_initiation(ok_action, state) == []
 
-        bad_action = GovAction(
-            action_type=GovActionType.HARD_FORK_INITIATION, payload=(12, 0)
-        )
+        bad_action = GovAction(action_type=GovActionType.HARD_FORK_INITIATION, payload=(12, 0))
         errors = validate_hard_fork_initiation(bad_action, state)
         assert any("VersionMismatch" in e for e in errors)
 
@@ -756,9 +742,7 @@ class TestRatificationArithmetic:
         # Now imagine the threshold was raised to 100% and there's a NO voter
         d2 = _cred(2)
         state.dreps[d2] = 500_000_000
-        state.votes[aid][Voter(VoterRole.DREP, d2)] = VotingProcedure(
-            vote=Vote.NO
-        )
+        state.votes[aid][Voter(VoterRole.DREP, d2)] = VotingProcedure(vote=Vote.NO)
         # 1/2 YES with (1,1) threshold => 50% < 100% => fail
         assert not check_ratification(aid, state, TEST_PARAMS, strict)
         # But with (1,2) threshold => 50% >= 50% => pass

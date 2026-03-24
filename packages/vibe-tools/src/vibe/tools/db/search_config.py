@@ -66,11 +66,6 @@ SEARCH_CONFIG: dict[str, dict] = {
 
 async def get_available_configs(conn) -> dict[str, dict]:
     """Return only configs whose tables exist in the database."""
-    result = await conn.fetch(
-        "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
-    )
+    result = await conn.fetch("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
     existing_tables = {row["tablename"] for row in result}
-    return {
-        name: cfg for name, cfg in SEARCH_CONFIG.items()
-        if cfg["table"] in existing_tables
-    }
+    return {name: cfg for name, cfg in SEARCH_CONFIG.items() if cfg["table"] in existing_tables}

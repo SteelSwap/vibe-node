@@ -13,28 +13,28 @@ from __future__ import annotations
 
 import pytest
 
-from vibe.core.multiplexer.bearer import connect
-from vibe.core.multiplexer.segment import MuxSegment
-from vibe.cardano.network.handshake import (
-    encode_propose_versions,
-    decode_handshake_response,
-    build_version_table,
-    PREPROD_NETWORK_MAGIC,
-    HANDSHAKE_PROTOCOL_ID,
-    MsgAcceptVersion,
+from vibe.cardano.network.blockfetch import (
+    BLOCK_FETCH_N2N_ID,
+    MsgBatchDone,
+    MsgBlock,
+    MsgNoBlocks,
+    MsgStartBatch,
+    encode_request_range,
 )
 from vibe.cardano.network.blockfetch import (
-    encode_request_range,
-    encode_client_done,
     decode_server_message as decode_blockfetch,
-    MsgStartBatch,
-    MsgNoBlocks,
-    MsgBlock,
-    MsgBatchDone,
-    BLOCK_FETCH_N2N_ID,
 )
 from vibe.cardano.network.chainsync import Point
-
+from vibe.cardano.network.handshake import (
+    HANDSHAKE_PROTOCOL_ID,
+    PREPROD_NETWORK_MAGIC,
+    MsgAcceptVersion,
+    build_version_table,
+    decode_handshake_response,
+    encode_propose_versions,
+)
+from vibe.core.multiplexer.bearer import connect
+from vibe.core.multiplexer.segment import MuxSegment
 
 pytestmark = pytest.mark.integration
 
@@ -54,8 +54,12 @@ async def test_blockfetch_handshake_and_request(cardano_node_available):
 
     # Handshake
     versions = build_version_table(PREPROD_NETWORK_MAGIC)
-    seg = MuxSegment(timestamp=0, protocol_id=HANDSHAKE_PROTOCOL_ID,
-                     is_initiator=True, payload=encode_propose_versions(versions))
+    seg = MuxSegment(
+        timestamp=0,
+        protocol_id=HANDSHAKE_PROTOCOL_ID,
+        is_initiator=True,
+        payload=encode_propose_versions(versions),
+    )
     await bearer.write_segment(seg)
     resp = await bearer.read_segment()
     hs = decode_handshake_response(resp.payload)
@@ -63,14 +67,19 @@ async def test_blockfetch_handshake_and_request(cardano_node_available):
 
     # Send a block-fetch request with a known point (slot 0, genesis hash for preprod)
     # The server should respond with either StartBatch or NoBlocks
-    genesis_point = Point(slot=0, hash=bytes.fromhex(
-        "d4b8de7a11d929a323373cbab6c1a9bdc931beffff11db111cf9d57356ee1937"
-    ))
+    genesis_point = Point(
+        slot=0,
+        hash=bytes.fromhex("d4b8de7a11d929a323373cbab6c1a9bdc931beffff11db111cf9d57356ee1937"),
+    )
 
-    await bearer.write_segment(MuxSegment(
-        timestamp=0, protocol_id=BLOCK_FETCH_N2N_ID,
-        is_initiator=True, payload=encode_request_range(genesis_point, genesis_point)
-    ))
+    await bearer.write_segment(
+        MuxSegment(
+            timestamp=0,
+            protocol_id=BLOCK_FETCH_N2N_ID,
+            is_initiator=True,
+            payload=encode_request_range(genesis_point, genesis_point),
+        )
+    )
 
     resp = await bearer.read_segment()
     msg = decode_blockfetch(resp.payload)

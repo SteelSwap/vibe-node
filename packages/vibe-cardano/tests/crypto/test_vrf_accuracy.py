@@ -23,16 +23,13 @@ import struct
 from decimal import Decimal, getcontext
 
 import pytest
-from hypothesis import given, settings, assume
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from vibe.cardano.crypto.vrf import (
     VRF_OUTPUT_SIZE,
-    _2_POW_256,
     certified_nat_max_check,
-    vrf_leader_value,
 )
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -118,15 +115,11 @@ class TestPraosLeaderComparisonMpmath:
     """
 
     @given(
-        sigma=st.floats(min_value=0.001, max_value=1.0,
-                        allow_nan=False, allow_infinity=False),
-        f=st.floats(min_value=0.001, max_value=0.999,
-                     allow_nan=False, allow_infinity=False),
+        sigma=st.floats(min_value=0.001, max_value=1.0, allow_nan=False, allow_infinity=False),
+        f=st.floats(min_value=0.001, max_value=0.999, allow_nan=False, allow_infinity=False),
     )
     @settings(max_examples=100)
-    def test_property_praos_leader_comparison(
-        self, sigma: float, f: float
-    ) -> None:
+    def test_property_praos_leader_comparison(self, sigma: float, f: float) -> None:
         """Our Decimal threshold matches mpmath to 30+ decimal places.
 
         For 100 random (sigma, f) pairs, compute the Praos threshold
@@ -195,28 +188,20 @@ class TestSigmaZeroAlwaysRejected:
 
     def test_sigma_zero_min_output(self) -> None:
         """sigma=0 with zero VRF output: not elected."""
-        assert not certified_nat_max_check(
-            b"\x00" * VRF_OUTPUT_SIZE, sigma=0.0, f=0.05
-        )
+        assert not certified_nat_max_check(b"\x00" * VRF_OUTPUT_SIZE, sigma=0.0, f=0.05)
 
     def test_sigma_zero_max_output(self) -> None:
         """sigma=0 with max VRF output: not elected."""
-        assert not certified_nat_max_check(
-            b"\xff" * VRF_OUTPUT_SIZE, sigma=0.0, f=0.05
-        )
+        assert not certified_nat_max_check(b"\xff" * VRF_OUTPUT_SIZE, sigma=0.0, f=0.05)
 
     def test_sigma_zero_random_output(self) -> None:
         """sigma=0 with random VRF output: not elected."""
         random_output = os.urandom(VRF_OUTPUT_SIZE)
-        assert not certified_nat_max_check(
-            random_output, sigma=0.0, f=0.05
-        )
+        assert not certified_nat_max_check(random_output, sigma=0.0, f=0.05)
 
     def test_sigma_zero_high_f(self) -> None:
         """sigma=0 with high f: still not elected."""
-        assert not certified_nat_max_check(
-            b"\x00" * VRF_OUTPUT_SIZE, sigma=0.0, f=0.99
-        )
+        assert not certified_nat_max_check(b"\x00" * VRF_OUTPUT_SIZE, sigma=0.0, f=0.99)
 
 
 class TestSigmaOneThresholdEqualsF:
@@ -279,7 +264,7 @@ class TestFZeroAlwaysRejected:
             certified_nat_max_check(output, sigma=0.5, f=-0.01)
 
     def test_very_small_f_low_threshold(self) -> None:
-        """f very close to 0 should have a very low threshold.
+        """F very close to 0 should have a very low threshold.
 
         With f=0.001 and sigma=1.0, threshold = 0.001. Only ~0.1% of
         VRF outputs pass. The max output should fail.

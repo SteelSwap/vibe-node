@@ -23,18 +23,12 @@ import struct
 import time
 from pathlib import Path
 
-import pyarrow as pa
-import pyarrow.ipc as ipc
 import pytest
 
 from vibe.cardano.storage.ledger import (
-    BlockDiff,
-    ExceededRollbackError,
     LedgerDB,
-    UTXO_SCHEMA,
 )
 from vibe.core.storage.interfaces import SnapshotHandle
-
 
 # ---------------------------------------------------------------------------
 # Helpers

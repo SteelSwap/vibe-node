@@ -26,11 +26,9 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from enum import IntEnum, auto
-from typing import Any
+from enum import IntEnum
 
 from vibe.cardano.ledger.allegra_mary import MaryProtocolParams
-
 
 # ---------------------------------------------------------------------------
 # ExUnits — execution budget
@@ -275,13 +273,11 @@ class ExUnitPrices:
         """
         # Ceiling division: ceil(a * n / d) = (a * n + d - 1) // d
         mem_fee = (
-            (ex_units.mem * self.mem_price_numerator + self.mem_price_denominator - 1)
-            // self.mem_price_denominator
-        )
+            ex_units.mem * self.mem_price_numerator + self.mem_price_denominator - 1
+        ) // self.mem_price_denominator
         step_fee = (
-            (ex_units.steps * self.step_price_numerator + self.step_price_denominator - 1)
-            // self.step_price_denominator
-        )
+            ex_units.steps * self.step_price_numerator + self.step_price_denominator - 1
+        ) // self.step_price_denominator
         return mem_fee + step_fee
 
 
@@ -441,12 +437,14 @@ def compute_script_integrity_hash(
     # Encode redeemers as a CBOR array of [tag, index, data, [mem, steps]]
     redeemer_entries = []
     for r in sorted(redeemers, key=lambda x: (x.tag.value, x.index)):
-        redeemer_entries.append([
-            r.tag.value,
-            r.index,
-            cbor2.loads(r.data) if r.data else None,
-            [r.ex_units.mem, r.ex_units.steps],
-        ])
+        redeemer_entries.append(
+            [
+                r.tag.value,
+                r.index,
+                cbor2.loads(r.data) if r.data else None,
+                [r.ex_units.mem, r.ex_units.steps],
+            ]
+        )
     redeemers_cbor = cbor2.dumps(redeemer_entries)
 
     # Encode datums as a CBOR array

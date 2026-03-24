@@ -75,7 +75,7 @@ class MsgRequestTxIds:
     determines whether the client must reply with at least one tx ID
     (blocking=True) or may reply with an empty list (blocking=False).
 
-    Attributes
+    Attributes:
     ----------
     blocking : bool
         If True, the client MUST reply with a non-empty list or MsgDone.
@@ -100,7 +100,7 @@ class MsgReplyTxIds:
     blocking request, this list MUST be non-empty. When replying to a
     non-blocking request, the list may be empty.
 
-    Attributes
+    Attributes:
     ----------
     txids : list[tuple[bytes, int]]
         List of (transaction_id_bytes, size_in_bytes) pairs.
@@ -114,7 +114,7 @@ class MsgReplyTxIds:
 class MsgRequestTxs:
     """Server -> Client: request full transactions by their IDs.
 
-    Attributes
+    Attributes:
     ----------
     txids : list[bytes]
         List of transaction IDs to fetch.
@@ -128,7 +128,7 @@ class MsgRequestTxs:
 class MsgReplyTxs:
     """Client -> Server: reply with full CBOR-encoded transactions.
 
-    Attributes
+    Attributes:
     ----------
     txs : list[bytes]
         List of CBOR-encoded transaction bodies.
@@ -273,12 +273,12 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
     cbor_bytes : bytes
         Raw CBOR payload (one complete message).
 
-    Returns
+    Returns:
     -------
     ServerMessage
         One of: MsgRequestTxIds, MsgRequestTxs.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.
@@ -292,9 +292,7 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
 
     if msg_id == MSG_REQUEST_TX_IDS:
         if len(msg) != 4:
-            raise ValueError(
-                f"MsgRequestTxIds: expected 4 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgRequestTxIds: expected 4 elements, got {len(msg)}")
         blocking = msg[1]
         if not isinstance(blocking, bool):
             raise ValueError(
@@ -302,23 +300,15 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
             )
         ack_count = msg[2]
         req_count = msg[3]
-        return MsgRequestTxIds(
-            blocking=blocking, ack_count=ack_count, req_count=req_count
-        )
+        return MsgRequestTxIds(blocking=blocking, ack_count=ack_count, req_count=req_count)
 
     elif msg_id == MSG_REQUEST_TXS:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgRequestTxs: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgRequestTxs: expected 2 elements, got {len(msg)}")
         txids_raw = msg[1]
         if not isinstance(txids_raw, list):
-            raise ValueError(
-                f"MsgRequestTxs: txids must be list, got {type(txids_raw).__name__}"
-            )
-        txids = [
-            bytes(t) if isinstance(t, memoryview) else t for t in txids_raw
-        ]
+            raise ValueError(f"MsgRequestTxs: txids must be list, got {type(txids_raw).__name__}")
+        txids = [bytes(t) if isinstance(t, memoryview) else t for t in txids_raw]
         return MsgRequestTxs(txids=txids)
 
     else:
@@ -335,12 +325,12 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
 
     Client sends MsgInit, MsgReplyTxIds, MsgReplyTxs, or MsgDone.
 
-    Returns
+    Returns:
     -------
     ClientMessage
         One of: MsgInit, MsgReplyTxIds, MsgReplyTxs, MsgDone.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.
@@ -359,14 +349,10 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
 
     elif msg_id == MSG_REPLY_TX_IDS:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgReplyTxIds: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgReplyTxIds: expected 2 elements, got {len(msg)}")
         raw_txids = msg[1]
         if not isinstance(raw_txids, list):
-            raise ValueError(
-                f"MsgReplyTxIds: txids must be list, got {type(raw_txids).__name__}"
-            )
+            raise ValueError(f"MsgReplyTxIds: txids must be list, got {type(raw_txids).__name__}")
         txids: list[tuple[bytes, int]] = []
         for item in raw_txids:
             if not isinstance(item, list) or len(item) != 2:
@@ -383,14 +369,10 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
 
     elif msg_id == MSG_REPLY_TXS:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgReplyTxs: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgReplyTxs: expected 2 elements, got {len(msg)}")
         raw_txs = msg[1]
         if not isinstance(raw_txs, list):
-            raise ValueError(
-                f"MsgReplyTxs: txs must be list, got {type(raw_txs).__name__}"
-            )
+            raise ValueError(f"MsgReplyTxs: txs must be list, got {type(raw_txs).__name__}")
         txs = [bytes(t) if isinstance(t, memoryview) else t for t in raw_txs]
         return MsgReplyTxs(txs=txs)
 

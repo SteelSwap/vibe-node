@@ -33,14 +33,12 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 import pytest
 
 from vibe.cardano.consensus.header_validation import (
     Checkpoints,
     HeaderValidationFailure,
-    HeaderValidationParams,
     PoolInfo,
     StakeDistribution,
     _pool_id_from_vkey,
@@ -48,7 +46,6 @@ from vibe.cardano.consensus.header_validation import (
 )
 from vibe.cardano.consensus.hfc import (
     Era,
-    EraParams,
     HardForkConfig,
     PastHorizonError,
     _era_start_slots,
@@ -57,7 +54,6 @@ from vibe.cardano.consensus.hfc import (
 )
 from vibe.cardano.consensus.nonce import (
     NEUTRAL_NONCE,
-    EpochNonce,
     accumulate_vrf_output,
     evolve_nonce,
     is_in_stability_window,
@@ -66,10 +62,6 @@ from vibe.cardano.consensus.praos import (
     PraosState,
     apply_header,
 )
-from vibe.cardano.consensus.slot_arithmetic import (
-    SHELLEY_EPOCH_LENGTH,
-)
-
 
 # ---------------------------------------------------------------------------
 # Mock header — reuses the pattern from existing tests
@@ -94,12 +86,12 @@ class MockOperationalCert:
 class MockBlockHeader:
     slot: int = 100
     block_number: int = 10
-    prev_hash: Optional[bytes] = None
+    prev_hash: bytes | None = None
     issuer_vkey: bytes = b"\x00" * 32
     header_cbor: bytes = b"\x00" * 100
     protocol_version: MockProtocolVersion = None  # type: ignore
     operational_cert: MockOperationalCert = None  # type: ignore
-    vrf_output: Optional[bytes] = None
+    vrf_output: bytes | None = None
     header_body_cbor: bytes = b""
     kes_signature: bytes = b""
 
@@ -163,9 +155,7 @@ class TestIntegratedPRTCLTransition:
             vrf_out = os.urandom(64)
             vrf_outputs.append(vrf_out)
 
-            prev_hash = (
-                _blake2b_256(headers[-1].header_cbor) if headers else b"\x00" * 32
-            )
+            prev_hash = _blake2b_256(headers[-1].header_cbor) if headers else b"\x00" * 32
             hdr = MockBlockHeader(
                 slot=100 + (i + 1) * 10,
                 block_number=10 + i + 1,
@@ -216,13 +206,9 @@ class TestIntegratedPRTCLTransition:
         # Verify the accumulated nonce is correct by recomputing manually.
         expected_eta = NEUTRAL_NONCE.value
         for vrf_out in vrf_outputs:
-            expected_eta = hashlib.blake2b(
-                expected_eta + vrf_out, digest_size=32
-            ).digest()
+            expected_eta = hashlib.blake2b(expected_eta + vrf_out, digest_size=32).digest()
 
-        assert eta_v == expected_eta, (
-            "Nonce accumulation diverged from manual computation"
-        )
+        assert eta_v == expected_eta, "Nonce accumulation diverged from manual computation"
 
 
 # ===========================================================================
@@ -245,7 +231,8 @@ class TestPRTCLEpochBoundary:
 
     def test_epoch_boundary_nonce_evolution(self) -> None:
         """Simulate blocks in epoch N (within stability window), then
-        trigger epoch transition and verify the new nonce."""
+        trigger epoch transition and verify the new nonce.
+        """
         epoch_length = 100  # small epoch for test convenience
         stability_cutoff = (epoch_length * 2) // 3  # slot 66 relative
 
@@ -267,14 +254,13 @@ class TestPRTCLEpochBoundary:
         new_nonce = evolve_nonce(prev_nonce, eta_v)
 
         # Manual verification.
-        expected = hashlib.blake2b(
-            prev_nonce.value + eta_v, digest_size=32
-        ).digest()
+        expected = hashlib.blake2b(prev_nonce.value + eta_v, digest_size=32).digest()
         assert new_nonce.value == expected
 
     def test_block_outside_stability_window_excluded(self) -> None:
         """A block in the last 1/3 of the epoch should NOT be in the
-        stability window — its VRF output must not contribute to eta_v."""
+        stability window — its VRF output must not contribute to eta_v.
+        """
         epoch_length = 100
         # Slot 67 relative is past the 2/3 cutoff.
         assert not is_in_stability_window(67, 0, epoch_length)
@@ -297,9 +283,7 @@ class TestPRTCLEpochBoundary:
         assert nonce_without.value != nonce_with.value
 
         # Manual check: evolve_nonce first computes base, then mixes extra.
-        base = hashlib.blake2b(
-            prev_nonce.value + eta_v, digest_size=32
-        ).digest()
+        base = hashlib.blake2b(prev_nonce.value + eta_v, digest_size=32).digest()
         expected = hashlib.blake2b(base + extra, digest_size=32).digest()
         assert nonce_with.value == expected
 
@@ -410,7 +394,8 @@ class TestHFCForecastAcrossEraBoundary:
 
     def test_slot_in_next_era_uses_correct_params(self) -> None:
         """A slot in the Shelley era after a Byron->Shelley transition
-        uses Shelley's 432000-slot epoch length, not Byron's 21600."""
+        uses Shelley's 432000-slot epoch length, not Byron's 21600.
+        """
         config = HardForkConfig(
             era_transitions={
                 Era.BYRON: 0,

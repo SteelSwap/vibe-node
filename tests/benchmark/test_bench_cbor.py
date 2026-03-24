@@ -10,7 +10,6 @@ Run: uv run pytest tests/benchmark/test_bench_cbor.py -v --benchmark-only
 from __future__ import annotations
 
 import cbor2pure as cbor2
-import pytest
 
 from vibe.cardano.serialization.block import (
     Era,
@@ -18,10 +17,10 @@ from vibe.cardano.serialization.block import (
     detect_era,
 )
 
-
 # ---------------------------------------------------------------------------
 # Benchmark: raw CBOR decode (cbor2.loads — no semantic interpretation)
 # ---------------------------------------------------------------------------
+
 
 class TestRawCBORDecode:
     """Benchmark raw cbor2.loads across all eras.
@@ -99,6 +98,7 @@ class TestRawCBORDecode:
 # Benchmark: era detection (tag parsing)
 # ---------------------------------------------------------------------------
 
+
 class TestEraDetection:
     """Benchmark detect_era — fast tag parsing without full decode."""
 
@@ -118,6 +118,7 @@ class TestEraDetection:
 # ---------------------------------------------------------------------------
 # Benchmark: full block header decode (our decode_block_header)
 # ---------------------------------------------------------------------------
+
 
 class TestBlockHeaderDecode:
     """Benchmark decode_block_header across Shelley+ eras.
@@ -183,11 +184,13 @@ class TestBlockHeaderDecode:
 # Benchmark: CBOR encode round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestCBORRoundTrip:
     """Benchmark encode+decode cycle to measure serialization overhead."""
 
     def test_roundtrip_shelley(self, benchmark, shelley_block_cbor: bytes) -> None:
         """Decode then re-encode a Shelley block."""
+
         def roundtrip(data: bytes) -> bytes:
             decoded = cbor2.loads(data, raw_tags=True)
             return cbor2.dumps(decoded)
@@ -197,6 +200,7 @@ class TestCBORRoundTrip:
 
     def test_roundtrip_conway(self, benchmark, conway_block_cbor: bytes) -> None:
         """Decode then re-encode a Conway block."""
+
         def roundtrip(data: bytes) -> bytes:
             decoded = cbor2.loads(data, raw_tags=True)
             return cbor2.dumps(decoded)

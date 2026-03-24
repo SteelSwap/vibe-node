@@ -18,7 +18,6 @@ from vibe.cardano.node.metrics import (
     MetricsServer,
 )
 
-
 # ---------------------------------------------------------------------------
 # Metric primitives
 # ---------------------------------------------------------------------------
@@ -83,8 +82,8 @@ class TestHistogram:
     def test_histogram_buckets(self) -> None:
         h = Histogram("test_hist_bucket", "Bucket test", buckets=(0.1, 0.5, 1.0))
         h.observe(0.05)  # fits in 0.1, 0.5, 1.0, +Inf
-        h.observe(0.3)   # fits in 0.5, 1.0, +Inf
-        h.observe(2.0)   # fits in +Inf only
+        h.observe(0.3)  # fits in 0.5, 1.0, +Inf
+        h.observe(2.0)  # fits in +Inf only
         text = h.exposition()
         assert 'le="0.1"} 1' in text
         assert 'le="0.5"} 2' in text

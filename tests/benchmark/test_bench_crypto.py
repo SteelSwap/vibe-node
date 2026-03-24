@@ -38,10 +38,10 @@ from vibe.cardano.crypto.vrf import (
     vrf_verify,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def ed25519_keypair() -> tuple[Ed25519PrivateKey, bytes, bytes]:
@@ -98,6 +98,7 @@ def kes_depth6_sig(kes_key_depth6: KesSecretKey) -> tuple[bytes, bytes, bytes]:
 # Blake2b-256 hashing
 # ---------------------------------------------------------------------------
 
+
 class TestBlake2bHashing:
     """Benchmark Blake2b-256 at various input sizes.
 
@@ -131,6 +132,7 @@ class TestBlake2bHashing:
 # Ed25519
 # ---------------------------------------------------------------------------
 
+
 class TestEd25519:
     """Benchmark Ed25519 operations using the cryptography library.
 
@@ -161,6 +163,7 @@ class TestEd25519:
 # KES (Key-Evolving Signatures)
 # ---------------------------------------------------------------------------
 
+
 class TestKES:
     """Benchmark KES operations at depth 3 (fast) and depth 6 (mainnet).
 
@@ -180,9 +183,7 @@ class TestKES:
     def test_kes_verify_depth3(self, benchmark, kes_depth3_sig) -> None:
         """KES verify at depth 3."""
         vk, sig, msg = kes_depth3_sig
-        result = benchmark.pedantic(
-            kes_verify, args=(vk, 3, 0, sig, msg), rounds=100
-        )
+        result = benchmark.pedantic(kes_verify, args=(vk, 3, 0, sig, msg), rounds=100)
         assert result is True
 
     def test_kes_sign_depth6(self, benchmark, kes_key_depth6: KesSecretKey) -> None:
@@ -208,6 +209,7 @@ class TestKES:
 
     def test_kes_update_depth3(self, benchmark) -> None:
         """KES key evolution at depth 3 (period 0 -> 1)."""
+
         # We need a fresh key each time since update mutates
         def setup():
             return (kes_keygen(depth=3),), {}
@@ -223,6 +225,7 @@ class TestKES:
 # ---------------------------------------------------------------------------
 # VRF (Verifiable Random Function)
 # ---------------------------------------------------------------------------
+
 
 class TestVRF:
     """Benchmark VRF operations (requires native extension).
@@ -256,9 +259,7 @@ class TestVRF:
 
     def test_vrf_verify(self, benchmark, vrf_proof_data) -> None:
         pk, proof, output, alpha = vrf_proof_data
-        result = benchmark.pedantic(
-            vrf_verify, args=(pk, proof, alpha), rounds=100
-        )
+        result = benchmark.pedantic(vrf_verify, args=(pk, proof, alpha), rounds=100)
         assert result  # vrf_verify returns output bytes (truthy) on success
 
     def test_vrf_proof_to_hash(self, benchmark, vrf_proof_data) -> None:

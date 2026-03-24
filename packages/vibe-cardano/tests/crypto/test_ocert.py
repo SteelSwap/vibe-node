@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import struct
 
-import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
@@ -31,9 +30,7 @@ from vibe.cardano.crypto.kes import (
     kes_sign,
 )
 from vibe.cardano.crypto.ocert import (
-    MAX_KES_EVOLUTIONS,
     SLOTS_PER_KES_PERIOD,
-    OCertError,
     OCertFailure,
     OperationalCert,
     ocert_signed_payload,
@@ -41,7 +38,6 @@ from vibe.cardano.crypto.ocert import (
     validate_ocert,
     verify_ocert_cold_sig,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -259,7 +255,9 @@ class TestValidateOcert:
     def test_counter_too_small(self) -> None:
         """On-chain counter > cert counter should fail."""
         data = _make_full_test_data(
-            kes_depth=2, cert_count=3, current_kes_period=0,
+            kes_depth=2,
+            cert_count=3,
+            current_kes_period=0,
         )
         errors = validate_ocert(
             ocert=data["ocert"],
@@ -277,7 +275,9 @@ class TestValidateOcert:
     def test_counter_equal_is_valid(self) -> None:
         """On-chain counter == cert counter is valid (m <= n)."""
         data = _make_full_test_data(
-            kes_depth=2, cert_count=5, current_kes_period=0,
+            kes_depth=2,
+            cert_count=5,
+            current_kes_period=0,
         )
         errors = validate_ocert(
             ocert=data["ocert"],
@@ -357,7 +357,8 @@ class TestValidateOcert:
         kes_sk = kes_keygen(kes_depth)
         kes_vk = kes_derive_vk(kes_sk)
         ocert = _make_ocert(
-            cold_sk, kes_vk,
+            cold_sk,
+            kes_vk,
             cert_count=0,
             kes_period_start=kes_period_start,
         )
@@ -417,9 +418,7 @@ class TestOcertHypothesis:
         issue_no=st.integers(min_value=0, max_value=1000),
     )
     @settings(max_examples=50, deadline=10000)
-    def test_counter_monotonicity(
-        self, cert_count: int, issue_no: int
-    ) -> None:
+    def test_counter_monotonicity(self, cert_count: int, issue_no: int) -> None:
         """Counter check: fails iff issue_no > cert_count."""
         cold_sk, cold_vk = _make_cold_keypair()
         kes_sk = kes_keygen(1)
@@ -451,17 +450,13 @@ class TestOcertHypothesis:
         current_period=st.integers(min_value=0, max_value=200),
     )
     @settings(max_examples=50, deadline=10000)
-    def test_kes_period_bounds(
-        self, kes_period_start: int, current_period: int
-    ) -> None:
+    def test_kes_period_bounds(self, kes_period_start: int, current_period: int) -> None:
         """KES period bounds: c_0 <= current < c_0 + max_kes_evo."""
         max_kes_evo = 2  # small for testing
         cold_sk, cold_vk = _make_cold_keypair()
         kes_sk = kes_keygen(1)
         kes_vk = kes_derive_vk(kes_sk)
-        ocert = _make_ocert(
-            cold_sk, kes_vk, kes_period_start=kes_period_start
-        )
+        ocert = _make_ocert(cold_sk, kes_vk, kes_period_start=kes_period_start)
 
         errors = validate_ocert(
             ocert=ocert,
@@ -554,12 +549,12 @@ class TestOcertCborGolden:
         # Verify the CBOR structure byte by byte
         assert ocert_cbor[0] == 0x84  # array(4)
         assert ocert_cbor[1] == 0x58  # bytes, 1-byte length follows
-        assert ocert_cbor[2] == 32    # length = 32
+        assert ocert_cbor[2] == 32  # length = 32
         assert ocert_cbor[3:35] == b"\x00" * 32  # kes_vk
         assert ocert_cbor[35] == 0x00  # unsigned(0) = cert_count
         assert ocert_cbor[36] == 0x00  # unsigned(0) = kes_period
         assert ocert_cbor[37] == 0x58  # bytes, 1-byte length follows
-        assert ocert_cbor[38] == 64   # length = 64
+        assert ocert_cbor[38] == 64  # length = 64
         assert ocert_cbor[39:103] == b"\x00" * 64  # cold_sig
         assert len(ocert_cbor) == 103
 
@@ -573,12 +568,14 @@ class TestOcertCborGolden:
         ocert = _make_ocert(cold_sk, kes_vk, cert_count=7, kes_period_start=15)
 
         # Serialize in Haskell format
-        ocert_cbor = cbor2.dumps([
-            ocert.kes_vk,
-            ocert.cert_count,
-            ocert.kes_period_start,
-            ocert.cold_sig,
-        ])
+        ocert_cbor = cbor2.dumps(
+            [
+                ocert.kes_vk,
+                ocert.cert_count,
+                ocert.kes_period_start,
+                ocert.cold_sig,
+            ]
+        )
 
         # Deserialize and reconstruct
         decoded = cbor2.loads(ocert_cbor)
@@ -629,7 +626,8 @@ class TestOcertCounterSequence:
 
         for cert_count in [0, 1, 2, 5, 10]:
             ocert = _make_ocert(
-                cold_sk, kes_vk,
+                cold_sk,
+                kes_vk,
                 cert_count=cert_count,
                 kes_period_start=0,
             )
@@ -663,7 +661,8 @@ class TestOcertCounterSequence:
 
         # Simulate: on-chain counter is 5, new cert says 3
         ocert = _make_ocert(
-            cold_sk, kes_vk,
+            cold_sk,
+            kes_vk,
             cert_count=3,
             kes_period_start=0,
         )
@@ -691,7 +690,8 @@ class TestOcertCounterSequence:
         kes_vk = kes_derive_vk(kes_sk)
 
         ocert = _make_ocert(
-            cold_sk, kes_vk,
+            cold_sk,
+            kes_vk,
             cert_count=5,
             kes_period_start=0,
         )
@@ -724,7 +724,8 @@ class TestOcertCounterSequence:
         on_chain_counter = 0
         for cert_count in [0, 3, 7, 100]:
             ocert = _make_ocert(
-                cold_sk, kes_vk,
+                cold_sk,
+                kes_vk,
                 cert_count=cert_count,
                 kes_period_start=0,
             )
@@ -758,9 +759,14 @@ class TestOcertCounterSequence:
         kes_sig = kes_sign(kes_sk, 0, msg)
 
         errors = validate_ocert(
-            ocert=ocert5, cold_vk=cold_vk, current_kes_period=0,
-            current_issue_no=0, header_body_cbor=msg, kes_sig=kes_sig,
-            max_kes_evo=4, kes_depth=kes_depth,
+            ocert=ocert5,
+            cold_vk=cold_vk,
+            current_kes_period=0,
+            current_issue_no=0,
+            header_body_cbor=msg,
+            kes_sig=kes_sig,
+            max_kes_evo=4,
+            kes_depth=kes_depth,
         )
         assert not any(e.failure == OCertFailure.COUNTER_TOO_SMALL for e in errors)
 
@@ -770,9 +776,14 @@ class TestOcertCounterSequence:
         kes_sig2 = kes_sign(kes_sk, 0, msg2)
 
         errors = validate_ocert(
-            ocert=ocert2, cold_vk=cold_vk, current_kes_period=0,
-            current_issue_no=5, header_body_cbor=msg2, kes_sig=kes_sig2,
-            max_kes_evo=4, kes_depth=kes_depth,
+            ocert=ocert2,
+            cold_vk=cold_vk,
+            current_kes_period=0,
+            current_issue_no=5,
+            header_body_cbor=msg2,
+            kes_sig=kes_sig2,
+            max_kes_evo=4,
+            kes_depth=kes_depth,
         )
         failures = {e.failure for e in errors}
         assert OCertFailure.COUNTER_TOO_SMALL in failures

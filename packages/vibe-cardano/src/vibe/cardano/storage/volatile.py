@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 __all__ = [
@@ -311,11 +311,7 @@ class VolatileDB:
         Returns:
             Number of blocks removed.
         """
-        to_remove = [
-            h
-            for h, info in self._block_info.items()
-            if info.slot <= immutable_tip_slot
-        ]
+        to_remove = [h for h, info in self._block_info.items() if info.slot <= immutable_tip_slot]
         for h in to_remove:
             self._remove_block(h)
 
@@ -380,9 +376,7 @@ class VolatileDB:
             try:
                 info = parse_header(cbor_bytes)
             except Exception:
-                logger.warning(
-                    "VolatileDB: skipping corrupt block file %s", filename
-                )
+                logger.warning("VolatileDB: skipping corrupt block file %s", filename)
                 continue
 
             self._blocks[info.block_hash] = cbor_bytes
@@ -398,7 +392,11 @@ class VolatileDB:
 
             count += 1
 
-        logger.info("VolatileDB loaded %d blocks from disk", count, extra={"event": "volatiledb.loaded", "block_count": count})
+        logger.info(
+            "VolatileDB loaded %d blocks from disk",
+            count,
+            extra={"event": "volatiledb.loaded", "block_count": count},
+        )
         return count
 
     # -------------------------------------------------------------------

@@ -224,7 +224,8 @@ class TestMixedProtocols:
 
     def test_segment_mixed_protocols_in_sequence(self) -> None:
         """Encoding two segments with different protocol_ids produces
-        separate valid segments that decode independently."""
+        separate valid segments that decode independently.
+        """
         seg_a = MuxSegment(
             timestamp=100,
             protocol_id=2,
@@ -268,7 +269,8 @@ class TestSingleSegmentEncoding:
 
     def test_single_message_fits_in_one_segment(self) -> None:
         """When payload <= MAX_PAYLOAD_SIZE, encoding produces exactly
-        1 segment: 8-byte header + payload, nothing more."""
+        1 segment: 8-byte header + payload, nothing more.
+        """
         payload = b"\xfe" * 1024  # 1 KiB, well within limit
         seg = MuxSegment(
             timestamp=0,

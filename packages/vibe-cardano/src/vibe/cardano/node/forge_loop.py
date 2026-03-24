@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from .config import NodeConfig
@@ -51,12 +51,10 @@ def forge_loop(
 
     import hashlib
 
+    import cbor2pure as cbor2
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-    import cbor2pure as cbor2
-
     from vibe.cardano.consensus.slot_arithmetic import (
-        SlotConfig,
         slot_to_wall_clock,
         wall_clock_to_slot,
     )
@@ -79,6 +77,7 @@ def forge_loop(
     # --- Initialise forge credentials (same as before) ---
     if pool_keys.kes_sk:
         from vibe.cardano.crypto.kes_serialization import deserialize_kes_sk
+
         try:
             kes_sk = deserialize_kes_sk(pool_keys.kes_sk, CARDANO_KES_DEPTH)
             kes_vk = kes_derive_vk(kes_sk)
@@ -93,6 +92,7 @@ def forge_loop(
 
     if pool_keys.ocert:
         import cbor2pure as _cbor2
+
         try:
             ocert_data = _cbor2.loads(pool_keys.ocert)
             inner = ocert_data[0] if isinstance(ocert_data, list) else ocert_data
@@ -108,7 +108,9 @@ def forge_loop(
             ocert_payload = ocert_signed_payload(kes_vk, cert_count=0, kes_period_start=0)
             cold_sk_ed = Ed25519PrivateKey.from_private_bytes(pool_keys.cold_sk)
             cold_sig = cold_sk_ed.sign(ocert_payload)
-            ocert = OperationalCert(kes_vk=kes_vk, cert_count=0, kes_period_start=0, cold_sig=cold_sig)
+            ocert = OperationalCert(
+                kes_vk=kes_vk, cert_count=0, kes_period_start=0, cold_sig=cold_sig
+            )
     elif pool_keys.cold_sk:
         ocert_payload = ocert_signed_payload(kes_vk, cert_count=0, kes_period_start=0)
         cold_sk_ed = Ed25519PrivateKey.from_private_bytes(pool_keys.cold_sk)
@@ -135,10 +137,14 @@ def forge_loop(
 
     # KES evolution
     slots_per_kes = config.slots_per_kes_period
-    current_slot = wall_clock_to_slot(datetime.now(timezone.utc), slot_config)
-    current_kes_period = slot_to_kes_period(
-        current_slot, slots_per_kes_period=slots_per_kes,
-    ) - ocert.kes_period_start
+    current_slot = wall_clock_to_slot(datetime.now(UTC), slot_config)
+    current_kes_period = (
+        slot_to_kes_period(
+            current_slot,
+            slots_per_kes_period=slots_per_kes,
+        )
+        - ocert.kes_period_start
+    )
 
     if current_kes_period < 0:
         current_kes_period = 0
@@ -165,7 +171,8 @@ def forge_loop(
 
     logger.info(
         "Forge loop started (stake=%.2f%%, kes_period=%d)",
-        relative_stake * 100, _current_kes_period,
+        relative_stake * 100,
+        _current_kes_period,
         extra={
             "event": "forge.started",
             "vrf_vk": pool_keys.vrf_vk.hex()[:16],
@@ -183,9 +190,9 @@ def forge_loop(
         # Wait for next slot OR new block arrival (whichever first).
         # This is the key difference from the async version: we wake
         # immediately when a block arrives, eliminating one-slot lag.
-        next_slot = wall_clock_to_slot(datetime.now(timezone.utc), slot_config) + 1
+        next_slot = wall_clock_to_slot(datetime.now(UTC), slot_config) + 1
         next_slot_time = slot_to_wall_clock(next_slot, slot_config)
-        timeout = max(0.0, (next_slot_time - datetime.now(timezone.utc)).total_seconds())
+        timeout = max(0.0, (next_slot_time - datetime.now(UTC)).total_seconds())
 
         block_received_event.wait(timeout=timeout)
         block_received_event.clear()
@@ -193,12 +200,16 @@ def forge_loop(
         if shutdown_event.is_set():
             return
 
-        slot = wall_clock_to_slot(datetime.now(timezone.utc), slot_config)
+        slot = wall_clock_to_slot(datetime.now(UTC), slot_config)
 
         # Evolve KES key if period has advanced
-        new_kes_period = slot_to_kes_period(
-            slot, slots_per_kes_period=slots_per_kes,
-        ) - ocert.kes_period_start
+        new_kes_period = (
+            slot_to_kes_period(
+                slot,
+                slots_per_kes_period=slots_per_kes,
+            )
+            - ocert.kes_period_start
+        )
         if new_kes_period > _current_kes_period:
             for p in range(_current_kes_period, new_kes_period):
                 evolved = kes_update(kes_sk, p)
@@ -287,6 +298,7 @@ def forge_loop(
             # Use STM to verify the nonce hasn't changed since we read it.
             # If it changed (header processing ticked epoch), retry forging.
             if chain_db is not None:
+
                 def _store_tx(tx):
                     # Verify nonce is still what we used for VRF
                     current_nonce = tx.read(node_kernel.nonce_tvar) if node_kernel else epoch_nonce
@@ -309,7 +321,8 @@ def forge_loop(
                 if store_result == "nonce_changed":
                     logger.info(
                         "Forged block #%d at slot %d discarded (nonce changed)",
-                        forged.block.block_number, forged.block.slot,
+                        forged.block.block_number,
+                        forged.block.slot,
                     )
                     continue
                 result = store_result
@@ -317,25 +330,32 @@ def forge_loop(
                 if not result.adopted:
                     logger.info(
                         "Forged block #%d at slot %d orphaned (tip changed)",
-                        forged.block.block_number, forged.block.slot,
+                        forged.block.block_number,
+                        forged.block.slot,
                     )
                     continue
 
                 # Nonce update for our forged block
                 if node_kernel is not None:
                     node_kernel.on_block_adopted(
-                        forged.block.slot, forged.block.block_hash,
-                        forged_predecessor, proof.vrf_output,
+                        forged.block.slot,
+                        forged.block.block_hash,
+                        forged_predecessor,
+                        proof.vrf_output,
                     )
 
             prev_block_number = forged.block.block_number
             prev_header_hash = forged.block.block_hash
 
-            tx_count = len(forged.block.transactions) if hasattr(forged.block, "transactions") else 0
+            tx_count = (
+                len(forged.block.transactions) if hasattr(forged.block, "transactions") else 0
+            )
             logger.info(
                 "Forged block #%d at slot %d (%d txs, %d bytes)",
-                forged.block.block_number, forged.block.slot,
-                tx_count, len(forged.cbor),
+                forged.block.block_number,
+                forged.block.slot,
+                tx_count,
+                len(forged.cbor),
                 extra={
                     "event": "forge.block",
                     "block_number": forged.block.block_number,

@@ -6,12 +6,10 @@ This is the Docker entrypoint for the devnet container.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
-import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from vibe.cardano.node.config import NodeConfig, PeerAddress, PoolKeys
@@ -42,7 +40,7 @@ def main() -> None:
     permissive = os.environ.get("VIBE_PERMISSIVE_VALIDATION", "").lower() in ("1", "true", "yes")
 
     # Genesis parameters
-    system_start = datetime(2017, 9, 23, 21, 44, 51, tzinfo=timezone.utc)
+    system_start = datetime(2017, 9, 23, 21, 44, 51, tzinfo=UTC)
     slot_length = 1.0
     epoch_length = 432000
     security_param = 2160
@@ -59,7 +57,7 @@ def main() -> None:
                 sg = json.load(f)
             system_start = datetime.fromisoformat(sg["systemStart"])
             if system_start.tzinfo is None:
-                system_start = system_start.replace(tzinfo=timezone.utc)
+                system_start = system_start.replace(tzinfo=UTC)
             slot_length = sg.get("slotLength", slot_length)
             epoch_length = sg.get("epochLength", epoch_length)
             security_param = sg.get("securityParam", security_param)
@@ -68,6 +66,7 @@ def main() -> None:
             protocol_params = sg.get("protocolParams", None)
             genesis_bytes = genesis_path.read_bytes()  # Hash raw file bytes, not re-encoded JSON
             import hashlib
+
             genesis_hash = hashlib.blake2b(genesis_bytes, digest_size=32).digest()
             # Parse initial stake distribution
             initial_pool_stakes: dict[bytes, int] = {}
@@ -111,15 +110,14 @@ def main() -> None:
         kes_key = os.environ.get("VIBE_KES_KEY")
         opcert_path = os.environ.get("VIBE_OPCERT")
         import cbor2pure as _cbor2
+
         kes_sk_bytes = b""
         if kes_key:
             raw = _read_key_bytes(kes_key)
             # KES skey is CBOR-wrapped: the cborHex after stripping prefix gives
             # another CBOR layer containing the raw bytes
             try:
-                kes_sk_bytes = _cbor2.loads(bytes.fromhex(
-                    json.load(open(kes_key))["cborHex"]
-                ))
+                kes_sk_bytes = _cbor2.loads(bytes.fromhex(json.load(open(kes_key))["cborHex"]))
                 if not isinstance(kes_sk_bytes, bytes):
                     kes_sk_bytes = raw
             except Exception:
@@ -127,9 +125,7 @@ def main() -> None:
         ocert_bytes = b""
         if opcert_path:
             try:
-                ocert_bytes = bytes.fromhex(
-                    json.load(open(opcert_path))["cborHex"]
-                )
+                ocert_bytes = bytes.fromhex(json.load(open(opcert_path))["cborHex"])
             except Exception:
                 ocert_bytes = Path(opcert_path).read_bytes()
         pool_keys = PoolKeys(
@@ -161,9 +157,25 @@ def main() -> None:
         initial_pool_stakes=initial_pool_stakes,
     )
 
-    logger.info("vibe-node starting (magic=%d, %s:%d, %d peers, producer=%s)", config.network_magic, config.host, config.port, len(config.peers), config.is_block_producer, extra={"event": "node.init", "network_magic": config.network_magic, "host": config.host, "port": config.port, "peer_count": len(config.peers), "block_producer": config.is_block_producer})
+    logger.info(
+        "vibe-node starting (magic=%d, %s:%d, %d peers, producer=%s)",
+        config.network_magic,
+        config.host,
+        config.port,
+        len(config.peers),
+        config.is_block_producer,
+        extra={
+            "event": "node.init",
+            "network_magic": config.network_magic,
+            "host": config.host,
+            "port": config.port,
+            "peer_count": len(config.peers),
+            "block_producer": config.is_block_producer,
+        },
+    )
 
     from vibe.cardano.node.run import run_node
+
     run_node(config)  # Sync — handles its own asyncio for init, then threads
 
 

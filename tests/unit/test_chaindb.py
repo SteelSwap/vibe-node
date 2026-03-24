@@ -15,7 +15,6 @@ Covers the test specifications from the database for the storage subsystem:
 
 from __future__ import annotations
 
-import os
 import struct
 
 import pytest
@@ -23,8 +22,7 @@ import pytest
 from vibe.cardano.storage.chaindb import ChainDB
 from vibe.cardano.storage.immutable import ImmutableDB
 from vibe.cardano.storage.ledger import LedgerDB
-from vibe.cardano.storage.volatile import BlockInfo, VolatileDB
-
+from vibe.cardano.storage.volatile import VolatileDB
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -217,9 +215,7 @@ async def test_gc_cleans_volatile_after_promotion(chain_db):
     # Blocks at or below immutable slot 4 should be gone from volatile
     for slot, bh, _, bn, cbor in blocks[:4]:
         result = await chain_db.volatile_db.get_block(bh)
-        assert result is None, (
-            f"Block at slot {slot} should have been GC'd from volatile"
-        )
+        assert result is None, f"Block at slot {slot} should have been GC'd from volatile"
 
 
 # ---------------------------------------------------------------------------
@@ -634,13 +630,14 @@ async def test_concurrent_add_blocks(chain_db):
 
     # At minimum, one complete chain's blocks should be accessible
     assert found_count >= BLOCKS_PER_CHAIN, (
-        f"Expected at least {BLOCKS_PER_CHAIN} blocks retrievable, "
-        f"got {found_count}"
+        f"Expected at least {BLOCKS_PER_CHAIN} blocks retrievable, got {found_count}"
     )
 
     # The chain tip must point to a real block
     tip_block = await chain_db.get_block(tip[1])
     assert tip_block is not None, "Tip block must be retrievable"
+
+
 async def test_add_future_block_rejected(chain_db):
     """Block with slot far in the future should be accepted by storage
     (future-slot filtering is a consensus-layer concern, not storage).

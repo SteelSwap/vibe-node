@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from vibe.tools.ingest.haskell_parser import CodeChunkData, HaskellParser
+from vibe.tools.ingest.haskell_parser import HaskellParser
 
 VENDOR_ROOT = Path(__file__).resolve().parents[1] / "vendor"
 
@@ -123,6 +123,7 @@ x = 1
 # AST node type discovery test
 # ---------------------------------------------------------------------------
 
+
 def test_discover_real_node_types(parser: HaskellParser) -> None:
     """Print AST node types from a real vendor .hs file.
 
@@ -131,13 +132,7 @@ def test_discover_real_node_types(parser: HaskellParser) -> None:
     as long as tree-sitter can parse the file without crashing.
     """
     hs_file = (
-        VENDOR_ROOT
-        / "ouroboros-consensus"
-        / "sop-extras"
-        / "src"
-        / "Data"
-        / "SOP"
-        / "Match.hs"
+        VENDOR_ROOT / "ouroboros-consensus" / "sop-extras" / "src" / "Data" / "SOP" / "Match.hs"
     )
     if not hs_file.exists():
         pytest.skip("vendor/ouroboros-consensus not checked out")

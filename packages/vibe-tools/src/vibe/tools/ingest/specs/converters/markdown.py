@@ -1,7 +1,5 @@
 """Markdown converter — direct passthrough with frontmatter stripping."""
 
-import re
-
 
 def convert_markdown(content: str) -> str:
     """Convert markdown content. Strips YAML frontmatter if present."""
@@ -9,5 +7,5 @@ def convert_markdown(content: str) -> str:
     if content.startswith("---"):
         end = content.find("---", 3)
         if end != -1:
-            content = content[end + 3:].strip()
+            content = content[end + 3 :].strip()
     return content

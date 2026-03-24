@@ -24,7 +24,6 @@ Haskell references:
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -33,7 +32,6 @@ import websockets
 
 from vibe.cardano.plutus.cost_model import (
     COST_MODEL_PARAM_COUNTS,
-    PLUTUS_VERSION_INTRODUCED_AT,
     CostModel,
     ExUnits,
     PlutusVersion,
@@ -50,11 +48,9 @@ if str(_THIS_DIR) not in sys.path:
 from helpers import (  # noqa: E402
     extract_block_metadata,
     fetch_blocks_from_origin,
-    fetch_blocks_from_point,
     load_fixture,
     ogmios_rpc,
 )
-
 
 # ===================================================================
 # TIER 1: Fixture-based / unit-level Plutus conformance tests
@@ -349,7 +345,8 @@ class TestLivePlutusScriptPresence:
     """
 
     async def test_metadata_extraction_on_early_blocks(
-        self, ogmios_client: websockets.ClientConnection,
+        self,
+        ogmios_client: websockets.ClientConnection,
     ) -> None:
         """Verify script metadata extraction logic works on real blocks.
 
@@ -366,7 +363,8 @@ class TestLivePlutusScriptPresence:
             assert meta["redeemer_count"] >= 0
 
     async def test_protocol_params_have_cost_models(
-        self, ogmios_url: str,
+        self,
+        ogmios_url: str,
     ) -> None:
         """Verify current protocol parameters include Plutus cost models.
 
@@ -374,9 +372,7 @@ class TestLivePlutusScriptPresence:
         for all active Plutus versions.
         """
         async with websockets.connect(ogmios_url) as ws:
-            params = await ogmios_rpc(
-                ws, "queryLedgerState/protocolParameters", rpc_id="params"
-            )
+            params = await ogmios_rpc(ws, "queryLedgerState/protocolParameters", rpc_id="params")
 
             # Protocol parameters should include cost model data
             # The exact key depends on Ogmios version, but it should exist

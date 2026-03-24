@@ -15,7 +15,6 @@ from __future__ import annotations
 import pytest
 
 from vibe.cardano.crypto.kes import (
-    CARDANO_KES_DEPTH,
     KesSecretKey,
     kes_derive_vk,
     kes_keygen,
@@ -24,7 +23,6 @@ from vibe.cardano.crypto.kes import (
     kes_verify,
 )
 from vibe.cardano.crypto.ocert import slot_to_kes_period
-
 
 # ---------------------------------------------------------------------------
 # test_kes_period_computed_from_slot
@@ -91,9 +89,7 @@ class TestKesEvolvesOnPeriodBoundary:
         for period in range(4):
             msg = f"block at period {period}".encode()
             sig = kes_sign(sk, period, msg)
-            assert kes_verify(vk, 2, period, sig, msg), (
-                f"Signature invalid at period {period}"
-            )
+            assert kes_verify(vk, 2, period, sig, msg), f"Signature invalid at period {period}"
             if period < 3:
                 evolved = kes_update(sk, period)
                 assert evolved is not None

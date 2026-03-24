@@ -34,7 +34,7 @@ import io
 import logging
 from typing import Generic
 
-from vibe.core.multiplexer.mux import MiniProtocolChannel, MuxClosedError
+from vibe.core.multiplexer.mux import MiniProtocolChannel
 from vibe.core.protocols.agency import (
     Agency,
     Message,
@@ -136,9 +136,7 @@ class ProtocolRunner(Generic[St]):
 
         # Terminal state check.
         if ag is Agency.Nobody:
-            raise ProtocolError(
-                f"Cannot send in terminal state {self._state!r}"
-            )
+            raise ProtocolError(f"Cannot send in terminal state {self._state!r}")
 
         # Agency check — we must have agency to send.
         if not self._has_agency():
@@ -170,9 +168,7 @@ class ProtocolRunner(Generic[St]):
         except CodecError:
             raise
         except Exception as exc:
-            raise CodecError(
-                f"Failed to encode {type(message).__name__}: {exc}"
-            ) from exc
+            raise CodecError(f"Failed to encode {type(message).__name__}: {exc}") from exc
 
         logger.debug(
             "send %s (%d bytes) [%s -> %s]",
@@ -208,9 +204,7 @@ class ProtocolRunner(Generic[St]):
 
         # Terminal state check.
         if ag is Agency.Nobody:
-            raise ProtocolError(
-                f"Cannot receive in terminal state {self._state!r}"
-            )
+            raise ProtocolError(f"Cannot receive in terminal state {self._state!r}")
 
         # Agency check — we should NOT have agency when receiving.
         if self._has_agency():
@@ -248,22 +242,16 @@ class ProtocolRunner(Generic[St]):
         except CodecError:
             raise
         except Exception as exc:
-            raise CodecError(
-                f"Failed to decode message at state {self._state!r}: {exc}"
-            ) from exc
+            raise CodecError(f"Failed to decode message at state {self._state!r}: {exc}") from exc
 
         # Validate the decoded message against current state.
         if message.from_state != self._state:
-            raise ProtocolError(
-                f"Decoded {message!r} but current state is "
-                f"{self._state!r}"
-            )
+            raise ProtocolError(f"Decoded {message!r} but current state is {self._state!r}")
 
         valid = self._protocol.valid_messages(self._state)
         if type(message) not in valid:
             raise ProtocolError(
-                f"Decoded invalid message type "
-                f"{type(message).__name__} at state {self._state!r}"
+                f"Decoded invalid message type {type(message).__name__} at state {self._state!r}"
             )
 
         logger.debug(

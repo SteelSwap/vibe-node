@@ -10,26 +10,25 @@ Requires a running Haskell node on localhost:30001.
 import asyncio
 import hashlib
 
+import cbor2pure as cbor2
 import pytest
 
-import cbor2pure as cbor2
-
-from vibe.core.multiplexer import Bearer, Multiplexer
-from vibe.cardano.network.handshake_protocol import run_handshake_client
 from vibe.cardano.network.blockfetch_protocol import (
     BlockFetchClient,
-    BlockFetchProtocol,
     BlockFetchCodec,
+    BlockFetchProtocol,
 )
+from vibe.cardano.network.chainsync import ORIGIN, Point
 from vibe.cardano.network.chainsync_protocol import (
-    ChainSyncProtocol,
-    ChainSyncCodec,
     ChainSyncClient,
+    ChainSyncCodec,
+    ChainSyncProtocol,
     CsMsgRollForward,
 )
-from vibe.core.protocols.runner import ProtocolRunner
+from vibe.cardano.network.handshake_protocol import run_handshake_client
+from vibe.core.multiplexer import Bearer, Multiplexer
 from vibe.core.protocols.agency import PeerRole
-from vibe.cardano.network.chainsync import ORIGIN, Point
+from vibe.core.protocols.runner import ProtocolRunner
 
 
 @pytest.mark.integration
@@ -37,10 +36,8 @@ from vibe.cardano.network.chainsync import ORIGIN, Point
 async def test_block_hash_roundtrip():
     """Block-fetch block hash must match chain-sync header hash."""
     try:
-        r, w = await asyncio.wait_for(
-            asyncio.open_connection("localhost", 30001), timeout=3
-        )
-    except (ConnectionRefusedError, TimeoutError, OSError):
+        r, w = await asyncio.wait_for(asyncio.open_connection("localhost", 30001), timeout=3)
+    except ConnectionRefusedError, TimeoutError, OSError:
         pytest.skip("No Haskell node on localhost:30001")
 
     bearer = Bearer(r, w)
@@ -54,9 +51,7 @@ async def test_block_hash_roundtrip():
         await run_handshake_client(ch0, 42)
 
         cs = ChainSyncClient(
-            ProtocolRunner(
-                PeerRole.Initiator, ChainSyncProtocol(), ChainSyncCodec(), ch2
-            )
+            ProtocolRunner(PeerRole.Initiator, ChainSyncProtocol(), ChainSyncCodec(), ch2)
         )
         await cs.find_intersection([ORIGIN])
         await cs.request_next()  # rollback
@@ -74,9 +69,7 @@ async def test_block_hash_roundtrip():
 
         # Block-fetch the same blocks
         bf = BlockFetchClient(
-            ProtocolRunner(
-                PeerRole.Initiator, BlockFetchProtocol(), BlockFetchCodec(), ch3
-            )
+            ProtocolRunner(PeerRole.Initiator, BlockFetchProtocol(), BlockFetchCodec(), ch3)
         )
         blocks = await asyncio.wait_for(
             bf.request_range(
@@ -151,8 +144,7 @@ async def test_cbor_roundtrip_preserves_bytes():
         decoded = cbor2.loads(original)
         reencoded = cbor2.dumps(decoded)
         assert original == reencoded, (
-            f"Case {i}: roundtrip changed bytes "
-            f"({len(original)}B → {len(reencoded)}B)"
+            f"Case {i}: roundtrip changed bytes ({len(original)}B → {len(reencoded)}B)"
         )
         orig_hash = hashlib.blake2b(original, digest_size=32).digest()
         re_hash = hashlib.blake2b(reencoded, digest_size=32).digest()

@@ -34,15 +34,11 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-import cbor2pure as cbor2
+import cbor2pure as _cbor2
 import pytest
 
-import cbor2pure as _cbor2
-
 from vibe.cardano.serialization.block import (
-    BlockHeader,
     Era,
-    OperationalCert,
     ProtocolVersion,
     block_hash,
     decode_block_header,
@@ -62,12 +58,11 @@ def _strip_tag(cbor_bytes: bytes) -> tuple[int, bytes]:
     if isinstance(decoded, _cbor2.CBORTag):
         return decoded.tag, _cbor2.dumps(decoded.value)
     raise ValueError(f"Expected CBOR tag, got {type(decoded).__name__}")
+
+
 from vibe.cardano.serialization.transaction import (
-    DecodedBlockBody,
-    DecodedTransaction,
-    decode_block_body,
-    decode_block_transactions,
     _tx_hash,
+    decode_block_body,
 )
 
 # ---------------------------------------------------------------------------
@@ -114,11 +109,21 @@ def _make_shelley_header_body(
 ) -> list:
     """Construct a Shelley-era header_body (15 fields, two-VRF format)."""
     return [
-        block_number, slot, prev_hash, issuer_vkey, vrf_vkey,
-        nonce_vrf, leader_vrf,
-        body_size, body_hash,
-        hot_vkey, seq_number, kes_period, sigma,
-        proto_major, proto_minor,
+        block_number,
+        slot,
+        prev_hash,
+        issuer_vkey,
+        vrf_vkey,
+        nonce_vrf,
+        leader_vrf,
+        body_size,
+        body_hash,
+        hot_vkey,
+        seq_number,
+        kes_period,
+        sigma,
+        proto_major,
+        proto_minor,
     ]
 
 
@@ -141,11 +146,20 @@ def _make_babbage_header_body(
 ) -> list:
     """Construct a Babbage-era header_body (14 fields, single-VRF format)."""
     return [
-        block_number, slot, prev_hash, issuer_vkey, vrf_vkey,
+        block_number,
+        slot,
+        prev_hash,
+        issuer_vkey,
+        vrf_vkey,
         vrf_result,
-        body_size, body_hash,
-        hot_vkey, seq_number, kes_period, sigma,
-        proto_major, proto_minor,
+        body_size,
+        body_hash,
+        hot_vkey,
+        seq_number,
+        kes_period,
+        sigma,
+        proto_major,
+        proto_minor,
     ]
 
 
@@ -156,7 +170,9 @@ def _encode_tagged_block(era_tag: int, payload: Any) -> bytes:
     return tag_byte + payload_cbor
 
 
-def _wrap_block(era: Era, header_body: list, *, tx_bodies=None, tx_witnesses=None, aux_data=None) -> bytes:
+def _wrap_block(
+    era: Era, header_body: list, *, tx_bodies=None, tx_witnesses=None, aux_data=None
+) -> bytes:
     """Wrap a header body + optional transactions into a full tagged block."""
     header = [header_body, SIG64]
     block = [header, tx_bodies or [], tx_witnesses or [], aux_data if aux_data is not None else {}]
@@ -596,7 +612,9 @@ class TestTransactionBodyFieldsPerEra:
         body = _make_tx_body(
             fee=500_000,
             extra_fields={
-                19: {b"\x66" * 28: {HASH32: 1}},  # voting procedures (voter -> govActionId -> vote)
+                19: {
+                    b"\x66" * 28: {HASH32: 1}
+                },  # voting procedures (voter -> govActionId -> vote)
                 20: [[0, HASH32, 1_000_000, HASH32]],  # proposal procedures
                 21: 50_000_000_000,  # treasury value
                 22: 1_000_000,  # donation
@@ -622,26 +640,26 @@ class TestTransactionBodyFieldsPerEra:
         property for forward compatibility.
         """
         all_fields = {
-            0: [[HASH32, 0]],       # inputs
+            0: [[HASH32, 0]],  # inputs
             1: [[ADDR_BYTES, 2_000_000]],  # outputs
-            2: 300_000,              # fee
-            3: 100_000,              # ttl
-            4: [],                   # certs
-            5: {},                   # withdrawals
-            7: HASH32,              # auxiliary_data_hash
-            8: 500,                 # validity_interval_start
+            2: 300_000,  # fee
+            3: 100_000,  # ttl
+            4: [],  # certs
+            5: {},  # withdrawals
+            7: HASH32,  # auxiliary_data_hash
+            8: 500,  # validity_interval_start
             9: {b"\x00" * 28: {b"TOKEN": 100}},  # mint (policy_id -> {asset -> amount})
-            11: HASH32,             # script_data_hash
-            13: [[HASH32, 1]],      # collateral
-            14: [b"\x55" * 28],     # required_signers
-            15: 1,                  # network_id (mainnet)
+            11: HASH32,  # script_data_hash
+            13: [[HASH32, 1]],  # collateral
+            14: [b"\x55" * 28],  # required_signers
+            15: 1,  # network_id (mainnet)
             16: [ADDR_BYTES, 1_000_000],  # collateral_return
-            17: 2_000_000,          # total_collateral
-            18: [[HASH32, 3]],      # reference_inputs
-            19: {},                 # voting_procedures
-            20: [],                 # proposal_procedures
-            21: 10_000_000_000,     # treasury_value
-            22: 500_000,            # donation
+            17: 2_000_000,  # total_collateral
+            18: [[HASH32, 3]],  # reference_inputs
+            19: {},  # voting_procedures
+            20: [],  # proposal_procedures
+            21: 10_000_000_000,  # treasury_value
+            22: 500_000,  # donation
         }
         block_cbor = _wrap_block(
             Era.CONWAY,
@@ -925,9 +943,7 @@ class TestTransactionHashDeterminism:
         result = decode_block_body(block_cbor)
 
         for i, tx in enumerate(result.transactions):
-            expected_hash = hashlib.blake2b(
-                _dumps(bodies[i]), digest_size=32
-            ).digest()
+            expected_hash = hashlib.blake2b(_dumps(bodies[i]), digest_size=32).digest()
             assert tx.tx_hash == expected_hash, f"Tx {i} hash mismatch"
 
     def test_tx_hash_length_always_32(self):
@@ -1057,7 +1073,8 @@ class TestCrossDecoderConsistency:
 
         body = _make_tx_body()
         block_cbor = _wrap_block(
-            era, header_body,
+            era,
+            header_body,
             tx_bodies=[body],
             tx_witnesses=[{}],
         )

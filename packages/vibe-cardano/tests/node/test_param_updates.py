@@ -10,8 +10,6 @@ Validates that NodeKernel can:
 
 from __future__ import annotations
 
-import pytest
-
 from vibe.cardano.node.kernel import NodeKernel
 
 
@@ -71,11 +69,13 @@ class TestQueueAndApplyUpdates:
     def test_multiple_updates_merge(self) -> None:
         """Multiple updates are applied in order; later updates win."""
         kernel = NodeKernel()
-        kernel.init_protocol_params({
-            "max_tx_size": 16384,
-            "min_fee_constant": 155381,
-            "max_block_body_size": 90112,
-        })
+        kernel.init_protocol_params(
+            {
+                "max_tx_size": 16384,
+                "min_fee_constant": 155381,
+                "max_block_body_size": 90112,
+            }
+        )
 
         # Two updates queued in order
         kernel.queue_param_update({"max_tx_size": 32768, "min_fee_constant": 200000})

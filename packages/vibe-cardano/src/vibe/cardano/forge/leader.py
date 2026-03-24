@@ -64,13 +64,11 @@ class LeaderProof:
     def __post_init__(self) -> None:
         if len(self.vrf_proof) != VRF_PROOF_SIZE:
             raise ValueError(
-                f"VRF proof must be {VRF_PROOF_SIZE} bytes, "
-                f"got {len(self.vrf_proof)}"
+                f"VRF proof must be {VRF_PROOF_SIZE} bytes, got {len(self.vrf_proof)}"
             )
         if len(self.vrf_output) != VRF_OUTPUT_SIZE:
             raise ValueError(
-                f"VRF output must be {VRF_OUTPUT_SIZE} bytes, "
-                f"got {len(self.vrf_output)}"
+                f"VRF output must be {VRF_OUTPUT_SIZE} bytes, got {len(self.vrf_output)}"
             )
 
 
@@ -92,6 +90,7 @@ def _mk_seed(uc_nonce: bytes, slot: int, epoch_nonce: bytes) -> bytes:
         32-byte VRF seed.
     """
     import hashlib
+
     # Step 1: slot_be64 || epoch_nonce
     payload = struct.pack(">Q", slot) + epoch_nonce
     # Step 2: blake2b-256
@@ -102,6 +101,7 @@ def _mk_seed(uc_nonce: bytes, slot: int, epoch_nonce: bytes) -> bytes:
 
 # Universal constants from Haskell: mkNonceFromNumber n = blake2b_256(n as Word64)
 import hashlib as _hl
+
 SEED_ETA: bytes = _hl.blake2b(struct.pack(">Q", 0), digest_size=32).digest()
 SEED_L: bytes = _hl.blake2b(struct.pack(">Q", 1), digest_size=32).digest()
 
@@ -125,6 +125,7 @@ def _mk_input_vrf(slot: int, epoch_nonce: bytes) -> bytes:
         32-byte VRF input hash.
     """
     import hashlib
+
     payload = struct.pack(">Q", slot) + epoch_nonce
     return hashlib.blake2b(payload, digest_size=32).digest()
 
@@ -193,7 +194,18 @@ def check_leadership(
 
     # Check the Praos leader threshold
     if certified_nat_max_check(output, relative_stake, active_slot_coeff):
-        logger.info("Elected leader for slot %d (stake=%.4f%%, f=%.4f)", slot, relative_stake * 100, active_slot_coeff, extra={"event": "forge.elected", "slot": slot, "relative_stake": relative_stake, "active_slot_coeff": active_slot_coeff})
+        logger.info(
+            "Elected leader for slot %d (stake=%.4f%%, f=%.4f)",
+            slot,
+            relative_stake * 100,
+            active_slot_coeff,
+            extra={
+                "event": "forge.elected",
+                "slot": slot,
+                "relative_stake": relative_stake,
+                "active_slot_coeff": active_slot_coeff,
+            },
+        )
         return LeaderProof(
             vrf_proof=proof,
             vrf_output=output,

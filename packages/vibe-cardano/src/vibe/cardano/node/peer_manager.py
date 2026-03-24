@@ -12,16 +12,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-from vibe.core.multiplexer import Bearer, BearerClosedError, MiniProtocolChannel, Multiplexer, MuxClosedError
-
-from vibe.cardano.network.handshake import HANDSHAKE_PROTOCOL_ID
-from vibe.cardano.network.chainsync import CHAIN_SYNC_N2N_ID
 from vibe.cardano.network.blockfetch import BLOCK_FETCH_N2N_ID
-from vibe.cardano.network.txsubmission import TX_SUBMISSION_N2N_ID
+from vibe.cardano.network.chainsync import CHAIN_SYNC_N2N_ID
+from vibe.cardano.network.handshake import HANDSHAKE_PROTOCOL_ID
 from vibe.cardano.network.keepalive import KEEP_ALIVE_PROTOCOL_ID
+from vibe.cardano.network.txsubmission import TX_SUBMISSION_N2N_ID
+from vibe.core.multiplexer import (
+    Bearer,
+    BearerClosedError,
+    MiniProtocolChannel,
+    Multiplexer,
+    MuxClosedError,
+)
 
 from .config import NodeConfig, PeerAddress
 from .inbound_server import N2N_PROTOCOL_IDS
@@ -43,6 +48,7 @@ def _get_new_chain_blocks(
     Used to re-apply nonce state after a fork switch.
     """
     from vibe.cardano.serialization.block import decode_block_header
+
     blocks: list[tuple[int, bytes, bytes, bytes | None]] = []
     h = tip_hash
     while h and h != intersection_hash and h in chain_db.volatile_db._block_info:
@@ -98,7 +104,16 @@ class PeerManager:
         chain_db: ChainDB instance for storing received blocks.
     """
 
-    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks", "_known_points", "_block_received_event")
+    __slots__ = (
+        "_config",
+        "_chain_db",
+        "_node_kernel",
+        "_peers",
+        "_stopped",
+        "_tasks",
+        "_known_points",
+        "_block_received_event",
+    )
 
     def __init__(
         self,
@@ -150,9 +165,7 @@ class PeerManager:
     async def start(self) -> None:
         """Start connection tasks for all registered peers."""
         for peer_id, peer in self._peers.items():
-            task = asyncio.create_task(
-                self._peer_loop(peer), name=f"peer-{peer_id}"
-            )
+            task = asyncio.create_task(self._peer_loop(peer), name=f"peer-{peer_id}")
             self._tasks.append(task)
             peer.task = task
 
@@ -165,7 +178,7 @@ class PeerManager:
                 peer.task.cancel()
                 try:
                     await peer.task
-                except (asyncio.CancelledError, Exception):
+                except asyncio.CancelledError, Exception:
                     pass
 
     async def _peer_loop(self, peer: _PeerConnection) -> None:
@@ -255,10 +268,12 @@ class PeerManager:
             run_handshake_client,
         )
 
-        logger.info("Peer %s connecting", peer.address, extra={"event": "peer.connect", "peer": str(peer.address)})
-        reader, writer = await asyncio.open_connection(
-            peer.address.host, peer.address.port
+        logger.info(
+            "Peer %s connecting",
+            peer.address,
+            extra={"event": "peer.connect", "peer": str(peer.address)},
         )
+        reader, writer = await asyncio.open_connection(peer.address.host, peer.address.port)
         bearer = Bearer(reader, writer)
         mux = Multiplexer(bearer, is_initiator=True)
 
@@ -290,11 +305,20 @@ class PeerManager:
         try:
             # Run N2N handshake on channel 0.
             hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
-            result = await run_handshake_client(
-                hs_channel, self._config.network_magic
-            )
+            result = await run_handshake_client(hs_channel, self._config.network_magic)
             peer.connected = True
-            logger.info("Peer %s connected (v%d, magic %d)", peer.address, result.version_number, result.version_data.network_magic, extra={"event": "peer.connected", "peer": str(peer.address), "version": result.version_number, "magic": result.version_data.network_magic})
+            logger.info(
+                "Peer %s connected (v%d, magic %d)",
+                peer.address,
+                result.version_number,
+                result.version_data.network_magic,
+                extra={
+                    "event": "peer.connected",
+                    "peer": str(peer.address),
+                    "version": result.version_number,
+                    "magic": result.version_data.network_magic,
+                },
+            )
         except (HandshakeError, Exception) as exc:
             # Handshake failed — tear down the mux and propagate.
             await mux.close()
@@ -302,9 +326,7 @@ class PeerManager:
                 await mux_task
             except Exception:
                 pass
-            raise ConnectionError(
-                f"Handshake with {peer.address} failed: {exc}"
-            ) from exc
+            raise ConnectionError(f"Handshake with {peer.address} failed: {exc}") from exc
 
         # --- Launch miniprotocol runners on their channels ---
         # Each runs as a background task for the lifetime of the connection.
@@ -337,7 +359,6 @@ class PeerManager:
 
         import cbor2pure as cbor2
 
-        from vibe.cardano.network.blockfetch_protocol import run_block_fetch
         from vibe.cardano.network.chainsync import Point
 
         # Queue of points discovered by chain-sync, consumed by block-fetch.
@@ -354,8 +375,10 @@ class PeerManager:
             # Use the serialization layer to decode header fields.
             from vibe.cardano.serialization.block import (
                 Era,
-                block_hash as compute_block_hash,
                 decode_block_header_raw,
+            )
+            from vibe.cardano.serialization.block import (
+                block_hash as compute_block_hash,
             )
 
             try:
@@ -369,7 +392,7 @@ class PeerManager:
                         hdr = decode_block_header_raw(header_bytes, era)
                         slot = hdr.slot
                         blk_hash = hdr.hash
-                    except (NotImplementedError, ValueError):
+                    except NotImplementedError, ValueError:
                         # Byron or unrecognised era -- fall back to inline
                         inner = cbor2.loads(header_bytes)
                         hdr_body = inner[0]
@@ -393,18 +416,43 @@ class PeerManager:
                         pass
 
                     if _headers_received % 100 == 1 or _headers_received <= 5:
-                        logger.info("Chain-sync header #%d at slot %d from %s", _headers_received, slot, peer.address, extra={"event": "chainsync.header", "peer": str(peer.address), "header_num": _headers_received, "slot": slot, "hash": blk_hash.hex()[:16]})
+                        logger.info(
+                            "Chain-sync header #%d at slot %d from %s",
+                            _headers_received,
+                            slot,
+                            peer.address,
+                            extra={
+                                "event": "chainsync.header",
+                                "peer": str(peer.address),
+                                "header_num": _headers_received,
+                                "slot": slot,
+                                "hash": blk_hash.hex()[:16],
+                            },
+                        )
                 else:
                     if _headers_received % 100 == 1:
                         logger.debug(
                             "Peer %s: header #%d (unparsed, tip=%s)",
-                            peer.address, _headers_received, tip,
+                            peer.address,
+                            _headers_received,
+                            tip,
                         )
             except Exception as exc:
                 logger.warning("Peer %s: header parse error: %s", peer.address, exc)
 
         async def _on_roll_backward(point: object, tip: object) -> None:
-            logger.info("Chain rollback to %s (tip=%s) from %s", point, tip, peer.address, extra={"event": "chainsync.rollback", "peer": str(peer.address), "point": str(point), "tip": str(tip)})
+            logger.info(
+                "Chain rollback to %s (tip=%s) from %s",
+                point,
+                tip,
+                peer.address,
+                extra={
+                    "event": "chainsync.rollback",
+                    "peer": str(peer.address),
+                    "point": str(point),
+                    "tip": str(tip),
+                },
+            )
             # TODO: ChainDB rollback to point
 
         asyncio.create_task(
@@ -439,9 +487,7 @@ class PeerManager:
                 while not stop_event.is_set():
                     batch: list[Point] = []
                     try:
-                        point = await asyncio.wait_for(
-                            fetch_queue.get(), timeout=1.0
-                        )
+                        point = await asyncio.wait_for(fetch_queue.get(), timeout=1.0)
                         batch.append(point)
                         while len(batch) < 100:
                             try:
@@ -457,6 +503,7 @@ class PeerManager:
 
             async def _on_block(block_cbor: bytes) -> None:
                 nonlocal _blocks_stored
+                from vibe.cardano.consensus.hfc import validate_block
                 from vibe.cardano.serialization.block import (
                     Era,
                     decode_block_header,
@@ -464,7 +511,6 @@ class PeerManager:
                 from vibe.cardano.serialization.transaction import (
                     decode_block_body,
                 )
-                from vibe.cardano.consensus.hfc import validate_block
 
                 try:
                     # --- Parse block from block-fetch wire format ---
@@ -473,7 +519,7 @@ class PeerManager:
                     decoded = cbor2.loads(block_cbor)
 
                     # Unwrap tag-24 if present
-                    if hasattr(decoded, 'tag') and decoded.tag == 24:
+                    if hasattr(decoded, "tag") and decoded.tag == 24:
                         inner = decoded.value
                         if isinstance(inner, bytes):
                             decoded = cbor2.loads(inner)
@@ -482,10 +528,14 @@ class PeerManager:
 
                     # Block-fetch format: [era_int, block_body]
                     # where block_body = [header, tx_bodies, tx_witnesses, aux, invalid_txs]
-                    if isinstance(decoded, list) and len(decoded) >= 2 and isinstance(decoded[0], int):
+                    if (
+                        isinstance(decoded, list)
+                        and len(decoded) >= 2
+                        and isinstance(decoded[0], int)
+                    ):
                         era_tag = decoded[0]
                         block_body = decoded[1]
-                    elif hasattr(decoded, 'tag'):
+                    elif hasattr(decoded, "tag"):
                         era_tag = decoded.tag
                         block_body = decoded.value
                     else:
@@ -520,9 +570,7 @@ class PeerManager:
                         errors = validate_block(
                             era=era,
                             block=body.transactions,
-                            ledger_state=(
-                                chain_db.ledger_db if chain_db else None
-                            ),
+                            ledger_state=(chain_db.ledger_db if chain_db else None),
                             protocol_params=self._config.protocol_params,
                             current_slot=slot,
                         )
@@ -531,15 +579,20 @@ class PeerManager:
                                 logger.warning(
                                     "Peer %s: block #%d slot=%d has %d "
                                     "validation errors (permissive): %s",
-                                    peer.address, block_number, slot,
-                                    len(errors), errors[:3],
+                                    peer.address,
+                                    block_number,
+                                    slot,
+                                    len(errors),
+                                    errors[:3],
                                 )
                             else:
                                 logger.warning(
-                                    "Peer %s: REJECTING block #%d "
-                                    "slot=%d: %d errors: %s",
-                                    peer.address, block_number, slot,
-                                    len(errors), errors[:3],
+                                    "Peer %s: REJECTING block #%d slot=%d: %d errors: %s",
+                                    peer.address,
+                                    block_number,
+                                    slot,
+                                    len(errors),
+                                    errors[:3],
                                 )
                                 return  # Don't store invalid blocks
 
@@ -576,22 +629,35 @@ class PeerManager:
                                     datum_hash = getattr(out, "datum_hash", b"") or b""
                                     if hasattr(datum_hash, "payload"):
                                         datum_hash = datum_hash.payload
-                                    created.append((key, {
-                                        "tx_hash": tx.tx_hash,
-                                        "tx_index": idx,
-                                        "address": addr,
-                                        "value": int(value),
-                                        "datum_hash": datum_hash if isinstance(datum_hash, bytes) else b"",
-                                    }))
+                                    created.append(
+                                        (
+                                            key,
+                                            {
+                                                "tx_hash": tx.tx_hash,
+                                                "tx_index": idx,
+                                                "address": addr,
+                                                "value": int(value),
+                                                "datum_hash": (
+                                                    datum_hash
+                                                    if isinstance(datum_hash, bytes)
+                                                    else b""
+                                                ),
+                                            },
+                                        )
+                                    )
                         if consumed or created:
                             try:
                                 chain_db.ledger_db.apply_block(
-                                    consumed, created, block_slot=slot,
+                                    consumed,
+                                    created,
+                                    block_slot=slot,
                                 )
                             except Exception as exc:
                                 logger.warning(
                                     "Peer %s: ledger apply error at slot %d: %s",
-                                    peer.address, slot, exc,
+                                    peer.address,
+                                    slot,
+                                    exc,
                                 )
 
                     # --- Store in ChainDB (includes chain selection + follower notification) ---
@@ -600,7 +666,7 @@ class PeerManager:
                             max(0, era_tag - 1) if era_tag >= 2 else 0,
                             cbor2.CBORTag(24, hdr_cbor),
                         ]
-                        hdr_vrf_out = getattr(hdr, 'vrf_output', None)
+                        hdr_vrf_out = getattr(hdr, "vrf_output", None)
                         result = await chain_db.add_block(
                             slot=slot,
                             block_hash=block_hash,
@@ -621,25 +687,57 @@ class PeerManager:
                                 # Fork switch — rollback nonce and re-apply
                                 # Walk new chain from intersection to tip via VolatileDB
                                 new_blocks = _get_new_chain_blocks(
-                                    chain_db, result.intersection_hash, block_hash,
+                                    chain_db,
+                                    result.intersection_hash,
+                                    block_hash,
                                 )
                                 node_kernel.on_fork_switch(
-                                    result.intersection_hash, new_blocks,
+                                    result.intersection_hash,
+                                    new_blocks,
                                 )
                             else:
                                 # Simple extension
                                 node_kernel.on_block_adopted(
-                                    slot, block_hash, prev_hash, vrf_out,
+                                    slot,
+                                    block_hash,
+                                    prev_hash,
+                                    vrf_out,
                                 )
 
                     _blocks_stored += 1
-                    tx_count = len(block_body[1]) if len(block_body) > 1 and isinstance(block_body[1], list) else 0
+                    tx_count = (
+                        len(block_body[1])
+                        if len(block_body) > 1 and isinstance(block_body[1], list)
+                        else 0
+                    )
                     if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
-                        logger.info("Block #%d stored at slot %d (%s, %d txs, %d bytes) from %s [%d total]", block_number, slot, era.name, tx_count, len(raw_block), peer.address, _blocks_stored, extra={"event": "block.stored", "block_number": block_number, "slot": slot, "era": era.name, "tx_count": tx_count, "size_bytes": len(raw_block), "hash": block_hash.hex()[:16], "peer": str(peer.address), "total_stored": _blocks_stored})
+                        logger.info(
+                            "Block #%d stored at slot %d (%s, %d txs, %d bytes) from %s [%d total]",
+                            block_number,
+                            slot,
+                            era.name,
+                            tx_count,
+                            len(raw_block),
+                            peer.address,
+                            _blocks_stored,
+                            extra={
+                                "event": "block.stored",
+                                "block_number": block_number,
+                                "slot": slot,
+                                "era": era.name,
+                                "tx_count": tx_count,
+                                "size_bytes": len(raw_block),
+                                "hash": block_hash.hex()[:16],
+                                "peer": str(peer.address),
+                                "total_stored": _blocks_stored,
+                            },
+                        )
                 except Exception as exc:
                     logger.error(
                         "Peer %s: block process error: %s",
-                        peer.address, exc, exc_info=True,
+                        peer.address,
+                        exc,
+                        exc_info=True,
                     )
 
             try:
@@ -650,9 +748,7 @@ class PeerManager:
                     stop_event=stop_event,
                 )
             except Exception as exc:
-                logger.warning(
-                    "Peer %s: block-fetch error: %s", peer.address, exc
-                )
+                logger.warning("Peer %s: block-fetch error: %s", peer.address, exc)
             finally:
                 builder_task.cancel()
 
@@ -708,7 +804,11 @@ class PeerManager:
 
     async def _disconnect_peer(self, peer: _PeerConnection) -> None:
         """Tear down a peer's multiplexer and bearer."""
-        logger.info("Peer %s disconnected", peer.address, extra={"event": "peer.disconnect", "peer": str(peer.address)})
+        logger.info(
+            "Peer %s disconnected",
+            peer.address,
+            extra={"event": "peer.disconnect", "peer": str(peer.address)},
+        )
         # Signal miniprotocol runners to stop.
         if peer.stop_event is not None:
             peer.stop_event.set()
@@ -723,7 +823,7 @@ class PeerManager:
             peer.mux_task.cancel()
             try:
                 await peer.mux_task
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError, Exception:
                 pass
             peer.mux_task = None
         if peer.bearer is not None:

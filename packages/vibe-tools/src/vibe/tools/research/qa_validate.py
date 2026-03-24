@@ -10,13 +10,13 @@ Runs after the extraction pipeline to validate and categorize results:
 Usage:
     vibe-node research qa-validate --subsystem networking
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
 import subprocess
-import uuid
 from enum import Enum
 from pathlib import Path
 
@@ -40,14 +40,15 @@ class GapCategory(str, Enum):
 
 
 class GapSeverity(str, Enum):
-    critical = "critical"       # Must match Haskell behavior exactly
-    important = "important"     # Affects correctness, needs careful handling
+    critical = "critical"  # Must match Haskell behavior exactly
+    important = "important"  # Affects correctness, needs careful handling
     informational = "informational"  # Good to know, can use spec approach initially
     false_positive = "false_positive"  # Not a real gap
 
 
 class GapValidation(BaseModel):
     """QA agent's assessment of a gap entry."""
+
     category: GapCategory
     severity: GapSeverity
     verified: bool = Field(description="True if the gap was verified against source code")
@@ -59,6 +60,7 @@ class GapValidation(BaseModel):
 
 class XrefValidation(BaseModel):
     """QA agent's assessment of a cross-reference."""
+
     is_accurate: bool = Field(description="True if the cross-reference is genuinely correct")
     confidence_adjustment: float = Field(description="New confidence score 0.0-1.0")
     notes: str | None = None
@@ -148,13 +150,14 @@ def _git_grep(term: str, repo_path: Path, max_results: int = 5) -> list[str]:
         result = subprocess.run(
             ["git", "grep", "-n", "-i", "--max-count", str(max_results), term],
             cwd=repo_path,
-            capture_output=True, timeout=10,
+            capture_output=True,
+            timeout=10,
         )
         if result.returncode == 0:
             stdout = result.stdout.decode("utf-8", errors="replace")
             for line in stdout.strip().splitlines()[:max_results]:
                 results.append(line[:500])  # Truncate long lines
-    except (subprocess.TimeoutExpired, OSError):
+    except subprocess.TimeoutExpired, OSError:
         pass
     return results
 
@@ -183,8 +186,12 @@ def _search_vendor_repos(search_terms: list[str]) -> dict[str, list[str]]:
 
 
 async def validate_gaps(
-    pool, subsystem: str, limit: int | None = None,
-    concurrency: int = 5, progress=None, task_id=None,
+    pool,
+    subsystem: str,
+    limit: int | None = None,
+    concurrency: int = 5,
+    progress=None,
+    task_id=None,
 ) -> dict:
     """Validate and categorize gap_analysis entries for a subsystem."""
     import asyncio
@@ -289,7 +296,8 @@ async def validate_gaps(
                         """UPDATE gap_analysis
                         SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
                         WHERE id = $2""",
-                        json.dumps(qa_metadata), gap_id,
+                        json.dumps(qa_metadata),
+                        gap_id,
                     )
 
                 stats["gaps_validated"] += 1
@@ -317,8 +325,12 @@ async def validate_gaps(
 
 
 async def validate_xrefs(
-    pool, subsystem: str, limit: int | None = None,
-    concurrency: int = 5, progress=None, task_id=None,
+    pool,
+    subsystem: str,
+    limit: int | None = None,
+    concurrency: int = 5,
+    progress=None,
+    task_id=None,
 ) -> dict:
     """Spot-check cross-references for accuracy."""
     import asyncio
@@ -378,7 +390,8 @@ async def validate_xrefs(
                         SET confidence = $1,
                             notes = COALESCE(notes, '') || ' [qa_validated]'
                         WHERE id = $2""",
-                        validation.confidence_adjustment, xref_id,
+                        validation.confidence_adjustment,
+                        xref_id,
                     )
 
                 stats["checked"] += 1

@@ -11,7 +11,6 @@ Tests cover:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -24,21 +23,14 @@ from vibe.cardano.network.chainsync import (
 from vibe.cardano.network.chainsync_protocol import (
     ChainProvider,
     ChainSyncCodec,
-    ChainSyncProtocol,
-    CsMsgAwaitReply,
     CsMsgDone,
     CsMsgFindIntersect,
-    CsMsgIntersectFound,
     CsMsgRequestNext,
-    CsMsgRollForward,
     run_chain_sync_server,
 )
 from vibe.cardano.node.config import NodeConfig, PeerAddress
 from vibe.cardano.node.run import PeerManager
 from vibe.core.multiplexer import BearerClosedError, MuxClosedError
-from vibe.core.protocols.agency import PeerRole
-from vibe.core.protocols.runner import ProtocolRunner
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -105,12 +97,14 @@ async def test_chain_sync_server_sends_await_reply_at_tip():
     new_point = Point(slot=101, hash=b"\xbb" * 32)
     new_tip = Tip(point=new_point, block_number=11)
 
-    provider = StubChainProvider([
-        # First call: at tip -> await
-        ("await", None, None, SAMPLE_TIP),
-        # Second call (after polling): new block available
-        ("roll_forward", SAMPLE_HEADER, new_point, new_tip),
-    ])
+    provider = StubChainProvider(
+        [
+            # First call: at tip -> await
+            ("await", None, None, SAMPLE_TIP),
+            # Second call (after polling): new block available
+            ("roll_forward", SAMPLE_HEADER, new_point, new_tip),
+        ]
+    )
 
     # Track messages sent by the server.
     sent_messages: list[object] = []
@@ -182,13 +176,15 @@ async def test_chain_sync_server_handles_client_done_during_await():
     the underlying channel raises an exception (client disconnected),
     the server should return without crashing.
     """
-    provider = StubChainProvider([
-        # Always returns await — forces the server into the polling loop.
-        ("await", None, None, SAMPLE_TIP),
-        ("await", None, None, SAMPLE_TIP),
-        ("await", None, None, SAMPLE_TIP),
-        ("await", None, None, SAMPLE_TIP),
-    ])
+    provider = StubChainProvider(
+        [
+            # Always returns await — forces the server into the polling loop.
+            ("await", None, None, SAMPLE_TIP),
+            ("await", None, None, SAMPLE_TIP),
+            ("await", None, None, SAMPLE_TIP),
+            ("await", None, None, SAMPLE_TIP),
+        ]
+    )
 
     channel = _make_mock_channel()
     codec = ChainSyncCodec()
@@ -252,7 +248,7 @@ async def test_keepalive_prevents_idle_disconnect():
             run_keep_alive_server(channel, stop_event=stop),
             timeout=2.0,
         )
-    except (MuxClosedError, TimeoutError):
+    except MuxClosedError, TimeoutError:
         # Either outcome is acceptable: the server may propagate
         # MuxClosedError or timeout if it doesn't check the channel.
         pass
@@ -298,7 +294,7 @@ async def test_bearer_closed_handled_gracefully():
     with patch.object(PeerManager, "_connect_peer", mock_connect):
         try:
             await asyncio.wait_for(pm._peer_loop(peer), timeout=5.0)
-        except (asyncio.CancelledError, TimeoutError):
+        except asyncio.CancelledError, TimeoutError:
             pass
 
     # The peer loop should have attempted at least one reconnect
@@ -333,7 +329,7 @@ async def test_reconnect_after_disconnect():
     with patch.object(PeerManager, "_connect_peer", mock_connect):
         try:
             await asyncio.wait_for(pm._peer_loop(peer), timeout=15.0)
-        except (asyncio.CancelledError, TimeoutError):
+        except asyncio.CancelledError, TimeoutError:
             pass
 
     # Should have attempted at least 2 connections.

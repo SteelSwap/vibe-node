@@ -27,7 +27,6 @@ from vibe.cardano.consensus.nonce import (
     mk_nonce,
 )
 
-
 # ---------------------------------------------------------------------------
 # EpochNonce construction
 # ---------------------------------------------------------------------------
@@ -104,30 +103,26 @@ class TestStabilityWindow:
         """The last slot before 2/3 is in the window."""
         # epoch_length=432000, 2/3 = 288000
         # Slot 287999 should be in the window
-        assert is_in_stability_window(
-            slot=287999, epoch_start_slot=0, epoch_length=432000
-        )
+        assert is_in_stability_window(slot=287999, epoch_start_slot=0, epoch_length=432000)
 
     def test_first_slot_outside_window(self) -> None:
         """Slot at exactly 2/3 is NOT in the window."""
         # slot_in_epoch=288000, 288000*3 = 864000, epoch_length*2 = 864000
         # 864000 < 864000 is False
-        assert not is_in_stability_window(
-            slot=288000, epoch_start_slot=0, epoch_length=432000
-        )
+        assert not is_in_stability_window(slot=288000, epoch_start_slot=0, epoch_length=432000)
 
     def test_last_slot_outside_window(self) -> None:
         """Last slot of epoch is outside the window."""
-        assert not is_in_stability_window(
-            slot=431999, epoch_start_slot=0, epoch_length=432000
-        )
+        assert not is_in_stability_window(slot=431999, epoch_start_slot=0, epoch_length=432000)
 
     def test_non_zero_epoch_start(self) -> None:
         """Works with arbitrary epoch start slot."""
         epoch_start = 432000  # epoch 1
         epoch_len = 432000
         # First slot of epoch 1 is in the window
-        assert is_in_stability_window(slot=432000, epoch_start_slot=epoch_start, epoch_length=epoch_len)
+        assert is_in_stability_window(
+            slot=432000, epoch_start_slot=epoch_start, epoch_length=epoch_len
+        )
         # 2/3 mark of epoch 1 is NOT in the window
         assert not is_in_stability_window(
             slot=432000 + 288000, epoch_start_slot=epoch_start, epoch_length=epoch_len
@@ -288,9 +283,7 @@ class TestNonceProperties:
         epoch_length=st.integers(min_value=3, max_value=1000000),
     )
     @settings(max_examples=100)
-    def test_stability_window_partition(
-        self, slot_offset: int, epoch_length: int
-    ) -> None:
+    def test_stability_window_partition(self, slot_offset: int, epoch_length: int) -> None:
         """Every slot is either in or out of the stability window — never both."""
         slot_offset = slot_offset % epoch_length
         result = is_in_stability_window(

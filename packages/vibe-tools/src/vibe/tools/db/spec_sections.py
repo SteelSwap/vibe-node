@@ -1,6 +1,6 @@
 """CRUD operations for spec_sections table."""
+
 import uuid
-from typing import Optional
 
 
 async def add_spec_section(
@@ -12,15 +12,13 @@ async def add_spec_section(
     subsystem: str,
     verbatim: str,
     extracted_rule: str,
-    spec_chunk_id: Optional[uuid.UUID] = None,
-    embedding: Optional[list[float]] = None,
-    metadata: Optional[dict] = None,
+    spec_chunk_id: uuid.UUID | None = None,
+    embedding: list[float] | None = None,
+    metadata: dict | None = None,
 ) -> uuid.UUID:
     """Insert a spec section and return its ID."""
     row_id = uuid.uuid4()
-    embedding_str = (
-        "[" + ",".join(str(x) for x in embedding) + "]" if embedding else None
-    )
+    embedding_str = "[" + ",".join(str(x) for x in embedding) + "]" if embedding else None
     result = await conn.fetchrow(
         """
         INSERT INTO spec_sections (id, spec_chunk_id, section_id, title, section_type,
@@ -33,8 +31,16 @@ async def add_spec_section(
             metadata = EXCLUDED.metadata
         RETURNING id
         """,
-        row_id, spec_chunk_id, section_id, title, section_type,
-        era, subsystem, verbatim, extracted_rule, embedding_str,
+        row_id,
+        spec_chunk_id,
+        section_id,
+        title,
+        section_type,
+        era,
+        subsystem,
+        verbatim,
+        extracted_rule,
+        embedding_str,
         metadata,
     )
     return result["id"]
@@ -42,9 +48,9 @@ async def add_spec_section(
 
 async def list_spec_sections(
     conn,
-    subsystem: Optional[str] = None,
-    era: Optional[str] = None,
-    section_type: Optional[str] = None,
+    subsystem: str | None = None,
+    era: str | None = None,
+    section_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict], int]:
@@ -67,9 +73,7 @@ async def list_spec_sections(
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-    count = await conn.fetchval(
-        f"SELECT COUNT(*) FROM spec_sections {where}", *params
-    )
+    count = await conn.fetchval(f"SELECT COUNT(*) FROM spec_sections {where}", *params)
 
     params.extend([limit, offset])
     rows = await conn.fetch(

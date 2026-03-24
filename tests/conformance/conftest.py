@@ -14,9 +14,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator
 
 import httpx
 import pytest
@@ -29,18 +29,14 @@ if str(_THIS_DIR) not in sys.path:
 
 from helpers import (  # noqa: E402
     ERA_FIXTURE_FILES,
-    FIXTURES_DIR,
-    extract_block_metadata,
-    fetch_blocks_from_origin,
-    fetch_blocks_from_point,
     load_fixture,
     ogmios_rpc,
 )
 
-
 # ---------------------------------------------------------------------------
 # URL configuration
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def ogmios_url() -> str:
@@ -56,6 +52,7 @@ def ogmios_url() -> str:
 # Availability check
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session")
 def ogmios_available(ogmios_url: str) -> bool:
     """Check whether Ogmios is reachable.
@@ -70,7 +67,7 @@ def ogmios_available(ogmios_url: str) -> bool:
     try:
         resp = httpx.get(health_url, timeout=5.0)
         return resp.status_code == 200
-    except (httpx.ConnectError, httpx.TimeoutException, OSError):
+    except httpx.ConnectError, httpx.TimeoutException, OSError:
         return False
 
 
@@ -95,15 +92,16 @@ def skip_without_ogmios(request: pytest.FixtureRequest, ogmios_available: bool) 
 # WebSocket client
 # ---------------------------------------------------------------------------
 
+
 @asynccontextmanager
-async def _ogmios_ws(url: str) -> AsyncGenerator[websockets.ClientConnection, None]:
+async def _ogmios_ws(url: str) -> AsyncGenerator[websockets.ClientConnection]:
     """Open a WebSocket connection to Ogmios."""
     async with websockets.connect(url) as ws:
         yield ws
 
 
 @pytest.fixture
-async def ogmios_client(ogmios_url: str) -> AsyncGenerator[websockets.ClientConnection, None]:
+async def ogmios_client(ogmios_url: str) -> AsyncGenerator[websockets.ClientConnection]:
     """Async fixture providing a WebSocket connection to Ogmios.
 
     Usage::
@@ -119,6 +117,7 @@ async def ogmios_client(ogmios_url: str) -> AsyncGenerator[websockets.ClientConn
 # ---------------------------------------------------------------------------
 # Fixture-file fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def byron_block_fixture() -> dict:
@@ -160,6 +159,7 @@ def all_era_fixtures() -> dict[str, dict]:
 # Helper: fetch block CBOR
 # ---------------------------------------------------------------------------
 
+
 async def fetch_block_cbor(
     ogmios_url: str,
     slot: int,
@@ -195,9 +195,7 @@ async def fetch_block_cbor(
 
         block = result.get("block")
         if block is None:
-            raise RuntimeError(
-                f"No block in Ogmios response: {json.dumps(result)[:500]}"
-            )
+            raise RuntimeError(f"No block in Ogmios response: {json.dumps(result)[:500]}")
 
         # Extract CBOR — Ogmios v6 includes a 'cbor' field when available
         if isinstance(block, dict):

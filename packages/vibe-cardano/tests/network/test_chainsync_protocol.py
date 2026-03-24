@@ -15,17 +15,13 @@ import time
 
 import pytest
 
-from vibe.cardano.network.chainsync import Point, Tip, ORIGIN
+from vibe.cardano.network.chainsync import Point, Tip
 from vibe.cardano.network.chainsync_protocol import (
     ChainSyncCodec,
-    ChainSyncProtocol,
-    ChainSyncState,
+    CsMsgDone,
     CsMsgRequestNext,
     CsMsgRollForward,
-    CsMsgRollBackward,
-    CsMsgDone,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fake channel for chain-sync testing

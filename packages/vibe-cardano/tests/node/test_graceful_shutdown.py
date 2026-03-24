@@ -19,22 +19,13 @@ Haskell reference:
 from __future__ import annotations
 
 import asyncio
-import os
 import warnings
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
-from vibe.cardano.node.run import (
-    SlotClock,
-    _snapshot_loop,
-)
-from vibe.cardano.consensus.slot_arithmetic import SlotConfig
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -144,7 +135,7 @@ async def test_shutdown_event_stops_forge_loop() -> None:
     task = asyncio.create_task(forge_loop_pattern())
     try:
         await asyncio.wait_for(task, timeout=2.0)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         task.cancel()
         pytest.fail("Forge loop did not exit within 2 seconds after shutdown_event was set")
 
@@ -185,7 +176,7 @@ async def test_shutdown_event_stops_forge_loop_midrun() -> None:
     saved_iterations = iterations
     try:
         await asyncio.wait_for(task, timeout=2.0)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         task.cancel()
         pytest.fail("Forge loop did not exit within 2 seconds after shutdown_event was set")
 
@@ -233,7 +224,7 @@ async def test_shutdown_cancels_all_tasks() -> None:
             task.cancel()
             try:
                 await task
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError, Exception:
                 pass
 
     # All tasks should now be done
@@ -260,10 +251,7 @@ async def test_no_task_destroyed_warnings() -> None:
             pass
 
     # Start tasks
-    tasks = [
-        asyncio.create_task(background_work(), name=f"worker-{i}")
-        for i in range(5)
-    ]
+    tasks = [asyncio.create_task(background_work(), name=f"worker-{i}") for i in range(5)]
 
     await asyncio.sleep(0.03)
 
@@ -279,7 +267,7 @@ async def test_no_task_destroyed_warnings() -> None:
                 task.cancel()
                 try:
                     await task
-                except (asyncio.CancelledError, Exception):
+                except asyncio.CancelledError, Exception:
                     pass
 
         # Check no "destroyed" warnings
@@ -325,7 +313,7 @@ async def test_shutdown_during_sync() -> None:
     # The sync should stop fairly quickly (after finishing current block)
     try:
         await asyncio.wait_for(sync_task, timeout=2.0)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         sync_task.cancel()
         pytest.fail("Sync did not stop within 2 seconds after shutdown")
 
@@ -387,7 +375,7 @@ async def test_socket_cleanup_on_shutdown() -> None:
     # Wait for the task to finish
     try:
         await asyncio.wait_for(task, timeout=2.0)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         task.cancel()
         pytest.fail("Server task did not exit after shutdown")
 

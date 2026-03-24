@@ -29,26 +29,17 @@ Haskell references:
 
 from __future__ import annotations
 
-import hashlib
-
-import pytest
-
 from uplc.ast import (
     PlutusByteString,
     PlutusConstr,
-    PlutusData,
     PlutusInteger,
     PlutusList,
-    PlutusMap,
 )
 
 from vibe.cardano.plutus.context import (
     TxInfoBuilder,
-    address_to_data,
     interval_to_data,
-    value_to_data,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -190,9 +181,7 @@ class TestAlonzoByronAddress:
         addr_data = tx_out.fields[0]
 
         credential = addr_data.fields[0]
-        assert credential.constructor == 0, (
-            "Byron input address should be PubKeyCredential"
-        )
+        assert credential.constructor == 0, "Byron input address should be PubKeyCredential"
         assert credential.fields[0].value == expected_cred
 
 
@@ -296,8 +285,7 @@ class TestBabbageTxInfoV2:
 
         # Should be Just(datum), i.e. Constr 0 [datum]
         assert datum_field.constructor == 0, (
-            "Inline datum should produce Just (Constr 0), got "
-            f"Constr {datum_field.constructor}"
+            f"Inline datum should produce Just (Constr 0), got Constr {datum_field.constructor}"
         )
         # The datum value itself is inside
         assert datum_field.fields[0] == inline_datum
@@ -579,9 +567,7 @@ class TestValidityIntervalPV9:
         upper_bound = valid_range.fields[1]
         upper_closure = upper_bound.fields[1]
 
-        assert upper_closure.constructor == 0, (
-            "V1 TxInfo upper bound should be exclusive (PV9+)"
-        )
+        assert upper_closure.constructor == 0, "V1 TxInfo upper bound should be exclusive (PV9+)"
 
 
 # ---------------------------------------------------------------------------
@@ -604,7 +590,8 @@ class TestTxInfoFieldCounts:
 
     def test_v1_txinfo_has_10_fields(self) -> None:
         """PlutusV1 TxInfo: inputs, outputs, fee, mint, dcerts, wdrl,
-        valid_range, signatories, data, id = 10 fields."""
+        valid_range, signatories, data, id = 10 fields.
+        """
         builder = TxInfoBuilder()
         builder.set_tx_id(b"\xaa" * 32)
         tx_info = builder.build_v1()
@@ -623,7 +610,8 @@ class TestTxInfoFieldCounts:
 
     def test_v3_txinfo_has_16_fields(self) -> None:
         """PlutusV3 TxInfo: adds voting_procedures, proposal_procedures,
-        current_treasury_amount, treasury_donation = 16 fields."""
+        current_treasury_amount, treasury_donation = 16 fields.
+        """
         builder = TxInfoBuilder()
         builder.set_tx_id(b"\xaa" * 32)
         tx_info = builder.build_v3()

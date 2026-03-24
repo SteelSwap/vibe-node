@@ -27,7 +27,7 @@ Haskell references:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Final
 
 # ---------------------------------------------------------------------------
@@ -47,9 +47,7 @@ SHELLEY_SLOT_LENGTH: Final[float] = 1.0
 SHELLEY_EPOCH_LENGTH: Final[int] = 432000
 
 #: Cardano mainnet system start time (2017-09-23T21:44:51Z).
-MAINNET_SYSTEM_START: Final[datetime] = datetime(
-    2017, 9, 23, 21, 44, 51, tzinfo=timezone.utc
-)
+MAINNET_SYSTEM_START: Final[datetime] = datetime(2017, 9, 23, 21, 44, 51, tzinfo=UTC)
 
 #: SlotsPerKESPeriod on Cardano mainnet (129600 slots = 36 hours).
 MAINNET_SLOTS_PER_KES_PERIOD: Final[int] = 129600
@@ -89,9 +87,7 @@ class SlotConfig:
         if self.slot_length <= 0:
             raise ValueError(f"slot_length must be positive, got {self.slot_length}")
         if self.epoch_length <= 0:
-            raise ValueError(
-                f"epoch_length must be positive, got {self.epoch_length}"
-            )
+            raise ValueError(f"epoch_length must be positive, got {self.epoch_length}")
 
 
 #: Pre-built Byron config for mainnet.
@@ -253,7 +249,5 @@ def slot_to_kes_period(
     if slot < 0:
         raise ValueError(f"Slot must be non-negative, got {slot}")
     if slots_per_kes_period <= 0:
-        raise ValueError(
-            f"slots_per_kes_period must be positive, got {slots_per_kes_period}"
-        )
+        raise ValueError(f"slots_per_kes_period must be positive, got {slots_per_kes_period}")
     return slot // slots_per_kes_period

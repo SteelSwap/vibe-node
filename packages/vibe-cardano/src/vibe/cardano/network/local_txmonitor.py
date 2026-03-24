@@ -79,7 +79,7 @@ class MsgAcquired:
 
     Wire format: ``[1, slot]``
 
-    Attributes
+    Attributes:
     ----------
     slot : int
         The slot number at which the mempool snapshot was taken.
@@ -130,7 +130,7 @@ class MsgReplyNextTx:
         Nothing: ``[5, []]``
         Just:    ``[5, [era_id, tx_bytes]]``
 
-    Attributes
+    Attributes:
     ----------
     tx : tuple[int, bytes] | None
         If not None, a (era_id, tx_bytes) pair for the next transaction.
@@ -147,7 +147,7 @@ class MsgHasTx:
 
     Wire format: ``[6, tx_id]``
 
-    Attributes
+    Attributes:
     ----------
     tx_id : bytes
         Transaction ID (hash) to look up.
@@ -163,7 +163,7 @@ class MsgReplyHasTx:
 
     Wire format: ``[7, bool]``
 
-    Attributes
+    Attributes:
     ----------
     has_tx : bool
         True if the transaction is in the mempool snapshot.
@@ -189,7 +189,7 @@ class MsgReplyGetSizes:
 
     Wire format: ``[9, num_txs, total_size, num_bytes]``
 
-    Attributes
+    Attributes:
     ----------
     num_txs : int
         Number of transactions in the mempool.
@@ -218,20 +218,36 @@ class MsgDone:
 
 #: Union of all client-to-server message types (client has agency).
 ClientMessage = Union[
-    MsgAcquire, MsgAwaitAcquire, MsgRelease,
-    MsgNextTx, MsgHasTx, MsgGetSizes, MsgDone,
+    MsgAcquire,
+    MsgAwaitAcquire,
+    MsgRelease,
+    MsgNextTx,
+    MsgHasTx,
+    MsgGetSizes,
+    MsgDone,
 ]
 
 #: Union of all server-to-client message types (server has agency).
 ServerMessage = Union[
-    MsgAcquired, MsgReplyNextTx, MsgReplyHasTx, MsgReplyGetSizes,
+    MsgAcquired,
+    MsgReplyNextTx,
+    MsgReplyHasTx,
+    MsgReplyGetSizes,
 ]
 
 #: Union of all local tx-monitor message types.
 LocalTxMonitorMessage = Union[
-    MsgAcquire, MsgAcquired, MsgAwaitAcquire, MsgRelease,
-    MsgNextTx, MsgReplyNextTx, MsgHasTx, MsgReplyHasTx,
-    MsgGetSizes, MsgReplyGetSizes, MsgDone,
+    MsgAcquire,
+    MsgAcquired,
+    MsgAwaitAcquire,
+    MsgRelease,
+    MsgNextTx,
+    MsgReplyNextTx,
+    MsgHasTx,
+    MsgReplyHasTx,
+    MsgGetSizes,
+    MsgReplyGetSizes,
+    MsgDone,
 ]
 
 
@@ -297,9 +313,7 @@ def encode_get_sizes() -> bytes:
     return cbor2.dumps([MSG_GET_SIZES])
 
 
-def encode_reply_get_sizes(
-    num_txs: int, total_size: int, num_bytes: int
-) -> bytes:
+def encode_reply_get_sizes(num_txs: int, total_size: int, num_bytes: int) -> bytes:
     """Encode MsgReplyGetSizes: ``[9, num_txs, total_size, num_bytes]``."""
     return cbor2.dumps([MSG_REPLY_GET_SIZES, num_txs, total_size, num_bytes])
 
@@ -322,12 +336,12 @@ def decode_message(cbor_bytes: bytes) -> LocalTxMonitorMessage:
     cbor_bytes : bytes
         Raw CBOR payload (one complete message).
 
-    Returns
+    Returns:
     -------
     LocalTxMonitorMessage
         The decoded message.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.
@@ -341,55 +355,38 @@ def decode_message(cbor_bytes: bytes) -> LocalTxMonitorMessage:
 
     if msg_id == MSG_ACQUIRE:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgAcquire: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgAcquire: expected 1 element, got {len(msg)}")
         return MsgAcquire()
 
     elif msg_id == MSG_ACQUIRED:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgAcquired: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgAcquired: expected 2 elements, got {len(msg)}")
         slot = msg[1]
         if not isinstance(slot, int) or isinstance(slot, bool):
-            raise ValueError(
-                f"MsgAcquired: slot must be int, got {type(slot).__name__}"
-            )
+            raise ValueError(f"MsgAcquired: slot must be int, got {type(slot).__name__}")
         return MsgAcquired(slot=slot)
 
     elif msg_id == MSG_AWAIT_ACQUIRE:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgAwaitAcquire: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgAwaitAcquire: expected 1 element, got {len(msg)}")
         return MsgAwaitAcquire()
 
     elif msg_id == MSG_RELEASE:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgRelease: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgRelease: expected 1 element, got {len(msg)}")
         return MsgRelease()
 
     elif msg_id == MSG_NEXT_TX:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgNextTx: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgNextTx: expected 1 element, got {len(msg)}")
         return MsgNextTx()
 
     elif msg_id == MSG_REPLY_NEXT_TX:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgReplyNextTx: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgReplyNextTx: expected 2 elements, got {len(msg)}")
         inner = msg[1]
         if not isinstance(inner, list):
-            raise ValueError(
-                f"MsgReplyNextTx: inner must be list, got "
-                f"{type(inner).__name__}"
-            )
+            raise ValueError(f"MsgReplyNextTx: inner must be list, got {type(inner).__name__}")
         if len(inner) == 0:
             return MsgReplyNextTx(tx=None)
         elif len(inner) == 2:
@@ -399,55 +396,40 @@ def decode_message(cbor_bytes: bytes) -> LocalTxMonitorMessage:
                 tx_bytes = bytes(tx_bytes)
             if not isinstance(tx_bytes, bytes):
                 raise ValueError(
-                    f"MsgReplyNextTx: tx_bytes must be bytes, got "
-                    f"{type(tx_bytes).__name__}"
+                    f"MsgReplyNextTx: tx_bytes must be bytes, got {type(tx_bytes).__name__}"
                 )
             return MsgReplyNextTx(tx=(era_id, tx_bytes))
         else:
             raise ValueError(
-                f"MsgReplyNextTx: inner list must have 0 or 2 elements, "
-                f"got {len(inner)}"
+                f"MsgReplyNextTx: inner list must have 0 or 2 elements, got {len(inner)}"
             )
 
     elif msg_id == MSG_HAS_TX:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgHasTx: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgHasTx: expected 2 elements, got {len(msg)}")
         tx_id = msg[1]
         if isinstance(tx_id, memoryview):
             tx_id = bytes(tx_id)
         if not isinstance(tx_id, bytes):
-            raise ValueError(
-                f"MsgHasTx: tx_id must be bytes, got {type(tx_id).__name__}"
-            )
+            raise ValueError(f"MsgHasTx: tx_id must be bytes, got {type(tx_id).__name__}")
         return MsgHasTx(tx_id=tx_id)
 
     elif msg_id == MSG_REPLY_HAS_TX:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgReplyHasTx: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgReplyHasTx: expected 2 elements, got {len(msg)}")
         has_tx = msg[1]
         if not isinstance(has_tx, bool):
-            raise ValueError(
-                f"MsgReplyHasTx: has_tx must be bool, got "
-                f"{type(has_tx).__name__}"
-            )
+            raise ValueError(f"MsgReplyHasTx: has_tx must be bool, got {type(has_tx).__name__}")
         return MsgReplyHasTx(has_tx=has_tx)
 
     elif msg_id == MSG_GET_SIZES:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgGetSizes: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgGetSizes: expected 1 element, got {len(msg)}")
         return MsgGetSizes()
 
     elif msg_id == MSG_REPLY_GET_SIZES:
         if len(msg) != 4:
-            raise ValueError(
-                f"MsgReplyGetSizes: expected 4 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgReplyGetSizes: expected 4 elements, got {len(msg)}")
         num_txs = msg[1]
         total_size = msg[2]
         num_bytes = msg[3]
@@ -457,19 +439,12 @@ def decode_message(cbor_bytes: bytes) -> LocalTxMonitorMessage:
             ("num_bytes", num_bytes),
         ]:
             if not isinstance(val, int) or isinstance(val, bool):
-                raise ValueError(
-                    f"MsgReplyGetSizes: {name} must be int, got "
-                    f"{type(val).__name__}"
-                )
-        return MsgReplyGetSizes(
-            num_txs=num_txs, total_size=total_size, num_bytes=num_bytes
-        )
+                raise ValueError(f"MsgReplyGetSizes: {name} must be int, got {type(val).__name__}")
+        return MsgReplyGetSizes(num_txs=num_txs, total_size=total_size, num_bytes=num_bytes)
 
     elif msg_id == MSG_DONE:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgDone: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgDone: expected 1 element, got {len(msg)}")
         return MsgDone()
 
     else:
@@ -479,7 +454,7 @@ def decode_message(cbor_bytes: bytes) -> LocalTxMonitorMessage:
 def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
     """Decode a client-to-server local tx-monitor message.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message is not a valid client message.
@@ -487,19 +462,16 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
     msg = decode_message(cbor_bytes)
     if not isinstance(
         msg,
-        (MsgAcquire, MsgAwaitAcquire, MsgRelease, MsgNextTx, MsgHasTx,
-         MsgGetSizes, MsgDone),
+        (MsgAcquire, MsgAwaitAcquire, MsgRelease, MsgNextTx, MsgHasTx, MsgGetSizes, MsgDone),
     ):
-        raise ValueError(
-            f"Expected client message, got: {type(msg).__name__}"
-        )
+        raise ValueError(f"Expected client message, got: {type(msg).__name__}")
     return msg
 
 
 def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
     """Decode a server-to-client local tx-monitor message.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message is not a valid server message.
@@ -509,7 +481,5 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
         msg,
         (MsgAcquired, MsgReplyNextTx, MsgReplyHasTx, MsgReplyGetSizes),
     ):
-        raise ValueError(
-            f"Expected server message, got: {type(msg).__name__}"
-        )
+        raise ValueError(f"Expected server message, got: {type(msg).__name__}")
     return msg

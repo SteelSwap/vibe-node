@@ -47,7 +47,6 @@ import pyarrow as pa
 import pyarrow.ipc as ipc
 
 from vibe.cardano.storage import BlockDiff, LedgerDB
-from vibe.cardano.storage.ledger import UTXO_SCHEMA
 
 __all__ = [
     "recover",
@@ -128,7 +127,18 @@ def write_snapshot(
     _fsync_file(meta_path)
 
     snapshot_size = arrow_path.stat().st_size
-    logger.info("Ledger snapshot written at slot %d (%d UTxOs, %d bytes)", slot_label, ledger_db.utxo_count, snapshot_size, extra={"event": "ledger.snapshot.write", "slot": slot_label, "utxo_count": ledger_db.utxo_count, "size_bytes": snapshot_size})
+    logger.info(
+        "Ledger snapshot written at slot %d (%d UTxOs, %d bytes)",
+        slot_label,
+        ledger_db.utxo_count,
+        snapshot_size,
+        extra={
+            "event": "ledger.snapshot.write",
+            "slot": slot_label,
+            "utxo_count": ledger_db.utxo_count,
+            "size_bytes": snapshot_size,
+        },
+    )
 
     return arrow_path
 
@@ -215,13 +225,9 @@ def _read_diff_log(log_path: Path) -> list[BlockDiff]:
     diffs: list[BlockDiff] = []
 
     while pos + _DIFF_HEADER_SIZE <= len(data):
-        magic, slot, n_consumed, n_created = struct.unpack_from(
-            _DIFF_HEADER_FMT, data, pos
-        )
+        magic, slot, n_consumed, n_created = struct.unpack_from(_DIFF_HEADER_FMT, data, pos)
         if magic != _DIFF_MAGIC:
-            logger.warning(
-                "Diff log: bad magic at offset %d, stopping replay", pos
-            )
+            logger.warning("Diff log: bad magic at offset %d, stopping replay", pos)
             break
 
         pos += _DIFF_HEADER_SIZE
@@ -237,7 +243,7 @@ def _read_diff_log(log_path: Path) -> list[BlockDiff]:
             for _ in range(n_created):
                 key, col_vals, pos = _read_entry(data, pos)
                 created.append((key, col_vals))
-        except (struct.error, IndexError, ValueError):
+        except struct.error, IndexError, ValueError:
             # Truncated entry — stop here (crash during write).
             logger.warning(
                 "Diff log: truncated entry at offset %d for slot %d, "
@@ -253,9 +259,7 @@ def _read_diff_log(log_path: Path) -> list[BlockDiff]:
     return diffs
 
 
-def _read_entry(
-    data: bytes, pos: int
-) -> tuple[bytes, dict[str, Any], int]:
+def _read_entry(data: bytes, pos: int) -> tuple[bytes, dict[str, Any], int]:
     """Read one (key, col_vals) entry from the diff log at the given offset.
 
     Returns (key, col_vals, new_pos).
@@ -305,19 +309,31 @@ def recover(
         snapshot was found.
     """
     if not snapshot_dir.is_dir():
-        logger.info("No snapshot directory found at %s", snapshot_dir, extra={"event": "recovery.no_dir", "path": str(snapshot_dir)})
+        logger.info(
+            "No snapshot directory found at %s",
+            snapshot_dir,
+            extra={"event": "recovery.no_dir", "path": str(snapshot_dir)},
+        )
         return -1
 
     # Find the latest snapshot by slot number (not lexicographic order).
     snapshot_files = list(snapshot_dir.glob("snapshot-*.arrow"))
     if not snapshot_files:
-        logger.info("No snapshots found in %s", snapshot_dir, extra={"event": "recovery.no_snapshots", "path": str(snapshot_dir)})
+        logger.info(
+            "No snapshots found in %s",
+            snapshot_dir,
+            extra={"event": "recovery.no_snapshots", "path": str(snapshot_dir)},
+        )
         return -1
 
     latest_snapshot = max(snapshot_files, key=_slot_from_snapshot_path)
     snapshot_slot = _slot_from_snapshot_path(latest_snapshot)
 
-    logger.info("Loading snapshot at slot %d", snapshot_slot, extra={"event": "recovery.loading", "slot": snapshot_slot, "path": str(latest_snapshot)})
+    logger.info(
+        "Loading snapshot at slot %d",
+        snapshot_slot,
+        extra={"event": "recovery.loading", "slot": snapshot_slot, "path": str(latest_snapshot)},
+    )
 
     # Load the Arrow IPC snapshot.
     with pa.OSFile(str(latest_snapshot), "rb") as source:
@@ -334,7 +350,16 @@ def recover(
     ledger_db._diffs.clear()
     ledger_db._free_rows.clear()
 
-    logger.info("Snapshot loaded: %d UTxOs at slot %d", ledger_db.utxo_count, snapshot_slot, extra={"event": "recovery.loaded", "utxo_count": ledger_db.utxo_count, "slot": snapshot_slot})
+    logger.info(
+        "Snapshot loaded: %d UTxOs at slot %d",
+        ledger_db.utxo_count,
+        snapshot_slot,
+        extra={
+            "event": "recovery.loaded",
+            "utxo_count": ledger_db.utxo_count,
+            "slot": snapshot_slot,
+        },
+    )
 
     # Replay diffs from the log.
     log_path = snapshot_dir / "diff-replay.log"
@@ -359,7 +384,18 @@ def recover(
         replayed += 1
 
     if replayed > 0:
-        logger.info("Replayed %d diffs (slot %d -> %d)", replayed, snapshot_slot, tip_slot, extra={"event": "recovery.replayed", "diff_count": replayed, "from_slot": snapshot_slot, "to_slot": tip_slot})
+        logger.info(
+            "Replayed %d diffs (slot %d -> %d)",
+            replayed,
+            snapshot_slot,
+            tip_slot,
+            extra={
+                "event": "recovery.replayed",
+                "diff_count": replayed,
+                "from_slot": snapshot_slot,
+                "to_slot": tip_slot,
+            },
+        )
 
     # Truncate the diff log — we've recovered, so start fresh.
     if log_path.exists():

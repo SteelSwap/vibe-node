@@ -14,10 +14,7 @@ Haskell ref:
 
 from __future__ import annotations
 
-import pytest
-
 from vibe.cardano.mempool.validator import LedgerTxValidator
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -51,9 +48,7 @@ def _make_minimal_tx_cbor() -> bytes:
             TransactionOutput.from_primitive(
                 [
                     # A minimal Shelley-era enterprise address (testnet)
-                    bytes.fromhex(
-                        "60" + "00" * 28
-                    ),
+                    bytes.fromhex("60" + "00" * 28),
                     1_500_000,
                 ]
             )

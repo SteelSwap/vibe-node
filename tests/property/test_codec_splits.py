@@ -31,28 +31,34 @@ Haskell reference:
 
 from __future__ import annotations
 
-import io
-
 import cbor2
 import pytest
-from hypothesis import given, settings, assume, HealthCheck
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
 from vibe.cardano.network.blockfetch import (
     MsgBatchDone,
     MsgBlock,
-    MsgClientDone as BFMsgClientDone,
     MsgNoBlocks,
     MsgRequestRange,
     MsgStartBatch,
-    decode_client_message as bf_decode_client_message,
-    decode_server_message as bf_decode_server_message,
     encode_batch_done,
     encode_block,
-    encode_client_done as bf_encode_client_done,
     encode_no_blocks,
     encode_request_range,
     encode_start_batch,
+)
+from vibe.cardano.network.blockfetch import (
+    MsgClientDone as BFMsgClientDone,
+)
+from vibe.cardano.network.blockfetch import (
+    decode_client_message as bf_decode_client_message,
+)
+from vibe.cardano.network.blockfetch import (
+    decode_server_message as bf_decode_server_message,
+)
+from vibe.cardano.network.blockfetch import (
+    encode_client_done as bf_encode_client_done,
 )
 from vibe.cardano.network.chainsync import (
     ORIGIN,
@@ -82,25 +88,21 @@ from vibe.cardano.network.handshake import (
     N2N_V14,
     N2N_V15,
     MsgAcceptVersion,
-    MsgProposeVersions,
     MsgRefuse,
     NodeToNodeVersionData,
     PeerSharing,
     RefuseReasonRefused,
     RefuseReasonVersionMismatch,
+    _encode_version_data,
     build_version_table,
     decode_handshake_response,
     encode_propose_versions,
-    _encode_version_data,
 )
 from vibe.core.multiplexer.segment import (
-    MAX_PAYLOAD_SIZE,
-    SEGMENT_HEADER_SIZE,
     MuxSegment,
     decode_segment,
     encode_segment,
 )
-
 
 # ---------------------------------------------------------------------------
 # Hypothesis strategies
@@ -140,13 +142,17 @@ version_data = st.builds(
 @st.composite
 def chainsync_server_messages(draw: st.DrawFn) -> tuple[bytes, object]:
     """Generate a random chain-sync server message as (cbor_bytes, expected)."""
-    msg_type = draw(st.sampled_from([
-        "await_reply",
-        "roll_forward",
-        "roll_backward",
-        "intersect_found",
-        "intersect_not_found",
-    ]))
+    msg_type = draw(
+        st.sampled_from(
+            [
+                "await_reply",
+                "roll_forward",
+                "roll_backward",
+                "intersect_found",
+                "intersect_not_found",
+            ]
+        )
+    )
 
     if msg_type == "await_reply":
         return encode_await_reply(), MsgAwaitReply()
@@ -334,19 +340,27 @@ def handshake_response_messages(draw: st.DrawFn) -> tuple[bytes, object]:
         expected = MsgAcceptVersion(version_number=vn, version_data=vd)
         return encoded, expected
     elif msg_type == "refuse_mismatch":
-        versions = draw(st.lists(
-            st.sampled_from([N2N_V14, N2N_V15, 10, 11, 12, 13]),
-            min_size=1,
-            max_size=6,
-        ))
+        versions = draw(
+            st.lists(
+                st.sampled_from([N2N_V14, N2N_V15, 10, 11, 12, 13]),
+                min_size=1,
+                max_size=6,
+            )
+        )
         encoded = _encode_refuse_version_mismatch(versions)
         expected = MsgRefuse(reason=RefuseReasonVersionMismatch(versions=versions))
         return encoded, expected
     else:  # refuse_refused
         vn = draw(st.sampled_from([N2N_V14, N2N_V15]))
-        msg = draw(st.text(min_size=1, max_size=50, alphabet=st.characters(
-            whitelist_categories=("L", "N", "P", "Z"),
-        )))
+        msg = draw(
+            st.text(
+                min_size=1,
+                max_size=50,
+                alphabet=st.characters(
+                    whitelist_categories=("L", "N", "P", "Z"),
+                ),
+            )
+        )
         encoded = _encode_refuse_refused(vn, msg)
         expected = MsgRefuse(reason=RefuseReasonRefused(version_number=vn, message=msg))
         return encoded, expected
@@ -391,9 +405,7 @@ class TestHandshakeCodecSplits3:
         s2 = data.draw(st.integers(min_value=s1 + 1, max_value=len(encoded) - 1))
         frag1, frag2, frag3 = encoded[:s1], encoded[s1:s2], encoded[s2:]
 
-        decoded = _buffer_and_decode_cbor(
-            [frag1, frag2, frag3], decode_handshake_response
-        )
+        decoded = _buffer_and_decode_cbor([frag1, frag2, frag3], decode_handshake_response)
         assert decoded == expected
 
 
@@ -481,9 +493,16 @@ block_bodies = st.binary(min_size=0, max_size=512)
 @st.composite
 def blockfetch_server_messages(draw: st.DrawFn) -> tuple[bytes, object]:
     """Generate a random block-fetch server message as (cbor_bytes, expected)."""
-    msg_type = draw(st.sampled_from([
-        "start_batch", "no_blocks", "block", "batch_done",
-    ]))
+    msg_type = draw(
+        st.sampled_from(
+            [
+                "start_batch",
+                "no_blocks",
+                "block",
+                "batch_done",
+            ]
+        )
+    )
 
     if msg_type == "start_batch":
         return encode_start_batch(), MsgStartBatch()
@@ -848,9 +867,7 @@ class TestIncrementalDecodeLimitation:
 
     def test_segment_decoder_rejects_truncated_header(self):
         """decode_segment raises ValueError when header is incomplete."""
-        seg = MuxSegment(
-            timestamp=12345, protocol_id=2, is_initiator=True, payload=b"test"
-        )
+        seg = MuxSegment(timestamp=12345, protocol_id=2, is_initiator=True, payload=b"test")
         encoded = encode_segment(seg)
 
         # Any prefix shorter than header + payload should raise ValueError.

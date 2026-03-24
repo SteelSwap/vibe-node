@@ -57,10 +57,10 @@ TAG_PATTERNS: dict[str, re.Pattern[str]] = {
 # (e.g., cardano-ledger has 237 release tags). Only the N most recent
 # by git commit date are indexed. Set to None for no limit.
 MAX_TAGS_PER_REPO: dict[str, int | None] = {
-    "cardano-node": 10,       # well-indexed already (99 tags), just keep recent
-    "cardano-ledger": 20,     # was 3 tags, need modern eras
-    "ouroboros-network": 10,   # well-indexed (52 tags), just keep recent
-    "ouroboros-consensus": 15, # was 6 tags, need modern consensus
-    "plutus": 10,              # well-indexed (67 tags), just keep recent
+    "cardano-node": 10,  # well-indexed already (99 tags), just keep recent
+    "cardano-ledger": 20,  # was 3 tags, need modern eras
+    "ouroboros-network": 10,  # well-indexed (52 tags), just keep recent
+    "ouroboros-consensus": 15,  # was 6 tags, need modern consensus
+    "plutus": 10,  # well-indexed (67 tags), just keep recent
     "formal-ledger-specs": None,  # only 3 tags total
 }

@@ -23,12 +23,9 @@ import hashlib
 import pytest
 
 from vibe.cardano.consensus.nonce import (
-    EpochNonce,
-    is_in_stability_window,
     stability_window,
 )
 from vibe.cardano.node.kernel import NodeKernel
-
 
 EPOCH_LENGTH = 100  # Small epoch for testing (real mainnet: 432000)
 # Use small security_param and active_slot_coeff so stability window

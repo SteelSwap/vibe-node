@@ -22,7 +22,6 @@ from __future__ import annotations
 import hashlib
 
 import cbor2
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from pycardano import (
@@ -63,7 +62,6 @@ from vibe.cardano.ledger.alonzo_types import (
     compute_script_integrity_hash,
 )
 from vibe.cardano.ledger.shelley import ShelleyUTxO
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
@@ -119,9 +117,7 @@ def make_policy_id(seed: int = 0) -> ScriptHash:
     return ScriptHash(digest)
 
 
-def sign_tx_body(
-    tx_body: TransactionBody, sk: PaymentSigningKey
-) -> VerificationKeyWitness:
+def sign_tx_body(tx_body: TransactionBody, sk: PaymentSigningKey) -> VerificationKeyWitness:
     """Sign a transaction body and return a VKey witness."""
     tx_body_hash = tx_body.hash()
     signature = sk.sign(tx_body_hash)
@@ -901,15 +897,11 @@ class TestAlonzoWitnessValidation:
             )
         ]
         datums = [cbor2.dumps(99)]
-        cost_models: dict[Language, dict[str, int]] = {
-            Language.PLUTUS_V1: {"a": 1}
-        }
+        cost_models: dict[Language, dict[str, int]] = {Language.PLUTUS_V1: {"a": 1}}
         languages = {Language.PLUTUS_V1}
 
         # Correct hash
-        correct_hash = compute_script_integrity_hash(
-            redeemers, datums, cost_models, languages
-        )
+        correct_hash = compute_script_integrity_hash(redeemers, datums, cost_models, languages)
         # Wrong hash
         wrong_hash = b"\x00" * 32
 
@@ -948,14 +940,10 @@ class TestAlonzoWitnessValidation:
             )
         ]
         datums = [cbor2.dumps(99)]
-        cost_models: dict[Language, dict[str, int]] = {
-            Language.PLUTUS_V1: {"a": 1}
-        }
+        cost_models: dict[Language, dict[str, int]] = {Language.PLUTUS_V1: {"a": 1}}
         languages = {Language.PLUTUS_V1}
 
-        correct_hash = compute_script_integrity_hash(
-            redeemers, datums, cost_models, languages
-        )
+        correct_hash = compute_script_integrity_hash(redeemers, datums, cost_models, languages)
 
         errors = validate_alonzo_witnesses(
             tx_body=tx_body,
@@ -1063,9 +1051,7 @@ class TestAlonzoProperties:
         collateral=st.integers(min_value=0, max_value=10**12),
     )
     @settings(max_examples=100)
-    def test_collateral_monotonic_in_fees(
-        self, fee: int, percentage: int, collateral: int
-    ):
+    def test_collateral_monotonic_in_fees(self, fee: int, percentage: int, collateral: int):
         """Higher fees should never reduce the collateral requirement."""
         required = (fee * percentage + 99) // 100
         required_plus_one = ((fee + 1) * percentage + 99) // 100

@@ -30,20 +30,18 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from vibe.cardano.crypto.vrf import (
+    _2_POW_256,
     HAS_VRF_NATIVE,
     VRF_OUTPUT_SIZE,
     VRF_PK_SIZE,
     VRF_PROOF_SIZE,
     VRF_SK_SIZE,
-    _2_POW_256,
     certified_nat_max_check,
     vrf_keypair,
-    vrf_leader_value,
     vrf_proof_to_hash,
     vrf_prove,
     vrf_verify,
 )
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -233,9 +231,7 @@ class TestCertifiedNatMaxCheckProperties:
         sigma_low=st.floats(min_value=0.001, max_value=0.999),
     )
     @settings(max_examples=200)
-    def test_monotonic_in_stake(
-        self, vrf_bytes: bytes, sigma_low: float
-    ) -> None:
+    def test_monotonic_in_stake(self, vrf_bytes: bytes, sigma_low: float) -> None:
         """If elected at stake sigma, must also be elected at any higher stake.
 
         This is the core monotonicity property: more stake => higher
@@ -245,12 +241,8 @@ class TestCertifiedNatMaxCheckProperties:
         sigma_high = min(sigma_low + 0.001, 1.0)
         result_low = certified_nat_max_check(vrf_bytes, sigma=sigma_low, f=f)
         if result_low:
-            result_high = certified_nat_max_check(
-                vrf_bytes, sigma=sigma_high, f=f
-            )
-            assert result_high, (
-                f"Elected at sigma={sigma_low} but not at sigma={sigma_high}"
-            )
+            result_high = certified_nat_max_check(vrf_bytes, sigma=sigma_high, f=f)
+            assert result_high, f"Elected at sigma={sigma_low} but not at sigma={sigma_high}"
 
     @given(
         vrf_bytes=st.binary(min_size=VRF_OUTPUT_SIZE, max_size=VRF_OUTPUT_SIZE),
@@ -267,12 +259,8 @@ class TestCertifiedNatMaxCheckProperties:
         f_high = min(f_low + 0.01, 0.99)
         result_low = certified_nat_max_check(vrf_bytes, sigma=sigma, f=f_low)
         if result_low:
-            result_high = certified_nat_max_check(
-                vrf_bytes, sigma=sigma, f=f_high
-            )
-            assert result_high, (
-                f"Elected at f={f_low} but not at f={f_high}"
-            )
+            result_high = certified_nat_max_check(vrf_bytes, sigma=sigma, f=f_high)
+            assert result_high, f"Elected at f={f_low} but not at f={f_high}"
 
     @given(
         vrf_bytes=st.binary(min_size=VRF_OUTPUT_SIZE, max_size=VRF_OUTPUT_SIZE),
@@ -286,9 +274,7 @@ class TestCertifiedNatMaxCheckProperties:
         vrf_bytes=st.binary(min_size=VRF_OUTPUT_SIZE, max_size=VRF_OUTPUT_SIZE),
     )
     @settings(max_examples=100)
-    def test_ultra_low_leader_val_always_wins_with_positive_stake(
-        self, vrf_bytes: bytes
-    ) -> None:
+    def test_ultra_low_leader_val_always_wins_with_positive_stake(self, vrf_bytes: bytes) -> None:
         """A VRF output with ultra-low leader_val should always win if sigma > 0.
 
         The pre-computed WINNER_VRF_OUTPUT has leader_val ~0.0000156, which is
@@ -340,7 +326,6 @@ class TestVRFVerify:
 class TestVRFProofToHash:
     """Tests for vrf_proof_to_hash."""
 
-
     def test_wrong_proof_size(self) -> None:
         """Wrong proof size raises ValueError."""
         with pytest.raises(ValueError, match=f"{VRF_PROOF_SIZE} bytes"):
@@ -349,7 +334,6 @@ class TestVRFProofToHash:
 
 class TestVRFProve:
     """Tests for vrf_prove."""
-
 
     def test_wrong_sk_size(self) -> None:
         """Wrong secret key size raises ValueError."""
@@ -391,7 +375,7 @@ class TestVRFEndToEnd:
         assert len(proof) == VRF_PROOF_SIZE
 
     def test_prove_verify_roundtrip(self) -> None:
-        """prove then verify succeeds and returns 64-byte output."""
+        """Prove then verify succeeds and returns 64-byte output."""
         pk, sk = vrf_keypair()
         alpha = b"slot 12345 nonce"
         proof = vrf_prove(sk, alpha)
@@ -711,6 +695,4 @@ class TestVRFKeySizeMismatch:
         """VRF output of wrong size should be rejected by leader check."""
         for bad_size in [0, 31, 32, 63, 65, 128]:
             with pytest.raises(ValueError, match="64 bytes"):
-                certified_nat_max_check(
-                    b"\x00" * bad_size, sigma=0.5, f=MAINNET_F
-                )
+                certified_nat_max_check(b"\x00" * bad_size, sigma=0.5, f=MAINNET_F)

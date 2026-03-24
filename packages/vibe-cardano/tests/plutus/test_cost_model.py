@@ -10,14 +10,11 @@ Tests cover:
 
 from __future__ import annotations
 
-import hashlib
-
 import pytest
 
 from vibe.cardano.plutus.cost_model import (
     BUILTINS_INTRODUCED_IN,
     COST_MODEL_PARAM_COUNTS,
-    PLUTUS_VERSION_INTRODUCED_AT,
     CostModel,
     CostModels,
     ExUnits,
@@ -30,7 +27,6 @@ from vibe.cardano.plutus.cost_model import (
     param_name_to_index,
     serialize_cost_models_for_integrity,
 )
-
 
 # ---------------------------------------------------------------------------
 # ExUnits
@@ -378,13 +374,23 @@ class TestBuiltinAvailability:
         """BLS12-381 builtins are V3+ (CIP-0055)."""
         v3_builtins = builtins_available_at(PlutusVersion.V3)
         bls_builtins = [
-            "Bls12_381_G1_Add", "Bls12_381_G1_Neg", "Bls12_381_G1_ScalarMul",
-            "Bls12_381_G1_Equal", "Bls12_381_G1_Compress", "Bls12_381_G1_Uncompress",
+            "Bls12_381_G1_Add",
+            "Bls12_381_G1_Neg",
+            "Bls12_381_G1_ScalarMul",
+            "Bls12_381_G1_Equal",
+            "Bls12_381_G1_Compress",
+            "Bls12_381_G1_Uncompress",
             "Bls12_381_G1_HashToGroup",
-            "Bls12_381_G2_Add", "Bls12_381_G2_Neg", "Bls12_381_G2_ScalarMul",
-            "Bls12_381_G2_Equal", "Bls12_381_G2_Compress", "Bls12_381_G2_Uncompress",
+            "Bls12_381_G2_Add",
+            "Bls12_381_G2_Neg",
+            "Bls12_381_G2_ScalarMul",
+            "Bls12_381_G2_Equal",
+            "Bls12_381_G2_Compress",
+            "Bls12_381_G2_Uncompress",
             "Bls12_381_G2_HashToGroup",
-            "Bls12_381_MillerLoop", "Bls12_381_MulMlResult", "Bls12_381_FinalVerify",
+            "Bls12_381_MillerLoop",
+            "Bls12_381_MulMlResult",
+            "Bls12_381_FinalVerify",
         ]
         for builtin in bls_builtins:
             assert builtin in v3_builtins, f"{builtin} should be in V3"
@@ -469,8 +475,7 @@ class TestCostModelParamNames:
                 idx = param_name_to_index(version, name)
                 recovered = param_index_to_name(version, idx)
                 assert recovered == name, (
-                    f"Round-trip failed for {version.name}: "
-                    f"{name} -> {idx} -> {recovered}"
+                    f"Round-trip failed for {version.name}: {name} -> {idx} -> {recovered}"
                 )
 
     def test_index_to_name_round_trip(self) -> None:
@@ -483,8 +488,7 @@ class TestCostModelParamNames:
                 name = param_index_to_name(version, idx)
                 recovered = param_name_to_index(version, name)
                 assert recovered == idx, (
-                    f"Round-trip failed for {version.name}: "
-                    f"{idx} -> {name} -> {recovered}"
+                    f"Round-trip failed for {version.name}: {idx} -> {name} -> {recovered}"
                 )
 
     def test_known_parameter_name_exists(self) -> None:
@@ -511,17 +515,13 @@ class TestCostModelParamNames:
         """All parameter names within a version must be unique."""
         for version in PlutusVersion:
             names = cost_model_param_names(version)
-            assert len(names) == len(set(names)), (
-                f"Duplicate parameter names in {version.name}"
-            )
+            assert len(names) == len(set(names)), f"Duplicate parameter names in {version.name}"
 
     def test_names_are_sorted(self) -> None:
         """Parameter names should be in alphabetical order (canonical ordering)."""
         for version in PlutusVersion:
             names = cost_model_param_names(version)
-            assert names == tuple(sorted(names)), (
-                f"Parameter names not sorted for {version.name}"
-            )
+            assert names == tuple(sorted(names)), f"Parameter names not sorted for {version.name}"
 
 
 # ---------------------------------------------------------------------------
@@ -550,11 +550,15 @@ class TestCostModelParamCountRelationships:
 
     def test_v2_has_more_params_than_v1(self) -> None:
         """V2 adds builtins (serialiseData, secp256k1) so has more params."""
-        assert COST_MODEL_PARAM_COUNTS[PlutusVersion.V2] > COST_MODEL_PARAM_COUNTS[PlutusVersion.V1]
+        assert (
+            COST_MODEL_PARAM_COUNTS[PlutusVersion.V2] > COST_MODEL_PARAM_COUNTS[PlutusVersion.V1]
+        )
 
     def test_v3_has_more_params_than_v2(self) -> None:
         """V3 adds many builtins (BLS, bitwise) so has more params."""
-        assert COST_MODEL_PARAM_COUNTS[PlutusVersion.V3] > COST_MODEL_PARAM_COUNTS[PlutusVersion.V2]
+        assert (
+            COST_MODEL_PARAM_COUNTS[PlutusVersion.V3] > COST_MODEL_PARAM_COUNTS[PlutusVersion.V2]
+        )
 
     def test_v1_builtin_params_are_subset_of_v2(self) -> None:
         """V1 builtin parameter names should be a subset of V2 builtin params.
@@ -568,9 +572,7 @@ class TestCostModelParamCountRelationships:
         """
         v1_names = {n for n in cost_model_param_names(PlutusVersion.V1) if not n.startswith("cek")}
         v2_names = {n for n in cost_model_param_names(PlutusVersion.V2) if not n.startswith("cek")}
-        assert v1_names.issubset(v2_names), (
-            f"V1 builtin params not in V2: {v1_names - v2_names}"
-        )
+        assert v1_names.issubset(v2_names), f"V1 builtin params not in V2: {v1_names - v2_names}"
 
     def test_v2_adds_9_params_over_v1(self) -> None:
         """V2 adds exactly 9 parameters over V1 (175 - 166 = 9).
@@ -579,7 +581,9 @@ class TestCostModelParamCountRelationships:
         verifyEcdsaSecp256k1Signature, verifySchnorrSecp256k1Signature),
         each with multiple cost parameters.
         """
-        diff = COST_MODEL_PARAM_COUNTS[PlutusVersion.V2] - COST_MODEL_PARAM_COUNTS[PlutusVersion.V1]
+        diff = (
+            COST_MODEL_PARAM_COUNTS[PlutusVersion.V2] - COST_MODEL_PARAM_COUNTS[PlutusVersion.V1]
+        )
         assert diff == 9
 
     def test_v3_is_not_superset_of_v1_v2_params(self) -> None:

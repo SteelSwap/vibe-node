@@ -360,9 +360,7 @@ def kes_sign(sk: KesSecretKey, period: int, msg: bytes) -> bytes:
     total_periods = 1 << sk.depth
 
     if period < 0 or period >= total_periods:
-        raise ValueError(
-            f"KES period {period} out of range [0, {total_periods})"
-        )
+        raise ValueError(f"KES period {period} out of range [0, {total_periods})")
 
     if sk._zeroed:
         raise ValueError("Cannot sign with a zeroed KES key")
@@ -433,9 +431,7 @@ def kes_verify(vk: bytes, depth: int, period: int, sig: bytes, msg: bytes) -> bo
     return _kes_verify_recursive(vk, depth, period, sig, msg)
 
 
-def _kes_verify_recursive(
-    vk: bytes, depth: int, period: int, sig: bytes, msg: bytes
-) -> bool:
+def _kes_verify_recursive(vk: bytes, depth: int, period: int, sig: bytes, msg: bytes) -> bool:
     """Recursive KES verification implementation.
 
     At each level, we extract the child signature, left_vk, and right_vk
@@ -466,9 +462,7 @@ def _kes_verify_recursive(
     if period < half:
         return _kes_verify_recursive(left_vk, depth - 1, period, child_sig, msg)
     else:
-        return _kes_verify_recursive(
-            right_vk, depth - 1, period - half, child_sig, msg
-        )
+        return _kes_verify_recursive(right_vk, depth - 1, period - half, child_sig, msg)
 
 
 # ---------------------------------------------------------------------------
@@ -501,9 +495,7 @@ def kes_update(sk: KesSecretKey, current_period: int) -> KesSecretKey | None:
     return _kes_update_recursive(sk, current_period)
 
 
-def _kes_update_recursive(
-    sk: KesSecretKey, current_period: int
-) -> KesSecretKey | None:
+def _kes_update_recursive(sk: KesSecretKey, current_period: int) -> KesSecretKey | None:
     """Recursive KES key update."""
     if sk.depth == 0:
         # Leaf: erase the key — it's been used

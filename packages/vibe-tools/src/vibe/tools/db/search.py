@@ -193,9 +193,7 @@ def build_rrf_query(
 
     # Build filter clause for BM25 CTE (no alias needed — single table query)
     bm25_filter_params: list = []
-    bm25_filter_sql = _build_filter_clause(
-        filters, filter_columns, bm25_filter_params
-    )
+    bm25_filter_sql = _build_filter_clause(filters, filter_columns, bm25_filter_params)
     # Append bm25 filter values into main params, shifting $N accordingly
     bm25_param_offset = len(params)
     params.extend(bm25_filter_params)
@@ -215,9 +213,7 @@ def build_rrf_query(
 
     # Build filter clause for vector CTE
     vector_filter_params: list = []
-    vector_filter_sql = _build_filter_clause(
-        filters, filter_columns, vector_filter_params
-    )
+    vector_filter_sql = _build_filter_clause(filters, filter_columns, vector_filter_params)
     vector_param_offset = len(params)
     params.extend(vector_filter_params)
 
@@ -337,6 +333,7 @@ async def search_all(
             ranked_rows = await conn.fetch(sql, *params)
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning("Search failed on %s: %s", cfg["table"], e)
             continue
 
@@ -369,5 +366,5 @@ async def search_all(
     total = len(all_results)
 
     # Apply pagination
-    paginated = all_results[offset:offset + limit]
+    paginated = all_results[offset : offset + limit]
     return paginated, total

@@ -7,7 +7,7 @@ in bulk (100 items + comments per request instead of 1 per request with REST).
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 from sqlalchemy import text
@@ -147,7 +147,10 @@ class GitHubIngestor:
                     wait = 10 * attempt
                     logger.warning(
                         "GitHub API returned %d — retrying in %ds (attempt %d/%d)",
-                        e.response.status_code, wait, attempt, _retries,
+                        e.response.status_code,
+                        wait,
+                        attempt,
+                        _retries,
                     )
                     await asyncio.sleep(wait)
                     continue
@@ -157,7 +160,10 @@ class GitHubIngestor:
                     wait = 10 * attempt
                     logger.warning(
                         "GitHub API connection error (%s) — retrying in %ds (attempt %d/%d)",
-                        type(e).__name__, wait, attempt, _retries,
+                        type(e).__name__,
+                        wait,
+                        attempt,
+                        _retries,
                     )
                     await asyncio.sleep(wait)
                     continue
@@ -193,7 +199,9 @@ class GitHubIngestor:
 
     @staticmethod
     def _build_content_combined(
-        title: str, body: str | None, comments: list[dict],
+        title: str,
+        body: str | None,
+        comments: list[dict],
     ) -> str:
         parts = [f"# {title}"]
         if body:
@@ -209,9 +217,11 @@ class GitHubIngestor:
         if not body:
             return []
         import re
-        refs = re.findall(r'#(\d+)', body)
+
+        refs = re.findall(r"#(\d+)", body)
         urls = re.findall(
-            r'https://github\.com/[\w-]+/[\w-]+/(?:issues|pull)/(\d+)', body,
+            r"https://github\.com/[\w-]+/[\w-]+/(?:issues|pull)/(\d+)",
+            body,
         )
         return list(set(f"{repo}#{r}" for r in refs + urls))
 
@@ -245,14 +255,20 @@ class GitHubIngestor:
         if ingested_numbers:
             logger.info(
                 "%s: %d issues already ingested%s",
-                repo, len(ingested_numbers),
+                repo,
+                len(ingested_numbers),
                 " (rescan mode — checking for updates)" if rescan else "",
             )
 
         while True:
-            data = await self._graphql(ISSUES_QUERY, {
-                "owner": owner, "name": name, "cursor": cursor,
-            })
+            data = await self._graphql(
+                ISSUES_QUERY,
+                {
+                    "owner": owner,
+                    "name": name,
+                    "cursor": cursor,
+                },
+            )
             issues_data = data["repository"]["issues"]
 
             if total is None:
@@ -263,14 +279,22 @@ class GitHubIngestor:
                     logger.info("All %d issues already ingested for %s", total, repo)
                     if progress:
                         task = progress.add_task(
-                            f"[blue]{repo} issues", total=total, completed=total,
+                            f"[blue]{repo} issues",
+                            total=total,
+                            completed=total,
                         )
                     return 0
                 if progress:
                     task = progress.add_task(
-                        f"[blue]{repo} issues", total=effective_total,
+                        f"[blue]{repo} issues",
+                        total=effective_total,
                     )
-                logger.info("Fetching %d new issues from %s (%d already ingested)", effective_total, repo, len(ingested_numbers))
+                logger.info(
+                    "Fetching %d new issues from %s (%d already ingested)",
+                    effective_total,
+                    repo,
+                    len(ingested_numbers),
+                )
 
             # Track how many items on this page were already ingested
             page_skipped = 0
@@ -299,7 +323,9 @@ class GitHubIngestor:
                 ]
 
                 content_combined = self._build_content_combined(
-                    node["title"], node.get("body"), comments,
+                    node["title"],
+                    node.get("body"),
+                    comments,
                 )
 
                 # On rescan, skip re-embedding if comment count hasn't changed
@@ -407,7 +433,8 @@ class GitHubIngestor:
             if page_skipped == page_total and not rescan:
                 logger.info(
                     "%s: entire page already ingested — stopping early (%d items skipped)",
-                    repo, len(ingested_numbers),
+                    repo,
+                    len(ingested_numbers),
                 )
                 break
 
@@ -439,7 +466,9 @@ class GitHubIngestor:
         ingested_numbers: set[int] = set()
         ingested_comment_counts: dict[int, int] = {}
         existing_result = await session.execute(
-            text("SELECT pr_number, comment_count + review_comment_count FROM github_pull_requests WHERE repo = :repo"),
+            text(
+                "SELECT pr_number, comment_count + review_comment_count FROM github_pull_requests WHERE repo = :repo"
+            ),
             {"repo": repo},
         )
         for row in existing_result.fetchall():
@@ -448,14 +477,20 @@ class GitHubIngestor:
         if ingested_numbers:
             logger.info(
                 "%s: %d PRs already ingested%s",
-                repo, len(ingested_numbers),
+                repo,
+                len(ingested_numbers),
                 " (rescan mode — checking for updates)" if rescan else "",
             )
 
         while True:
-            data = await self._graphql(PRS_QUERY, {
-                "owner": owner, "name": name, "cursor": cursor,
-            })
+            data = await self._graphql(
+                PRS_QUERY,
+                {
+                    "owner": owner,
+                    "name": name,
+                    "cursor": cursor,
+                },
+            )
             prs_data = data["repository"]["pullRequests"]
 
             if total is None:
@@ -466,14 +501,22 @@ class GitHubIngestor:
                     logger.info("All %d PRs already ingested for %s", total, repo)
                     if progress:
                         task = progress.add_task(
-                            f"[purple]{repo} PRs", total=total, completed=total,
+                            f"[purple]{repo} PRs",
+                            total=total,
+                            completed=total,
                         )
                     return 0
                 if progress:
                     task = progress.add_task(
-                        f"[purple]{repo} PRs", total=effective_total,
+                        f"[purple]{repo} PRs",
+                        total=effective_total,
                     )
-                logger.info("Fetching %d new PRs from %s (%d already ingested)", effective_total, repo, len(ingested_numbers))
+                logger.info(
+                    "Fetching %d new PRs from %s (%d already ingested)",
+                    effective_total,
+                    repo,
+                    len(ingested_numbers),
+                )
 
             # Track how many items on this page were already ingested
             page_skipped = 0
@@ -492,30 +535,43 @@ class GitHubIngestor:
 
                 # Collect all comment types
                 general_comments = node.get("comments", {}).get("nodes", [])
-                reviews = [
-                    r for r in node.get("reviews", {}).get("nodes", [])
-                    if r.get("body")
-                ]
+                reviews = [r for r in node.get("reviews", {}).get("nodes", []) if r.get("body")]
                 review_comments = []
                 for thread in node.get("reviewThreads", {}).get("nodes", []):
-                    review_comments.extend(
-                        thread.get("comments", {}).get("nodes", [])
-                    )
+                    review_comments.extend(thread.get("comments", {}).get("nodes", []))
 
                 # Build combined content
-                all_for_combined = [
-                    {"body": c.get("body", ""), "_author": self._author(c), "_date": c.get("createdAt", "")}
-                    for c in general_comments
-                ] + [
-                    {"body": r.get("body", ""), "_author": self._author(r), "_date": r.get("submittedAt", "")}
-                    for r in reviews
-                ] + [
-                    {"body": rc.get("body", ""), "_author": self._author(rc), "_date": rc.get("createdAt", "")}
-                    for rc in review_comments
-                ]
+                all_for_combined = (
+                    [
+                        {
+                            "body": c.get("body", ""),
+                            "_author": self._author(c),
+                            "_date": c.get("createdAt", ""),
+                        }
+                        for c in general_comments
+                    ]
+                    + [
+                        {
+                            "body": r.get("body", ""),
+                            "_author": self._author(r),
+                            "_date": r.get("submittedAt", ""),
+                        }
+                        for r in reviews
+                    ]
+                    + [
+                        {
+                            "body": rc.get("body", ""),
+                            "_author": self._author(rc),
+                            "_date": rc.get("createdAt", ""),
+                        }
+                        for rc in review_comments
+                    ]
+                )
 
                 content_combined = self._build_content_combined(
-                    node["title"], node.get("body"), all_for_combined,
+                    node["title"],
+                    node.get("body"),
+                    all_for_combined,
                 )
 
                 # On rescan, skip re-embedding if total comment count hasn't changed
@@ -704,7 +760,8 @@ class GitHubIngestor:
             if page_skipped == page_total and not rescan:
                 logger.info(
                     "%s: entire page of PRs already ingested — stopping early (%d items skipped)",
-                    repo, len(ingested_numbers),
+                    repo,
+                    len(ingested_numbers),
                 )
                 break
 
@@ -727,10 +784,20 @@ class GitHubIngestor:
         rescan: bool = False,
     ) -> dict[str, int]:
         issues_count = await self.ingest_issues(
-            repo, session, embed_client, limit=limit, progress=progress, rescan=rescan,
+            repo,
+            session,
+            embed_client,
+            limit=limit,
+            progress=progress,
+            rescan=rescan,
         )
         prs_count = await self.ingest_prs(
-            repo, session, embed_client, limit=limit, progress=progress, rescan=rescan,
+            repo,
+            session,
+            embed_client,
+            limit=limit,
+            progress=progress,
+            rescan=rescan,
         )
         return {"issues": issues_count, "prs": prs_count}
 
@@ -747,7 +814,12 @@ class GitHubIngestor:
         results = {}
         for repo in repos:
             results[repo] = await self.ingest_repo(
-                repo, session, embed_client, limit=limit, progress=progress, rescan=rescan,
+                repo,
+                session,
+                embed_client,
+                limit=limit,
+                progress=progress,
+                rescan=rescan,
             )
         return results
 

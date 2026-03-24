@@ -25,11 +25,9 @@ from vibe.cardano.consensus.hfc import (
     PROTOCOL_VERSION_ERA,
     Era,
     EraParams,
-    EraValidationError,
     HardForkConfig,
     HFCState,
     PastHorizonError,
-    TranslatedState,
     _era_start_slots,
     current_era,
     detect_era_transition,
@@ -44,7 +42,6 @@ from vibe.cardano.consensus.slot_arithmetic import (
     BYRON_EPOCH_LENGTH,
     SHELLEY_EPOCH_LENGTH,
 )
-
 
 # ---------------------------------------------------------------------------
 # Era enumeration
@@ -108,7 +105,7 @@ class TestHardForkConfig:
         for i in range(len(epochs) - 1):
             assert epochs[i] < epochs[i + 1], (
                 f"Era {Era(i).name} epoch {epochs[i]} >= "
-                f"Era {Era(i+1).name} epoch {epochs[i+1]}"
+                f"Era {Era(i + 1).name} epoch {epochs[i + 1]}"
             )
 
     def test_config_requires_byron(self) -> None:
@@ -333,8 +330,7 @@ class TestDetectEraTransition:
         for from_era, pv, expected in transitions:
             result = detect_era_transition(from_era, pv)
             assert result == expected, (
-                f"Expected {from_era.name} + PV{pv} -> {expected.name}, "
-                f"got {result}"
+                f"Expected {from_era.name} + PV{pv} -> {expected.name}, got {result}"
             )
 
 
@@ -620,8 +616,7 @@ class TestHypothesisProperties:
         era1 = current_era(slot1, MAINNET_HFC_CONFIG)
         era2 = current_era(slot2, MAINNET_HFC_CONFIG)
         assert era1 <= era2, (
-            f"Era monotonicity violated: slot {slot1} -> {era1.name}, "
-            f"slot {slot2} -> {era2.name}"
+            f"Era monotonicity violated: slot {slot1} -> {era1.name}, slot {slot2} -> {era2.name}"
         )
 
     @given(epoch=st.integers(min_value=0, max_value=10000))
@@ -870,11 +865,15 @@ class TestInvariantCheck:
         # Manually construct an invalid config (bypass __post_init__ by using
         # a config where the epoch ordering is violated but Byron is still 0)
         config = HardForkConfig.__new__(HardForkConfig)
-        object.__setattr__(config, "era_transitions", {
-            Era.BYRON: 0,
-            Era.SHELLEY: 100,
-            Era.ALLEGRA: 50,  # violation: 50 < 100
-        })
+        object.__setattr__(
+            config,
+            "era_transitions",
+            {
+                Era.BYRON: 0,
+                Era.SHELLEY: 100,
+                Era.ALLEGRA: 50,  # violation: 50 < 100
+            },
+        )
         object.__setattr__(config, "era_params", dict(DEFAULT_ERA_PARAMS))
         object.__setattr__(config, "safe_zone", None)
         violations = invariant_check(config)
@@ -953,18 +952,28 @@ class TestInvariantCheck:
     def test_multiple_violations_reported(self) -> None:
         """invariant_check reports ALL violations, not just the first."""
         config = HardForkConfig.__new__(HardForkConfig)
-        object.__setattr__(config, "era_transitions", {
-            Era.BYRON: 5,       # violation: not epoch 0
-            Era.ALONZO: 3,      # violation: gap (missing Shelley/Allegra/Mary)
-        })
-        object.__setattr__(config, "era_params", {
-            Era.BYRON: EraParams(epoch_length=0, slot_length=-1.0),  # two violations
-            Era.ALONZO: EraParams(epoch_length=432000, slot_length=1.0),
-        })
+        object.__setattr__(
+            config,
+            "era_transitions",
+            {
+                Era.BYRON: 5,  # violation: not epoch 0
+                Era.ALONZO: 3,  # violation: gap (missing Shelley/Allegra/Mary)
+            },
+        )
+        object.__setattr__(
+            config,
+            "era_params",
+            {
+                Era.BYRON: EraParams(epoch_length=0, slot_length=-1.0),  # two violations
+                Era.ALONZO: EraParams(epoch_length=432000, slot_length=1.0),
+            },
+        )
         object.__setattr__(config, "safe_zone", None)
         violations = invariant_check(config)
         # Should have at least: epoch 0 violation, gap violation, epoch_length, slot_length
-        assert len(violations) >= 4, f"Expected >= 4 violations, got {len(violations)}: {violations}"
+        assert len(violations) >= 4, (
+            f"Expected >= 4 violations, got {len(violations)}: {violations}"
+        )
 
 
 # ---------------------------------------------------------------------------

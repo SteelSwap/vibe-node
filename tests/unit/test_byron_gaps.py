@@ -30,7 +30,6 @@ from vibe.cardano.consensus.slot_arithmetic import (
     wall_clock_to_slot,
 )
 
-
 # ---------------------------------------------------------------------------
 # Constants from the Byron spec / Haskell implementation
 # ---------------------------------------------------------------------------
@@ -119,9 +118,7 @@ class TestMkLovelace:
     def test_max_plus_one_is_invalid(self) -> None:
         """Values exceeding maxLovelaceVal are invalid."""
         value = MAX_LOVELACE_VAL + 1
-        assert value > MAX_LOVELACE_VAL, (
-            f"Value {value} should exceed maxLovelaceVal"
-        )
+        assert value > MAX_LOVELACE_VAL, f"Value {value} should exceed maxLovelaceVal"
 
     def test_max_val_is_valid(self) -> None:
         """The maxLovelaceVal itself is a valid value."""
@@ -293,12 +290,11 @@ class TestByronSlottingRoundtrip:
             local = slot - first
             reconstructed = first + local
             assert reconstructed == slot, (
-                f"Roundtrip failed for slot {slot}: "
-                f"epoch={epoch}, first={first}, local={local}"
+                f"Roundtrip failed for slot {slot}: epoch={epoch}, first={first}, local={local}"
             )
 
     def test_wall_clock_roundtrip(self) -> None:
-        """slot -> wall_clock -> slot roundtrips for Byron slots."""
+        """Slot -> wall_clock -> slot roundtrips for Byron slots."""
         for slot in [0, 1, 100, 21599, 21600]:
             wall = slot_to_wall_clock(slot, BYRON_CONFIG)
             recovered = wall_clock_to_slot(wall, BYRON_CONFIG)
@@ -328,16 +324,12 @@ class TestByronUpdateProposalApplicationName:
         """Names <= 12 chars with valid characters pass."""
         valid_names = ["cardano-sl", "node", "a", "x" * 12, "v1.0"]
         for name in valid_names:
-            assert 0 < len(name) <= APPLICATION_NAME_MAX_LENGTH, (
-                f"Name '{name}' should be valid"
-            )
+            assert 0 < len(name) <= APPLICATION_NAME_MAX_LENGTH, f"Name '{name}' should be valid"
 
     def test_invalid_application_name_too_long(self) -> None:
         """Names > 12 characters must be rejected."""
         name = "x" * 13
-        assert len(name) > APPLICATION_NAME_MAX_LENGTH, (
-            f"Name '{name}' should exceed max length"
-        )
+        assert len(name) > APPLICATION_NAME_MAX_LENGTH, f"Name '{name}' should exceed max length"
 
     def test_empty_application_name_invalid(self) -> None:
         """Empty application name must be rejected."""

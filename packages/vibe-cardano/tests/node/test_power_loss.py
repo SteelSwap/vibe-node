@@ -18,8 +18,6 @@ Haskell reference:
 
 from __future__ import annotations
 
-import os
-import struct
 import time
 from pathlib import Path
 from typing import Any
@@ -32,7 +30,6 @@ from vibe.cardano.storage.recovery import (
     write_diff_log_entry,
     write_snapshot,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -130,12 +127,8 @@ class TestRecoveryFromDiffReplay:
             cols = _make_col_vals(1000 + i, 1)
             block_1001_created.append((key, cols))
 
-        diff_1001 = BlockDiff(
-            consumed=[], created=block_1001_created, block_slot=1001
-        )
-        ledger.apply_block(
-            consumed=[], created=block_1001_created, block_slot=1001
-        )
+        diff_1001 = BlockDiff(consumed=[], created=block_1001_created, block_slot=1001)
+        ledger.apply_block(consumed=[], created=block_1001_created, block_slot=1001)
 
         # Consume 5 from initial + create 5 new at slot 1002.
         consumed_keys_1002 = [k for k, _ in initial_entries[:5]]
@@ -188,9 +181,7 @@ class TestRecoveryPreservesUtxoCount:
     """test_recovery_preserves_utxo_count — count matches pre-crash state."""
 
     @pytest.mark.parametrize("utxo_count", [1, 10, 100, 500, 1000])
-    def test_recovery_preserves_utxo_count(
-        self, tmp_path: Path, utxo_count: int
-    ) -> None:
+    def test_recovery_preserves_utxo_count(self, tmp_path: Path, utxo_count: int) -> None:
         snapshot_dir = tmp_path / "snapshots"
 
         ledger = LedgerDB(k=100)
@@ -321,9 +312,7 @@ class TestMultipleSnapshotsUsesLatest:
             key = _make_utxo_key(1 + i, 0)
             assert key not in recovered
 
-    def test_diffs_only_replay_after_latest_snapshot(
-        self, tmp_path: Path
-    ) -> None:
+    def test_diffs_only_replay_after_latest_snapshot(self, tmp_path: Path) -> None:
         """Diffs older than the latest snapshot are skipped."""
         snapshot_dir = tmp_path / "snapshots"
 

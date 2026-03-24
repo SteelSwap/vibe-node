@@ -41,12 +41,6 @@ from .header_validation import (
     HeaderValidationError,
     validate_header,
 )
-from .praos import (
-    ActiveSlotCoeff,
-    PraosState,
-    apply_header,
-    leader_check,
-)
 from .hfc import (
     Era,
     EraValidationError,
@@ -62,6 +56,12 @@ from .hfc import (
     translate_ledger_state,
     translate_through_eras,
     validate_block,
+)
+from .praos import (
+    ActiveSlotCoeff,
+    PraosState,
+    apply_header,
+    leader_check,
 )
 from .slot_arithmetic import (
     SlotConfig,

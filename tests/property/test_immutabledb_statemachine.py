@@ -17,26 +17,21 @@ Structured for Antithesis compatibility:
 from __future__ import annotations
 
 import asyncio
-import struct
 import shutil
+import struct
 import tempfile
 from pathlib import Path
 
-import pytest
-from hypothesis import settings, HealthCheck
+from hypothesis import HealthCheck, settings
+from hypothesis import strategies as st
 from hypothesis.stateful import (
-    Bundle,
     RuleBasedStateMachine,
-    initialize,
     invariant,
     precondition,
     rule,
 )
-from hypothesis import strategies as st
 
 from vibe.cardano.storage.immutable import (
-    AppendBlockNotNewerThanTipError,
-    ClosedDBError,
     ImmutableDB,
 )
 
@@ -89,7 +84,9 @@ class ImmutableDBStateMachine(RuleBasedStateMachine):
         self._model.append((slot, block_hash, data))
         self._next_slot = slot + 1
 
-    @rule(gap=st.integers(min_value=2, max_value=10), size=st.integers(min_value=10, max_value=100))
+    @rule(
+        gap=st.integers(min_value=2, max_value=10), size=st.integers(min_value=10, max_value=100)
+    )
     def append_with_gap(self, gap: int, size: int):
         """Append a block with a slot gap (simulates empty slots)."""
         if self._closed:
@@ -120,6 +117,7 @@ class ImmutableDBStateMachine(RuleBasedStateMachine):
     def read_random_block(self):
         """Read a random block from the model and verify."""
         import random
+
         idx = random.randrange(len(self._model))
         slot, block_hash, expected_data = self._model[idx]
         result = run_async(self._db.get_block(block_hash))
@@ -138,8 +136,7 @@ class ImmutableDBStateMachine(RuleBasedStateMachine):
         it.close()
 
         assert len(collected) == len(self._model), (
-            f"Block count mismatch: DB has {len(collected)}, "
-            f"model has {len(self._model)}"
+            f"Block count mismatch: DB has {len(collected)}, model has {len(self._model)}"
         )
 
         for (db_slot, db_data), (model_slot, _, model_data) in zip(collected, self._model):
@@ -201,8 +198,7 @@ class ImmutableDBStateMachine(RuleBasedStateMachine):
         if self._closed:
             return
         assert len(self._db._hash_index) == len(self._model), (
-            f"Hash index has {len(self._db._hash_index)} entries, "
-            f"model has {len(self._model)}"
+            f"Hash index has {len(self._db._hash_index)} entries, model has {len(self._model)}"
         )
 
 

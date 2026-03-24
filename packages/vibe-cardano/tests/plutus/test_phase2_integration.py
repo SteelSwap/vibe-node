@@ -24,14 +24,9 @@ Haskell references:
 from __future__ import annotations
 
 import cbor2
-import pytest
-
 from uplc.ast import (
     PlutusConstr,
     PlutusInteger,
-    PlutusByteString,
-    PlutusList,
-    PlutusMap,
 )
 from uplc.tools import flatten, parse
 
@@ -43,7 +38,6 @@ from vibe.cardano.plutus.context import (
 )
 from vibe.cardano.plutus.cost_model import ExUnits, PlutusVersion
 from vibe.cardano.plutus.evaluate import EvalResult, evaluate_script
-
 
 # ---------------------------------------------------------------------------
 # Test helpers

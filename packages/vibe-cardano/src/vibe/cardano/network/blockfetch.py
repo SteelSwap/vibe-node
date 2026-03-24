@@ -30,11 +30,9 @@ from typing import Union
 import cbor2pure as cbor2
 
 from vibe.cardano.network.chainsync import (
-    Point,
-    Origin,
     PointOrOrigin,
-    _encode_point,
     _decode_point,
+    _encode_point,
 )
 
 # ---------------------------------------------------------------------------
@@ -61,7 +59,7 @@ BLOCK_FETCH_N2N_ID: int = 3
 class MsgRequestRange:
     """Client -> Server: request blocks in the given range.
 
-    Attributes
+    Attributes:
     ----------
     point_from : PointOrOrigin
         Start of the range (inclusive).
@@ -99,7 +97,7 @@ class MsgNoBlocks:
 class MsgBlock:
     """Server -> Client: a single block in the batch.
 
-    Attributes
+    Attributes:
     ----------
     block_cbor : bytes
         CBOR-encoded block body bytes.  We keep it as opaque bytes at
@@ -186,12 +184,12 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
     cbor_bytes : bytes
         Raw CBOR payload (one complete message).
 
-    Returns
+    Returns:
     -------
     ServerMessage
         One of: MsgStartBatch, MsgNoBlocks, MsgBlock, MsgBatchDone.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.
@@ -245,12 +243,12 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
 def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
     """Decode a client-to-server block-fetch message from CBOR bytes.
 
-    Returns
+    Returns:
     -------
     ClientMessage
         One of: MsgRequestRange, MsgClientDone.
 
-    Raises
+    Raises:
     ------
     ValueError
         If the message ID is unknown or the payload structure is invalid.
@@ -264,18 +262,14 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
 
     if msg_id == MSG_REQUEST_RANGE:
         if len(msg) != 3:
-            raise ValueError(
-                f"MsgRequestRange: expected 3 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgRequestRange: expected 3 elements, got {len(msg)}")
         point_from = _decode_point(msg[1])
         point_to = _decode_point(msg[2])
         return MsgRequestRange(point_from=point_from, point_to=point_to)
 
     elif msg_id == MSG_CLIENT_DONE:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgClientDone: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgClientDone: expected 1 element, got {len(msg)}")
         return MsgClientDone()
 
     else:

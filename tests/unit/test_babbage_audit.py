@@ -21,8 +21,7 @@ from __future__ import annotations
 
 import hashlib
 
-import pytest
-from hypothesis import given, settings, assume
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from pycardano import (
     Asset,
@@ -56,7 +55,6 @@ from vibe.cardano.ledger.babbage_types import (
     ReferenceScript,
 )
 from vibe.cardano.ledger.shelley import ShelleyUTxO, shelley_min_fee
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
@@ -284,10 +282,12 @@ class TestMultiAssetMinUtxo:
         out1 = TransactionOutput(addr, Value(coin=2_000_000, multi_asset=ma1))
 
         pid2 = make_policy_id(1)
-        ma2 = MultiAsset({
-            pid1: Asset({AssetName(b"t"): 1}),
-            pid2: Asset({AssetName(b"t"): 1}),
-        })
+        ma2 = MultiAsset(
+            {
+                pid1: Asset({AssetName(b"t"): 1}),
+                pid2: Asset({AssetName(b"t"): 1}),
+            }
+        )
         out2 = TransactionOutput(addr, Value(coin=2_000_000, multi_asset=ma2))
 
         size1 = estimate_output_size(out1)
@@ -305,13 +305,19 @@ class TestMultiAssetMinUtxo:
         ma1 = MultiAsset({pid: Asset({AssetName(b"a"): 1})})
         out1 = TransactionOutput(addr, Value(coin=2_000_000, multi_asset=ma1))
 
-        ma5 = MultiAsset({pid: Asset({
-            AssetName(b"a"): 1,
-            AssetName(b"b"): 1,
-            AssetName(b"c"): 1,
-            AssetName(b"d"): 1,
-            AssetName(b"e"): 1,
-        })})
+        ma5 = MultiAsset(
+            {
+                pid: Asset(
+                    {
+                        AssetName(b"a"): 1,
+                        AssetName(b"b"): 1,
+                        AssetName(b"c"): 1,
+                        AssetName(b"d"): 1,
+                        AssetName(b"e"): 1,
+                    }
+                )
+            }
+        )
         out5 = TransactionOutput(addr, Value(coin=2_000_000, multi_asset=ma5))
 
         size1 = estimate_output_size(out1)
@@ -362,9 +368,7 @@ class TestValuePreservationMultiAsset:
         fee=st.integers(min_value=200, max_value=1_000_000),
     )
     @settings(max_examples=100)
-    def test_balanced_multi_asset_tx_passes(
-        self, ada_in: int, token_amount: int, fee: int
-    ):
+    def test_balanced_multi_asset_tx_passes(self, ada_in: int, token_amount: int, fee: int):
         """A balanced multi-asset transaction should pass value preservation."""
         assume(ada_in > fee + 1_000_000)  # Enough for output + fee
         ada_out = ada_in - fee
@@ -400,9 +404,7 @@ class TestValuePreservationMultiAsset:
         mint_amount=st.integers(min_value=1, max_value=100_000),
     )
     @settings(max_examples=100)
-    def test_minting_preserves_value(
-        self, ada_in: int, token_amount: int, mint_amount: int
-    ):
+    def test_minting_preserves_value(self, ada_in: int, token_amount: int, mint_amount: int):
         """Minting new tokens should preserve value when outputs account for them."""
         fee = 300  # min fee for tx_size=200 with min_fee_a=1, min_fee_b=100
         assume(ada_in > fee + 1_000_000)

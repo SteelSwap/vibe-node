@@ -69,8 +69,7 @@ from vibe.cardano.network.local_statequery_protocol import (
     LsqMsgRelease,
     LsqMsgResult,
 )
-from vibe.core.protocols import Agency, Message, ProtocolError
-
+from vibe.core.protocols import Agency
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -863,9 +862,30 @@ class TestServerUTxOByAddress:
         key2 = b"\x02" * 34
         key3 = b"\x03" * 34
         utxos = {
-            key1: {"address": "addr_test1abc", "value": 5000000, "tx_hash": b"\x01" * 32, "tx_index": 0, "datum_hash": b"", "key": key1},
-            key2: {"address": "addr_test1xyz", "value": 3000000, "tx_hash": b"\x02" * 32, "tx_index": 0, "datum_hash": b"", "key": key2},
-            key3: {"address": "addr_test1abc", "value": 2000000, "tx_hash": b"\x03" * 32, "tx_index": 0, "datum_hash": b"", "key": key3},
+            key1: {
+                "address": "addr_test1abc",
+                "value": 5000000,
+                "tx_hash": b"\x01" * 32,
+                "tx_index": 0,
+                "datum_hash": b"",
+                "key": key1,
+            },
+            key2: {
+                "address": "addr_test1xyz",
+                "value": 3000000,
+                "tx_hash": b"\x02" * 32,
+                "tx_index": 0,
+                "datum_hash": b"",
+                "key": key2,
+            },
+            key3: {
+                "address": "addr_test1abc",
+                "value": 2000000,
+                "tx_hash": b"\x03" * 32,
+                "tx_index": 0,
+                "datum_hash": b"",
+                "key": key3,
+            },
         }
         ledgerdb = _MockLedgerDB(utxos)
 
@@ -879,7 +899,8 @@ class TestServerUTxOByAddress:
             channel=server_ch,
         )
         server = LocalStateQueryServer(
-            server_runner, ledgerdb,
+            server_runner,
+            ledgerdb,
             protocol_params={"min_fee_a": 44, "min_fee_b": 155381},
         )
 
@@ -947,7 +968,8 @@ class TestServerProtocolParams:
             channel=server_ch,
         )
         server = LocalStateQueryServer(
-            server_runner, ledgerdb,
+            server_runner,
+            ledgerdb,
             protocol_params=params,
         )
 
@@ -996,7 +1018,8 @@ class TestServerEpochInfo:
             channel=server_ch,
         )
         server = LocalStateQueryServer(
-            server_runner, ledgerdb,
+            server_runner,
+            ledgerdb,
             epoch_no=400,
             slot_in_epoch=50000,
             epoch_length=432000,
@@ -1049,7 +1072,9 @@ class TestServerFailedAcquisition:
         # Server with a specific chain tip
         tip = Point(slot=1000, block_hash=b"\xaa" * 32)
         server = LocalStateQueryServer(
-            server_runner, ledgerdb, chain_tip=tip,
+            server_runner,
+            ledgerdb,
+            chain_tip=tip,
         )
 
         client_runner = ProtocolRunner(
@@ -1085,9 +1110,12 @@ class TestServerMultipleQueries:
         key1 = b"\x01" * 34
         utxos = {
             key1: {
-                "address": "addr_test1abc", "value": 5000000,
-                "tx_hash": b"\x01" * 32, "tx_index": 0,
-                "datum_hash": b"", "key": key1,
+                "address": "addr_test1abc",
+                "value": 5000000,
+                "tx_hash": b"\x01" * 32,
+                "tx_index": 0,
+                "datum_hash": b"",
+                "key": key1,
             },
         }
         ledgerdb = _MockLedgerDB(utxos)
@@ -1102,7 +1130,8 @@ class TestServerMultipleQueries:
             channel=server_ch,
         )
         server = LocalStateQueryServer(
-            server_runner, ledgerdb,
+            server_runner,
+            ledgerdb,
             protocol_params=params,
             epoch_no=100,
             slot_in_epoch=5000,
@@ -1123,17 +1152,13 @@ class TestServerMultipleQueries:
         await client_runner.recv_message()
 
         # Query 1: protocol params
-        await client_runner.send_message(
-            LsqMsgQuery(query=Query(QueryType.ProtocolParameters))
-        )
+        await client_runner.send_message(LsqMsgQuery(query=Query(QueryType.ProtocolParameters)))
         r1 = await client_runner.recv_message()
         assert isinstance(r1, LsqMsgResult)
         assert r1.result == params
 
         # Query 2: epoch info
-        await client_runner.send_message(
-            LsqMsgQuery(query=Query(QueryType.EpochInfo))
-        )
+        await client_runner.send_message(LsqMsgQuery(query=Query(QueryType.EpochInfo)))
         r2 = await client_runner.recv_message()
         assert isinstance(r2, LsqMsgResult)
         assert r2.result == [100, 5000, 427000]
@@ -1164,8 +1189,22 @@ class TestServerUTxOByTxIn:
         key1 = b"\x01" * 34
         key2 = b"\x02" * 34
         utxos = {
-            key1: {"address": "addr1", "value": 5000000, "tx_hash": b"\x01" * 32, "tx_index": 0, "datum_hash": b"", "key": key1},
-            key2: {"address": "addr2", "value": 3000000, "tx_hash": b"\x02" * 32, "tx_index": 0, "datum_hash": b"", "key": key2},
+            key1: {
+                "address": "addr1",
+                "value": 5000000,
+                "tx_hash": b"\x01" * 32,
+                "tx_index": 0,
+                "datum_hash": b"",
+                "key": key1,
+            },
+            key2: {
+                "address": "addr2",
+                "value": 3000000,
+                "tx_hash": b"\x02" * 32,
+                "tx_index": 0,
+                "datum_hash": b"",
+                "key": key2,
+            },
         }
         ledgerdb = _MockLedgerDB(utxos)
         client_ch, server_ch = _make_connected_channels()
@@ -1231,7 +1270,8 @@ class TestServerStakeDistribution:
             channel=server_ch,
         )
         server = LocalStateQueryServer(
-            server_runner, ledgerdb,
+            server_runner,
+            ledgerdb,
             stake_distribution=stake_dist,
         )
 

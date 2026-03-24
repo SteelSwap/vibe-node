@@ -16,14 +16,12 @@ Test specifications referenced (from test_specifications table):
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
 
 from vibe.cardano.storage.volatile import BlockInfo, ClosedVolatileDBError, VolatileDB
 from vibe.core.storage.interfaces import KeyValueStore
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -489,9 +487,7 @@ class TestPersistence:
         # Successor map should be rebuilt
         assert await db2.get_successors(_genesis_hash()) == [_hash(1)]
 
-    async def test_load_from_disk_skips_corrupt_files(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_load_from_disk_skips_corrupt_files(self, tmp_path: Path) -> None:
         """Corrupt block files are skipped during recovery."""
         db = VolatileDB(db_dir=tmp_path)
         await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))

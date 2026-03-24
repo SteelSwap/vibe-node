@@ -24,11 +24,10 @@ Haskell references:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import IntEnum, auto
+from enum import IntEnum
 from typing import Any
 
 from vibe.cardano.ledger.babbage_types import BabbageProtocolParams
-
 
 # ---------------------------------------------------------------------------
 # Governance action types
@@ -442,9 +441,7 @@ class GovernanceState:
     proposals: dict[GovActionId, ProposalProcedure] = field(default_factory=dict)
     """Active governance proposals."""
 
-    votes: dict[GovActionId, dict[Voter, VotingProcedure]] = field(
-        default_factory=dict
-    )
+    votes: dict[GovActionId, dict[Voter, VotingProcedure]] = field(default_factory=dict)
     """Votes cast on proposals: action_id -> voter -> procedure."""
 
     dreps: dict[bytes, int] = field(default_factory=dict)

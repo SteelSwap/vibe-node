@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from vibe.cardano.storage.volatile import VolatileDB, BlockInfo
+from vibe.cardano.storage.volatile import VolatileDB
 
 
 def _block_hash(n: int) -> bytes:
@@ -179,16 +179,25 @@ async def test_get_predecessor() -> None:
     # Chain: genesis -> bh1 -> bh2
     # Fork:  genesis -> bh3
     await db.add_block(
-        block_hash=bh1, slot=1, predecessor_hash=genesis,
-        block_number=1, cbor_bytes=b"b1",
+        block_hash=bh1,
+        slot=1,
+        predecessor_hash=genesis,
+        block_number=1,
+        cbor_bytes=b"b1",
     )
     await db.add_block(
-        block_hash=bh2, slot=2, predecessor_hash=bh1,
-        block_number=2, cbor_bytes=b"b2",
+        block_hash=bh2,
+        slot=2,
+        predecessor_hash=bh1,
+        block_number=2,
+        cbor_bytes=b"b2",
     )
     await db.add_block(
-        block_hash=bh3, slot=1, predecessor_hash=genesis,
-        block_number=1, cbor_bytes=b"b3",
+        block_hash=bh3,
+        slot=1,
+        predecessor_hash=genesis,
+        block_number=1,
+        cbor_bytes=b"b3",
     )
 
     # Genesis has two successors
