@@ -162,9 +162,7 @@ class HandshakeProtocol(Protocol[HandshakeState]):
                 return Agency.Nobody
         raise ValueError(f"Unknown handshake state: {state}")  # pragma: no cover
 
-    def valid_messages(
-        self, state: HandshakeState
-    ) -> frozenset[type[Message[HandshakeState]]]:
+    def valid_messages(self, state: HandshakeState) -> frozenset[type[Message[HandshakeState]]]:
         match state:
             case HandshakeState.StPropose:
                 return frozenset({MsgProposeVersionsMsg})
@@ -264,13 +262,11 @@ def negotiate_version(
     #   is unidirectional)
     # - peer_sharing: use server's preference (server decides)
     # - query: use client's (client is the one requesting query mode)
-    from .handshake import PeerSharing
 
     merged_data = NodeToNodeVersionData(
         network_magic=server_data.network_magic,
         initiator_only_diffusion_mode=(
-            client_data.initiator_only_diffusion_mode
-            or server_data.initiator_only_diffusion_mode
+            client_data.initiator_only_diffusion_mode or server_data.initiator_only_diffusion_mode
         ),
         peer_sharing=server_data.peer_sharing,
         query=client_data.query,
@@ -328,9 +324,7 @@ async def run_handshake_client(
             # Receive response
             response_bytes = await channel.recv()
     except TimeoutError:
-        raise HandshakeTimeoutError(
-            f"Handshake timed out after {timeout}s"
-        ) from None
+        raise HandshakeTimeoutError(f"Handshake timed out after {timeout}s") from None
 
     # Decode response
     response: HandshakeResponse = decode_handshake_response(response_bytes)
@@ -384,12 +378,11 @@ async def run_handshake_server(
             # Receive client's proposal
             propose_bytes = await channel.recv()
     except TimeoutError:
-        raise HandshakeTimeoutError(
-            f"Handshake server timed out after {timeout}s"
-        ) from None
+        raise HandshakeTimeoutError(f"Handshake server timed out after {timeout}s") from None
 
     # Decode the proposal
     import cbor2pure as cbor2
+
     proposal = cbor2.loads(propose_bytes)
     # proposal = [0, {version: version_data, ...}]
     if not isinstance(proposal, list) or len(proposal) < 2 or proposal[0] != 0:
@@ -414,6 +407,7 @@ async def run_handshake_server(
     if result is not None:
         # Accept — encode and send
         from .handshake import encode_accept_version
+
         accept_bytes = encode_accept_version(result)
         try:
             async with asyncio.timeout(timeout):
@@ -425,9 +419,9 @@ async def run_handshake_server(
         return result
     else:
         # Refuse — version mismatch
-        refuse = MsgRefuse(reason=RefuseReasonVersionMismatch(
-            versions=list(server_versions.keys())
-        ))
+        refuse = MsgRefuse(
+            reason=RefuseReasonVersionMismatch(versions=list(server_versions.keys()))
+        )
         refuse_bytes = encode_refuse(refuse)
         try:
             async with asyncio.timeout(timeout):
@@ -488,9 +482,7 @@ async def run_handshake_server_n2c(
             # Receive client's proposal
             propose_bytes = await channel.recv()
     except TimeoutError:
-        raise HandshakeTimeoutError(
-            f"N2C handshake server timed out after {timeout}s"
-        ) from None
+        raise HandshakeTimeoutError(f"N2C handshake server timed out after {timeout}s") from None
 
     # Decode the proposal
     proposal = cbor2.loads(propose_bytes)
@@ -533,9 +525,9 @@ async def run_handshake_server_n2c(
         return N2CHandshakeResult(version_number=best, version_data=merged)
     else:
         # Refuse — version mismatch
-        refuse = MsgRefuse(reason=RefuseReasonVersionMismatch(
-            versions=list(server_versions.keys())
-        ))
+        refuse = MsgRefuse(
+            reason=RefuseReasonVersionMismatch(versions=list(server_versions.keys()))
+        )
         refuse_bytes = encode_refuse(refuse)
         try:
             async with asyncio.timeout(timeout):

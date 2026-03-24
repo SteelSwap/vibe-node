@@ -27,26 +27,20 @@ Spec references:
 from __future__ import annotations
 
 import hashlib
-from copy import deepcopy
 from fractions import Fraction
 
 import pytest
-from nacl.signing import SigningKey as NaClSigningKey
-
 from pycardano import (
     TransactionBody,
     TransactionInput,
     TransactionOutput,
-    Transaction,
 )
 from pycardano.address import Address
 from pycardano.certificate import (
     PoolParams,
     PoolRegistration,
-    PoolRetirement,
     StakeCredential,
     StakeDelegation,
-    StakeRegistration,
 )
 from pycardano.hash import (
     PoolKeyHash,
@@ -56,8 +50,8 @@ from pycardano.hash import (
     VerificationKeyHash,
 )
 from pycardano.key import PaymentSigningKey, PaymentVerificationKey
-from pycardano.network import Network
 from pycardano.nativescript import ScriptPubkey
+from pycardano.network import Network
 from pycardano.pool_params import PoolMetadata
 from pycardano.witness import TransactionWitnessSet, VerificationKeyWitness
 
@@ -66,15 +60,12 @@ from vibe.cardano.ledger.shelley import (
     ShelleyUTxO,
     validate_shelley_utxo,
     validate_shelley_witnesses,
-    validate_shelley_tx,
 )
 from vibe.cardano.ledger.shelley_delegation import (
     DelegationError,
     DelegationState,
     process_certificate,
-    process_certificates,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -279,9 +270,9 @@ class TestMissingScriptWitnesses:
         witness_set = TransactionWitnessSet(vkey_witnesses=[wit])
 
         errors = validate_shelley_witnesses(tx_body, witness_set, utxo_set)
-        assert any("MissingScriptWitnessesUTxOW" in e for e in errors), (
-            f"Expected MissingScriptWitnessesUTxOW, got: {errors}"
-        )
+        assert any(
+            "MissingScriptWitnessesUTxOW" in e for e in errors
+        ), f"Expected MissingScriptWitnessesUTxOW, got: {errors}"
 
 
 # ===========================================================================
@@ -370,9 +361,7 @@ class TestEpochBoundaryCrossing:
 
         # Current slot is in epoch 0 -- well before TTL
         current_slot = self.EPOCH_LENGTH - 1000
-        errors = validate_shelley_utxo(
-            tx_body, utxo_set, TEST_PARAMS, current_slot, tx_size=200
-        )
+        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot, tx_size=200)
         # Should not have ExpiredUTxO
         expired = [e for e in errors if "ExpiredUTxO" in e]
         assert expired == [], f"Tx should be valid before TTL, got: {expired}"
@@ -395,9 +384,7 @@ class TestEpochBoundaryCrossing:
 
         # Current slot is past TTL
         current_slot = self.EPOCH_LENGTH + 100  # exactly at TTL (>= means expired)
-        errors = validate_shelley_utxo(
-            tx_body, utxo_set, TEST_PARAMS, current_slot, tx_size=200
-        )
+        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot, tx_size=200)
         expired = [e for e in errors if "ExpiredUTxO" in e]
         assert len(expired) == 1, f"Tx should be expired at TTL, got: {errors}"
 
@@ -503,9 +490,7 @@ class TestPoolMetadataHashSize:
         pp = _pool_params(operator_prefix=0xB2, pool_metadata=metadata)
         cert = PoolRegistration(pp)
 
-        new_state = process_certificate(
-            cert, DelegationState(), TEST_PARAMS, current_epoch=200
-        )
+        new_state = process_certificate(cert, DelegationState(), TEST_PARAMS, current_epoch=200)
         assert _fake_hash(0xB2) in new_state.pools
 
 
@@ -592,9 +577,7 @@ class TestPoolWrongNetworkId:
         )
         cert = PoolRegistration(pp)
 
-        new_state = process_certificate(
-            cert, DelegationState(), TEST_PARAMS, current_epoch=200
-        )
+        new_state = process_certificate(cert, DelegationState(), TEST_PARAMS, current_epoch=200)
         assert _fake_hash(0xB4) in new_state.pools
 
 
@@ -641,9 +624,7 @@ class TestPoolMetadataUrlTooLong:
         pp = _pool_params(operator_prefix=0xB6, pool_metadata=metadata)
         cert = PoolRegistration(pp)
 
-        new_state = process_certificate(
-            cert, DelegationState(), TEST_PARAMS, current_epoch=200
-        )
+        new_state = process_certificate(cert, DelegationState(), TEST_PARAMS, current_epoch=200)
         assert _fake_hash(0xB6) in new_state.pools
 
 

@@ -55,7 +55,9 @@ def infra_status() -> None:
 
 @infra_app.command()
 def logs(
-    service: str = typer.Argument(None, help="Service name (e.g. paradedb, ollama). Omit for all."),
+    service: str = typer.Argument(
+        None, help="Service name (e.g. paradedb, ollama). Omit for all."
+    ),
     follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output."),
     tail: int = typer.Option(50, "--tail", "-n", help="Number of lines to show."),
 ) -> None:
@@ -89,9 +91,18 @@ def register_db_extras(db_app: typer.Typer) -> None:
 
         result = subprocess.run(
             [
-                "docker", "compose", "exec", "-T", "paradedb",
-                "pg_dump", "-U", "vibenode", "-d", "vibenode",
-                "--format=custom", "--compress=zstd",
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                "paradedb",
+                "pg_dump",
+                "-U",
+                "vibenode",
+                "-d",
+                "vibenode",
+                "--format=custom",
+                "--compress=zstd",
             ],
             capture_output=True,
         )
@@ -125,29 +136,58 @@ def register_db_extras(db_app: typer.Typer) -> None:
         # Terminate active connections and drop schema
         subprocess.run(
             [
-                "docker", "compose", "exec", "-T", "paradedb",
-                "psql", "-U", "vibenode", "-d", "vibenode", "-c",
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                "paradedb",
+                "psql",
+                "-U",
+                "vibenode",
+                "-d",
+                "vibenode",
+                "-c",
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
                 "WHERE datname = 'vibenode' AND pid <> pg_backend_pid();",
             ],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         subprocess.run(
             [
-                "docker", "compose", "exec", "-T", "paradedb",
-                "psql", "-U", "vibenode", "-d", "vibenode", "-c",
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                "paradedb",
+                "psql",
+                "-U",
+                "vibenode",
+                "-d",
+                "vibenode",
+                "-c",
                 "DROP SCHEMA public CASCADE; CREATE SCHEMA public;",
             ],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
 
         # Restore from dump via stdin
         data = snapshot_file.read_bytes()
         result = subprocess.run(
             [
-                "docker", "compose", "exec", "-T", "paradedb",
-                "pg_restore", "-U", "vibenode", "-d", "vibenode",
-                "--no-owner", "--no-privileges",
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                "paradedb",
+                "pg_restore",
+                "-U",
+                "vibenode",
+                "-d",
+                "vibenode",
+                "--no-owner",
+                "--no-privileges",
             ],
             input=data,
             capture_output=True,
@@ -164,15 +204,16 @@ def register_db_extras(db_app: typer.Typer) -> None:
     @db_app.command(name="search")
     def search(
         query: str = typer.Argument(help="Search query text"),
-        table: str = typer.Option("all", "--table", "-t",
-                                  help="Entity type: spec_doc, code, issue, pr, all"),
+        table: str = typer.Option(
+            "all", "--table", "-t", help="Entity type: spec_doc, code, issue, pr, all"
+        ),
         limit: int = typer.Option(10, "--limit", "-n", help="Max results"),
     ) -> None:
         """Search the knowledge base using BM25 + vector fusion (RRF)."""
         import asyncio
 
         async def _run():
-            from vibe.tools.db.pool import get_pool, close_pool
+            from vibe.tools.db.pool import close_pool, get_pool
             from vibe.tools.db.search import search_all
             from vibe.tools.embed.client import EmbeddingClient
 
@@ -185,7 +226,9 @@ def register_db_extras(db_app: typer.Typer) -> None:
             pool = await get_pool()
             async with pool.acquire() as conn:
                 results, total = await search_all(
-                    conn, query, embedding,
+                    conn,
+                    query,
+                    embedding,
                     entity_type=entity_type,
                     limit=limit,
                 )

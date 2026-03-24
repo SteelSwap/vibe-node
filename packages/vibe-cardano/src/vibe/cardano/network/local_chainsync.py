@@ -40,35 +40,34 @@ from typing import Union
 import cbor2pure as cbor2
 
 from vibe.cardano.network.chainsync import (
+    CHAIN_SYNC_N2C_ID,
     # Message ID constants — same for N2N and N2C
     MSG_AWAIT_REPLY,
-    MSG_ROLL_FORWARD,
-    MSG_ROLL_BACKWARD,
     MSG_INTERSECT_FOUND,
     MSG_INTERSECT_NOT_FOUND,
-    CHAIN_SYNC_N2C_ID,
+    MSG_ROLL_BACKWARD,
+    MSG_ROLL_FORWARD,
+    MsgAwaitReply,
+    MsgDone,
+    MsgFindIntersect,
+    # Client messages — identical between N2N and N2C
+    MsgRequestNext,
     # Domain types — shared between N2N and N2C
-    Point,
     Tip,
     # Point/tip encoding helpers — wire format is identical
     _decode_point,
-    _encode_tip,
     _decode_tip,
-    # Client messages — identical between N2N and N2C
-    MsgRequestNext,
-    MsgAwaitReply,
-    MsgFindIntersect,
-    MsgDone,
-    # Encode functions for messages that are identical
-    encode_request_next,
-    encode_find_intersect,
-    encode_done,
-    encode_await_reply,
-    encode_roll_backward,
-    encode_intersect_found,
-    encode_intersect_not_found,
+    _encode_tip,
     # Decode for client messages — identical
     decode_client_message,
+    encode_await_reply,
+    encode_done,
+    encode_find_intersect,
+    encode_intersect_found,
+    encode_intersect_not_found,
+    # Encode functions for messages that are identical
+    encode_request_next,
+    encode_roll_backward,
 )
 
 __all__ = [
@@ -126,11 +125,10 @@ class N2CMsgRollForward:
 # Re-import MsgRollBackward, MsgIntersectFound, MsgIntersectNotFound
 # from N2N — these are identical for N2C.
 from vibe.cardano.network.chainsync import (  # noqa: E402
-    MsgRollBackward,
     MsgIntersectFound,
     MsgIntersectNotFound,
+    MsgRollBackward,
 )
-
 
 #: Union of all N2C server-to-client message types.
 N2CServerMessage = Union[
@@ -215,18 +213,14 @@ def decode_n2c_server_message(cbor_bytes: bytes) -> N2CServerMessage:
 
     elif msg_id == MSG_INTERSECT_FOUND:
         if len(msg) != 3:
-            raise ValueError(
-                f"MsgIntersectFound: expected 3 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgIntersectFound: expected 3 elements, got {len(msg)}")
         point = _decode_point(msg[1])
         tip = _decode_tip(msg[2])
         return MsgIntersectFound(point=point, tip=tip)
 
     elif msg_id == MSG_INTERSECT_NOT_FOUND:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgIntersectNotFound: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgIntersectNotFound: expected 2 elements, got {len(msg)}")
         tip = _decode_tip(msg[1])
         return MsgIntersectNotFound(tip=tip)
 

@@ -13,7 +13,6 @@ import hashlib
 
 import cbor2
 import pytest
-
 from pycardano.key import VerificationKey
 from pycardano.metadata import AuxiliaryData, Metadata
 from pycardano.transaction import Transaction, TransactionBody
@@ -23,14 +22,13 @@ from vibe.cardano.serialization.transaction import (
     DecodedBlockBody,
     DecodedTransaction,
     Era,
-    decode_block_body,
-    decode_block_transactions,
-    _tx_hash,
+    _try_decode_auxiliary_data,
     _try_decode_tx_body,
     _try_decode_witness_set,
-    _try_decode_auxiliary_data,
+    _tx_hash,
+    decode_block_body,
+    decode_block_transactions,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test vector helpers
@@ -49,41 +47,41 @@ ADDR_BYTES = b"\x00" + b"\x11" * 28 + b"\x22" * 28
 def _make_shelley_header_body() -> list:
     """Minimal Shelley header_body (15 items)."""
     return [
-        42,         # block_number
-        1000,       # slot
-        HASH32,     # prev_hash
-        VKEY32,     # issuer_vkey
-        VKEY32,     # vrf_vkey
-        VRF_CERT,   # nonce_vrf
-        VRF_CERT,   # leader_vrf
-        512,        # block_body_size
-        HASH32,     # block_body_hash
-        VKEY32,     # op_cert hot_vkey
-        7,          # op_cert sequence_number
-        100,        # op_cert kes_period
-        SIG64,      # op_cert sigma
-        3,          # protocol_version major
-        0,          # protocol_version minor
+        42,  # block_number
+        1000,  # slot
+        HASH32,  # prev_hash
+        VKEY32,  # issuer_vkey
+        VKEY32,  # vrf_vkey
+        VRF_CERT,  # nonce_vrf
+        VRF_CERT,  # leader_vrf
+        512,  # block_body_size
+        HASH32,  # block_body_hash
+        VKEY32,  # op_cert hot_vkey
+        7,  # op_cert sequence_number
+        100,  # op_cert kes_period
+        SIG64,  # op_cert sigma
+        3,  # protocol_version major
+        0,  # protocol_version minor
     ]
 
 
 def _make_babbage_header_body() -> list:
     """Minimal Babbage header_body (14 items)."""
     return [
-        99,         # block_number
-        5000,       # slot
-        HASH32,     # prev_hash
-        VKEY32,     # issuer_vkey
-        VKEY32,     # vrf_vkey
-        VRF_CERT,   # vrf_result (single, replaces nonce_vrf + leader_vrf)
-        1024,       # block_body_size
-        HASH32,     # block_body_hash
-        VKEY32,     # op_cert hot_vkey
-        10,         # op_cert sequence_number
-        200,        # op_cert kes_period
-        SIG64,      # op_cert sigma
-        7,          # protocol_version major
-        0,          # protocol_version minor
+        99,  # block_number
+        5000,  # slot
+        HASH32,  # prev_hash
+        VKEY32,  # issuer_vkey
+        VKEY32,  # vrf_vkey
+        VRF_CERT,  # vrf_result (single, replaces nonce_vrf + leader_vrf)
+        1024,  # block_body_size
+        HASH32,  # block_body_hash
+        VKEY32,  # op_cert hot_vkey
+        10,  # op_cert sequence_number
+        200,  # op_cert kes_period
+        SIG64,  # op_cert sigma
+        7,  # protocol_version major
+        0,  # protocol_version minor
     ]
 
 
@@ -393,10 +391,7 @@ class TestTransactionBodyDecoding:
         assert [tx.index for tx in result.transactions] == [0, 1, 2, 3, 4]
 
     def test_each_tx_has_unique_hash_when_different(self):
-        bodies = [
-            _make_tx_body_primitive(fee=i * 100_000 + 100_000)
-            for i in range(3)
-        ]
+        bodies = [_make_tx_body_primitive(fee=i * 100_000 + 100_000) for i in range(3)]
         witnesses = [_make_witness_set_primitive() for _ in bodies]
         raw = _make_block_cbor(Era.BABBAGE, tx_bodies=bodies, tx_witnesses=witnesses)
         result = decode_block_body(raw)
@@ -674,12 +669,8 @@ class TestTransactionHash:
         body = _make_tx_body_primitive()
         ws = _make_witness_set_primitive()
 
-        raw_shelley = _make_block_cbor(
-            Era.SHELLEY, tx_bodies=[body], tx_witnesses=[ws]
-        )
-        raw_babbage = _make_block_cbor(
-            Era.BABBAGE, tx_bodies=[body], tx_witnesses=[ws]
-        )
+        raw_shelley = _make_block_cbor(Era.SHELLEY, tx_bodies=[body], tx_witnesses=[ws])
+        raw_babbage = _make_block_cbor(Era.BABBAGE, tx_bodies=[body], tx_witnesses=[ws])
 
         result_s = decode_block_body(raw_shelley)
         result_b = decode_block_body(raw_babbage)
@@ -710,9 +701,7 @@ class TestDecodeBlockTransactions:
         assert result == []
 
     def test_multiple_transactions(self):
-        bodies = [
-            _make_tx_body_primitive(fee=100_000 + i * 10_000) for i in range(4)
-        ]
+        bodies = [_make_tx_body_primitive(fee=100_000 + i * 10_000) for i in range(4)]
         witnesses = [_make_witness_set_primitive() for _ in bodies]
         raw = _make_block_cbor(Era.BABBAGE, tx_bodies=bodies, tx_witnesses=witnesses)
         result = decode_block_transactions(raw)
@@ -841,7 +830,7 @@ class TestEdgeCases:
         """test_utxo_empty_transaction_outputs: tx with zero outputs."""
         body = {
             0: [[HASH32, 0]],  # one input
-            1: [],              # zero outputs
+            1: [],  # zero outputs
             2: 200_000,
         }
         ws = _make_witness_set_primitive()
@@ -1301,7 +1290,5 @@ class TestSerializationDistributivityTx:
         result = decode_block_body(raw)
 
         for i, tx in enumerate(result.transactions):
-            expected = hashlib.blake2b(
-                cbor2.dumps(bodies[i]), digest_size=32
-            ).digest()
+            expected = hashlib.blake2b(cbor2.dumps(bodies[i]), digest_size=32).digest()
             assert tx.tx_hash == expected, f"Distributivity failed for tx {i}"

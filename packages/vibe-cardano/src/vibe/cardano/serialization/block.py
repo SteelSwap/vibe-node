@@ -20,7 +20,6 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Optional
 
 import cbor2pure as cbor2
 
@@ -47,10 +46,6 @@ _TWO_VRF_ERAS = frozenset({Era.SHELLEY, Era.ALLEGRA, Era.MARY, Era.ALONZO})
 
 # Eras that use the single vrf_result format (Babbage onward)
 _SINGLE_VRF_ERAS = frozenset({Era.BABBAGE, Era.CONWAY})
-
-
-
-
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +105,7 @@ class BlockHeader:
 
     slot: int
     block_number: int
-    prev_hash: Optional[bytes]
+    prev_hash: bytes | None
     issuer_vkey: bytes
     block_body_hash: bytes
     block_body_size: int
@@ -122,7 +117,7 @@ class BlockHeader:
     header_cbor: bytes
     # VRF output bytes from the header (nonce_vrf for Shelley-Alonzo,
     # vrf_result for Babbage+).  None for Byron or if not decoded.
-    vrf_output: Optional[bytes] = None
+    vrf_output: bytes | None = None
 
     @property
     def hash(self) -> bytes:
@@ -178,9 +173,7 @@ def block_hash(header_cbor: bytes) -> bytes:
     return hashlib.blake2b(header_cbor, digest_size=32).digest()
 
 
-def _decode_header_body_shelley(
-    items: list, era: Era, header_cbor: bytes
-) -> BlockHeader:
+def _decode_header_body_shelley(items: list, era: Era, header_cbor: bytes) -> BlockHeader:
     """Decode a Shelley-through-Alonzo header_body (two VRF certs).
 
     CDDL field order (shelley.cddl):
@@ -198,9 +191,7 @@ def _decode_header_body_shelley(
       [14] protocol_version minor
     """
     if len(items) < 15:
-        raise ValueError(
-            f"Shelley-era header_body expected >= 15 items, got {len(items)}"
-        )
+        raise ValueError(f"Shelley-era header_body expected >= 15 items, got {len(items)}")
 
     block_number = items[0]
     slot = items[1]
@@ -214,7 +205,7 @@ def _decode_header_body_shelley(
 
     # Extract VRF output from nonce_vrf cert for nonce evolution.
     # Shelley nonce_vrf is items[5] = [vrf_output_bytes, vrf_proof_bytes]
-    vrf_output: Optional[bytes] = None
+    vrf_output: bytes | None = None
     nonce_vrf = items[5]
     if isinstance(nonce_vrf, (list, tuple)) and len(nonce_vrf) >= 1:
         candidate = nonce_vrf[0]
@@ -245,9 +236,7 @@ def _decode_header_body_shelley(
     )
 
 
-def _decode_header_body_babbage(
-    items: list, era: Era, header_cbor: bytes
-) -> BlockHeader:
+def _decode_header_body_babbage(items: list, era: Era, header_cbor: bytes) -> BlockHeader:
     """Decode a Babbage/Conway header_body (single vrf_result).
 
     CDDL field order (babbage.cddl):
@@ -269,9 +258,7 @@ def _decode_header_body_babbage(
     #   [8] [kes_vk, n, c0, sig], [9] [major, minor]
     # Shelley-Mary uses 14 fields with opcert + protver inlined.
     if len(items) < 10:
-        raise ValueError(
-            f"header_body expected >= 10 items, got {len(items)}"
-        )
+        raise ValueError(f"header_body expected >= 10 items, got {len(items)}")
 
     block_number = items[0]
     slot = items[1]
@@ -284,7 +271,7 @@ def _decode_header_body_babbage(
 
     # Extract VRF output from vrf_result cert for nonce evolution.
     # Babbage vrf_result is items[5] = [vrf_output_bytes, vrf_proof_bytes]
-    vrf_output: Optional[bytes] = None
+    vrf_output: bytes | None = None
     vrf_result = items[5]
     if isinstance(vrf_result, (list, tuple)) and len(vrf_result) >= 1:
         candidate = vrf_result[0]
@@ -378,9 +365,7 @@ def decode_block_header(cbor_bytes: bytes) -> BlockHeader:
     era, block_array = _decode_tagged_block(cbor_bytes)
 
     if era in (Era.BYRON_MAIN, Era.BYRON_EBB):
-        raise NotImplementedError(
-            f"Byron block decoding not yet supported (era tag {era.value})"
-        )
+        raise NotImplementedError(f"Byron block decoding not yet supported (era tag {era.value})")
 
     if not isinstance(block_array, list) or len(block_array) < 4:
         raise ValueError(
@@ -407,9 +392,7 @@ def decode_block_header(cbor_bytes: bytes) -> BlockHeader:
     # header_array[1] = body_signature (KES signature, preserved in header_cbor)
 
     if not isinstance(header_body, list):
-        raise ValueError(
-            f"Expected header_body as CBOR array, got {type(header_body).__name__}"
-        )
+        raise ValueError(f"Expected header_body as CBOR array, got {type(header_body).__name__}")
 
     if era in _TWO_VRF_ERAS:
         return _decode_header_body_shelley(header_body, era, header_cbor)
@@ -437,9 +420,7 @@ def decode_block_header_raw(header_cbor: bytes, era: Era) -> BlockHeader:
         ValueError: For malformed CBOR or unexpected structure.
     """
     if era in (Era.BYRON_MAIN, Era.BYRON_EBB):
-        raise NotImplementedError(
-            f"Byron header decoding not yet supported (era tag {era.value})"
-        )
+        raise NotImplementedError(f"Byron header decoding not yet supported (era tag {era.value})")
 
     header_array = cbor2.loads(header_cbor)
 
@@ -452,9 +433,7 @@ def decode_block_header_raw(header_cbor: bytes, era: Era) -> BlockHeader:
     header_body = header_array[0]
 
     if not isinstance(header_body, list):
-        raise ValueError(
-            f"Expected header_body as CBOR array, got {type(header_body).__name__}"
-        )
+        raise ValueError(f"Expected header_body as CBOR array, got {type(header_body).__name__}")
 
     if era in _TWO_VRF_ERAS:
         return _decode_header_body_shelley(header_body, era, header_cbor)

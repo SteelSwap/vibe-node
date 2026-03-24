@@ -24,7 +24,6 @@ Haskell references:
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -33,7 +32,6 @@ import websockets
 
 from vibe.cardano.plutus.cost_model import (
     COST_MODEL_PARAM_COUNTS,
-    PLUTUS_VERSION_INTRODUCED_AT,
     CostModel,
     ExUnits,
     PlutusVersion,
@@ -50,11 +48,9 @@ if str(_THIS_DIR) not in sys.path:
 from helpers import (  # noqa: E402
     extract_block_metadata,
     fetch_blocks_from_origin,
-    fetch_blocks_from_point,
     load_fixture,
     ogmios_rpc,
 )
-
 
 # ===================================================================
 # TIER 1: Fixture-based / unit-level Plutus conformance tests
@@ -114,9 +110,9 @@ class TestCostModelParamNames:
         if len(names) == 0:
             pytest.skip("uplc cost model config files not available")
         on_chain_count = COST_MODEL_PARAM_COUNTS[version]
-        assert len(names) >= on_chain_count, (
-            f"{version.name} has {len(names)} param names, but on-chain count is {on_chain_count}"
-        )
+        assert (
+            len(names) >= on_chain_count
+        ), f"{version.name} has {len(names)} param names, but on-chain count is {on_chain_count}"
 
     @pytest.mark.parametrize("version", [PlutusVersion.V1, PlutusVersion.V2, PlutusVersion.V3])
     def test_param_names_are_unique(self, version: PlutusVersion) -> None:
@@ -165,9 +161,9 @@ class TestPlutusVersionAvailability:
         """No Plutus version should be available before Alonzo (PV < 5)."""
         for pv in range(0, 5):
             for version in PlutusVersion:
-                assert not is_plutus_version_available(version, pv), (
-                    f"{version.name} should not be available at PV {pv}"
-                )
+                assert not is_plutus_version_available(
+                    version, pv
+                ), f"{version.name} should not be available at PV {pv}"
 
 
 class TestBuiltinAvailability:
@@ -329,9 +325,9 @@ class TestFixturePlutusFields:
             for tx in block["transactions"]:
                 for redeemer in tx.get("redeemers", []):
                     purpose = redeemer["validator"]["purpose"]
-                    assert purpose in valid_purposes, (
-                        f"Invalid redeemer purpose '{purpose}' in {era}"
-                    )
+                    assert (
+                        purpose in valid_purposes
+                    ), f"Invalid redeemer purpose '{purpose}' in {era}"
 
 
 # ===================================================================
@@ -349,7 +345,8 @@ class TestLivePlutusScriptPresence:
     """
 
     async def test_metadata_extraction_on_early_blocks(
-        self, ogmios_client: websockets.ClientConnection,
+        self,
+        ogmios_client: websockets.ClientConnection,
     ) -> None:
         """Verify script metadata extraction logic works on real blocks.
 
@@ -366,7 +363,8 @@ class TestLivePlutusScriptPresence:
             assert meta["redeemer_count"] >= 0
 
     async def test_protocol_params_have_cost_models(
-        self, ogmios_url: str,
+        self,
+        ogmios_url: str,
     ) -> None:
         """Verify current protocol parameters include Plutus cost models.
 
@@ -374,12 +372,10 @@ class TestLivePlutusScriptPresence:
         for all active Plutus versions.
         """
         async with websockets.connect(ogmios_url) as ws:
-            params = await ogmios_rpc(
-                ws, "queryLedgerState/protocolParameters", rpc_id="params"
-            )
+            params = await ogmios_rpc(ws, "queryLedgerState/protocolParameters", rpc_id="params")
 
             # Protocol parameters should include cost model data
             # The exact key depends on Ogmios version, but it should exist
-            assert "plutusCostModels" in params or "costModels" in params, (
-                f"No cost model data in protocol parameters. Keys: {list(params.keys())}"
-            )
+            assert (
+                "plutusCostModels" in params or "costModels" in params
+            ), f"No cost model data in protocol parameters. Keys: {list(params.keys())}"

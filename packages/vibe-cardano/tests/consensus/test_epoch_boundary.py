@@ -19,7 +19,6 @@ from __future__ import annotations
 from fractions import Fraction
 from unittest.mock import MagicMock
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -37,7 +36,6 @@ from vibe.cardano.consensus.rewards import (
     pool_reward,
     total_reward_pot,
 )
-
 
 # ---------------------------------------------------------------------------
 # Mock PoolParams — lightweight stand-in for pycardano.PoolParams
@@ -447,9 +445,7 @@ class TestEpochBoundaryProperties:
         n_delegators=st.integers(min_value=1, max_value=10),
     )
     @settings(max_examples=30)
-    def test_relative_stakes_sum_to_one(
-        self, n_pools: int, n_delegators: int
-    ) -> None:
+    def test_relative_stakes_sum_to_one(self, n_pools: int, n_delegators: int) -> None:
         """Relative stakes of all pools should sum to 1 when all stake is delegated."""
         pool_ids = [bytes([i]) * 28 for i in range(1, n_pools + 1)]
         cred_ids = [bytes([i + 100]) * 28 for i in range(n_delegators)]
@@ -464,9 +460,7 @@ class TestEpochBoundaryProperties:
         snapshot = compute_stake_distribution(utxo_stakes, delegations, pool_regs)
 
         if snapshot.total_stake > 0:
-            total_relative = sum(
-                relative_stake(pid, snapshot) for pid in pool_ids
-            )
+            total_relative = sum(relative_stake(pid, snapshot) for pid in pool_ids)
             assert total_relative == Fraction(1)
 
     @given(
@@ -538,14 +532,17 @@ class TestRewardPerformanceFactor:
         rewards_pot = 30_000_000_000_000
 
         # Without performance factor (default)
-        base_reward = pool_reward(
-            pool, total_stake, rewards_pot, 500, Fraction(3, 10)
-        )
+        base_reward = pool_reward(pool, total_stake, rewards_pot, 500, Fraction(3, 10))
 
         # With 100% performance
         full_perf_reward = pool_reward(
-            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
-            blocks_made=100, expected_blocks=100,
+            pool,
+            total_stake,
+            rewards_pot,
+            500,
+            Fraction(3, 10),
+            blocks_made=100,
+            expected_blocks=100,
         )
 
         assert full_perf_reward == base_reward
@@ -557,13 +554,23 @@ class TestRewardPerformanceFactor:
         rewards_pot = 30_000_000_000_000
 
         full_reward = pool_reward(
-            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
-            blocks_made=100, expected_blocks=100,
+            pool,
+            total_stake,
+            rewards_pot,
+            500,
+            Fraction(3, 10),
+            blocks_made=100,
+            expected_blocks=100,
         )
 
         half_reward = pool_reward(
-            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
-            blocks_made=50, expected_blocks=100,
+            pool,
+            total_stake,
+            rewards_pot,
+            500,
+            Fraction(3, 10),
+            blocks_made=50,
+            expected_blocks=100,
         )
 
         # Half performance should give approximately half reward
@@ -577,8 +584,13 @@ class TestRewardPerformanceFactor:
         rewards_pot = 30_000_000_000_000
 
         zero_reward = pool_reward(
-            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
-            blocks_made=0, expected_blocks=100,
+            pool,
+            total_stake,
+            rewards_pot,
+            500,
+            Fraction(3, 10),
+            blocks_made=0,
+            expected_blocks=100,
         )
 
         assert zero_reward == 0
@@ -594,13 +606,23 @@ class TestRewardPerformanceFactor:
         rewards_pot = 30_000_000_000_000
 
         full_reward = pool_reward(
-            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
-            blocks_made=100, expected_blocks=100,
+            pool,
+            total_stake,
+            rewards_pot,
+            500,
+            Fraction(3, 10),
+            blocks_made=100,
+            expected_blocks=100,
         )
 
         over_reward = pool_reward(
-            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
-            blocks_made=200, expected_blocks=100,
+            pool,
+            total_stake,
+            rewards_pot,
+            500,
+            Fraction(3, 10),
+            blocks_made=200,
+            expected_blocks=100,
         )
 
         assert over_reward == full_reward
@@ -612,8 +634,13 @@ class TestRewardPerformanceFactor:
         rewards_pot = 30_000_000_000_000
 
         r = pool_reward(
-            pool, total_stake, rewards_pot, 500, Fraction(3, 10),
-            blocks_made=10, expected_blocks=0,
+            pool,
+            total_stake,
+            rewards_pot,
+            500,
+            Fraction(3, 10),
+            blocks_made=10,
+            expected_blocks=0,
         )
         assert r == 0
 

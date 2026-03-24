@@ -26,35 +26,33 @@ from __future__ import annotations
 import cbor2
 import pytest
 
-from vibe.cardano.network.chainsync import (
-    ORIGIN,
-    Origin,
-    Point,
-)
 from vibe.cardano.network.blockfetch import (
     BLOCK_FETCH_N2N_ID,
-    MSG_REQUEST_RANGE,
-    MSG_CLIENT_DONE,
-    MSG_START_BATCH,
-    MSG_NO_BLOCKS,
-    MSG_BLOCK,
     MSG_BATCH_DONE,
-    MsgRequestRange,
-    MsgClientDone,
-    MsgStartBatch,
-    MsgNoBlocks,
-    MsgBlock,
+    MSG_BLOCK,
+    MSG_CLIENT_DONE,
+    MSG_NO_BLOCKS,
+    MSG_REQUEST_RANGE,
+    MSG_START_BATCH,
     MsgBatchDone,
-    encode_request_range,
-    encode_client_done,
-    encode_start_batch,
-    encode_no_blocks,
-    encode_block,
-    encode_batch_done,
-    decode_server_message,
+    MsgBlock,
+    MsgClientDone,
+    MsgNoBlocks,
+    MsgRequestRange,
+    MsgStartBatch,
     decode_client_message,
+    decode_server_message,
+    encode_batch_done,
+    encode_block,
+    encode_client_done,
+    encode_no_blocks,
+    encode_request_range,
+    encode_start_batch,
 )
-
+from vibe.cardano.network.chainsync import (
+    ORIGIN,
+    Point,
+)
 
 # ---------------------------------------------------------------------------
 # Test fixtures

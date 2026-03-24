@@ -33,21 +33,18 @@ from enum import Enum, auto
 from typing import TYPE_CHECKING
 
 from pycardano import (
-    Asset,
     MultiAsset,
     TransactionBody,
     TransactionInput,
     TransactionOutput,
     Value,
 )
-from pycardano.hash import ScriptHash
 
 from vibe.cardano.ledger.shelley import (
     ShelleyProtocolParams,
     ShelleyUTxO,
     _output_lovelace,
     shelley_min_fee,
-    validate_shelley_witnesses,
 )
 
 if TYPE_CHECKING:
@@ -113,10 +110,7 @@ def validate_validity_interval(
 
     # Upper bound: tx invalid at or after this slot
     # Spec: current_slot < invalid_hereafter
-    if (
-        interval.invalid_hereafter is not None
-        and current_slot >= interval.invalid_hereafter
-    ):
+    if interval.invalid_hereafter is not None and current_slot >= interval.invalid_hereafter:
         errors.append(
             f"OutsideValidityIntervalUTxO: current_slot={current_slot} "
             f">= invalid_hereafter={interval.invalid_hereafter}"
@@ -193,22 +187,14 @@ def evaluate_timelock(
             return script.key_hash is not None and script.key_hash in signers
 
         case TimelockType.REQUIRE_ALL_OF:
-            return all(
-                evaluate_timelock(sub, signers, current_slot)
-                for sub in script.scripts
-            )
+            return all(evaluate_timelock(sub, signers, current_slot) for sub in script.scripts)
 
         case TimelockType.REQUIRE_ANY_OF:
-            return any(
-                evaluate_timelock(sub, signers, current_slot)
-                for sub in script.scripts
-            )
+            return any(evaluate_timelock(sub, signers, current_slot) for sub in script.scripts)
 
         case TimelockType.REQUIRE_M_OF_N:
             satisfied = sum(
-                1
-                for sub in script.scripts
-                if evaluate_timelock(sub, signers, current_slot)
+                1 for sub in script.scripts if evaluate_timelock(sub, signers, current_slot)
             )
             return satisfied >= script.required
 
@@ -478,9 +464,7 @@ def validate_mary_value_preservation(
     produced = produced + Value(coin=fee)
 
     if not _value_eq(consumed, produced):
-        errors.append(
-            f"ValueNotConservedUTxO: consumed={consumed}, produced={produced}"
-        )
+        errors.append(f"ValueNotConservedUTxO: consumed={consumed}, produced={produced}")
 
     return errors
 
@@ -525,9 +509,7 @@ def validate_allegra_utxo(
         errors.extend(validate_validity_interval(validity_interval, current_slot))
     elif tx_body.ttl is not None and current_slot >= tx_body.ttl:
         # Shelley-style TTL fallback
-        errors.append(
-            f"ExpiredUTxO: current_slot={current_slot}, ttl={tx_body.ttl}"
-        )
+        errors.append(f"ExpiredUTxO: current_slot={current_slot}, ttl={tx_body.ttl}")
 
     # --- All inputs must exist ---
     missing_inputs: list[TransactionInput] = []
@@ -547,25 +529,19 @@ def validate_allegra_utxo(
 
     # --- Tx size within limits ---
     if tx_size > params.max_tx_size:
-        errors.append(
-            f"MaxTxSizeUTxO: tx_size={tx_size}, max={params.max_tx_size}"
-        )
+        errors.append(f"MaxTxSizeUTxO: tx_size={tx_size}, max={params.max_tx_size}")
 
     # --- Fee >= minimum fee ---
     min_fee = shelley_min_fee(tx_size, params)
     if tx_body.fee < min_fee:
-        errors.append(
-            f"FeeTooSmallUTxO: fee={tx_body.fee}, min_fee={min_fee} "
-            f"(tx_size={tx_size})"
-        )
+        errors.append(f"FeeTooSmallUTxO: fee={tx_body.fee}, min_fee={min_fee} (tx_size={tx_size})")
 
     # --- All output values >= min_utxo_value ---
     for i, txout in enumerate(tx_body.outputs):
         out_value = _output_lovelace(txout)
         if out_value < params.min_utxo_value:
             errors.append(
-                f"OutputTooSmallUTxO: output[{i}] value={out_value}, "
-                f"min={params.min_utxo_value}"
+                f"OutputTooSmallUTxO: output[{i}] value={out_value}, min={params.min_utxo_value}"
             )
 
     # --- Value preservation (lovelace only for Allegra) ---
@@ -578,9 +554,7 @@ def validate_allegra_utxo(
         output_sum = sum(_output_lovelace(out) for out in tx_body.outputs)
         produced = output_sum + tx_body.fee
         if consumed != produced:
-            errors.append(
-                f"ValueNotConservedUTxO: consumed={consumed}, produced={produced}"
-            )
+            errors.append(f"ValueNotConservedUTxO: consumed={consumed}, produced={produced}")
 
     return errors
 
@@ -633,9 +607,7 @@ def validate_mary_tx(
     if validity_interval is not None:
         errors.extend(validate_validity_interval(validity_interval, current_slot))
     elif tx_body.ttl is not None and current_slot >= tx_body.ttl:
-        errors.append(
-            f"ExpiredUTxO: current_slot={current_slot}, ttl={tx_body.ttl}"
-        )
+        errors.append(f"ExpiredUTxO: current_slot={current_slot}, ttl={tx_body.ttl}")
 
     # --- All inputs must exist ---
     missing_inputs: list[TransactionInput] = []
@@ -655,27 +627,19 @@ def validate_mary_tx(
 
     # --- Tx size within limits ---
     if tx_size > params.max_tx_size:
-        errors.append(
-            f"MaxTxSizeUTxO: tx_size={tx_size}, max={params.max_tx_size}"
-        )
+        errors.append(f"MaxTxSizeUTxO: tx_size={tx_size}, max={params.max_tx_size}")
 
     # --- Fee >= minimum fee ---
     min_fee = shelley_min_fee(tx_size, params)
     if tx_body.fee < min_fee:
-        errors.append(
-            f"FeeTooSmallUTxO: fee={tx_body.fee}, min_fee={min_fee} "
-            f"(tx_size={tx_size})"
-        )
+        errors.append(f"FeeTooSmallUTxO: fee={tx_body.fee}, min_fee={min_fee} (tx_size={tx_size})")
 
     # --- Min UTxO value (Mary: size-based for multi-asset) ---
     for i, txout in enumerate(tx_body.outputs):
         min_value = mary_min_utxo_value(txout, params)
         out_lovelace = _output_lovelace(txout)
         if out_lovelace < min_value:
-            errors.append(
-                f"OutputTooSmallUTxO: output[{i}] value={out_lovelace}, "
-                f"min={min_value}"
-            )
+            errors.append(f"OutputTooSmallUTxO: output[{i}] value={out_lovelace}, min={min_value}")
 
     # --- Multi-asset value preservation ---
     if not missing_inputs:

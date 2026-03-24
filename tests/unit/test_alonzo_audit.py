@@ -63,7 +63,6 @@ from vibe.cardano.ledger.alonzo_types import (
 )
 from vibe.cardano.ledger.shelley import ShelleyUTxO
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers (reused from test_alonzo.py patterns)
 # ---------------------------------------------------------------------------
@@ -96,9 +95,7 @@ def _make_policy_id(seed: int = 0) -> ScriptHash:
     return ScriptHash(digest)
 
 
-def _sign_tx_body(
-    tx_body: TransactionBody, sk: PaymentSigningKey
-) -> VerificationKeyWitness:
+def _sign_tx_body(tx_body: TransactionBody, sk: PaymentSigningKey) -> VerificationKeyWitness:
     """Sign a transaction body and return a VKey witness."""
     tx_body_hash = tx_body.hash()
     signature = sk.sign(tx_body_hash)
@@ -591,12 +588,16 @@ class TestOutputTooSmallMinUTxO:
         ada_min = alonzo_min_utxo_value(ada_only_out, TEST_PARAMS.coins_per_utxo_word)
 
         policy_id = _make_policy_id(1)
-        ma = MultiAsset({
-            policy_id: Asset({
-                AssetName(b"token_a"): 100,
-                AssetName(b"token_b"): 200,
-            })
-        })
+        ma = MultiAsset(
+            {
+                policy_id: Asset(
+                    {
+                        AssetName(b"token_a"): 100,
+                        AssetName(b"token_b"): 200,
+                    }
+                )
+            }
+        )
         multi_out = TransactionOutput(addr, Value(coin=2_000_000, multi_asset=ma))
         multi_min = alonzo_min_utxo_value(multi_out, TEST_PARAMS.coins_per_utxo_word)
 
@@ -611,7 +612,7 @@ class TestOutputTooSmallMinUTxO:
             inputs=[txin],
             outputs=[
                 TransactionOutput(addr, 5_000_000),  # OK
-                TransactionOutput(addr, 1),           # Too small
+                TransactionOutput(addr, 1),  # Too small
             ],
             fee=10_000_000 - 5_000_001,
         )
@@ -753,9 +754,7 @@ class TestMultipleScriptLanguages:
             )
         ]
         datums = [cbor2.dumps(99)]
-        cost_models: dict[Language, dict[str, int]] = {
-            Language.PLUTUS_V1: {"addInteger-cpu": 100}
-        }
+        cost_models: dict[Language, dict[str, int]] = {Language.PLUTUS_V1: {"addInteger-cpu": 100}}
         languages = {Language.PLUTUS_V1}
 
         # Compute hash with Plutus only (native scripts excluded)
@@ -826,22 +825,21 @@ class TestMultipleScriptLanguages:
         ]
         datums = [cbor2.dumps(99)]
         datum_hash = hashlib.blake2b(datums[0], digest_size=32).digest()
-        cost_models: dict[Language, dict[str, int]] = {
-            Language.PLUTUS_V1: {"a": 1}
-        }
+        cost_models: dict[Language, dict[str, int]] = {Language.PLUTUS_V1: {"a": 1}}
         languages = {Language.PLUTUS_V1}
 
         # Compute correct script integrity hash
-        integrity_hash = compute_script_integrity_hash(
-            redeemers, datums, cost_models, languages
-        )
+        integrity_hash = compute_script_integrity_hash(redeemers, datums, cost_models, languages)
 
         tx_body = TransactionBody(
             inputs=[txin],
-            outputs=[TransactionOutput(
-                addr, 8_000_000,
-                datum_hash=DatumHash(datum_hash),
-            )],
+            outputs=[
+                TransactionOutput(
+                    addr,
+                    8_000_000,
+                    datum_hash=DatumHash(datum_hash),
+                )
+            ],
             fee=2_000_000,
             collateral=[coll_txin],
             validity_start=10,

@@ -11,23 +11,16 @@ they run reliably in CI regardless of actual memory/FD state.
 
 from __future__ import annotations
 
-import gc
-import os
-import resource
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from vibe.cardano.node.resource_limits import (
-    DEFAULT_FD_WARN_THRESHOLD,
-    DEFAULT_GC_THRESHOLD,
-    DEFAULT_MEMORY_SOFT_LIMIT,
     FDTracker,
     MemoryMonitor,
     VolatilePruner,
 )
 from vibe.cardano.storage.volatile import VolatileDB
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -89,9 +82,7 @@ class TestMemoryMonitor:
         assert rss == 700
         mock_gc.assert_not_called()
 
-    def test_memory_monitor_no_warning_below_limit(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_memory_monitor_no_warning_below_limit(self, caplog: pytest.LogCaptureFixture) -> None:
         """No warning logged when RSS < soft_limit."""
         monitor = MemoryMonitor(soft_limit=1000, gc_threshold=0.80)
         with patch.object(MemoryMonitor, "_get_rss_bytes", return_value=500):
@@ -132,9 +123,7 @@ class TestFDTracker:
         assert count == 90
         assert any("open FDs >= warning threshold" in r.message for r in caplog.records)
 
-    def test_fd_tracker_no_warning_below_threshold(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_fd_tracker_no_warning_below_threshold(self, caplog: pytest.LogCaptureFixture) -> None:
         """No warning when FD usage is below the threshold."""
         tracker = FDTracker(warn_threshold=0.80)
 

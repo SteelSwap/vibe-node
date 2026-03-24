@@ -77,18 +77,12 @@ def encode_segment(segment: MuxSegment) -> bytes:
         ValueError: If protocol_id, timestamp, or payload length is out of range.
     """
     if not (0 <= segment.protocol_id <= _PROTOCOL_MASK):
-        raise ValueError(
-            f"protocol_id must be 0..{_PROTOCOL_MASK}, got {segment.protocol_id}"
-        )
+        raise ValueError(f"protocol_id must be 0..{_PROTOCOL_MASK}, got {segment.protocol_id}")
     if not (0 <= segment.timestamp <= 0xFFFFFFFF):
-        raise ValueError(
-            f"timestamp must be 0..{0xFFFFFFFF}, got {segment.timestamp}"
-        )
+        raise ValueError(f"timestamp must be 0..{0xFFFFFFFF}, got {segment.timestamp}")
     payload_len = len(segment.payload)
     if payload_len > MAX_PAYLOAD_SIZE:
-        raise ValueError(
-            f"payload length must be 0..{MAX_PAYLOAD_SIZE}, got {payload_len}"
-        )
+        raise ValueError(f"payload length must be 0..{MAX_PAYLOAD_SIZE}, got {payload_len}")
 
     # Spec: M=0 for initiator, M=1 (0x8000) for responder.
     # Haskell: InitiatorDir → n, ResponderDir → n .|. 0x8000
@@ -114,18 +108,13 @@ def decode_segment(data: bytes) -> tuple[MuxSegment, int]:
         ValueError: If the buffer is too short for the header or payload.
     """
     if len(data) < SEGMENT_HEADER_SIZE:
-        raise ValueError(
-            f"need at least {SEGMENT_HEADER_SIZE} bytes for header, "
-            f"got {len(data)}"
-        )
+        raise ValueError(f"need at least {SEGMENT_HEADER_SIZE} bytes for header, got {len(data)}")
 
     timestamp, proto_word, payload_len = _HEADER_STRUCT.unpack_from(data)
 
     total = SEGMENT_HEADER_SIZE + payload_len
     if len(data) < total:
-        raise ValueError(
-            f"need {total} bytes (header + payload), got {len(data)}"
-        )
+        raise ValueError(f"need {total} bytes (header + payload), got {len(data)}")
 
     is_initiator = (proto_word & _MODE_BIT) == 0
     protocol_id = proto_word & _PROTOCOL_MASK

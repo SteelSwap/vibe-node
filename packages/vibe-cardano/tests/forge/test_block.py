@@ -18,10 +18,8 @@ from __future__ import annotations
 import hashlib
 
 import cbor2
-import pytest
 
 from vibe.cardano.crypto.kes import (
-    CARDANO_KES_DEPTH,
     kes_derive_vk,
     kes_keygen,
     kes_verify,
@@ -29,8 +27,6 @@ from vibe.cardano.crypto.kes import (
 from vibe.cardano.crypto.ocert import OperationalCert
 from vibe.cardano.crypto.vrf import VRF_OUTPUT_SIZE, VRF_PROOF_SIZE
 from vibe.cardano.forge.block import (
-    DEFAULT_MAX_BLOCK_BODY_SIZE,
-    DEFAULT_PROTOCOL_VERSION,
     Block,
     ForgedBlock,
     _build_block_body,
@@ -38,7 +34,6 @@ from vibe.cardano.forge.block import (
     forge_block,
 )
 from vibe.cardano.forge.leader import LeaderProof
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -398,9 +393,7 @@ class TestForgeBlock:
             kes_depth=2,
         )
 
-        expected_hash = hashlib.blake2b(
-            result.block.header_cbor, digest_size=32
-        ).digest()
+        expected_hash = hashlib.blake2b(result.block.header_cbor, digest_size=32).digest()
         assert result.block.block_hash == expected_hash
 
     def test_body_hash_in_header(self) -> None:
@@ -433,9 +426,7 @@ class TestForgeBlock:
         body_hash_in_header = header_body[7]  # index 7 = block_body_hash
 
         # Compute actual body hash
-        actual_body_hash = hashlib.blake2b(
-            result.block.body_cbor, digest_size=32
-        ).digest()
+        actual_body_hash = hashlib.blake2b(result.block.body_cbor, digest_size=32).digest()
 
         assert body_hash_in_header == actual_body_hash
 

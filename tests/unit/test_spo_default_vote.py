@@ -13,8 +13,6 @@ Haskell ref: ``spoAcceptedRatio`` in ``Cardano.Ledger.Conway.Rules.Ratify``
 
 from __future__ import annotations
 
-import pytest
-
 from vibe.cardano.ledger.conway import (
     DefaultVote,
     check_ratification,
@@ -36,7 +34,6 @@ from vibe.cardano.ledger.conway_types import (
     VoterRole,
     VotingProcedure,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -131,18 +128,16 @@ def test_pv9_single_yes_vote_100_percent() -> None:
             }
         },
         pool_stake={
-            _pool_id(1): 100,    # 1% stake, votes Yes
-            _pool_id(2): 4950,   # 49.5% stake, doesn't vote
-            _pool_id(3): 4950,   # 49.5% stake, doesn't vote
+            _pool_id(1): 100,  # 1% stake, votes Yes
+            _pool_id(2): 4950,  # 49.5% stake, doesn't vote
+            _pool_id(3): 4950,  # 49.5% stake, doesn't vote
         },
         current_protocol_version=(9, 0),  # Bootstrap phase
     )
 
     # With PV9, non-voters abstain -> denominator is just the 100 stake
     # ratio = 100 / 100 = 100% -> passes 51% threshold
-    assert check_ratification(
-        action_id, gov_state, ConwayProtocolParams(), _spo_threshold()
-    )
+    assert check_ratification(action_id, gov_state, ConwayProtocolParams(), _spo_threshold())
 
 
 # ---------------------------------------------------------------------------
@@ -167,18 +162,16 @@ def test_pv10_single_yes_vote_low_ratio() -> None:
             }
         },
         pool_stake={
-            _pool_id(1): 100,    # 1% stake, votes Yes
-            _pool_id(2): 4950,   # 49.5% stake, doesn't vote -> No
-            _pool_id(3): 4950,   # 49.5% stake, doesn't vote -> No
+            _pool_id(1): 100,  # 1% stake, votes Yes
+            _pool_id(2): 4950,  # 49.5% stake, doesn't vote -> No
+            _pool_id(3): 4950,  # 49.5% stake, doesn't vote -> No
         },
         current_protocol_version=(10, 0),  # Post-bootstrap
     )
 
     # With PV10, non-voters default to No -> denominator is 10000
     # ratio = 100 / 10000 = 1% -> fails 51% threshold
-    assert not check_ratification(
-        action_id, gov_state, ConwayProtocolParams(), _spo_threshold()
-    )
+    assert not check_ratification(action_id, gov_state, ConwayProtocolParams(), _spo_threshold())
 
 
 # ---------------------------------------------------------------------------
@@ -236,9 +229,7 @@ def test_hardfork_single_yes_passes_at_pv10() -> None:
 
     # HardFork: non-voters abstain even at PV10
     # denominator = 100 (only the voter), yes = 100 -> 100%
-    assert check_ratification(
-        action_id, gov_state, ConwayProtocolParams(), _spo_threshold()
-    )
+    assert check_ratification(action_id, gov_state, ConwayProtocolParams(), _spo_threshold())
 
 
 # ---------------------------------------------------------------------------
@@ -272,8 +263,8 @@ def test_always_abstain_delegation_ratification() -> None:
             }
         },
         pool_stake={
-            _pool_id(1): 600,   # Votes Yes
-            _pool_id(2): 400,   # Doesn't vote, AlwaysAbstain -> excluded
+            _pool_id(1): 600,  # Votes Yes
+            _pool_id(2): 400,  # Doesn't vote, AlwaysAbstain -> excluded
         },
         current_protocol_version=(10, 0),
         reward_account_delegations={
@@ -282,9 +273,7 @@ def test_always_abstain_delegation_ratification() -> None:
     )
 
     # denominator = 1000 - 400 (abstain) = 600, yes = 600 -> 100% -> passes
-    assert check_ratification(
-        action_id, gov_state, ConwayProtocolParams(), _spo_threshold()
-    )
+    assert check_ratification(action_id, gov_state, ConwayProtocolParams(), _spo_threshold())
 
 
 # ---------------------------------------------------------------------------
@@ -313,8 +302,8 @@ def test_always_no_confidence_ratification_no_confidence_action() -> None:
         proposals={action_id: _make_proposal(GovActionType.NO_CONFIDENCE)},
         votes={action_id: {}},  # No explicit votes
         pool_stake={
-            _pool_id(1): 600,   # AlwaysNoConfidence -> Yes for NoConfidence
-            _pool_id(2): 400,   # No delegation -> No
+            _pool_id(1): 600,  # AlwaysNoConfidence -> Yes for NoConfidence
+            _pool_id(2): 400,  # No delegation -> No
         },
         current_protocol_version=(10, 0),
         reward_account_delegations={
@@ -323,9 +312,7 @@ def test_always_no_confidence_ratification_no_confidence_action() -> None:
     )
 
     # denominator = 1000, yes = 600 -> 60% -> passes 51%
-    assert check_ratification(
-        action_id, gov_state, ConwayProtocolParams(), _spo_threshold()
-    )
+    assert check_ratification(action_id, gov_state, ConwayProtocolParams(), _spo_threshold())
 
 
 # ---------------------------------------------------------------------------
@@ -410,9 +397,7 @@ def test_mixed_explicit_and_default_votes() -> None:
         },
     )
 
-    assert check_ratification(
-        action_id, gov_state, ConwayProtocolParams(), _spo_threshold()
-    )
+    assert check_ratification(action_id, gov_state, ConwayProtocolParams(), _spo_threshold())
 
 
 def test_mixed_votes_fails_threshold() -> None:
@@ -451,9 +436,7 @@ def test_mixed_votes_fails_threshold() -> None:
         },
     )
 
-    assert not check_ratification(
-        action_id, gov_state, ConwayProtocolParams(), _spo_threshold()
-    )
+    assert not check_ratification(action_id, gov_state, ConwayProtocolParams(), _spo_threshold())
 
 
 # ---------------------------------------------------------------------------
@@ -484,9 +467,7 @@ def test_all_pools_abstain_safe_division() -> None:
 
     # denominator = 10000 - 10000 = 0 -> ratification should NOT crash
     # With denominator 0, threshold check returns False -> action not ratified
-    assert not check_ratification(
-        action_id, gov_state, ConwayProtocolParams(), _spo_threshold()
-    )
+    assert not check_ratification(action_id, gov_state, ConwayProtocolParams(), _spo_threshold())
 
 
 def test_all_pools_abstain_pv9() -> None:
@@ -504,6 +485,4 @@ def test_all_pools_abstain_pv9() -> None:
     )
 
     # PV9: all non-voters abstain -> denominator = 0 -> fails safely
-    assert not check_ratification(
-        action_id, gov_state, ConwayProtocolParams(), _spo_threshold()
-    )
+    assert not check_ratification(action_id, gov_state, ConwayProtocolParams(), _spo_threshold())

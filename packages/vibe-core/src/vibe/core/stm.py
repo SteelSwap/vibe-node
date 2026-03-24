@@ -35,7 +35,8 @@ Usage:
 from __future__ import annotations
 
 import threading
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 __all__ = ["TVar", "Transaction", "atomically", "RetryTransaction"]
 
@@ -213,6 +214,4 @@ def atomically(fn: Callable[[Transaction], T], max_retries: int = 1000) -> T:
             # Validation failed — retry
             continue
 
-    raise RuntimeError(
-        f"STM transaction failed after {max_retries} retries"
-    )
+    raise RuntimeError(f"STM transaction failed after {max_retries} retries")

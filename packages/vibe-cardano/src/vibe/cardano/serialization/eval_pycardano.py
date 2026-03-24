@@ -36,11 +36,10 @@ from typing import Any
 
 import cbor2pure as cbor2
 import websockets
-from rich.console import Console
-from rich.table import Table
-
 from pycardano import Transaction, TransactionBody, TransactionWitnessSet
 from pycardano.metadata import AuxiliaryData
+from rich.console import Console
+from rich.table import Table
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -131,7 +130,9 @@ def _make_jsonrpc(method: str, params: dict | None = None, req_id: str | None = 
     return json.dumps(msg)
 
 
-async def _send_recv(ws: websockets.WebSocketClientProtocol, method: str, params: dict | None = None) -> dict:
+async def _send_recv(
+    ws: websockets.WebSocketClientProtocol, method: str, params: dict | None = None
+) -> dict:
     """Send a JSON-RPC request and return the parsed response."""
     await ws.send(_make_jsonrpc(method, params))
     raw = await asyncio.wait_for(ws.recv(), timeout=30)
@@ -207,7 +208,7 @@ async def fetch_block_for_era(
             await ws.send(_make_jsonrpc("nextBlock"))
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=recv_timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if is_tip:
                     # At tip, nextBlock blocks until a new block arrives.
                     # Return whatever we have (or a synthetic result).
@@ -289,36 +290,46 @@ def _probe_block_header_cbor(raw_block: Any, era: str) -> list[FieldResult]:
                 block_data = raw_block[1]
                 if isinstance(block_data, list) and len(block_data) >= 1:
                     header = block_data[0]
-                    results.append(FieldResult(
-                        era=era,
-                        component="block_header",
-                        field_name="byron_header",
-                        handled=True,
-                        notes=f"Raw CBOR decode OK. Era tag={era_tag}, header is {type(header).__name__} with {len(header) if isinstance(header, (list, dict)) else '?'} elements",
-                    ))
+                    results.append(
+                        FieldResult(
+                            era=era,
+                            component="block_header",
+                            field_name="byron_header",
+                            handled=True,
+                            notes=f"Raw CBOR decode OK. Era tag={era_tag}, header is {type(header).__name__} with {len(header) if isinstance(header, (list, dict)) else '?'} elements",
+                        )
+                    )
                 else:
-                    results.append(FieldResult(
+                    results.append(
+                        FieldResult(
+                            era=era,
+                            component="block_header",
+                            field_name="byron_header",
+                            handled=False,
+                            error="Block data is not a list or too short",
+                        )
+                    )
+            else:
+                results.append(
+                    FieldResult(
                         era=era,
                         component="block_header",
                         field_name="byron_header",
                         handled=False,
-                        error="Block data is not a list or too short",
-                    ))
-            else:
-                results.append(FieldResult(
-                    era=era,
-                    component="block_header",
-                    field_name="byron_header",
-                    handled=False,
-                    error=f"Unexpected Byron block structure: {type(raw_block).__name__}",
-                ))
+                        error=f"Unexpected Byron block structure: {type(raw_block).__name__}",
+                    )
+                )
         else:
             # Post-Byron: the block CBOR is typically [header_cbor, tx_bodies, tx_witnesses, aux_data_map, invalid_txs]
             # But the outer wrapping varies. Shelley-onwards blocks from Ogmios may be
             # the era-tagged block: [era_int, [header, txbodies, witnesses, metadata, invalid]]
             if isinstance(raw_block, list):
                 # Could be [era_tag, block_array] or directly the block array
-                if len(raw_block) == 2 and isinstance(raw_block[0], int) and isinstance(raw_block[1], list):
+                if (
+                    len(raw_block) == 2
+                    and isinstance(raw_block[0], int)
+                    and isinstance(raw_block[1], list)
+                ):
                     block_array = raw_block[1]
                 elif len(raw_block) >= 3:
                     block_array = raw_block
@@ -331,63 +342,77 @@ def _probe_block_header_cbor(raw_block: Any, era: str) -> list[FieldResult]:
                     if isinstance(header, list) and len(header) >= 2:
                         header_body = header[0]
                         header_sig = header[1]
-                        results.append(FieldResult(
-                            era=era,
-                            component="block_header",
-                            field_name="header_body",
-                            handled=True,
-                            notes=f"Raw CBOR decode OK. {type(header_body).__name__} with {len(header_body) if isinstance(header_body, (list, dict)) else '?'} fields",
-                        ))
-                        results.append(FieldResult(
-                            era=era,
-                            component="block_header",
-                            field_name="header_signature",
-                            handled=True,
-                            notes=f"Raw CBOR: {type(header_sig).__name__}, {len(header_sig) if isinstance(header_sig, bytes) else '?'} bytes",
-                        ))
+                        results.append(
+                            FieldResult(
+                                era=era,
+                                component="block_header",
+                                field_name="header_body",
+                                handled=True,
+                                notes=f"Raw CBOR decode OK. {type(header_body).__name__} with {len(header_body) if isinstance(header_body, (list, dict)) else '?'} fields",
+                            )
+                        )
+                        results.append(
+                            FieldResult(
+                                era=era,
+                                component="block_header",
+                                field_name="header_signature",
+                                handled=True,
+                                notes=f"Raw CBOR: {type(header_sig).__name__}, {len(header_sig) if isinstance(header_sig, bytes) else '?'} bytes",
+                            )
+                        )
                     else:
-                        results.append(FieldResult(
+                        results.append(
+                            FieldResult(
+                                era=era,
+                                component="block_header",
+                                field_name="header",
+                                handled=True,
+                                notes=f"Raw CBOR decode OK but unexpected structure: {type(header).__name__}",
+                            )
+                        )
+                else:
+                    results.append(
+                        FieldResult(
                             era=era,
                             component="block_header",
                             field_name="header",
-                            handled=True,
-                            notes=f"Raw CBOR decode OK but unexpected structure: {type(header).__name__}",
-                        ))
-                else:
-                    results.append(FieldResult(
+                            handled=False,
+                            error="Block array too short or wrong type",
+                        )
+                    )
+            else:
+                results.append(
+                    FieldResult(
                         era=era,
                         component="block_header",
                         field_name="header",
                         handled=False,
-                        error="Block array too short or wrong type",
-                    ))
-            else:
-                results.append(FieldResult(
-                    era=era,
-                    component="block_header",
-                    field_name="header",
-                    handled=False,
-                    error=f"Block is not a list: {type(raw_block).__name__}",
-                ))
+                        error=f"Block is not a list: {type(raw_block).__name__}",
+                    )
+                )
 
     except Exception as e:
-        results.append(FieldResult(
-            era=era,
-            component="block_header",
-            field_name="header",
-            handled=False,
-            error=f"Exception: {e}",
-        ))
+        results.append(
+            FieldResult(
+                era=era,
+                component="block_header",
+                field_name="header",
+                handled=False,
+                error=f"Exception: {e}",
+            )
+        )
 
     # pycardano does NOT have block header types
-    results.append(FieldResult(
-        era=era,
-        component="block_header",
-        field_name="pycardano_block_header_type",
-        handled=False,
-        error="pycardano has no Block or BlockHeader class",
-        notes="Must implement custom block header deserialization",
-    ))
+    results.append(
+        FieldResult(
+            era=era,
+            component="block_header",
+            field_name="pycardano_block_header_type",
+            handled=False,
+            error="pycardano has no Block or BlockHeader class",
+            notes="Must implement custom block header deserialization",
+        )
+    )
 
     return results
 
@@ -400,13 +425,15 @@ def _probe_transaction_body(tx_cbor_bytes: bytes, era: str, tx_idx: int) -> list
     # Try full Transaction deserialization
     try:
         tx = Transaction.from_cbor(tx_cbor_bytes)
-        results.append(FieldResult(
-            era=era,
-            component="transaction",
-            field_name=f"{prefix}.full_transaction",
-            handled=True,
-            notes="Transaction.from_cbor() succeeded",
-        ))
+        results.append(
+            FieldResult(
+                era=era,
+                component="transaction",
+                field_name=f"{prefix}.full_transaction",
+                handled=True,
+                notes="Transaction.from_cbor() succeeded",
+            )
+        )
 
         # Probe individual TransactionBody fields
         body = tx.transaction_body
@@ -431,13 +458,15 @@ def _probe_transaction_body(tx_cbor_bytes: bytes, era: str, tx_idx: int) -> list
         }
 
         for field_name, value in body_fields.items():
-            results.append(FieldResult(
-                era=era,
-                component="transaction_body",
-                field_name=f"{prefix}.body.{field_name}",
-                handled=True,
-                notes=f"{'present' if value is not None else 'absent (None)'}: {_summarize(value)}",
-            ))
+            results.append(
+                FieldResult(
+                    era=era,
+                    component="transaction_body",
+                    field_name=f"{prefix}.body.{field_name}",
+                    handled=True,
+                    notes=f"{'present' if value is not None else 'absent (None)'}: {_summarize(value)}",
+                )
+            )
 
         # Probe witnesses
         wit = tx.transaction_witness_set
@@ -453,50 +482,60 @@ def _probe_transaction_body(tx_cbor_bytes: bytes, era: str, tx_idx: int) -> list
                 "plutus_v3_script": getattr(wit, "plutus_v3_script", None),
             }
             for field_name, value in wit_fields.items():
-                results.append(FieldResult(
+                results.append(
+                    FieldResult(
+                        era=era,
+                        component="witnesses",
+                        field_name=f"{prefix}.witnesses.{field_name}",
+                        handled=True,
+                        notes=f"{'present' if value is not None else 'absent (None)'}: {_summarize(value)}",
+                    )
+                )
+        else:
+            results.append(
+                FieldResult(
                     era=era,
                     component="witnesses",
-                    field_name=f"{prefix}.witnesses.{field_name}",
+                    field_name=f"{prefix}.witnesses",
                     handled=True,
-                    notes=f"{'present' if value is not None else 'absent (None)'}: {_summarize(value)}",
-                ))
-        else:
-            results.append(FieldResult(
-                era=era,
-                component="witnesses",
-                field_name=f"{prefix}.witnesses",
-                handled=True,
-                notes="WitnessSet is None (no witnesses)",
-            ))
+                    notes="WitnessSet is None (no witnesses)",
+                )
+            )
 
         # Probe auxiliary data
         aux = tx.auxiliary_data
         if aux is not None:
-            results.append(FieldResult(
-                era=era,
-                component="auxiliary_data",
-                field_name=f"{prefix}.auxiliary_data",
-                handled=True,
-                notes=f"AuxiliaryData present: {_summarize(aux)}",
-            ))
+            results.append(
+                FieldResult(
+                    era=era,
+                    component="auxiliary_data",
+                    field_name=f"{prefix}.auxiliary_data",
+                    handled=True,
+                    notes=f"AuxiliaryData present: {_summarize(aux)}",
+                )
+            )
         else:
-            results.append(FieldResult(
-                era=era,
-                component="auxiliary_data",
-                field_name=f"{prefix}.auxiliary_data",
-                handled=True,
-                notes="No auxiliary data in this transaction",
-            ))
+            results.append(
+                FieldResult(
+                    era=era,
+                    component="auxiliary_data",
+                    field_name=f"{prefix}.auxiliary_data",
+                    handled=True,
+                    notes="No auxiliary data in this transaction",
+                )
+            )
 
     except Exception as e:
         error_msg = f"{type(e).__name__}: {e}"
-        results.append(FieldResult(
-            era=era,
-            component="transaction",
-            field_name=f"{prefix}.full_transaction",
-            handled=False,
-            error=error_msg,
-        ))
+        results.append(
+            FieldResult(
+                era=era,
+                component="transaction",
+                field_name=f"{prefix}.full_transaction",
+                handled=False,
+                error=error_msg,
+            )
+        )
 
         # Try individual components even if full Transaction fails
         try:
@@ -506,70 +545,84 @@ def _probe_transaction_body(tx_cbor_bytes: bytes, era: str, tx_idx: int) -> list
                 body_bytes = cbor2.dumps(decoded[0])
                 try:
                     body = TransactionBody.from_cbor(body_bytes)
-                    results.append(FieldResult(
-                        era=era,
-                        component="transaction_body",
-                        field_name=f"{prefix}.body_standalone",
-                        handled=True,
-                        notes="TransactionBody.from_cbor() succeeded individually",
-                    ))
+                    results.append(
+                        FieldResult(
+                            era=era,
+                            component="transaction_body",
+                            field_name=f"{prefix}.body_standalone",
+                            handled=True,
+                            notes="TransactionBody.from_cbor() succeeded individually",
+                        )
+                    )
                 except Exception as e2:
-                    results.append(FieldResult(
-                        era=era,
-                        component="transaction_body",
-                        field_name=f"{prefix}.body_standalone",
-                        handled=False,
-                        error=f"{type(e2).__name__}: {e2}",
-                    ))
+                    results.append(
+                        FieldResult(
+                            era=era,
+                            component="transaction_body",
+                            field_name=f"{prefix}.body_standalone",
+                            handled=False,
+                            error=f"{type(e2).__name__}: {e2}",
+                        )
+                    )
 
                 # Try TransactionWitnessSet alone
                 wit_bytes = cbor2.dumps(decoded[1])
                 try:
                     wit = TransactionWitnessSet.from_cbor(wit_bytes)
-                    results.append(FieldResult(
-                        era=era,
-                        component="witnesses",
-                        field_name=f"{prefix}.witnesses_standalone",
-                        handled=True,
-                        notes="TransactionWitnessSet.from_cbor() succeeded individually",
-                    ))
+                    results.append(
+                        FieldResult(
+                            era=era,
+                            component="witnesses",
+                            field_name=f"{prefix}.witnesses_standalone",
+                            handled=True,
+                            notes="TransactionWitnessSet.from_cbor() succeeded individually",
+                        )
+                    )
                 except Exception as e2:
-                    results.append(FieldResult(
-                        era=era,
-                        component="witnesses",
-                        field_name=f"{prefix}.witnesses_standalone",
-                        handled=False,
-                        error=f"{type(e2).__name__}: {e2}",
-                    ))
+                    results.append(
+                        FieldResult(
+                            era=era,
+                            component="witnesses",
+                            field_name=f"{prefix}.witnesses_standalone",
+                            handled=False,
+                            error=f"{type(e2).__name__}: {e2}",
+                        )
+                    )
 
                 # Try AuxiliaryData
                 if len(decoded) >= 4 and decoded[3] is not None:
                     aux_bytes = cbor2.dumps(decoded[3])
                     try:
                         aux = AuxiliaryData.from_cbor(aux_bytes)
-                        results.append(FieldResult(
-                            era=era,
-                            component="auxiliary_data",
-                            field_name=f"{prefix}.auxiliary_data_standalone",
-                            handled=True,
-                            notes="AuxiliaryData.from_cbor() succeeded individually",
-                        ))
+                        results.append(
+                            FieldResult(
+                                era=era,
+                                component="auxiliary_data",
+                                field_name=f"{prefix}.auxiliary_data_standalone",
+                                handled=True,
+                                notes="AuxiliaryData.from_cbor() succeeded individually",
+                            )
+                        )
                     except Exception as e2:
-                        results.append(FieldResult(
-                            era=era,
-                            component="auxiliary_data",
-                            field_name=f"{prefix}.auxiliary_data_standalone",
-                            handled=False,
-                            error=f"{type(e2).__name__}: {e2}",
-                        ))
+                        results.append(
+                            FieldResult(
+                                era=era,
+                                component="auxiliary_data",
+                                field_name=f"{prefix}.auxiliary_data_standalone",
+                                handled=False,
+                                error=f"{type(e2).__name__}: {e2}",
+                            )
+                        )
         except Exception as e2:
-            results.append(FieldResult(
-                era=era,
-                component="transaction",
-                field_name=f"{prefix}.component_fallback",
-                handled=False,
-                error=f"Could not even CBOR-decode the transaction: {e2}",
-            ))
+            results.append(
+                FieldResult(
+                    era=era,
+                    component="transaction",
+                    field_name=f"{prefix}.component_fallback",
+                    handled=False,
+                    error=f"Could not even CBOR-decode the transaction: {e2}",
+                )
+            )
 
     return results
 
@@ -579,32 +632,38 @@ def _probe_byron_transaction(tx_data: Any, era: str, tx_idx: int) -> list[FieldR
     results = []
     prefix = f"tx[{tx_idx}]"
 
-    results.append(FieldResult(
-        era=era,
-        component="transaction",
-        field_name=f"{prefix}.byron_transaction",
-        handled=False,
-        error="pycardano does not support Byron-era transactions",
-        notes="Byron uses a completely different transaction format (TxAux)",
-    ))
+    results.append(
+        FieldResult(
+            era=era,
+            component="transaction",
+            field_name=f"{prefix}.byron_transaction",
+            handled=False,
+            error="pycardano does not support Byron-era transactions",
+            notes="Byron uses a completely different transaction format (TxAux)",
+        )
+    )
 
     # Show what we can decode with raw cbor2
     if isinstance(tx_data, list):
-        results.append(FieldResult(
-            era=era,
-            component="transaction_body",
-            field_name=f"{prefix}.byron_body_raw",
-            handled=True,
-            notes=f"Raw CBOR: list with {len(tx_data)} elements (cbor2 only, not pycardano)",
-        ))
+        results.append(
+            FieldResult(
+                era=era,
+                component="transaction_body",
+                field_name=f"{prefix}.byron_body_raw",
+                handled=True,
+                notes=f"Raw CBOR: list with {len(tx_data)} elements (cbor2 only, not pycardano)",
+            )
+        )
     else:
-        results.append(FieldResult(
-            era=era,
-            component="transaction_body",
-            field_name=f"{prefix}.byron_body_raw",
-            handled=False,
-            error=f"Unexpected type: {type(tx_data).__name__}",
-        ))
+        results.append(
+            FieldResult(
+                era=era,
+                component="transaction_body",
+                field_name=f"{prefix}.byron_body_raw",
+                handled=False,
+                error=f"Unexpected type: {type(tx_data).__name__}",
+            )
+        )
 
     return results
 
@@ -623,7 +682,7 @@ def _summarize(value: Any, max_len: int = 60) -> str:
         return str(value)
     s = str(value)
     if len(s) > max_len:
-        return s[:max_len - 3] + "..."
+        return s[: max_len - 3] + "..."
     return s
 
 
@@ -676,14 +735,18 @@ def _extract_transactions_cbor(raw_block: Any, era: str) -> list[bytes]:
             return txs
 
         # block_array = [header, tx_bodies, tx_witnesses, aux_data_map, ...]
-        tx_bodies = block_array[1]      # Map: index -> tx_body
-        tx_witnesses = block_array[2]   # Map: index -> witness_set
-        aux_data = block_array[3]       # Map: index -> aux_data (may be empty map or None)
+        tx_bodies = block_array[1]  # Map: index -> tx_body
+        tx_witnesses = block_array[2]  # Map: index -> witness_set
+        aux_data = block_array[3]  # Map: index -> aux_data (may be empty map or None)
 
         if isinstance(tx_bodies, list):
             # Some eras use a list of transaction bodies
             for i, tx_body in enumerate(tx_bodies):
-                wit = tx_witnesses[i] if isinstance(tx_witnesses, list) and i < len(tx_witnesses) else {}
+                wit = (
+                    tx_witnesses[i]
+                    if isinstance(tx_witnesses, list) and i < len(tx_witnesses)
+                    else {}
+                )
                 aux = None
                 if isinstance(aux_data, dict) and i in aux_data:
                     aux = aux_data[i]
@@ -741,14 +804,16 @@ def analyze_block_json(block_json: dict, era: str) -> EraResult:
     result.block_hash = block_json.get("id", "?")
 
     # Note: pycardano has no block header types regardless
-    result.field_results.append(FieldResult(
-        era=era,
-        component="block_header",
-        field_name="pycardano_block_type",
-        handled=False,
-        error="pycardano has no Block or BlockHeader class",
-        notes=f"Block era={block_era}, hash={result.block_hash[:16] if result.block_hash else '?'}...",
-    ))
+    result.field_results.append(
+        FieldResult(
+            era=era,
+            component="block_header",
+            field_name="pycardano_block_type",
+            handled=False,
+            error="pycardano has no Block or BlockHeader class",
+            notes=f"Block era={block_era}, hash={result.block_hash[:16] if result.block_hash else '?'}...",
+        )
+    )
 
     # Get transactions from the block JSON
     transactions = block_json.get("transactions", [])
@@ -757,45 +822,55 @@ def analyze_block_json(block_json: dict, era: str) -> EraResult:
     if era == "byron":
         # Byron era — pycardano doesn't support Byron transactions at all
         if result.tx_count > 0:
-            result.field_results.append(FieldResult(
-                era=era,
-                component="transaction",
-                field_name="byron_transactions",
-                handled=False,
-                error="pycardano does not support Byron-era transactions",
-                notes=f"{result.tx_count} transactions in block. Byron uses TxAux format, not Shelley+ Transaction.",
-            ))
+            result.field_results.append(
+                FieldResult(
+                    era=era,
+                    component="transaction",
+                    field_name="byron_transactions",
+                    handled=False,
+                    error="pycardano does not support Byron-era transactions",
+                    notes=f"{result.tx_count} transactions in block. Byron uses TxAux format, not Shelley+ Transaction.",
+                )
+            )
         else:
-            result.field_results.append(FieldResult(
-                era=era,
-                component="transaction",
-                field_name="byron_transactions",
-                handled=False,
-                error="pycardano does not support Byron-era transactions (0 txs in this block)",
-                notes="Byron blocks near genesis often have 0 transactions",
-            ))
+            result.field_results.append(
+                FieldResult(
+                    era=era,
+                    component="transaction",
+                    field_name="byron_transactions",
+                    handled=False,
+                    error="pycardano does not support Byron-era transactions (0 txs in this block)",
+                    notes="Byron blocks near genesis often have 0 transactions",
+                )
+            )
 
-        result.field_results.append(FieldResult(
-            era=era,
-            component="transaction_body",
-            field_name="byron_tx_body",
-            handled=False,
-            error="Byron transaction body format incompatible with pycardano.TransactionBody",
-        ))
-        result.field_results.append(FieldResult(
-            era=era,
-            component="witnesses",
-            field_name="byron_witnesses",
-            handled=False,
-            error="Byron witness format incompatible with pycardano.TransactionWitnessSet",
-        ))
-        result.field_results.append(FieldResult(
-            era=era,
-            component="auxiliary_data",
-            field_name="byron_metadata",
-            handled=False,
-            error="Byron has no auxiliary data (pre-Shelley)",
-        ))
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="transaction_body",
+                field_name="byron_tx_body",
+                handled=False,
+                error="Byron transaction body format incompatible with pycardano.TransactionBody",
+            )
+        )
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="witnesses",
+                field_name="byron_witnesses",
+                handled=False,
+                error="Byron witness format incompatible with pycardano.TransactionWitnessSet",
+            )
+        )
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="auxiliary_data",
+                field_name="byron_metadata",
+                handled=False,
+                error="Byron has no auxiliary data (pre-Shelley)",
+            )
+        )
         return result
 
     # Post-Byron: Ogmios returns structured JSON, not raw CBOR.
@@ -804,13 +879,15 @@ def analyze_block_json(block_json: dict, era: str) -> EraResult:
     # Let's check if transaction CBOR is available.
 
     if result.tx_count == 0:
-        result.field_results.append(FieldResult(
-            era=era,
-            component="transaction",
-            field_name="no_transactions",
-            handled=True,
-            notes="Block has 0 transactions — nothing to deserialize",
-        ))
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="transaction",
+                field_name="no_transactions",
+                handled=True,
+                notes="Block has 0 transactions — nothing to deserialize",
+            )
+        )
         return result
 
     # Analyze up to 3 transactions per era for coverage
@@ -840,96 +917,114 @@ def _analyze_tx_from_json(tx_json: dict, era: str, tx_idx: int, result: EraResul
     tx_id = tx_json.get("id", "?")
 
     # Check if we can reconstruct a transaction from JSON fields
-    result.field_results.append(FieldResult(
-        era=era,
-        component="transaction",
-        field_name=f"{prefix}.ogmios_json",
-        handled=True,
-        notes=f"Ogmios provides JSON (no raw CBOR). tx_id={tx_id[:16]}...",
-    ))
+    result.field_results.append(
+        FieldResult(
+            era=era,
+            component="transaction",
+            field_name=f"{prefix}.ogmios_json",
+            handled=True,
+            notes=f"Ogmios provides JSON (no raw CBOR). tx_id={tx_id[:16]}...",
+        )
+    )
 
     # Inputs
     inputs = tx_json.get("inputs", [])
-    result.field_results.append(FieldResult(
-        era=era,
-        component="transaction_body",
-        field_name=f"{prefix}.body.inputs",
-        handled=True,
-        notes=f"Ogmios JSON: {len(inputs)} inputs. pycardano.TransactionInput can represent these.",
-    ))
+    result.field_results.append(
+        FieldResult(
+            era=era,
+            component="transaction_body",
+            field_name=f"{prefix}.body.inputs",
+            handled=True,
+            notes=f"Ogmios JSON: {len(inputs)} inputs. pycardano.TransactionInput can represent these.",
+        )
+    )
 
     # Outputs
     outputs = tx_json.get("outputs", [])
-    result.field_results.append(FieldResult(
-        era=era,
-        component="transaction_body",
-        field_name=f"{prefix}.body.outputs",
-        handled=True,
-        notes=f"Ogmios JSON: {len(outputs)} outputs. pycardano.TransactionOutput can represent these.",
-    ))
+    result.field_results.append(
+        FieldResult(
+            era=era,
+            component="transaction_body",
+            field_name=f"{prefix}.body.outputs",
+            handled=True,
+            notes=f"Ogmios JSON: {len(outputs)} outputs. pycardano.TransactionOutput can represent these.",
+        )
+    )
 
     # Fee
     fee = tx_json.get("fee", {})
-    result.field_results.append(FieldResult(
-        era=era,
-        component="transaction_body",
-        field_name=f"{prefix}.body.fee",
-        handled=True,
-        notes=f"Fee: {fee}",
-    ))
+    result.field_results.append(
+        FieldResult(
+            era=era,
+            component="transaction_body",
+            field_name=f"{prefix}.body.fee",
+            handled=True,
+            notes=f"Fee: {fee}",
+        )
+    )
 
     # Validity interval
     validity = tx_json.get("validityInterval", {})
-    result.field_results.append(FieldResult(
-        era=era,
-        component="transaction_body",
-        field_name=f"{prefix}.body.validity_interval",
-        handled=True,
-        notes=f"Validity: {validity or 'not set'}",
-    ))
+    result.field_results.append(
+        FieldResult(
+            era=era,
+            component="transaction_body",
+            field_name=f"{prefix}.body.validity_interval",
+            handled=True,
+            notes=f"Validity: {validity or 'not set'}",
+        )
+    )
 
     # Mint
     mint = tx_json.get("mint", {})
     if mint:
-        result.field_results.append(FieldResult(
-            era=era,
-            component="transaction_body",
-            field_name=f"{prefix}.body.mint",
-            handled=True,
-            notes=f"Mint: {len(mint)} policy(ies). pycardano.MultiAsset can represent.",
-        ))
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="transaction_body",
+                field_name=f"{prefix}.body.mint",
+                handled=True,
+                notes=f"Mint: {len(mint)} policy(ies). pycardano.MultiAsset can represent.",
+            )
+        )
 
     # Certificates
     certs = tx_json.get("certificates", [])
     if certs:
-        result.field_results.append(FieldResult(
-            era=era,
-            component="transaction_body",
-            field_name=f"{prefix}.body.certificates",
-            handled=True,
-            notes=f"{len(certs)} certificate(s). pycardano has Certificate types.",
-        ))
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="transaction_body",
+                field_name=f"{prefix}.body.certificates",
+                handled=True,
+                notes=f"{len(certs)} certificate(s). pycardano has Certificate types.",
+            )
+        )
 
     # Withdrawals
     withdrawals = tx_json.get("withdrawals", {})
     if withdrawals:
-        result.field_results.append(FieldResult(
-            era=era,
-            component="transaction_body",
-            field_name=f"{prefix}.body.withdrawals",
-            handled=True,
-            notes=f"{len(withdrawals)} withdrawal(s). pycardano.Withdrawals can represent.",
-        ))
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="transaction_body",
+                field_name=f"{prefix}.body.withdrawals",
+                handled=True,
+                notes=f"{len(withdrawals)} withdrawal(s). pycardano.Withdrawals can represent.",
+            )
+        )
 
     # Witnesses — Ogmios provides "signatories" in JSON
     signatories = tx_json.get("signatories", [])
-    result.field_results.append(FieldResult(
-        era=era,
-        component="witnesses",
-        field_name=f"{prefix}.witnesses.vkey_witnesses",
-        handled=True,
-        notes=f"Ogmios JSON: {len(signatories)} signatories. Maps to pycardano VKey witnesses.",
-    ))
+    result.field_results.append(
+        FieldResult(
+            era=era,
+            component="witnesses",
+            field_name=f"{prefix}.witnesses.vkey_witnesses",
+            handled=True,
+            notes=f"Ogmios JSON: {len(signatories)} signatories. Maps to pycardano VKey witnesses.",
+        )
+    )
 
     # Scripts
     scripts = tx_json.get("scripts", {})
@@ -937,75 +1032,89 @@ def _analyze_tx_from_json(tx_json: dict, era: str, tx_idx: int, result: EraResul
         script_types = set()
         for _k, v in scripts.items() if isinstance(scripts, dict) else []:
             script_types.add(v.get("language", "unknown") if isinstance(v, dict) else "?")
-        result.field_results.append(FieldResult(
-            era=era,
-            component="witnesses",
-            field_name=f"{prefix}.witnesses.scripts",
-            handled=True,
-            notes=f"{len(scripts)} script(s), languages: {script_types}. pycardano supports PlutusV1/V2/V3.",
-        ))
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="witnesses",
+                field_name=f"{prefix}.witnesses.scripts",
+                handled=True,
+                notes=f"{len(scripts)} script(s), languages: {script_types}. pycardano supports PlutusV1/V2/V3.",
+            )
+        )
 
     # Datums
     datums = tx_json.get("datums", {})
     if datums:
-        result.field_results.append(FieldResult(
-            era=era,
-            component="witnesses",
-            field_name=f"{prefix}.witnesses.plutus_data",
-            handled=True,
-            notes=f"{len(datums)} datum(s). pycardano supports PlutusData.",
-        ))
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="witnesses",
+                field_name=f"{prefix}.witnesses.plutus_data",
+                handled=True,
+                notes=f"{len(datums)} datum(s). pycardano supports PlutusData.",
+            )
+        )
 
     # Redeemers
     redeemers = tx_json.get("redeemers", {})
     if redeemers:
-        result.field_results.append(FieldResult(
-            era=era,
-            component="witnesses",
-            field_name=f"{prefix}.witnesses.redeemers",
-            handled=True,
-            notes=f"{len(redeemers)} redeemer(s). pycardano supports Redeemer.",
-        ))
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="witnesses",
+                field_name=f"{prefix}.witnesses.redeemers",
+                handled=True,
+                notes=f"{len(redeemers)} redeemer(s). pycardano supports Redeemer.",
+            )
+        )
 
     # Metadata / auxiliary data
     metadata = tx_json.get("metadata", None)
     if metadata:
-        result.field_results.append(FieldResult(
-            era=era,
-            component="auxiliary_data",
-            field_name=f"{prefix}.auxiliary_data",
-            handled=True,
-            notes="Metadata present. pycardano.AuxiliaryData can represent.",
-        ))
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="auxiliary_data",
+                field_name=f"{prefix}.auxiliary_data",
+                handled=True,
+                notes="Metadata present. pycardano.AuxiliaryData can represent.",
+            )
+        )
     else:
-        result.field_results.append(FieldResult(
-            era=era,
-            component="auxiliary_data",
-            field_name=f"{prefix}.auxiliary_data",
-            handled=True,
-            notes="No metadata in this transaction",
-        ))
+        result.field_results.append(
+            FieldResult(
+                era=era,
+                component="auxiliary_data",
+                field_name=f"{prefix}.auxiliary_data",
+                handled=True,
+                notes="No metadata in this transaction",
+            )
+        )
 
     # Conway-specific governance fields
     if era == "conway":
         voting = tx_json.get("votes", {})
         proposals = tx_json.get("proposals", [])
         if voting:
-            result.field_results.append(FieldResult(
-                era=era,
-                component="transaction_body",
-                field_name=f"{prefix}.body.voting_procedures",
-                handled=True,
-                notes=f"{len(voting)} vote(s). pycardano has VotingProcedures.",
-            ))
+            result.field_results.append(
+                FieldResult(
+                    era=era,
+                    component="transaction_body",
+                    field_name=f"{prefix}.body.voting_procedures",
+                    handled=True,
+                    notes=f"{len(voting)} vote(s). pycardano has VotingProcedures.",
+                )
+            )
         if proposals:
-            result.field_results.append(FieldResult(
-                era=era,
-                component="transaction_body",
-                field_name=f"{prefix}.body.proposal_procedures",
-                handled=True,
-                notes=f"{len(proposals)} proposal(s). pycardano has ProposalProcedure.",
-            ))
+            result.field_results.append(
+                FieldResult(
+                    era=era,
+                    component="transaction_body",
+                    field_name=f"{prefix}.body.proposal_procedures",
+                    handled=True,
+                    notes=f"{len(proposals)} proposal(s). pycardano has ProposalProcedure.",
+                )
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -1046,9 +1155,9 @@ async def run_evaluation(ogmios_url: str = DEFAULT_OGMIOS_URL) -> list[EraResult
     eras = ["byron", "shelley", "allegra", "mary", "alonzo", "babbage", "conway"]
 
     for era in eras:
-        console.print(f"\n[bold cyan]{'='*60}[/]")
+        console.print(f"\n[bold cyan]{'=' * 60}[/]")
         console.print(f"[bold cyan]Era: {era.upper()}[/]")
-        console.print(f"[bold cyan]{'='*60}[/]")
+        console.print(f"[bold cyan]{'=' * 60}[/]")
 
         point = PREPROD_ERA_POINTS.get(era)
         if point is None:
@@ -1069,13 +1178,17 @@ async def run_evaluation(ogmios_url: str = DEFAULT_OGMIOS_URL) -> list[EraResult
             results.append(era_result)
 
             if era_result.block_found:
-                console.print(f"  [green]Block found![/] hash={era_result.block_hash or '?'}  txs={era_result.tx_count}")
+                console.print(
+                    f"  [green]Block found![/] hash={era_result.block_hash or '?'}  txs={era_result.tx_count}"
+                )
             else:
                 console.print(f"  [red]Block not found[/]: {era_result.raw_error}")
 
         except Exception as e:
             console.print(f"  [red]Error[/]: {e}")
-            era_result = EraResult(era=era, raw_error=f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
+            era_result = EraResult(
+                era=era, raw_error=f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+            )
             results.append(era_result)
 
     return results
@@ -1101,7 +1214,7 @@ def print_results(results: list[EraResult]) -> None:
     for r in results:
         ok_count = sum(1 for f in r.field_results if f.handled)
         fail_count = sum(1 for f in r.field_results if not f.handled)
-        found = "[green]Yes[/]" if r.block_found else f"[red]No[/]"
+        found = "[green]Yes[/]" if r.block_found else "[red]No[/]"
         notes = r.raw_error[:40] if r.raw_error else ""
         summary_table.add_row(
             r.era.capitalize(),
@@ -1143,25 +1256,43 @@ def print_results(results: list[EraResult]) -> None:
     console.print()
     console.print("[bold]Key Findings[/]")
     console.print()
-    console.print("  1. [bold red]No Block types[/]: pycardano has no Block, BlockHeader, or BlockBody classes.")
+    console.print(
+        "  1. [bold red]No Block types[/]: pycardano has no Block, BlockHeader, or BlockBody classes."
+    )
     console.print("     We must implement block-level CBOR deserialization from scratch.")
     console.print()
-    console.print("  2. [bold red]No Byron support[/]: pycardano does not handle Byron-era transactions.")
+    console.print(
+        "  2. [bold red]No Byron support[/]: pycardano does not handle Byron-era transactions."
+    )
     console.print("     Byron uses TxAux format — completely different from Shelley+ Transaction.")
     console.print()
-    console.print("  3. [bold green]Strong Shelley+ transaction support[/]: pycardano handles TransactionBody,")
+    console.print(
+        "  3. [bold green]Strong Shelley+ transaction support[/]: pycardano handles TransactionBody,"
+    )
     console.print("     TransactionWitnessSet, and AuxiliaryData well for Shelley through Conway.")
     console.print()
-    console.print("  4. [bold green]Conway governance[/]: pycardano supports VotingProcedures, ProposalProcedure,")
+    console.print(
+        "  4. [bold green]Conway governance[/]: pycardano supports VotingProcedures, ProposalProcedure,"
+    )
     console.print("     DRep types, and Conway-era certificates.")
     console.print()
-    console.print("  5. [bold yellow]No CBOR round-trip for blocks[/]: Ogmios v6 local-chain-sync returns JSON,")
-    console.print("     not raw CBOR. For true CBOR deserialization testing, we need block CBOR from")
+    console.print(
+        "  5. [bold yellow]No CBOR round-trip for blocks[/]: Ogmios v6 local-chain-sync returns JSON,"
+    )
+    console.print(
+        "     not raw CBOR. For true CBOR deserialization testing, we need block CBOR from"
+    )
     console.print("     chain-sync over the raw node-to-client protocol or a CBOR-aware endpoint.")
     console.print()
-    console.print("[bold]Recommendation[/]: Use pycardano for transaction-level types (body, witnesses,")
-    console.print("auxiliary data) but build custom Block and BlockHeader CBOR decoders. For Byron,")
-    console.print("everything must be custom. Consider the mini-protocol approach for raw CBOR access.")
+    console.print(
+        "[bold]Recommendation[/]: Use pycardano for transaction-level types (body, witnesses,"
+    )
+    console.print(
+        "auxiliary data) but build custom Block and BlockHeader CBOR decoders. For Byron,"
+    )
+    console.print(
+        "everything must be custom. Consider the mini-protocol approach for raw CBOR access."
+    )
     console.print()
 
 

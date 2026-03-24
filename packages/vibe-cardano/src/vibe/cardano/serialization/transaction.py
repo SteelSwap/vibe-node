@@ -30,11 +30,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 import cbor2pure as _cbor2
-
 from pycardano.metadata import AuxiliaryData
 from pycardano.transaction import Transaction, TransactionBody
 from pycardano.witness import TransactionWitnessSet
@@ -86,8 +84,6 @@ class DecodedBlockBody:
     tx_count: int
 
 
-
-
 def _cbor_dumps(obj: object) -> bytes:
     """Encode to CBOR bytes."""
     return _cbor2.dumps(obj)
@@ -125,8 +121,7 @@ def _try_decode_tx_body(raw: dict) -> TransactionBody | dict:
         return TransactionBody.from_primitive(raw)
     except Exception as exc:
         logger.debug(
-            "pycardano TransactionBody.from_primitive failed, "
-            "falling back to raw dict: %s",
+            "pycardano TransactionBody.from_primitive failed, falling back to raw dict: %s",
             exc,
         )
         return raw
@@ -147,8 +142,7 @@ def _try_decode_witness_set(raw: dict) -> TransactionWitnessSet | dict:
         return TransactionWitnessSet.from_primitive(raw)
     except Exception as exc:
         logger.debug(
-            "pycardano TransactionWitnessSet.from_primitive failed, "
-            "falling back to raw dict: %s",
+            "pycardano TransactionWitnessSet.from_primitive failed, falling back to raw dict: %s",
             exc,
         )
         return raw
@@ -172,8 +166,7 @@ def _try_decode_auxiliary_data(raw: object) -> AuxiliaryData | object | None:
         return AuxiliaryData.from_primitive(raw)
     except Exception as exc:
         logger.debug(
-            "pycardano AuxiliaryData.from_primitive failed, "
-            "falling back to raw primitive: %s",
+            "pycardano AuxiliaryData.from_primitive failed, falling back to raw primitive: %s",
             exc,
         )
         return raw
@@ -211,9 +204,7 @@ def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
         raise ValueError(f"Unknown era tag: {decoded.tag}") from None
 
     if era in (Era.BYRON_MAIN, Era.BYRON_EBB):
-        raise NotImplementedError(
-            f"Byron block decoding not yet supported (era tag {era.value})"
-        )
+        raise NotImplementedError(f"Byron block decoding not yet supported (era tag {era.value})")
 
     block_array = decoded.value
 
@@ -231,8 +222,7 @@ def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
 
     if not isinstance(raw_tx_bodies, list):
         raise ValueError(
-            f"Expected transaction_bodies as CBOR array, "
-            f"got {type(raw_tx_bodies).__name__}"
+            f"Expected transaction_bodies as CBOR array, got {type(raw_tx_bodies).__name__}"
         )
 
     if not isinstance(raw_tx_witnesses, list):
@@ -259,9 +249,7 @@ def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
         )
 
     transactions: list[DecodedTransaction] = []
-    for i, (body_raw, witness_raw) in enumerate(
-        zip(raw_tx_bodies, raw_tx_witnesses)
-    ):
+    for i, (body_raw, witness_raw) in enumerate(zip(raw_tx_bodies, raw_tx_witnesses)):
         if not isinstance(body_raw, dict):
             raise ValueError(
                 f"Transaction body at index {i} is {type(body_raw).__name__}, "
@@ -273,9 +261,7 @@ def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
 
         # Decode with pycardano (fallback to raw on failure)
         body = _try_decode_tx_body(body_raw)
-        witness_set = _try_decode_witness_set(
-            witness_raw if isinstance(witness_raw, dict) else {}
-        )
+        witness_set = _try_decode_witness_set(witness_raw if isinstance(witness_raw, dict) else {})
 
         # Auxiliary data for this transaction (keyed by index)
         aux_raw = aux_map.get(i)
@@ -344,9 +330,11 @@ def decode_block_transactions(cbor_bytes: bytes) -> list[Transaction | dict]:
                     {
                         "index": dtx.index,
                         "body": dtx.body_raw,
-                        "witnesses": dtx.witness_set
-                        if isinstance(dtx.witness_set, dict)
-                        else dtx.witness_set.to_primitive(),
+                        "witnesses": (
+                            dtx.witness_set
+                            if isinstance(dtx.witness_set, dict)
+                            else dtx.witness_set.to_primitive()
+                        ),
                         "auxiliary_data": dtx.auxiliary_data,
                     }
                 )

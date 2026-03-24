@@ -6,11 +6,12 @@ from dataclasses import dataclass
 @dataclass
 class SpecSource:
     """A spec document source to ingest."""
-    source_repo: str        # e.g. "IntersectMBO/ouroboros-consensus"
-    submodule_path: str     # e.g. "vendor/ouroboros-consensus"
-    spec_glob: str          # e.g. "docs/website/contents/**/*.md"
-    format: str             # markdown, cddl, latex, agda
-    era: str                # byron, shelley, conway, multi-era, etc.
+
+    source_repo: str  # e.g. "IntersectMBO/ouroboros-consensus"
+    submodule_path: str  # e.g. "vendor/ouroboros-consensus"
+    spec_glob: str  # e.g. "docs/website/contents/**/*.md"
+    format: str  # markdown, cddl, latex, agda
+    era: str  # byron, shelley, conway, multi-era, etc.
     root_file: str | None = None  # For LaTeX: main .tex file
 
 
@@ -24,7 +25,6 @@ SPEC_SOURCES: list[SpecSource] = [
         format="markdown",
         era="multi-era",
     ),
-
     # ── CDDL sources (Phase 2 — plain text) ────────────────────────
     SpecSource(
         source_repo="IntersectMBO/cardano-ledger",
@@ -40,7 +40,6 @@ SPEC_SOURCES: list[SpecSource] = [
         format="cddl",
         era="byron",
     ),
-
     # ── LaTeX sources (Phase 3 — needs pandoc) ──────────────────────
     SpecSource(
         source_repo="IntersectMBO/cardano-ledger",
@@ -121,7 +120,6 @@ SPEC_SOURCES: list[SpecSource] = [
         era="plutus",
         root_file="doc/plutus-core-spec/plutus-core-specification.tex",
     ),
-
     # ── Agda sources (Phase 4 — literate Agda) ─────────────────────
     SpecSource(
         source_repo="IntersectMBO/formal-ledger-specifications",
@@ -130,7 +128,6 @@ SPEC_SOURCES: list[SpecSource] = [
         format="agda",
         era="conway",
     ),
-
     # ── PDF sources (Phase 5 — Ouroboros papers, any PDF-only specs) ──
     # Place PDF files in data/pdf/ — they are not in submodules
     SpecSource(

@@ -25,7 +25,6 @@ Spec references:
 
 from __future__ import annotations
 
-import os
 from fractions import Fraction
 
 import pytest
@@ -38,7 +37,7 @@ from pycardano.certificate import (
     StakeDeregistration,
     StakeRegistration,
 )
-from pycardano.hash import PoolKeyHash, ScriptHash, VerificationKeyHash
+from pycardano.hash import PoolKeyHash, VerificationKeyHash
 
 from vibe.cardano.ledger.shelley import ShelleyProtocolParams
 from vibe.cardano.ledger.shelley_delegation import (
@@ -174,9 +173,7 @@ class TestStakeDeregistration:
     ):
         """Deregistering a registered credential with zero rewards succeeds."""
         cert = StakeDeregistration(_stake_credential(0xAA))
-        new_state = process_certificate(
-            cert, state_with_registered_key, params, current_epoch=200
-        )
+        new_state = process_certificate(cert, state_with_registered_key, params, current_epoch=200)
 
         cred_hash = _fake_hash(0xAA)
         assert cred_hash not in new_state.rewards
@@ -189,9 +186,7 @@ class TestStakeDeregistration:
         with pytest.raises(DelegationError, match="StakeKeyNotRegisteredDELEG"):
             process_certificate(cert, empty_state, params, current_epoch=200)
 
-    def test_deregister_nonzero_rewards_raises(
-        self, params: ShelleyProtocolParams
-    ):
+    def test_deregister_nonzero_rewards_raises(self, params: ShelleyProtocolParams):
         """Deregistering a credential with non-zero rewards fails.
 
         Spec: rewards must be withdrawn before deregistration.
@@ -201,9 +196,7 @@ class TestStakeDeregistration:
         state = DelegationState(rewards={cred_hash: 5_000_000})
 
         cert = StakeDeregistration(_stake_credential(0xAA))
-        with pytest.raises(
-            DelegationError, match="StakeKeyNonZeroAccountBalanceDELEG"
-        ):
+        with pytest.raises(DelegationError, match="StakeKeyNonZeroAccountBalanceDELEG"):
             process_certificate(cert, state, params, current_epoch=200)
 
     def test_deregister_removes_delegation(self, params: ShelleyProtocolParams):
@@ -285,12 +278,8 @@ class TestDelegation:
             _stake_credential(0xAA),
             _pool_key_hash(0xFF),  # unregistered pool
         )
-        with pytest.raises(
-            DelegationError, match="StakeDelegationImpossibleDELEG"
-        ):
-            process_certificate(
-                cert, state_with_registered_key, params, current_epoch=200
-            )
+        with pytest.raises(DelegationError, match="StakeDelegationImpossibleDELEG"):
+            process_certificate(cert, state_with_registered_key, params, current_epoch=200)
 
     def test_delegate_unregistered_credential_raises(
         self, empty_state: DelegationState, params: ShelleyProtocolParams
@@ -303,9 +292,7 @@ class TestDelegation:
         with pytest.raises(DelegationError, match="StakeKeyNotRegisteredDELEG"):
             process_certificate(cert, empty_state, params, current_epoch=200)
 
-    def test_redelegate_to_different_pool(
-        self, params: ShelleyProtocolParams
-    ):
+    def test_redelegate_to_different_pool(self, params: ShelleyProtocolParams):
         """Re-delegating to a different pool updates the delegation map."""
         cred_hash = _fake_hash(0xAA)
         pool1_hash = _fake_hash(0xB1)
@@ -336,9 +323,7 @@ class TestDelegation:
 class TestPoolRegistration:
     """Tests for the RegPool (pool registration) certificate."""
 
-    def test_register_new_pool(
-        self, empty_state: DelegationState, params: ShelleyProtocolParams
-    ):
+    def test_register_new_pool(self, empty_state: DelegationState, params: ShelleyProtocolParams):
         """Registering a new pool adds it to the pools map."""
         pp = _pool_params(0xBB)
         cert = PoolRegistration(pp)
@@ -350,9 +335,7 @@ class TestPoolRegistration:
         assert new_state.pools[pool_hash].cost == 340_000_000
         assert new_state.pools[pool_hash].margin == Fraction(1, 100)
 
-    def test_reregister_updates_params(
-        self, params: ShelleyProtocolParams
-    ):
+    def test_reregister_updates_params(self, params: ShelleyProtocolParams):
         """Re-registering an existing pool updates its parameters."""
         pool_hash = _fake_hash(0xBB)
         old_pp = _pool_params(0xBB)
@@ -373,9 +356,7 @@ class TestPoolRegistration:
         assert new_state.pools[pool_hash].pledge == 200_000_000
         assert new_state.pools[pool_hash].cost == 400_000_000
 
-    def test_reregister_cancels_retirement(
-        self, params: ShelleyProtocolParams
-    ):
+    def test_reregister_cancels_retirement(self, params: ShelleyProtocolParams):
         """Re-registering a pool that is scheduled to retire cancels the retirement.
 
         Spec: retiring' = {hk} ⊳ retiring
@@ -401,9 +382,7 @@ class TestPoolRegistration:
 class TestPoolRetirement:
     """Tests for the RetirePool (pool retirement) certificate."""
 
-    def test_retire_pool_schedules_retirement(
-        self, params: ShelleyProtocolParams
-    ):
+    def test_retire_pool_schedules_retirement(self, params: ShelleyProtocolParams):
         """Retiring a registered pool schedules it for a future epoch."""
         pool_hash = _fake_hash(0xBB)
         state = DelegationState(pools={pool_hash: _pool_params(0xBB)})
@@ -420,9 +399,7 @@ class TestPoolRetirement:
     ):
         """Retiring a pool that is not registered fails."""
         cert = PoolRetirement(_pool_key_hash(0xFF), epoch=300)
-        with pytest.raises(
-            DelegationError, match="StakePoolNotRegisteredOnKeyPOOL"
-        ):
+        with pytest.raises(DelegationError, match="StakePoolNotRegisteredOnKeyPOOL"):
             process_certificate(cert, empty_state, params, current_epoch=200)
 
     def test_retire_in_past_epoch_raises(self, params: ShelleyProtocolParams):
@@ -431,9 +408,7 @@ class TestPoolRetirement:
         state = DelegationState(pools={pool_hash: _pool_params(0xBB)})
 
         cert = PoolRetirement(_pool_key_hash(0xBB), epoch=200)  # same as current
-        with pytest.raises(
-            DelegationError, match="StakePoolRetirementWrongEpochPOOL"
-        ):
+        with pytest.raises(DelegationError, match="StakePoolRetirementWrongEpochPOOL"):
             process_certificate(cert, state, params, current_epoch=200)
 
     def test_retire_in_earlier_epoch_raises(self, params: ShelleyProtocolParams):
@@ -442,9 +417,7 @@ class TestPoolRetirement:
         state = DelegationState(pools={pool_hash: _pool_params(0xBB)})
 
         cert = PoolRetirement(_pool_key_hash(0xBB), epoch=100)
-        with pytest.raises(
-            DelegationError, match="StakePoolRetirementWrongEpochPOOL"
-        ):
+        with pytest.raises(DelegationError, match="StakePoolRetirementWrongEpochPOOL"):
             process_certificate(cert, state, params, current_epoch=200)
 
 
@@ -491,9 +464,7 @@ class TestDepositAccounting:
         expected = params.key_deposit + params.pool_deposit - params.key_deposit
         assert compute_certificate_deposits(certs, params) == expected
 
-    def test_register_deregister_roundtrip_net_zero(
-        self, params: ShelleyProtocolParams
-    ):
+    def test_register_deregister_roundtrip_net_zero(self, params: ShelleyProtocolParams):
         """Register then deregister the same key nets to zero deposit."""
         certs = [
             StakeRegistration(_stake_credential(0xAA)),
@@ -526,9 +497,7 @@ class TestProcessCertificates:
         assert pool_hash in new_state.pools
         assert new_state.delegations[cred_hash] == pool_hash
 
-    def test_empty_cert_list(
-        self, empty_state: DelegationState, params: ShelleyProtocolParams
-    ):
+    def test_empty_cert_list(self, empty_state: DelegationState, params: ShelleyProtocolParams):
         """Processing an empty certificate list returns the same state."""
         new_state = process_certificates([], empty_state, params, current_epoch=200)
         assert new_state is empty_state  # no copy needed for empty list
@@ -542,9 +511,7 @@ class TestProcessCertificates:
             # This delegation fails because pool 0xFF is not registered
             StakeDelegation(_stake_credential(0xAA), _pool_key_hash(0xFF)),
         ]
-        with pytest.raises(
-            DelegationError, match="StakeDelegationImpossibleDELEG"
-        ):
+        with pytest.raises(DelegationError, match="StakeDelegationImpossibleDELEG"):
             process_certificates(certs, empty_state, params, current_epoch=200)
 
     def test_unrecognized_cert_type_raises(

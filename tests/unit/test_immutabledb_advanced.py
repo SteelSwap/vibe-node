@@ -23,21 +23,13 @@ from __future__ import annotations
 
 import os
 import struct
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 import pytest
 
 from vibe.cardano.storage.immutable import (
-    AppendBlockNotNewerThanTipError,
-    ChunkInfo,
-    ClosedDBError,
-    ImmutableDB,
-    ImmutableDBIterator,
-    _PRI_ENTRY_SIZE,
     _SEC_ENTRY_SIZE,
+    ImmutableDB,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

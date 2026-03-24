@@ -17,58 +17,48 @@ Haskell reference: Ouroboros/Network/Protocol/ChainSync/Server.hs
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
 
 import cbor2
 import pytest
 
-from vibe.core.protocols.agency import Agency, PeerRole, ProtocolError, Message
-from vibe.core.protocols.codec import CodecError
-from vibe.core.protocols.runner import ProtocolRunner
-
 from vibe.cardano.network.chainsync import (
-    MSG_REQUEST_NEXT,
-    MSG_AWAIT_REPLY,
-    MSG_ROLL_FORWARD,
-    MSG_ROLL_BACKWARD,
-    MSG_FIND_INTERSECT,
-    MSG_INTERSECT_FOUND,
-    MSG_INTERSECT_NOT_FOUND,
-    MSG_DONE,
     CHAIN_SYNC_N2C_ID,
+    MSG_ROLL_FORWARD,
     ORIGIN,
     Origin,
     Point,
     Tip,
-    encode_request_next,
-    encode_find_intersect,
-    encode_done,
     encode_await_reply,
-    encode_roll_backward,
+    encode_done,
+    encode_find_intersect,
     encode_intersect_found,
     encode_intersect_not_found,
+    encode_request_next,
+    encode_roll_backward,
 )
 from vibe.cardano.network.local_chainsync import (
     N2CMsgRollForward,
-    encode_n2c_roll_forward,
     decode_n2c_server_message,
+    encode_n2c_roll_forward,
 )
 from vibe.cardano.network.local_chainsync_protocol import (
-    LocalChainSyncState,
-    LocalChainSyncProtocol,
-    LocalChainSyncCodec,
-    LocalChainSyncServer,
-    LcsMsgRequestNext,
     LcsMsgAwaitReply,
-    LcsMsgRollForward,
-    LcsMsgRollBackward,
+    LcsMsgDone,
     LcsMsgFindIntersect,
     LcsMsgIntersectFound,
     LcsMsgIntersectNotFound,
-    LcsMsgDone,
+    LcsMsgRequestNext,
+    LcsMsgRollBackward,
+    LcsMsgRollForward,
+    LocalChainSyncCodec,
+    LocalChainSyncProtocol,
+    LocalChainSyncServer,
+    LocalChainSyncState,
     create_local_chainsync_server,
 )
-
+from vibe.core.protocols.agency import Agency, Message, PeerRole
+from vibe.core.protocols.codec import CodecError
+from vibe.core.protocols.runner import ProtocolRunner
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -283,6 +273,7 @@ class TestN2CServerMessageDecode:
         raw = encode_roll_backward(POINT_A, TIP_B)
         msg = decode_n2c_server_message(raw)
         from vibe.cardano.network.chainsync import MsgRollBackward
+
         assert isinstance(msg, MsgRollBackward)
         assert msg.point == POINT_A
         assert msg.tip == TIP_B
@@ -291,6 +282,7 @@ class TestN2CServerMessageDecode:
         raw = encode_intersect_found(POINT_A, TIP_A)
         msg = decode_n2c_server_message(raw)
         from vibe.cardano.network.chainsync import MsgIntersectFound
+
         assert isinstance(msg, MsgIntersectFound)
         assert msg.point == POINT_A
 
@@ -298,6 +290,7 @@ class TestN2CServerMessageDecode:
         raw = encode_intersect_not_found(TIP_A)
         msg = decode_n2c_server_message(raw)
         from vibe.cardano.network.chainsync import MsgIntersectNotFound
+
         assert isinstance(msg, MsgIntersectNotFound)
 
     def test_unknown_msg_id(self) -> None:
@@ -510,10 +503,9 @@ class TestLocalChainSyncCodec:
             encoded1 = codec.encode(msg)
             decoded = codec.decode(encoded1)
             encoded2 = codec.encode(decoded)
-            assert encoded1 == encoded2, (
-                f"Roundtrip failed for {type(msg).__name__}: "
-                f"{encoded1.hex()} != {encoded2.hex()}"
-            )
+            assert (
+                encoded1 == encoded2
+            ), f"Roundtrip failed for {type(msg).__name__}: {encoded1.hex()} != {encoded2.hex()}"
 
 
 # ---------------------------------------------------------------------------

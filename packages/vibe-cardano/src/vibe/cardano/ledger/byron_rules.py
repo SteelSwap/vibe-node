@@ -30,12 +30,9 @@ Haskell references:
 
 from __future__ import annotations
 
-import hashlib
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-
-import cbor2pure as cbor2
 
 from vibe.cardano.ledger.byron import (
     ByronTx,
@@ -127,9 +124,7 @@ def byron_min_fee(
         raise ValueError(f"Transaction size must be non-negative, got {tx_size}")
 
     # a + ceil(b_num * txSize / b_den)
-    variable = math.ceil(
-        (fee_params.b_numerator * tx_size) / fee_params.b_denominator
-    )
+    variable = math.ceil((fee_params.b_numerator * tx_size) / fee_params.b_denominator)
     return fee_params.a + variable
 
 
@@ -181,8 +176,7 @@ def validate_byron_tx(
         key = _utxo_key(txin)
         if key not in utxo_set:
             errors.append(
-                f"Input not in UTxO: tx_id={txin.tx_id.digest.hex()[:16]}..., "
-                f"index={txin.index}"
+                f"Input not in UTxO: tx_id={txin.tx_id.digest.hex()[:16]}..., index={txin.index}"
             )
         else:
             resolved_inputs.append(utxo_set[key])
@@ -201,9 +195,7 @@ def validate_byron_tx(
     # --- Rule 3: All output values must be > 0 ---
     for i, txout in enumerate(tx.outputs):
         if txout.value <= 0:
-            errors.append(
-                f"Output {i} has non-positive value: {txout.value}"
-            )
+            errors.append(f"Output {i} has non-positive value: {txout.value}")
 
     # Short-circuit if we couldn't resolve all inputs -- value
     # preservation check would be meaningless.
@@ -216,10 +208,7 @@ def validate_byron_tx(
     output_sum = sum(out.value for out in tx.outputs)
 
     if output_sum > input_sum:
-        errors.append(
-            f"Outputs exceed inputs: input_sum={input_sum}, "
-            f"output_sum={output_sum}"
-        )
+        errors.append(f"Outputs exceed inputs: input_sum={input_sum}, output_sum={output_sum}")
         return errors
 
     implicit_fee = input_sum - output_sum
@@ -231,8 +220,7 @@ def validate_byron_tx(
 
     if implicit_fee < min_fee:
         errors.append(
-            f"Insufficient fee: implicit_fee={implicit_fee}, "
-            f"min_fee={min_fee} (tx_size={tx_size})"
+            f"Insufficient fee: implicit_fee={implicit_fee}, min_fee={min_fee} (tx_size={tx_size})"
         )
 
     return errors
@@ -254,10 +242,7 @@ def _produced_utxos(tx: ByronTx) -> dict[tuple[bytes, int], ByronTxOut]:
     Each output is keyed by (tx_id, output_index).
     """
     tx_id = ByronTxId.from_tx(tx)
-    return {
-        (tx_id.digest, i): txout
-        for i, txout in enumerate(tx.outputs)
-    }
+    return {(tx_id.digest, i): txout for i, txout in enumerate(tx.outputs)}
 
 
 def apply_byron_tx(
@@ -337,9 +322,7 @@ def apply_byron_block(
         try:
             current_utxo = apply_byron_tx(tx_aux, current_utxo, fee_params)
         except ByronValidationError as e:
-            raise ByronValidationError(
-                [f"Transaction {i}: {err}" for err in e.errors]
-            ) from e
+            raise ByronValidationError([f"Transaction {i}: {err}" for err in e.errors]) from e
 
     return current_utxo
 

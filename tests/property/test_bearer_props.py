@@ -18,7 +18,6 @@ from hypothesis import strategies as st
 
 from vibe.core.multiplexer.bearer import Bearer
 from vibe.core.multiplexer.segment import (
-    MAX_PAYLOAD_SIZE,
     MuxSegment,
     encode_segment,
 )

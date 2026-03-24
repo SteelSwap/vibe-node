@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
-from vibe.cardano.storage.chaindb import ChainDB, ChainSelectionResult, FragmentEntry
-from vibe.cardano.storage.volatile import VolatileDB
+from vibe.cardano.storage.chaindb import ChainDB
 from vibe.cardano.storage.immutable import ImmutableDB
 from vibe.cardano.storage.ledger import LedgerDB
-from vibe.cardano.network.chainsync import Point
+from vibe.cardano.storage.volatile import VolatileDB
 
 
 def _hash(n: int) -> bytes:
@@ -37,8 +34,12 @@ class TestChainFragment:
     @pytest.mark.asyncio
     async def test_first_block_creates_fragment(self, chain_db):
         result = await chain_db.add_block(
-            slot=1, block_hash=_hash(1), predecessor_hash=_hash(0),
-            block_number=1, cbor_bytes=b"block1", header_cbor=_hdr(1),
+            slot=1,
+            block_hash=_hash(1),
+            predecessor_hash=_hash(0),
+            block_number=1,
+            cbor_bytes=b"block1",
+            header_cbor=_hdr(1),
         )
         assert result.adopted is True
         frag = chain_db.get_current_chain()
@@ -48,12 +49,20 @@ class TestChainFragment:
     @pytest.mark.asyncio
     async def test_extending_chain_appends_to_fragment(self, chain_db):
         await chain_db.add_block(
-            slot=1, block_hash=_hash(1), predecessor_hash=_hash(0),
-            block_number=1, cbor_bytes=b"b1", header_cbor=_hdr(1),
+            slot=1,
+            block_hash=_hash(1),
+            predecessor_hash=_hash(0),
+            block_number=1,
+            cbor_bytes=b"b1",
+            header_cbor=_hdr(1),
         )
         result = await chain_db.add_block(
-            slot=2, block_hash=_hash(2), predecessor_hash=_hash(1),
-            block_number=2, cbor_bytes=b"b2", header_cbor=_hdr(2),
+            slot=2,
+            block_hash=_hash(2),
+            predecessor_hash=_hash(1),
+            block_number=2,
+            cbor_bytes=b"b2",
+            header_cbor=_hdr(2),
         )
         assert result.adopted is True
         assert result.rollback_depth == 0
@@ -65,17 +74,29 @@ class TestChainFragment:
     @pytest.mark.asyncio
     async def test_worse_block_not_adopted(self, chain_db):
         await chain_db.add_block(
-            slot=1, block_hash=_hash(1), predecessor_hash=_hash(0),
-            block_number=1, cbor_bytes=b"b1", header_cbor=_hdr(1),
+            slot=1,
+            block_hash=_hash(1),
+            predecessor_hash=_hash(0),
+            block_number=1,
+            cbor_bytes=b"b1",
+            header_cbor=_hdr(1),
         )
         await chain_db.add_block(
-            slot=2, block_hash=_hash(2), predecessor_hash=_hash(1),
-            block_number=2, cbor_bytes=b"b2", header_cbor=_hdr(2),
+            slot=2,
+            block_hash=_hash(2),
+            predecessor_hash=_hash(1),
+            block_number=2,
+            cbor_bytes=b"b2",
+            header_cbor=_hdr(2),
         )
         # Block at same height — not adopted (no improvement)
         result = await chain_db.add_block(
-            slot=3, block_hash=_hash(99), predecessor_hash=_hash(1),
-            block_number=2, cbor_bytes=b"b99", header_cbor=_hdr(99),
+            slot=3,
+            block_hash=_hash(99),
+            predecessor_hash=_hash(1),
+            block_number=2,
+            cbor_bytes=b"b99",
+            header_cbor=_hdr(99),
         )
         assert result.adopted is False
 
@@ -85,8 +106,12 @@ class TestChainFragment:
         prev = _hash(0)
         for i in range(1, 16):
             await chain_db.add_block(
-                slot=i, block_hash=_hash(i), predecessor_hash=prev,
-                block_number=i, cbor_bytes=f"b{i}".encode(), header_cbor=_hdr(i),
+                slot=i,
+                block_hash=_hash(i),
+                predecessor_hash=prev,
+                block_number=i,
+                cbor_bytes=f"b{i}".encode(),
+                header_cbor=_hdr(i),
             )
             prev = _hash(i)
         frag = chain_db.get_current_chain()
@@ -100,17 +125,29 @@ class TestChainSelectionResult:
     async def test_fork_switch_result(self, chain_db):
         # Build chain: 0 → 1 → 2
         await chain_db.add_block(
-            slot=1, block_hash=_hash(1), predecessor_hash=_hash(0),
-            block_number=1, cbor_bytes=b"b1", header_cbor=_hdr(1),
+            slot=1,
+            block_hash=_hash(1),
+            predecessor_hash=_hash(0),
+            block_number=1,
+            cbor_bytes=b"b1",
+            header_cbor=_hdr(1),
         )
         await chain_db.add_block(
-            slot=2, block_hash=_hash(2), predecessor_hash=_hash(1),
-            block_number=2, cbor_bytes=b"b2", header_cbor=_hdr(2),
+            slot=2,
+            block_hash=_hash(2),
+            predecessor_hash=_hash(1),
+            block_number=2,
+            cbor_bytes=b"b2",
+            header_cbor=_hdr(2),
         )
         # Fork: 0 → 1 → 3 (block_number=3, better than 2)
         result = await chain_db.add_block(
-            slot=3, block_hash=_hash(3), predecessor_hash=_hash(1),
-            block_number=3, cbor_bytes=b"b3", header_cbor=_hdr(3),
+            slot=3,
+            block_hash=_hash(3),
+            predecessor_hash=_hash(1),
+            block_number=3,
+            cbor_bytes=b"b3",
+            header_cbor=_hdr(3),
         )
         assert result.adopted is True
         assert result.rollback_depth == 1
@@ -120,16 +157,28 @@ class TestChainSelectionResult:
     @pytest.mark.asyncio
     async def test_fragment_correct_after_fork_switch(self, chain_db):
         await chain_db.add_block(
-            slot=1, block_hash=_hash(1), predecessor_hash=_hash(0),
-            block_number=1, cbor_bytes=b"b1", header_cbor=_hdr(1),
+            slot=1,
+            block_hash=_hash(1),
+            predecessor_hash=_hash(0),
+            block_number=1,
+            cbor_bytes=b"b1",
+            header_cbor=_hdr(1),
         )
         await chain_db.add_block(
-            slot=2, block_hash=_hash(2), predecessor_hash=_hash(1),
-            block_number=2, cbor_bytes=b"b2", header_cbor=_hdr(2),
+            slot=2,
+            block_hash=_hash(2),
+            predecessor_hash=_hash(1),
+            block_number=2,
+            cbor_bytes=b"b2",
+            header_cbor=_hdr(2),
         )
         await chain_db.add_block(
-            slot=3, block_hash=_hash(3), predecessor_hash=_hash(1),
-            block_number=3, cbor_bytes=b"b3", header_cbor=_hdr(3),
+            slot=3,
+            block_hash=_hash(3),
+            predecessor_hash=_hash(1),
+            block_number=3,
+            cbor_bytes=b"b3",
+            header_cbor=_hdr(3),
         )
         frag = chain_db.get_current_chain()
         hashes = [e.block_hash for e in frag]
@@ -143,7 +192,11 @@ class TestChainSelectionResult:
         # Manually set immutable tip
         chain_db._immutable_tip_block_number = 5
         result = await chain_db.add_block(
-            slot=3, block_hash=_hash(3), predecessor_hash=_hash(2),
-            block_number=3, cbor_bytes=b"b3", header_cbor=_hdr(3),
+            slot=3,
+            block_hash=_hash(3),
+            predecessor_hash=_hash(2),
+            block_number=3,
+            cbor_bytes=b"b3",
+            header_cbor=_hdr(3),
         )
         assert result.adopted is False

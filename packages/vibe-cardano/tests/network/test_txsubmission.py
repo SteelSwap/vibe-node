@@ -12,33 +12,32 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from vibe.cardano.network.txsubmission import (
+    MSG_DONE,
     # Constants
     MSG_INIT,
-    MSG_REQUEST_TX_IDS,
     MSG_REPLY_TX_IDS,
-    MSG_REQUEST_TXS,
     MSG_REPLY_TXS,
-    MSG_DONE,
+    MSG_REQUEST_TX_IDS,
+    MSG_REQUEST_TXS,
     TX_SUBMISSION_N2N_ID,
+    MsgDone,
     # Message classes
     MsgInit,
-    MsgRequestTxIds,
     MsgReplyTxIds,
-    MsgRequestTxs,
     MsgReplyTxs,
-    MsgDone,
-    # Encode
-    encode_init,
-    encode_request_tx_ids,
-    encode_reply_tx_ids,
-    encode_request_txs,
-    encode_reply_txs,
-    encode_done,
+    MsgRequestTxIds,
+    MsgRequestTxs,
+    decode_client_message,
     # Decode
     decode_server_message,
-    decode_client_message,
+    encode_done,
+    # Encode
+    encode_init,
+    encode_reply_tx_ids,
+    encode_reply_txs,
+    encode_request_tx_ids,
+    encode_request_txs,
 )
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -214,9 +213,7 @@ class TestEncodeDecodeServer:
         assert decoded.req_count == 10
 
     def test_request_tx_ids_nonblocking_round_trip(self) -> None:
-        encoded = encode_request_tx_ids(
-            blocking=False, ack_count=0, req_count=5
-        )
+        encoded = encode_request_tx_ids(blocking=False, ack_count=0, req_count=5)
         decoded = decode_server_message(encoded)
         assert isinstance(decoded, MsgRequestTxIds)
         assert decoded.blocking is False
@@ -345,16 +342,12 @@ class TestHypothesisRoundTrip:
 
     @given(txids=st.lists(txid_size_pair, max_size=20))
     @settings(max_examples=100)
-    def test_reply_tx_ids_round_trip(
-        self, txids: list[tuple[bytes, int]]
-    ) -> None:
+    def test_reply_tx_ids_round_trip(self, txids: list[tuple[bytes, int]]) -> None:
         encoded = encode_reply_tx_ids(txids)
         decoded = decode_client_message(encoded)
         assert isinstance(decoded, MsgReplyTxIds)
         assert len(decoded.txids) == len(txids)
-        for (orig_id, orig_sz), (dec_id, dec_sz) in zip(
-            txids, decoded.txids
-        ):
+        for (orig_id, orig_sz), (dec_id, dec_sz) in zip(txids, decoded.txids):
             assert dec_id == orig_id
             assert dec_sz == orig_sz
 
@@ -484,9 +477,7 @@ class TestCodecSplits3Chunk:
                 chunk2 = encoded[i:j]
                 chunk3 = encoded[j:]
                 reassembled = chunk1 + chunk2 + chunk3
-                assert reassembled == encoded, (
-                    f"Reassembly failed at splits ({i}, {j})"
-                )
+                assert reassembled == encoded, f"Reassembly failed at splits ({i}, {j})"
                 decoded = _decode_any_message(reassembled)
                 assert type(decoded) is type(reference), (
                     f"Type mismatch at splits ({i}, {j}): "
@@ -521,9 +512,7 @@ class TestValidCBOREncoding:
 
     @given(txids=st.lists(txid_size_pair, max_size=15))
     @settings(max_examples=50)
-    def test_reply_tx_ids_valid_cbor(
-        self, txids: list[tuple[bytes, int]]
-    ) -> None:
+    def test_reply_tx_ids_valid_cbor(self, txids: list[tuple[bytes, int]]) -> None:
         encoded = encode_reply_tx_ids(txids)
         cbor2.loads(encoded)
 

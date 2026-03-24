@@ -1,10 +1,12 @@
 """get_entity tool — fetch full entity details."""
+
 from __future__ import annotations
+
 import uuid as _uuid
 
+from vibe.tools.db.search_config import get_available_configs
 from vibe.tools.mcp.app import mcp
 from vibe.tools.mcp.db import get_pool
-from vibe.tools.db.search_config import get_available_configs
 
 
 @mcp.tool()
@@ -34,13 +36,9 @@ async def get_entity(
                 entity_uuid = _uuid.UUID(entity_id)
             except ValueError:
                 return {"error": f"Invalid UUID: {entity_id}"}
-            row = await conn.fetchrow(
-                f"SELECT * FROM {table} WHERE id = $1", entity_uuid
-            )
+            row = await conn.fetchrow(f"SELECT * FROM {table} WHERE id = $1", entity_uuid)
         elif section_id and table == "spec_sections":
-            row = await conn.fetchrow(
-                f"SELECT * FROM {table} WHERE section_id = $1", section_id
-            )
+            row = await conn.fetchrow(f"SELECT * FROM {table} WHERE section_id = $1", section_id)
         elif function_name and table == "code_chunks":
             q = f"SELECT * FROM {table} WHERE function_name = $1"
             p: list = [function_name]

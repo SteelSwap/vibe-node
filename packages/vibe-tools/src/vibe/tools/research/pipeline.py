@@ -9,6 +9,7 @@
 Usage:
     vibe-node research extract-rules --subsystem networking
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,7 +32,9 @@ logger = logging.getLogger(__name__)
 # Anthropic format: "anthropic:claude-sonnet-4-20250514"
 # Override via environment variables.
 EXTRACTION_MODEL = os.environ.get("EXTRACTION_MODEL", "bedrock:us.anthropic.claude-opus-4-6-v1")
-LINKING_MODEL = os.environ.get("LINKING_MODEL", "bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+LINKING_MODEL = os.environ.get(
+    "LINKING_MODEL", "bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+)
 
 
 def _get_model(model_str: str):
@@ -178,7 +181,10 @@ def get_analysis_agent() -> Agent:
 
 
 async def stage1_extract(
-    conn, spec_chunk_id: uuid.UUID, era: str, subsystem: str,
+    conn,
+    spec_chunk_id: uuid.UUID,
+    era: str,
+    subsystem: str,
 ) -> ExtractionResult:
     """Stage 1: Extract rules from a spec chunk."""
     row = await conn.fetchrow(
@@ -188,7 +194,10 @@ async def stage1_extract(
     )
     if not row:
         return ExtractionResult(
-            spec_chunk_id=str(spec_chunk_id), era=era, subsystem=subsystem, rules=[],
+            spec_chunk_id=str(spec_chunk_id),
+            era=era,
+            subsystem=subsystem,
+            rules=[],
         )
 
     context = (
@@ -211,8 +220,11 @@ async def stage1_extract(
 
 
 async def stage2_search(
-    conn, extracted_rule: str, subsystem: str,
-    exclude_ids: set[str] | None = None, batch_size: int = 10,
+    conn,
+    extracted_rule: str,
+    subsystem: str,
+    exclude_ids: set[str] | None = None,
+    batch_size: int = 10,
 ) -> list[SearchCandidate]:
     """Stage 2: Semantic search for candidate links.
 
@@ -239,30 +251,30 @@ async def stage2_search(
     candidates = []
     seen_ids: set[str] = set(exclude_ids or set())
 
-    def _add_candidate(entity_type: str, entity_id: str, title: str,
-                       content_preview: str, similarity: float):
+    def _add_candidate(
+        entity_type: str, entity_id: str, title: str, content_preview: str, similarity: float
+    ):
         if entity_id not in seen_ids:
             seen_ids.add(entity_id)
-            candidates.append(SearchCandidate(
-                entity_type=entity_type,
-                entity_id=entity_id,
-                title=title,
-                content_preview=content_preview[:500],
-                similarity=similarity,
-            ))
+            candidates.append(
+                SearchCandidate(
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    title=title,
+                    content_preview=content_preview[:500],
+                    similarity=similarity,
+                )
+            )
 
     # Get latest release tag for each repo (by commit date, not string sort)
-    latest_tags = await conn.fetch(
-        """SELECT DISTINCT ON (repo) repo, release_tag as latest_tag
+    latest_tags = await conn.fetch("""SELECT DISTINCT ON (repo) repo, release_tag as latest_tag
            FROM code_chunks
-           ORDER BY repo, commit_date DESC"""
-    )
+           ORDER BY repo, commit_date DESC""")
     latest_tag_set = {(row["repo"], row["latest_tag"]) for row in latest_tags}
 
     if latest_tag_set:
         tag_conditions = " OR ".join(
-            f"(repo = '{repo}' AND release_tag = '{tag}')"
-            for repo, tag in latest_tag_set
+            f"(repo = '{repo}' AND release_tag = '{tag}')" for repo, tag in latest_tag_set
         )
         embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
 
@@ -288,7 +300,8 @@ async def stage2_search(
             )
             for row in rows:
                 _add_candidate(
-                    "code_chunk", str(row["id"]),
+                    "code_chunk",
+                    str(row["id"]),
                     row.get("function_name", ""),
                     row.get("content", "") or "",
                     float(row.get("similarity", 0)),
@@ -312,7 +325,8 @@ async def stage2_search(
             )
             for row in rows:
                 _add_candidate(
-                    "code_chunk_test", str(row["id"]),
+                    "code_chunk_test",
+                    str(row["id"]),
                     f"[TEST] {row.get('function_name', '')}",
                     row.get("content", "") or "",
                     float(row.get("similarity", 0)),
@@ -336,11 +350,12 @@ async def stage2_search(
                 )
                 {exclude_clause}
                 LIMIT {batch_size}""",
-                subsystem.replace('-', '_'),
+                subsystem.replace("-", "_"),
             )
             for row in keyword_rows:
                 _add_candidate(
-                    "code_chunk_test", str(row["id"]),
+                    "code_chunk_test",
+                    str(row["id"]),
                     f"[TEST] {row.get('function_name', '')}",
                     row.get("content", "") or "",
                     0.5,
@@ -352,13 +367,19 @@ async def stage2_search(
     if "issue" in available:
         cfg = available["issue"]
         sql, params = build_vector_query(
-            cfg["table"], embedding, {}, cfg.get("filter_columns", {}), batch_size, 0,
+            cfg["table"],
+            embedding,
+            {},
+            cfg.get("filter_columns", {}),
+            batch_size,
+            0,
         )
         try:
             rows = await conn.fetch(sql, *params)
             for row in rows:
                 _add_candidate(
-                    "github_issue", str(row["id"]),
+                    "github_issue",
+                    str(row["id"]),
                     row.get("title", ""),
                     row.get("content_combined", "") or "",
                     1.0 - float(row.get("vector_distance", 1.0)),
@@ -370,13 +391,19 @@ async def stage2_search(
     if "pr" in available:
         cfg = available["pr"]
         sql, params = build_vector_query(
-            cfg["table"], embedding, {}, cfg.get("filter_columns", {}), batch_size, 0,
+            cfg["table"],
+            embedding,
+            {},
+            cfg.get("filter_columns", {}),
+            batch_size,
+            0,
         )
         try:
             rows = await conn.fetch(sql, *params)
             for row in rows:
                 _add_candidate(
-                    "github_pr", str(row["id"]),
+                    "github_pr",
+                    str(row["id"]),
                     row.get("title", ""),
                     row.get("content_combined", "") or "",
                     1.0 - float(row.get("vector_distance", 1.0)),
@@ -388,7 +415,9 @@ async def stage2_search(
 
 
 async def stage3_evaluate_link(
-    rule_verbatim: str, rule_extracted: str, candidate: SearchCandidate,
+    rule_verbatim: str,
+    rule_extracted: str,
+    candidate: SearchCandidate,
 ) -> LinkDecision:
     """Stage 3: LLM evaluates whether a candidate is linked to a rule."""
     prompt = (
@@ -405,7 +434,8 @@ async def stage3_evaluate_link(
 
 
 async def stage4_analyze(
-    rule_verbatim: str, rule_extracted: str,
+    rule_verbatim: str,
+    rule_extracted: str,
     implementing_code: str | None = None,
     existing_test_code: str | None = None,
 ) -> AnalysisResult:
@@ -414,11 +444,7 @@ async def stage4_analyze(
     If existing_test_code is provided, the LLM is instructed to propose
     Python tests that cover the same scenarios as the Haskell tests.
     """
-    prompt = (
-        f"SPEC RULE:\n"
-        f"Verbatim: {rule_verbatim[:1000]}\n"
-        f"Extracted: {rule_extracted[:2000]}\n"
-    )
+    prompt = f"SPEC RULE:\nVerbatim: {rule_verbatim[:1000]}\nExtracted: {rule_extracted[:2000]}\n"
     if implementing_code:
         prompt += f"\nIMPLEMENTING HASKELL CODE:\n{implementing_code[:3000]}"
     else:
@@ -438,7 +464,10 @@ async def stage4_analyze(
 
 
 async def _process_chunk(
-    pool, chunk_id: uuid.UUID, era: str, subsystem: str,
+    pool,
+    chunk_id: uuid.UUID,
+    era: str,
+    subsystem: str,
 ) -> dict:
     """Process a single spec chunk through all 4 pipeline stages.
 
@@ -446,21 +475,25 @@ async def _process_chunk(
     Returns per-chunk stats.
     """
     import asyncio as _asyncio
+
     from vibe.tools.db.spec_sections import add_spec_section
     from vibe.tools.db.test_specs import add_test_spec
     from vibe.tools.db.xref import add_xref
     from vibe.tools.embed.client import EmbeddingClient
 
     chunk_stats = {
-        "rules_extracted": 0, "links_created": 0,
-        "gaps_found": 0, "tests_proposed": 0,
+        "rules_extracted": 0,
+        "links_created": 0,
+        "gaps_found": 0,
+        "tests_proposed": 0,
     }
 
     async with pool.acquire() as conn:
         # Check if already processed — use a marker in spec_documents metadata
         # to track chunks that were processed (even if they produced no rules)
         existing = await conn.fetchval(
-            "SELECT COUNT(*) FROM spec_sections WHERE spec_chunk_id = $1", chunk_id,
+            "SELECT COUNT(*) FROM spec_sections WHERE spec_chunk_id = $1",
+            chunk_id,
         )
         # Also check if we previously processed this chunk and got no rules
         # by looking for a marker we set after extraction
@@ -515,7 +548,9 @@ async def _process_chunk(
 
             for search_round in range(MAX_CONTINUATION_ROUNDS + 1):
                 candidates = await stage2_search(
-                    conn, rule.extracted_rule, subsystem,
+                    conn,
+                    rule.extracted_rule,
+                    subsystem,
                     exclude_ids=all_linked_ids if search_round > 0 else None,
                 )
                 if not candidates:
@@ -524,7 +559,9 @@ async def _process_chunk(
                 async def _eval_candidate(cand):
                     try:
                         decision = await stage3_evaluate_link(
-                            rule.verbatim, rule.extracted_rule, cand,
+                            rule.verbatim,
+                            rule.extracted_rule,
+                            cand,
                         )
                         return cand, decision
                     except Exception as e:
@@ -539,10 +576,7 @@ async def _process_chunk(
                     all_linked_ids.add(cand.entity_id)
 
                 # Count how many linked in this batch
-                linked_count = sum(
-                    1 for _, d in eval_results
-                    if d is not None and d.is_linked
-                )
+                linked_count = sum(1 for _, d in eval_results if d is not None and d.is_linked)
                 # If less than 60% linked, stop searching deeper
                 if linked_count < len(candidates) * 0.6:
                     break
@@ -550,7 +584,10 @@ async def _process_chunk(
                 if search_round < MAX_CONTINUATION_ROUNDS:
                     logger.debug(
                         "Round %d: %d/%d linked, continuing search for %s",
-                        search_round, linked_count, len(candidates), rule.section_id,
+                        search_round,
+                        linked_count,
+                        len(candidates),
+                        rule.section_id,
                     )
 
             implementing_code = None
@@ -560,7 +597,11 @@ async def _process_chunk(
                     continue
                 if decision.is_linked and decision.relationship:
                     # Map code_chunk_test back to code_chunk for DB storage
-                    target_type = "code_chunk" if candidate.entity_type == "code_chunk_test" else candidate.entity_type
+                    target_type = (
+                        "code_chunk"
+                        if candidate.entity_type == "code_chunk_test"
+                        else candidate.entity_type
+                    )
                     await add_xref(
                         conn,
                         source_type="spec_section",
@@ -603,8 +644,10 @@ async def _process_chunk(
             # Stage 4: Gap detection + test proposals
             try:
                 analysis = await stage4_analyze(
-                    rule.verbatim, rule.extracted_rule,
-                    implementing_code, existing_test_code,
+                    rule.verbatim,
+                    rule.extracted_rule,
+                    implementing_code,
+                    existing_test_code,
                 )
             except Exception as e:
                 logger.warning("Analysis failed for %s: %s", rule.section_id, e)
@@ -620,9 +663,14 @@ async def _process_chunk(
                             spec_says = EXCLUDED.spec_says,
                             haskell_does = EXCLUDED.haskell_does,
                             implications = EXCLUDED.implications""",
-                        uuid.uuid4(), section_uuid, subsystem, era,
-                        analysis.gap.spec_says, analysis.gap.haskell_does,
-                        analysis.gap.delta, analysis.gap.implications,
+                        uuid.uuid4(),
+                        section_uuid,
+                        subsystem,
+                        era,
+                        analysis.gap.spec_says,
+                        analysis.gap.haskell_does,
+                        analysis.gap.delta,
+                        analysis.gap.implications,
                         f"Phase 1 pipeline, subsystem={subsystem}",
                     )
                     chunk_stats["gaps_found"] += 1
@@ -638,7 +686,11 @@ async def _process_chunk(
                         test_name=test.test_name,
                         description=test.description,
                         priority=test.priority.value,
-                        phase="phase-2" if subsystem in ("serialization", "networking", "miniprotocols-n2n") else "phase-3",
+                        phase=(
+                            "phase-2"
+                            if subsystem in ("serialization", "networking", "miniprotocols-n2n")
+                            else "phase-3"
+                        ),
                         spec_section_id=section_uuid,
                         hypothesis_strategy=test.hypothesis_strategy,
                     )
@@ -652,7 +704,10 @@ async def _process_chunk(
 
 
 async def run_pipeline(
-    conn, subsystem: str, limit: int | None = None, progress=None,
+    conn,
+    subsystem: str,
+    limit: int | None = None,
+    progress=None,
     concurrency: int = 3,
 ) -> dict:
     """Run the full 4-stage pipeline for a subsystem.
@@ -667,6 +722,7 @@ async def run_pipeline(
     Returns summary stats.
     """
     import asyncio as _asyncio
+
     from vibe.tools.db.pool import get_pool
 
     # Track in-progress chunks to prevent concurrent processing of the same chunk
@@ -721,7 +777,9 @@ async def run_pipeline(
 
     logger.info(
         "Processing %d spec chunks for subsystem=%s (concurrency=%d)",
-        len(unique_chunks), subsystem, concurrency,
+        len(unique_chunks),
+        subsystem,
+        concurrency,
     )
 
     # Set progress bar total now that we know the real deduplicated count

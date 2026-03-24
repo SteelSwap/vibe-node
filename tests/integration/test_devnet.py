@@ -9,8 +9,6 @@ Run with: pytest tests/integration/test_devnet.py -m devnet
 from __future__ import annotations
 
 import json
-import os
-import stat
 from pathlib import Path
 
 import pytest
@@ -291,11 +289,7 @@ class TestTopology:
     def test_haskell_node_1_connects_to_others(self, topology_files: dict) -> None:
         """haskell-node-1 must connect to haskell-node-2 and vibe-node."""
         topo = topology_files["haskell-node-1"]
-        addresses = {
-            ap["address"]
-            for root in topo["localRoots"]
-            for ap in root["accessPoints"]
-        }
+        addresses = {ap["address"] for root in topo["localRoots"] for ap in root["accessPoints"]}
         # Topology uses IPs or hostnames — check 2 peers exist
         assert len(addresses) >= 2, f"Expected 2 peers, got: {addresses}"
         # vibe-node address can be hostname or IP
@@ -303,22 +297,14 @@ class TestTopology:
     def test_haskell_node_2_connects_to_others(self, topology_files: dict) -> None:
         """haskell-node-2 must connect to haskell-node-1 and vibe-node."""
         topo = topology_files["haskell-node-2"]
-        addresses = {
-            ap["address"]
-            for root in topo["localRoots"]
-            for ap in root["accessPoints"]
-        }
+        addresses = {ap["address"] for root in topo["localRoots"] for ap in root["accessPoints"]}
         assert len(addresses) >= 2, f"Expected 2 peers, got: {addresses}"
         # vibe-node address can be hostname or IP
 
     def test_vibe_node_connects_to_haskell_nodes(self, topology_files: dict) -> None:
         """vibe-node must connect to both Haskell nodes."""
         topo = topology_files["vibe-node"]
-        addresses = {
-            ap["address"]
-            for root in topo["localRoots"]
-            for ap in root["accessPoints"]
-        }
+        addresses = {ap["address"] for root in topo["localRoots"] for ap in root["accessPoints"]}
         assert "haskell-node-1" in addresses
         assert "haskell-node-2" in addresses
 

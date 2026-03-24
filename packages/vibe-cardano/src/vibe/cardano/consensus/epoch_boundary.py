@@ -328,9 +328,7 @@ def process_epoch_boundary(
         EpochTransition capturing all state changes.
     """
     # Step 1: Stake snapshot
-    snapshot = compute_stake_distribution(
-        utxo_stakes, delegations, pool_registrations
-    )
+    snapshot = compute_stake_distribution(utxo_stakes, delegations, pool_registrations)
 
     # Step 2: Reward calculation
     pot = total_reward_pot(reserves, rho, tau, fees)
@@ -349,12 +347,13 @@ def process_epoch_boundary(
         # Build pool reward params
         prp = PoolRewardParams(
             pool_id=pool_id,
-            pledge=params.pledge if hasattr(params, 'pledge') else 0,
-            cost=params.cost if hasattr(params, 'cost') else 0,
-            margin=Fraction(
-                params.margin.numerator, params.margin.denominator
-            ) if hasattr(params, 'margin') and params.margin is not None
-            else Fraction(0),
+            pledge=params.pledge if hasattr(params, "pledge") else 0,
+            cost=params.cost if hasattr(params, "cost") else 0,
+            margin=(
+                Fraction(params.margin.numerator, params.margin.denominator)
+                if hasattr(params, "margin") and params.margin is not None
+                else Fraction(0)
+            ),
             pool_stake=pool_stake,
         )
 
@@ -366,9 +365,7 @@ def process_epoch_boundary(
         result = member_rewards(prp, pr, pool_delegators)
 
         pool_reward_results.append(result)
-        total_distributed += result.operator_reward + sum(
-            result.member_rewards.values()
-        )
+        total_distributed += result.operator_reward + sum(result.member_rewards.values())
 
     # Step 3: Nonce evolution
     new_nonce = evolve_nonce(prev_nonce, eta_v, extra_entropy)
@@ -381,9 +378,7 @@ def process_epoch_boundary(
                 applied_updates.update(update.updates)
 
     # Step 5: Pool retirements
-    retired_pools, _remaining_retiring = _process_pool_retirements(
-        retiring, new_epoch
-    )
+    retired_pools, _remaining_retiring = _process_pool_retirements(retiring, new_epoch)
 
     return EpochTransition(
         new_epoch=new_epoch,

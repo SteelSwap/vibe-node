@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from vibe.cardano.storage.volatile import VolatileDB, BlockInfo
+from vibe.cardano.storage.volatile import VolatileDB
 
 
 def _block_hash(n: int) -> bytes:
@@ -67,9 +67,9 @@ async def test_volatiledb_max_blocks_per_file(tmp_path: Path) -> None:
 
     # Count .block files on disk.
     block_files = list(db_dir.glob("*.block"))
-    assert len(block_files) == num_blocks, (
-        f"Expected {num_blocks} .block files, found {len(block_files)}"
-    )
+    assert (
+        len(block_files) == num_blocks
+    ), f"Expected {num_blocks} .block files, found {len(block_files)}"
 
     # Each file should contain exactly its block's CBOR data.
     for i, bh in enumerate(hashes, 1):
@@ -179,16 +179,25 @@ async def test_get_predecessor() -> None:
     # Chain: genesis -> bh1 -> bh2
     # Fork:  genesis -> bh3
     await db.add_block(
-        block_hash=bh1, slot=1, predecessor_hash=genesis,
-        block_number=1, cbor_bytes=b"b1",
+        block_hash=bh1,
+        slot=1,
+        predecessor_hash=genesis,
+        block_number=1,
+        cbor_bytes=b"b1",
     )
     await db.add_block(
-        block_hash=bh2, slot=2, predecessor_hash=bh1,
-        block_number=2, cbor_bytes=b"b2",
+        block_hash=bh2,
+        slot=2,
+        predecessor_hash=bh1,
+        block_number=2,
+        cbor_bytes=b"b2",
     )
     await db.add_block(
-        block_hash=bh3, slot=1, predecessor_hash=genesis,
-        block_number=1, cbor_bytes=b"b3",
+        block_hash=bh3,
+        slot=1,
+        predecessor_hash=genesis,
+        block_number=1,
+        cbor_bytes=b"b3",
     )
 
     # Genesis has two successors

@@ -30,7 +30,6 @@ from vibe.cardano.network.handshake import (
     PREPROD_NETWORK_MAGIC,
     PREVIEW_NETWORK_MAGIC,
     MsgAcceptVersion,
-    MsgProposeVersions,
     MsgRefuse,
     NodeToNodeVersionData,
     PeerSharing,
@@ -41,7 +40,6 @@ from vibe.cardano.network.handshake import (
     decode_handshake_response,
     encode_propose_versions,
 )
-
 
 # -----------------------------------------------------------------------
 # Constants
@@ -301,16 +299,18 @@ class TestDecodeAcceptVersion:
         vd = vt[highest]
 
         # Server encodes AcceptVersion
-        accept_bytes = cbor2.dumps([
-            1,
-            highest,
+        accept_bytes = cbor2.dumps(
             [
-                vd.network_magic,
-                vd.initiator_only_diffusion_mode,
-                int(vd.peer_sharing),
-                vd.query,
-            ],
-        ])
+                1,
+                highest,
+                [
+                    vd.network_magic,
+                    vd.initiator_only_diffusion_mode,
+                    int(vd.peer_sharing),
+                    vd.query,
+                ],
+            ]
+        )
 
         result = decode_handshake_response(accept_bytes)
         assert isinstance(result, MsgAcceptVersion)

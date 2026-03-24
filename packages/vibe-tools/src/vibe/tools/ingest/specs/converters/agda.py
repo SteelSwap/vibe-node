@@ -17,16 +17,16 @@ def convert_agda(content: str) -> str:
     hidden = False
 
     for line in lines:
-        if re.match(r'\\begin\{code\}\[hide\]', line):
+        if re.match(r"\\begin\{code\}\[hide\]", line):
             in_code = True
             hidden = True
             continue
-        elif re.match(r'\\begin\{code\}', line):
+        elif re.match(r"\\begin\{code\}", line):
             in_code = True
             hidden = False
             output.append("```agda")
             continue
-        elif re.match(r'\\end\{code\}', line):
+        elif re.match(r"\\end\{code\}", line):
             if not hidden:
                 output.append("```")
             in_code = False
@@ -40,14 +40,14 @@ def convert_agda(content: str) -> str:
         else:
             # LaTeX prose — basic cleanup
             # Convert \section{} to markdown headings
-            line = re.sub(r'\\section\{(.+?)\}', r'# \1', line)
-            line = re.sub(r'\\subsection\{(.+?)\}', r'## \1', line)
-            line = re.sub(r'\\subsubsection\{(.+?)\}', r'### \1', line)
+            line = re.sub(r"\\section\{(.+?)\}", r"# \1", line)
+            line = re.sub(r"\\subsection\{(.+?)\}", r"## \1", line)
+            line = re.sub(r"\\subsubsection\{(.+?)\}", r"### \1", line)
             # Convert \emph and \textbf
-            line = re.sub(r'\\emph\{(.+?)\}', r'*\1*', line)
-            line = re.sub(r'\\textbf\{(.+?)\}', r'**\1**', line)
+            line = re.sub(r"\\emph\{(.+?)\}", r"*\1*", line)
+            line = re.sub(r"\\textbf\{(.+?)\}", r"**\1**", line)
             # Strip other LaTeX commands but keep content
-            line = re.sub(r'\\[a-zA-Z]+\{([^}]*)\}', r'\1', line)
+            line = re.sub(r"\\[a-zA-Z]+\{([^}]*)\}", r"\1", line)
             output.append(line)
 
     return "\n".join(output)

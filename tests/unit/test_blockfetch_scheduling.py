@@ -25,26 +25,22 @@ Haskell reference:
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock
 
 import pytest
 
-from vibe.core.protocols.agency import PeerRole, ProtocolError
-from vibe.cardano.network.chainsync import Point, ORIGIN, Tip
 from vibe.cardano.network.blockfetch_protocol import (
-    BlockFetchState,
-    BlockFetchProtocol,
-    BlockFetchCodec,
-    BlockFetchClient,
-    BfMsgRequestRange,
-    BfMsgClientDone,
-    BfMsgStartBatch,
-    BfMsgNoBlocks,
-    BfMsgBlock,
     BfMsgBatchDone,
+    BfMsgBlock,
+    BfMsgClientDone,
+    BfMsgNoBlocks,
+    BfMsgStartBatch,
+    BlockFetchClient,
+    BlockFetchCodec,
+    BlockFetchState,
     run_block_fetch,
 )
-
+from vibe.cardano.network.chainsync import Point
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -134,9 +130,7 @@ class TestNoOverlap:
         blocks_a = [_make_block(i) for i in range(1, 4)]
         blocks_b = [_make_block(i) for i in range(4, 7)]
 
-        runner.recv_message.side_effect = (
-            _block_responses(blocks_a) + _block_responses(blocks_b)
-        )
+        runner.recv_message.side_effect = _block_responses(blocks_a) + _block_responses(blocks_b)
 
         result_a = await client.request_range(POINT_1, POINT_5)
         result_b = await client.request_range(POINT_6, POINT_10)
@@ -203,9 +197,7 @@ class TestWithOverlap:
         blocks_2 = [_make_block(i) for i in range(3, 8)]
 
         client, runner = _make_client()
-        runner.recv_message.side_effect = (
-            _block_responses(blocks_1) + _block_responses(blocks_2)
-        )
+        runner.recv_message.side_effect = _block_responses(blocks_1) + _block_responses(blocks_2)
 
         all_blocks: list[bytes] = []
         seen: set[bytes] = set()
@@ -585,9 +577,7 @@ class TestFetchAfterRollback:
         # First request succeeds
         blocks = [_make_block(i) for i in range(3)]
         # Second request fails (rollback invalidated the range)
-        runner.recv_message.side_effect = (
-            _block_responses(blocks) + [BfMsgNoBlocks()]
-        )
+        runner.recv_message.side_effect = _block_responses(blocks) + [BfMsgNoBlocks()]
 
         result_1 = await client.request_range(POINT_1, POINT_5)
         result_2 = await client.request_range(POINT_6, POINT_10)

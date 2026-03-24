@@ -33,14 +33,12 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 import pytest
 
 from vibe.cardano.consensus.header_validation import (
     Checkpoints,
     HeaderValidationFailure,
-    HeaderValidationParams,
     PoolInfo,
     StakeDistribution,
     _pool_id_from_vkey,
@@ -48,7 +46,6 @@ from vibe.cardano.consensus.header_validation import (
 )
 from vibe.cardano.consensus.hfc import (
     Era,
-    EraParams,
     HardForkConfig,
     PastHorizonError,
     _era_start_slots,
@@ -57,7 +54,6 @@ from vibe.cardano.consensus.hfc import (
 )
 from vibe.cardano.consensus.nonce import (
     NEUTRAL_NONCE,
-    EpochNonce,
     accumulate_vrf_output,
     evolve_nonce,
     is_in_stability_window,
@@ -66,10 +62,6 @@ from vibe.cardano.consensus.praos import (
     PraosState,
     apply_header,
 )
-from vibe.cardano.consensus.slot_arithmetic import (
-    SHELLEY_EPOCH_LENGTH,
-)
-
 
 # ---------------------------------------------------------------------------
 # Mock header — reuses the pattern from existing tests
@@ -94,12 +86,12 @@ class MockOperationalCert:
 class MockBlockHeader:
     slot: int = 100
     block_number: int = 10
-    prev_hash: Optional[bytes] = None
+    prev_hash: bytes | None = None
     issuer_vkey: bytes = b"\x00" * 32
     header_cbor: bytes = b"\x00" * 100
     protocol_version: MockProtocolVersion = None  # type: ignore
     operational_cert: MockOperationalCert = None  # type: ignore
-    vrf_output: Optional[bytes] = None
+    vrf_output: bytes | None = None
     header_body_cbor: bytes = b""
     kes_signature: bytes = b""
 
@@ -163,9 +155,7 @@ class TestIntegratedPRTCLTransition:
             vrf_out = os.urandom(64)
             vrf_outputs.append(vrf_out)
 
-            prev_hash = (
-                _blake2b_256(headers[-1].header_cbor) if headers else b"\x00" * 32
-            )
+            prev_hash = _blake2b_256(headers[-1].header_cbor) if headers else b"\x00" * 32
             hdr = MockBlockHeader(
                 slot=100 + (i + 1) * 10,
                 block_number=10 + i + 1,
@@ -204,9 +194,9 @@ class TestIntegratedPRTCLTransition:
                     HeaderValidationFailure.VRF_LEADER_CHECK_FAILED,
                 )
             ]
-            assert structural_errors == [], (
-                f"Header {i}: unexpected structural errors: {structural_errors}"
-            )
+            assert (
+                structural_errors == []
+            ), f"Header {i}: unexpected structural errors: {structural_errors}"
 
             # Accumulate VRF output into the running nonce (simulating
             # what the epoch boundary handler does in production).
@@ -216,13 +206,9 @@ class TestIntegratedPRTCLTransition:
         # Verify the accumulated nonce is correct by recomputing manually.
         expected_eta = NEUTRAL_NONCE.value
         for vrf_out in vrf_outputs:
-            expected_eta = hashlib.blake2b(
-                expected_eta + vrf_out, digest_size=32
-            ).digest()
+            expected_eta = hashlib.blake2b(expected_eta + vrf_out, digest_size=32).digest()
 
-        assert eta_v == expected_eta, (
-            "Nonce accumulation diverged from manual computation"
-        )
+        assert eta_v == expected_eta, "Nonce accumulation diverged from manual computation"
 
 
 # ===========================================================================
@@ -267,9 +253,7 @@ class TestPRTCLEpochBoundary:
         new_nonce = evolve_nonce(prev_nonce, eta_v)
 
         # Manual verification.
-        expected = hashlib.blake2b(
-            prev_nonce.value + eta_v, digest_size=32
-        ).digest()
+        expected = hashlib.blake2b(prev_nonce.value + eta_v, digest_size=32).digest()
         assert new_nonce.value == expected
 
     def test_block_outside_stability_window_excluded(self) -> None:
@@ -297,9 +281,7 @@ class TestPRTCLEpochBoundary:
         assert nonce_without.value != nonce_with.value
 
         # Manual check: evolve_nonce first computes base, then mixes extra.
-        base = hashlib.blake2b(
-            prev_nonce.value + eta_v, digest_size=32
-        ).digest()
+        base = hashlib.blake2b(prev_nonce.value + eta_v, digest_size=32).digest()
         expected = hashlib.blake2b(base + extra, digest_size=32).digest()
         assert nonce_with.value == expected
 

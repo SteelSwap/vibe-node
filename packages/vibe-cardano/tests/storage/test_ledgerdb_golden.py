@@ -13,7 +13,6 @@ Haskell reference:
 
 from __future__ import annotations
 
-import asyncio
 import os
 import tempfile
 from pathlib import Path
@@ -24,14 +23,13 @@ import pytest
 
 from vibe.cardano.storage.ledger import (
     UTXO_SCHEMA,
-    BlockDiff,
     LedgerDB,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_utxo_entry(
     index: int,
@@ -88,7 +86,14 @@ async def test_golden_snapshot_format() -> None:
         assert len(table) == 5
 
         # Must have the correct column names
-        assert table.column_names == ["key", "tx_hash", "tx_index", "address", "value", "datum_hash"]
+        assert table.column_names == [
+            "key",
+            "tx_hash",
+            "tx_index",
+            "address",
+            "value",
+            "datum_hash",
+        ]
 
 
 @pytest.mark.asyncio

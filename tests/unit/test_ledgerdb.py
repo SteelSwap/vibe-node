@@ -22,22 +22,16 @@ Test specifications from the database:
 
 from __future__ import annotations
 
-import os
 import struct
-import tempfile
-from pathlib import Path
 
-import pyarrow as pa
 import pytest
 
 from vibe.cardano.storage.ledger import (
     BlockDiff,
     ExceededRollbackError,
     LedgerDB,
-    UTXO_SCHEMA,
 )
 from vibe.core.storage.interfaces import SnapshotHandle, StateStore
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -252,9 +246,7 @@ class TestRollback:
 
         # Block 3: consume another, create 1.
         entry_3 = make_utxo_entry(20, 0)
-        db.apply_block(
-            consumed=[entries_1[1][0]], created=[entry_3], block_slot=3
-        )
+        db.apply_block(consumed=[entries_1[1][0]], created=[entry_3], block_slot=3)
 
         assert db.max_rollback == 3
 
@@ -367,8 +359,7 @@ class TestSnapshotRestore:
         db = LedgerDB(k=10, snapshot_dir=snapshot_dir)
 
         entries = [
-            make_utxo_entry(i, 0, address=f"addr_{i}", value=i * 1_000_000)
-            for i in range(1, 6)
+            make_utxo_entry(i, 0, address=f"addr_{i}", value=i * 1_000_000) for i in range(1, 6)
         ]
         db.apply_block(consumed=[], created=entries, block_slot=1)
 
@@ -533,6 +524,7 @@ class TestPerformanceBenchmarks:
     def test_lookup_performance(self):
         """Point lookup should be fast (~single-digit μs)."""
         import time
+
         db = self._build_db(10_000)
         key = make_txin(5000, 0)
 
@@ -546,6 +538,7 @@ class TestPerformanceBenchmarks:
     def test_block_apply_performance(self):
         """Applying a block with ~300 mutations should be fast."""
         import time
+
         db = LedgerDB(k=10)
         initial = [make_utxo_entry(i, 0) for i in range(150)]
         db.apply_block(consumed=[], created=initial, block_slot=1)
@@ -560,6 +553,7 @@ class TestPerformanceBenchmarks:
     def test_rollback_performance(self):
         """Rollback of 100 blocks should complete quickly."""
         import time
+
         k = 100
         db = LedgerDB(k=k)
         for slot in range(1, k + 1):
@@ -651,7 +645,7 @@ class TestForkSwitch:
         # Verify fork B state
         assert db.get_utxo(base_entries[0][0]) is not None  # untouched
         assert db.get_utxo(base_entries[1][0]) is not None  # untouched
-        assert db.get_utxo(base_entries[2][0]) is None       # consumed in fork B
+        assert db.get_utxo(base_entries[2][0]) is None  # consumed in fork B
         assert db.get_utxo(fork_b_entries[0][0]) is not None
         assert db.get_utxo(fork_b_entries[1][0]) is not None
         # Fork A UTxOs should definitely still be gone

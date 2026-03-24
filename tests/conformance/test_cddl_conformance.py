@@ -29,13 +29,11 @@ Spec references:
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import cbor2
-from cbor2 import CBORTag
 import pytest
-
+from cbor2 import CBORTag
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -85,6 +83,7 @@ if not _CDDL_PARSER_AVAILABLE:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def vendor_ledger_available() -> bool:
     """Check if the cardano-ledger vendor directory is populated."""
@@ -99,6 +98,7 @@ def vendor_ledger_available() -> bool:
 # ---------------------------------------------------------------------------
 # 1. CDDL file existence and parseability
 # ---------------------------------------------------------------------------
+
 
 class TestCddlSchemaDiscovery:
     """Verify that CDDL schema files exist and can be located."""
@@ -131,9 +131,7 @@ class TestCddlSchemaDiscovery:
         assert len(text) > 0, f"{era} CDDL file is empty"
 
         # Basic sanity: CDDL files should contain assignment operators
-        assert "=" in text, (
-            f"{era} CDDL file doesn't contain '=' — may not be valid CDDL"
-        )
+        assert "=" in text, f"{era} CDDL file doesn't contain '=' — may not be valid CDDL"
 
     @pytest.mark.parametrize("era,rel_path", list(CDDL_SCHEMAS.items()))
     def test_cddl_file_contains_key_definitions(self, era: str, rel_path: str):
@@ -147,14 +145,15 @@ class TestCddlSchemaDiscovery:
         # Every era's CDDL should define at least 'block' or 'transaction_body'
         has_block = "block" in text.lower()
         has_tx = "transaction" in text.lower()
-        assert has_block or has_tx, (
-            f"{era} CDDL file doesn't define 'block' or 'transaction' types"
-        )
+        assert (
+            has_block or has_tx
+        ), f"{era} CDDL file doesn't define 'block' or 'transaction' types"
 
 
 # ---------------------------------------------------------------------------
 # 2. CDDL parser availability
 # ---------------------------------------------------------------------------
+
 
 class TestCddlParserAvailability:
     """Document whether a CDDL parser is available for validation."""
@@ -169,8 +168,7 @@ class TestCddlParserAvailability:
         if _CDDL_PARSER_AVAILABLE:
             module_name = _cddl_parser_module.__name__
             pytest.skip(
-                f"CDDL parser IS available ({module_name}) — "
-                f"upgrade placeholder tests to use it!"
+                f"CDDL parser IS available ({module_name}) — upgrade placeholder tests to use it!"
             )
         else:
             # This is expected for now — no Python 3.14 CDDL parser exists
@@ -197,10 +195,7 @@ class TestCddlParserAvailability:
                 pass
 
         if available:
-            pytest.skip(
-                f"CDDL parser(s) available: {available}. "
-                f"Implement real CDDL validation!"
-            )
+            pytest.skip(f"CDDL parser(s) available: {available}. Implement real CDDL validation!")
         # Test passes: documents the current state
 
 
@@ -216,6 +211,7 @@ class TestCddlParserAvailability:
 #
 # This is the manual equivalent of what a CDDL validator would do.
 # ---------------------------------------------------------------------------
+
 
 class TestStructuralCddlConformance:
     """Manual structural checks derived from CDDL schemas."""
@@ -250,9 +246,7 @@ class TestStructuralCddlConformance:
 
         # Verify all keys are valid Shelley tx_body keys
         for key in tx_body:
-            assert key in all_valid_keys, (
-                f"Key {key} is not a valid Shelley tx_body field"
-            )
+            assert key in all_valid_keys, f"Key {key} is not a valid Shelley tx_body field"
 
         # Verify required keys present
         for key in required_keys:
@@ -287,9 +281,7 @@ class TestStructuralCddlConformance:
         }
 
         for key in tx_body:
-            assert key in alonzo_valid_keys, (
-                f"Key {key} is not a valid Alonzo tx_body field"
-            )
+            assert key in alonzo_valid_keys, f"Key {key} is not a valid Alonzo tx_body field"
 
     def test_babbage_tx_body_extended_keys(self):
         """Babbage adds keys 16-18 per CDDL.
@@ -341,29 +333,47 @@ class TestStructuralCddlConformance:
     def test_block_header_body_shelley_field_count(self):
         """Shelley header_body has 15 fields per CDDL."""
         header_body = [
-            0, 0, None, b"\x00" * 32, b"\x00" * 32,  # 5 fields
-            [b"\x00" * 32, b"\x00" * 80],              # nonce_vrf
-            [b"\x00" * 32, b"\x00" * 80],              # leader_vrf
-            0, b"\x00" * 32,                            # body_size, body_hash
-            b"\x00" * 32, 0, 0, b"\x00" * 64,          # ocert (4 fields)
-            0, 0,                                        # protocol_version (2 fields)
+            0,
+            0,
+            None,
+            b"\x00" * 32,
+            b"\x00" * 32,  # 5 fields
+            [b"\x00" * 32, b"\x00" * 80],  # nonce_vrf
+            [b"\x00" * 32, b"\x00" * 80],  # leader_vrf
+            0,
+            b"\x00" * 32,  # body_size, body_hash
+            b"\x00" * 32,
+            0,
+            0,
+            b"\x00" * 64,  # ocert (4 fields)
+            0,
+            0,  # protocol_version (2 fields)
         ]
-        assert len(header_body) == 15, (
-            f"Shelley header_body should have 15 fields, got {len(header_body)}"
-        )
+        assert (
+            len(header_body) == 15
+        ), f"Shelley header_body should have 15 fields, got {len(header_body)}"
 
     def test_block_header_body_babbage_field_count(self):
         """Babbage header_body has 14 fields per CDDL (single VRF cert)."""
         header_body = [
-            0, 0, None, b"\x00" * 32, b"\x00" * 32,  # 5 fields
-            [b"\x00" * 32, b"\x00" * 80],              # vrf_result (1 cert, not 2)
-            0, b"\x00" * 32,                            # body_size, body_hash
-            b"\x00" * 32, 0, 0, b"\x00" * 64,          # ocert (4 fields)
-            0, 0,                                        # protocol_version (2 fields)
+            0,
+            0,
+            None,
+            b"\x00" * 32,
+            b"\x00" * 32,  # 5 fields
+            [b"\x00" * 32, b"\x00" * 80],  # vrf_result (1 cert, not 2)
+            0,
+            b"\x00" * 32,  # body_size, body_hash
+            b"\x00" * 32,
+            0,
+            0,
+            b"\x00" * 64,  # ocert (4 fields)
+            0,
+            0,  # protocol_version (2 fields)
         ]
-        assert len(header_body) == 14, (
-            f"Babbage header_body should have 14 fields, got {len(header_body)}"
-        )
+        assert (
+            len(header_body) == 14
+        ), f"Babbage header_body should have 14 fields, got {len(header_body)}"
 
     def test_operational_cert_field_sizes(self):
         """OCert fields have specific sizes per CDDL."""
@@ -399,6 +409,7 @@ class TestStructuralCddlConformance:
 # When a CDDL parser becomes available, replace the body with real validation.
 # ---------------------------------------------------------------------------
 
+
 class TestCddlValidationPlaceholders:
     """Placeholder tests documenting CDDL rules needing automated validation.
 
@@ -424,7 +435,11 @@ class TestCddlValidationPlaceholders:
             ("alonzo", "costmdls", "{language => cost_model} in canonical CBOR"),
             ("alonzo", "plutus_data", "Constr / Map / List / Integer / Bytes"),
             ("babbage", "header_body", "14-field header body with single VRF result"),
-            ("babbage", "post_alonzo_transaction_output", "Map-based TxOut with datum_option and script_ref"),
+            (
+                "babbage",
+                "post_alonzo_transaction_output",
+                "Map-based TxOut with datum_option and script_ref",
+            ),
             ("babbage", "datum_option", "[0, hash32] / [1, data .cbor plutus_data]"),
             ("babbage", "script_ref", "#6.24(bytes .cbor script)"),
             ("conway", "transaction_body", "Extended with keys 19-22"),
@@ -433,9 +448,7 @@ class TestCddlValidationPlaceholders:
             ("conway", "voter", "5 voter types with keyhash/scripthash"),
         ],
     )
-    def test_cddl_definition_needs_validation(
-        self, era: str, definition: str, description: str
-    ):
+    def test_cddl_definition_needs_validation(self, era: str, definition: str, description: str):
         """Document a CDDL definition that needs automated validation.
 
         This test always passes — it's a tracking mechanism for CDDL coverage.
@@ -457,6 +470,7 @@ class TestCddlValidationPlaceholders:
 # Cardano uses specific CBOR tags that must be encoded correctly.
 # These are derivable from the CDDL without needing a parser.
 # ---------------------------------------------------------------------------
+
 
 class TestCborTagConformance:
     """Verify correct CBOR tag usage per Cardano CDDL conventions."""
@@ -522,10 +536,9 @@ class TestCborTagConformance:
             result = cbor2.dumps(tagged)
             # Tags 0-23 encode as 0xC0 + tag (single byte)
             expected_byte = 0xC0 + era_tag
-            assert result[0] == expected_byte, (
-                f"Era tag {era_tag} should encode as 0x{expected_byte:02x}, "
-                f"got 0x{result[0]:02x}"
-            )
+            assert (
+                result[0] == expected_byte
+            ), f"Era tag {era_tag} should encode as 0x{expected_byte:02x}, got 0x{result[0]:02x}"
 
     def test_canonical_map_key_ordering(self):
         """Canonical CBOR requires map keys sorted by encoded byte value.
@@ -542,6 +555,4 @@ class TestCborTagConformance:
 
         # The decoded map should have keys in canonical order
         keys = list(decoded.keys())
-        assert keys == [0, 1, 2, 10], (
-            f"Canonical CBOR should sort keys by encoded bytes: {keys}"
-        )
+        assert keys == [0, 1, 2, 10], f"Canonical CBOR should sort keys by encoded bytes: {keys}"

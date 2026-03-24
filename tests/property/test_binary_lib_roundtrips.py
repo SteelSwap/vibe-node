@@ -21,18 +21,17 @@ Haskell reference:
 from __future__ import annotations
 
 import math
-import struct
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from fractions import Fraction
 
 import cbor2
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. SlotNo / EpochNo / BlockNo / EpochSize as CBOR uint
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestSlotEpochBlockBoundaryValues:
@@ -115,6 +114,7 @@ class TestSlotEpochBlockBoundaryValues:
 # 2. SystemStart as CBOR text (ISO 8601) round-trip
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.property
 class TestSystemStartIso8601:
     """SystemStart encodes as ISO 8601 text in CBOR.
@@ -124,10 +124,10 @@ class TestSystemStartIso8601:
     """
 
     SYSTEM_START_VALUES: list[str] = [
-        "2017-09-23T21:44:51Z",       # Byron mainnet genesis
-        "2022-11-01T00:00:00Z",        # Preview testnet
-        "2000-01-01T00:00:00Z",        # Y2K boundary
-        "2099-12-31T23:59:59Z",        # Far future
+        "2017-09-23T21:44:51Z",  # Byron mainnet genesis
+        "2022-11-01T00:00:00Z",  # Preview testnet
+        "2000-01-01T00:00:00Z",  # Y2K boundary
+        "2099-12-31T23:59:59Z",  # Far future
     ]
 
     @pytest.mark.parametrize("iso_str", SYSTEM_START_VALUES)
@@ -159,6 +159,7 @@ class TestSystemStartIso8601:
 # ---------------------------------------------------------------------------
 # 3. embedTripSpec: Word8 → Word16 embedding
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestEmbedTripSpec:
@@ -218,6 +219,7 @@ class TestEmbedTripSpec:
 # 4. Set → List embedding (CBOR tag 258 set decodes as list)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.property
 class TestSetListEmbedding:
     """CBOR tag 258 set can be decoded as a plain list.
@@ -273,6 +275,7 @@ class TestSetListEmbedding:
 # 5. Vintage Byron-style round-trips
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.property
 class TestByronStyleRoundtrips:
     """Byron-era CBOR patterns — the simplest building blocks.
@@ -301,8 +304,17 @@ class TestByronStyleRoundtrips:
     @pytest.mark.parametrize(
         "value",
         [0, 1, -1, 42, -42, 2**63 - 1, -(2**63), 2**128, -(2**128)],
-        ids=["zero", "one", "neg_one", "small_pos", "small_neg",
-             "max_int64", "min_int64", "big_pos", "big_neg"],
+        ids=[
+            "zero",
+            "one",
+            "neg_one",
+            "small_pos",
+            "small_neg",
+            "max_int64",
+            "min_int64",
+            "big_pos",
+            "big_neg",
+        ],
     )
     def test_integer_roundtrip(self, value: int) -> None:
         """Arbitrary-precision integers round-trip via CBOR."""
@@ -325,18 +337,21 @@ class TestByronStyleRoundtrips:
     @pytest.mark.parametrize(
         "value,bits",
         [
-            (0, 32), (2**31 - 1, 32), (-(2**31), 32),
-            (0, 64), (2**63 - 1, 64), (-(2**63), 64),
+            (0, 32),
+            (2**31 - 1, 32),
+            (-(2**31), 32),
+            (0, 64),
+            (2**63 - 1, 64),
+            (-(2**63), 64),
         ],
-        ids=["int32_zero", "int32_max", "int32_min",
-             "int64_zero", "int64_max", "int64_min"],
+        ids=["int32_zero", "int32_max", "int32_min", "int64_zero", "int64_max", "int64_min"],
     )
     def test_signed_int_roundtrip(self, value: int, bits: int) -> None:
         """Int32/Int64 round-trip within their signed range."""
         encoded = cbor2.dumps(value)
         decoded = cbor2.loads(encoded)
         assert decoded == value
-        assert -(2**(bits - 1)) <= decoded < 2**(bits - 1)
+        assert -(2 ** (bits - 1)) <= decoded < 2 ** (bits - 1)
 
     @pytest.mark.parametrize(
         "value",
@@ -385,6 +400,7 @@ class TestByronStyleRoundtrips:
 # ---------------------------------------------------------------------------
 # 6. Sum-type CBOR encoding with tag discriminator
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestSumTypeCborEncoding:
@@ -463,6 +479,7 @@ class TestSumTypeCborEncoding:
 # 7. SubBytes / Annotated: pre-encoded CBOR in tag 24
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.property
 class TestSubBytesAnnotatedPattern:
     """SubBytes / Annotated pattern — pre-encoded CBOR wrapped in tag 24.
@@ -538,6 +555,7 @@ class TestSubBytesAnnotatedPattern:
 # 8. Hex text round-trip: bytes.hex() ↔ bytes.fromhex()
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.property
 class TestHexTextRoundtrip:
     """Hex text encoding of CBOR payloads — used in JSON APIs and logs.
@@ -606,10 +624,7 @@ class TestHexTextRoundtrip:
         cbor_bytes = cbor2.dumps(42)
         lower = cbor_bytes.hex()
         upper = lower.upper()
-        mixed = "".join(
-            c.upper() if i % 2 == 0 else c.lower()
-            for i, c in enumerate(lower)
-        )
+        mixed = "".join(c.upper() if i % 2 == 0 else c.lower() for i, c in enumerate(lower))
 
         assert bytes.fromhex(lower) == cbor_bytes
         assert bytes.fromhex(upper) == cbor_bytes

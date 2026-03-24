@@ -24,11 +24,11 @@ import struct
 
 import pytest
 
+from vibe.cardano.network.chainsync import Point
 from vibe.cardano.storage.chaindb import ChainDB
-from vibe.cardano.storage.volatile import VolatileDB
 from vibe.cardano.storage.immutable import ImmutableDB
 from vibe.cardano.storage.ledger import LedgerDB
-from vibe.cardano.network.chainsync import Point, ORIGIN
+from vibe.cardano.storage.volatile import VolatileDB
 
 
 def _hash(n: int) -> bytes:
@@ -62,6 +62,7 @@ def chain_db(tmp_path):
 @pytest.fixture
 def populated_chain_db(chain_db):
     """ChainDB with 50 blocks already added."""
+
     async def _populate():
         prev = _hash(0)
         for i in range(1, 51):
@@ -75,6 +76,7 @@ def populated_chain_db(chain_db):
                 vrf_output=_vrf(i),
             )
             prev = _hash(i)
+
     asyncio.run(_populate())
     return chain_db
 
@@ -202,9 +204,7 @@ class TestBlockFetchServing:
         db = populated_chain_db
 
         def fetch_one():
-            return asyncio.run(
-                db.get_block(_hash(25))
-            )
+            return asyncio.run(db.get_block(_hash(25)))
 
         benchmark(fetch_one)
 
@@ -215,9 +215,7 @@ class TestBlockFetchServing:
         p_to = Point(slot=300, hash=_hash(30))
 
         def fetch_range():
-            return asyncio.run(
-                db.get_blocks(p_from, p_to)
-            )
+            return asyncio.run(db.get_blocks(p_from, p_to))
 
         benchmark(fetch_range)
 
@@ -263,6 +261,7 @@ class TestFullPipeline:
     def test_under_200ms_target(self, populated_chain_db):
         """Verify full pipeline completes under 200ms (devnet target)."""
         import time
+
         db = populated_chain_db
         follower = db.new_follower()
         for _ in range(50):

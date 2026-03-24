@@ -46,7 +46,7 @@ from typing import Any
 import cbor2pure as cbor2
 import pyarrow as pa
 
-from vibe.cardano.storage import BlockDiff, ImmutableDB, LedgerDB
+from vibe.cardano.storage import ImmutableDB, LedgerDB
 from vibe.cardano.storage.ledger import UTXO_SCHEMA
 
 __all__ = [
@@ -92,9 +92,7 @@ def _read_haskell_primary_index(primary_path: Path) -> list[int]:
     offsets: list[int] = []
     for i in range(count):
         start = i * _HASKELL_PRIMARY_ENTRY_SIZE
-        (val,) = struct.unpack_from(
-            _HASKELL_PRIMARY_ENTRY_FMT, payload, start
-        )
+        (val,) = struct.unpack_from(_HASKELL_PRIMARY_ENTRY_FMT, payload, start)
         offsets.append(val)
     return offsets
 
@@ -207,8 +205,7 @@ def _extract_slot_and_hash(cbor_bytes: bytes) -> tuple[int, bytes]:
     # Shelley+ block: [header, tx_bodies, tx_witnesses, auxiliary]
     if not isinstance(block, list) or len(block) < 4:
         raise ValueError(
-            f"Expected Shelley+ block array of >= 4 elements, "
-            f"got {type(block).__name__}"
+            f"Expected Shelley+ block array of >= 4 elements, got {type(block).__name__}"
         )
 
     header = block[0]
@@ -267,9 +264,7 @@ def parse_immutable_chunks(
         primary_path = chunk_path.with_suffix(".primary")
 
         if not primary_path.exists():
-            logger.warning(
-                "No primary index for chunk %s, skipping", chunk_stem
-            )
+            logger.warning("No primary index for chunk %s, skipping", chunk_stem)
             continue
 
         # Read the primary index to get block boundary offsets.
@@ -300,9 +295,7 @@ def parse_immutable_chunks(
             block_count += 1
             yield slot, block_hash, cbor_bytes
 
-        logger.debug(
-            "Chunk %s: parsed %d blocks", chunk_stem, block_count
-        )
+        logger.debug("Chunk %s: parsed %d blocks", chunk_stem, block_count)
 
 
 # ---------------------------------------------------------------------------
@@ -332,12 +325,20 @@ def _decode_ledger_snapshot(
     # with the slot number, e.g., ``<slot>`` or ``<slot>_<hash>``.
     snapshot_files = sorted(ledger_dir.glob("*"))
     if not snapshot_files:
-        logger.info("No ledger snapshot files found in %s", ledger_dir, extra={"event": "mithril.ledger.empty", "path": str(ledger_dir)})
+        logger.info(
+            "No ledger snapshot files found in %s",
+            ledger_dir,
+            extra={"event": "mithril.ledger.empty", "path": str(ledger_dir)},
+        )
         return None
 
     # Take the most recent (largest filename = highest slot).
     snapshot_file = snapshot_files[-1]
-    logger.info("Decoding ledger snapshot from %s", snapshot_file, extra={"event": "mithril.ledger.decode", "path": str(snapshot_file)})
+    logger.info(
+        "Decoding ledger snapshot from %s",
+        snapshot_file,
+        extra={"event": "mithril.ledger.decode", "path": str(snapshot_file)},
+    )
 
     try:
         raw = snapshot_file.read_bytes()
@@ -425,7 +426,7 @@ def _utxo_table_from_ledger_state(state: Any) -> pa.Table | None:
             values.append(val)
             datum_hashes.append(dhash)
 
-        except (ValueError, TypeError, IndexError):
+        except ValueError, TypeError, IndexError:
             continue
 
     if not keys:
@@ -526,9 +527,7 @@ async def import_mithril_snapshot(
     ledger_dir = snapshot_dir / "ledger"
 
     if not immutable_dir.is_dir():
-        raise FileNotFoundError(
-            f"Immutable directory not found: {immutable_dir}"
-        )
+        raise FileNotFoundError(f"Immutable directory not found: {immutable_dir}")
 
     # Phase 1: Import blocks from chunk files into our ImmutableDB.
     tip_slot: int | None = None
@@ -536,7 +535,11 @@ async def import_mithril_snapshot(
     block_count = 0
     skipped = 0
 
-    logger.info("Importing blocks from %s", immutable_dir, extra={"event": "mithril.blocks.start", "path": str(immutable_dir)})
+    logger.info(
+        "Importing blocks from %s",
+        immutable_dir,
+        extra={"event": "mithril.blocks.start", "path": str(immutable_dir)},
+    )
 
     for slot, block_hash, cbor_bytes in parse_immutable_chunks(immutable_dir):
         # Skip blocks that are already in our DB (idempotent import).
@@ -548,9 +551,7 @@ async def import_mithril_snapshot(
         try:
             await immutable_db.append_block(slot, block_hash, cbor_bytes)
         except Exception as exc:
-            logger.warning(
-                "Failed to append block at slot %d: %s", slot, exc
-            )
+            logger.warning("Failed to append block at slot %d: %s", slot, exc)
             continue
 
         tip_slot = slot
@@ -558,15 +559,35 @@ async def import_mithril_snapshot(
         block_count += 1
 
         if block_count % 10_000 == 0:
-            logger.info("Imported %d blocks (tip slot %d)", block_count, slot, extra={"event": "mithril.blocks.progress", "block_count": block_count, "slot": slot})
+            logger.info(
+                "Imported %d blocks (tip slot %d)",
+                block_count,
+                slot,
+                extra={
+                    "event": "mithril.blocks.progress",
+                    "block_count": block_count,
+                    "slot": slot,
+                },
+            )
 
     if tip_slot is None or tip_hash is None:
         raise ValueError(
-            f"No blocks imported from {immutable_dir} "
-            f"(skipped {skipped} already-imported blocks)"
+            f"No blocks imported from {immutable_dir} (skipped {skipped} already-imported blocks)"
         )
 
-    logger.info("Import complete: %d blocks (skipped %d), tip at slot %d", block_count, skipped, tip_slot, extra={"event": "mithril.blocks.done", "block_count": block_count, "skipped": skipped, "tip_slot": tip_slot, "tip_hash": tip_hash.hex()[:16]})
+    logger.info(
+        "Import complete: %d blocks (skipped %d), tip at slot %d",
+        block_count,
+        skipped,
+        tip_slot,
+        extra={
+            "event": "mithril.blocks.done",
+            "block_count": block_count,
+            "skipped": skipped,
+            "tip_slot": tip_slot,
+            "tip_hash": tip_hash.hex()[:16],
+        },
+    )
 
     # Phase 2: Try to import the ledger state.
     if ledger_dir.is_dir():
@@ -575,18 +596,25 @@ async def import_mithril_snapshot(
             # Populate the LedgerDB with the decoded UTxO set.
             entries: list[tuple[bytes, dict[str, Any]]] = []
             for i in range(len(utxo_table)):
-                row = {
-                    col: utxo_table.column(col)[i].as_py()
-                    for col in UTXO_SCHEMA.names
-                }
+                row = {col: utxo_table.column(col)[i].as_py() for col in UTXO_SCHEMA.names}
                 key = row["key"]
                 entries.append((key, row))
 
             ledger_db._bulk_insert(entries)
-            logger.info("Loaded %d UTxOs from ledger snapshot", len(entries), extra={"event": "mithril.utxo.loaded", "utxo_count": len(entries)})
+            logger.info(
+                "Loaded %d UTxOs from ledger snapshot",
+                len(entries),
+                extra={"event": "mithril.utxo.loaded", "utxo_count": len(entries)},
+            )
         else:
-            logger.info("Could not decode ledger snapshot — UTxO set must be built by replaying blocks", extra={"event": "mithril.utxo.decode_failed"})
+            logger.info(
+                "Could not decode ledger snapshot — UTxO set must be built by replaying blocks",
+                extra={"event": "mithril.utxo.decode_failed"},
+            )
     else:
-        logger.info("No ledger directory in snapshot — skipping UTxO import", extra={"event": "mithril.utxo.skip"})
+        logger.info(
+            "No ledger directory in snapshot — skipping UTxO import",
+            extra={"event": "mithril.utxo.skip"},
+        )
 
     return tip_slot, tip_hash

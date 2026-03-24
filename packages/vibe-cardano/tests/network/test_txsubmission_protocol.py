@@ -14,31 +14,29 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vibe.core.protocols.agency import Agency, Message, PeerRole, ProtocolError
-from vibe.core.protocols.codec import CodecError
-from vibe.core.protocols.runner import ProtocolRunner
-
 from vibe.cardano.network.txsubmission_protocol import (
-    # States
-    TxSubmissionState,
-    # Protocol
-    TxSubmissionProtocol,
-    # Codec
-    TxSubmissionCodec,
-    # Typed messages
-    TsMsgInit,
-    TsMsgRequestTxIds,
-    TsMsgReplyTxIds,
-    TsMsgRequestTxs,
-    TsMsgReplyTxs,
-    TsMsgDone,
-    # Client
-    TxSubmissionClient,
     # Limits
     TX_SUBMISSION_SIZE_LIMITS,
     TX_SUBMISSION_TIME_LIMITS,
+    TsMsgDone,
+    # Typed messages
+    TsMsgInit,
+    TsMsgReplyTxIds,
+    TsMsgReplyTxs,
+    TsMsgRequestTxIds,
+    TsMsgRequestTxs,
+    # Client
+    TxSubmissionClient,
+    # Codec
+    TxSubmissionCodec,
+    # Protocol
+    TxSubmissionProtocol,
+    # States
+    TxSubmissionState,
 )
-
+from vibe.core.protocols.agency import Agency, Message, PeerRole
+from vibe.core.protocols.codec import CodecError
+from vibe.core.protocols.runner import ProtocolRunner
 
 # ---------------------------------------------------------------------------
 # Protocol definition
@@ -322,9 +320,7 @@ class TestHypothesisCodecRoundTrip:
     def test_request_tx_ids_codec_round_trip(
         self, blocking: bool, ack_count: int, req_count: int
     ) -> None:
-        msg = TsMsgRequestTxIds(
-            blocking=blocking, ack_count=ack_count, req_count=req_count
-        )
+        msg = TsMsgRequestTxIds(blocking=blocking, ack_count=ack_count, req_count=req_count)
         data = self.codec.encode(msg)
         decoded = self.codec.decode(data)
         assert isinstance(decoded, TsMsgRequestTxIds)
@@ -334,17 +330,13 @@ class TestHypothesisCodecRoundTrip:
 
     @given(txids=st.lists(txid_size_pair, max_size=15))
     @settings(max_examples=100)
-    def test_reply_tx_ids_codec_round_trip(
-        self, txids: list[tuple[bytes, int]]
-    ) -> None:
+    def test_reply_tx_ids_codec_round_trip(self, txids: list[tuple[bytes, int]]) -> None:
         msg = TsMsgReplyTxIds(txids=txids)
         data = self.codec.encode(msg)
         decoded = self.codec.decode(data)
         assert isinstance(decoded, TsMsgReplyTxIds)
         assert len(decoded.txids) == len(txids)
-        for (orig_id, orig_sz), (dec_id, dec_sz) in zip(
-            txids, decoded.txids
-        ):
+        for (orig_id, orig_sz), (dec_id, dec_sz) in zip(txids, decoded.txids):
             assert dec_id == orig_id
             assert dec_sz == orig_sz
 
@@ -400,9 +392,7 @@ class TestProtocolWalkthrough:
         assert state == TxSubmissionState.StTxIds
 
         # Client replies with tx IDs
-        msg_reply_ids = TsMsgReplyTxIds(
-            txids=[(b"\x01" * 32, 200), (b"\x02" * 32, 300)]
-        )
+        msg_reply_ids = TsMsgReplyTxIds(txids=[(b"\x01" * 32, 200), (b"\x02" * 32, 300)])
         assert msg_reply_ids.from_state == state
         state = msg_reply_ids.to_state
         assert state == TxSubmissionState.StIdle
@@ -498,12 +488,12 @@ class MockChannel:
     _b_to_a: asyncio.Queue[bytes] = field(default_factory=asyncio.Queue)
 
     @property
-    def client_side(self) -> "_MockChannelEnd":
+    def client_side(self) -> _MockChannelEnd:
         """Channel end for the client (Initiator)."""
         return _MockChannelEnd(send_q=self._a_to_b, recv_q=self._b_to_a)
 
     @property
-    def server_side(self) -> "_MockChannelEnd":
+    def server_side(self) -> _MockChannelEnd:
         """Channel end for the server (Responder)."""
         return _MockChannelEnd(send_q=self._b_to_a, recv_q=self._a_to_b)
 
@@ -609,9 +599,7 @@ class TestDirectClientServerPairing:
             assert isinstance(msg_init, TsMsgInit)
 
             # Request tx IDs (non-blocking)
-            await runner.send_message(
-                TsMsgRequestTxIds(blocking=False, ack_count=0, req_count=10)
-            )
+            await runner.send_message(TsMsgRequestTxIds(blocking=False, ack_count=0, req_count=10))
 
             # Receive reply with tx IDs
             reply_ids = await runner.recv_message()
@@ -628,9 +616,7 @@ class TestDirectClientServerPairing:
             server_received_txs.extend(reply_txs.txs)
 
             # Send blocking request for more tx IDs (client will send Done)
-            await runner.send_message(
-                TsMsgRequestTxIds(blocking=True, ack_count=2, req_count=5)
-            )
+            await runner.send_message(TsMsgRequestTxIds(blocking=True, ack_count=2, req_count=5))
 
             # Receive MsgDone
             msg_done = await runner.recv_message()
@@ -679,9 +665,7 @@ class TestDirectClientServerPairing:
             msg_init = await runner.recv_message()
             assert isinstance(msg_init, TsMsgInit)
 
-            await runner.send_message(
-                TsMsgRequestTxIds(blocking=True, ack_count=0, req_count=5)
-            )
+            await runner.send_message(TsMsgRequestTxIds(blocking=True, ack_count=0, req_count=5))
 
             msg_done = await runner.recv_message()
             assert isinstance(msg_done, TsMsgDone)
@@ -756,9 +740,7 @@ class TestDirectClientServerPairing:
                 all_server_txs.extend(reply_txs.txs)
 
             # Final blocking request
-            await runner.send_message(
-                TsMsgRequestTxIds(blocking=True, ack_count=2, req_count=5)
-            )
+            await runner.send_message(TsMsgRequestTxIds(blocking=True, ack_count=2, req_count=5))
             msg_done = await runner.recv_message()
             assert isinstance(msg_done, TsMsgDone)
 
@@ -939,17 +921,13 @@ class TestBlockingVsNonBlocking:
             await runner.recv_message()  # MsgInit
 
             # Non-blocking request
-            await runner.send_message(
-                TsMsgRequestTxIds(blocking=False, ack_count=0, req_count=5)
-            )
+            await runner.send_message(TsMsgRequestTxIds(blocking=False, ack_count=0, req_count=5))
             reply = await runner.recv_message()
             assert isinstance(reply, TsMsgReplyTxIds)
             assert reply.txids == []  # Empty is valid for non-blocking
 
             # Blocking request
-            await runner.send_message(
-                TsMsgRequestTxIds(blocking=True, ack_count=0, req_count=5)
-            )
+            await runner.send_message(TsMsgRequestTxIds(blocking=True, ack_count=0, req_count=5))
             done = await runner.recv_message()
             assert isinstance(done, TsMsgDone)
             assert runner.is_done

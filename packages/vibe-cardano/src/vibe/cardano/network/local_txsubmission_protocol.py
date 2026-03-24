@@ -28,29 +28,28 @@ from __future__ import annotations
 
 import enum
 import logging
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
+from vibe.cardano.network.local_txsubmission import (
+    MsgAcceptTx,
+    MsgDone,
+    MsgRejectTx,
+    MsgSubmitTx,
+    decode_message,
+    encode_accept_tx,
+    encode_done,
+    encode_reject_tx,
+    encode_submit_tx,
+)
 from vibe.core.protocols.agency import (
     Agency,
     Message,
+    PeerRole,
     Protocol,
     ProtocolError,
-    PeerRole,
 )
-from vibe.core.protocols.codec import Codec, CodecError
+from vibe.core.protocols.codec import CodecError
 from vibe.core.protocols.runner import ProtocolRunner
-
-from vibe.cardano.network.local_txsubmission import (
-    MsgSubmitTx,
-    MsgAcceptTx,
-    MsgRejectTx,
-    MsgDone,
-    encode_submit_tx,
-    encode_accept_tx,
-    encode_reject_tx,
-    encode_done,
-    decode_message,
-)
 
 __all__ = [
     "LocalTxSubmissionState",
@@ -219,9 +218,7 @@ class LocalTxSubmissionProtocol(Protocol[LocalTxSubmissionState]):
         try:
             return self._AGENCY_MAP[state]
         except KeyError:
-            raise ProtocolError(
-                f"Unknown local tx-submission state: {state!r}"
-            )
+            raise ProtocolError(f"Unknown local tx-submission state: {state!r}")
 
     def valid_messages(
         self, state: LocalTxSubmissionState
@@ -229,9 +226,7 @@ class LocalTxSubmissionProtocol(Protocol[LocalTxSubmissionState]):
         try:
             return self._VALID_MESSAGES[state]
         except KeyError:
-            raise ProtocolError(
-                f"Unknown local tx-submission state: {state!r}"
-            )
+            raise ProtocolError(f"Unknown local tx-submission state: {state!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -259,10 +254,7 @@ class LocalTxSubmissionCodec:
         elif isinstance(message, LtsMsgDone):
             return encode_done()
         else:
-            raise CodecError(
-                f"Unknown local tx-submission message type: "
-                f"{type(message).__name__}"
-            )
+            raise CodecError(f"Unknown local tx-submission message type: {type(message).__name__}")
 
     def decode(self, data: bytes) -> Message[LocalTxSubmissionState]:
         """Decode CBOR bytes into a typed local tx-submission message."""
@@ -280,10 +272,7 @@ class LocalTxSubmissionCodec:
         elif isinstance(msg, MsgDone):
             return LtsMsgDone()
         else:
-            raise CodecError(
-                f"Failed to decode local tx-submission message "
-                f"({len(data)} bytes)"
-            )
+            raise CodecError(f"Failed to decode local tx-submission message ({len(data)} bytes)")
 
 
 # ---------------------------------------------------------------------------
@@ -316,9 +305,7 @@ class LocalTxSubmissionServer:
 
     __slots__ = ("_runner",)
 
-    def __init__(
-        self, runner: ProtocolRunner[LocalTxSubmissionState]
-    ) -> None:
+    def __init__(self, runner: ProtocolRunner[LocalTxSubmissionState]) -> None:
         self._runner = runner
 
     @property
@@ -347,10 +334,7 @@ class LocalTxSubmissionServer:
         response = await self._runner.recv_message()
         if isinstance(response, (LtsMsgSubmitTx, LtsMsgDone)):
             return response
-        raise ProtocolError(
-            f"Unexpected client message in StIdle: "
-            f"{type(response).__name__}"
-        )
+        raise ProtocolError(f"Unexpected client message in StIdle: {type(response).__name__}")
 
     async def accept_tx(self) -> None:
         """Send MsgAcceptTx to accept the submitted transaction."""
@@ -416,9 +400,7 @@ async def run_local_tx_submission_server(
                 client_msg.era_id,
                 len(client_msg.tx_bytes),
             )
-            rejection = await validate_tx(
-                client_msg.era_id, client_msg.tx_bytes
-            )
+            rejection = await validate_tx(client_msg.era_id, client_msg.tx_bytes)
             if rejection is None:
                 await server.accept_tx()
                 logger.debug("Local tx-submission: accepted tx")

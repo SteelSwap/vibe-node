@@ -16,15 +16,14 @@ Spec ref:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from vibe.cardano.node.config import NodeConfig, PeerAddress
-from vibe.cardano.node.run import PeerManager, _PeerConnection
+from vibe.cardano.node.peer_manager import PeerManager, _PeerConnection
 from vibe.core.multiplexer import MuxClosedError
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -39,7 +38,7 @@ def _make_config() -> NodeConfig:
         epoch_length=432000,
         security_param=2160,
         active_slot_coeff=0.05,
-        system_start=datetime(2022, 11, 1, tzinfo=timezone.utc),
+        system_start=datetime(2022, 11, 1, tzinfo=UTC),
         host="127.0.0.1",
         port=3001,
     )
@@ -149,6 +148,7 @@ class TestMuxClosedErrorDoesntCrash:
             patch.object(PeerManager, "_disconnect_peer", _fake_disconnect),
             patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
         ):
+
             async def _stop_after_two(delay: float) -> None:
                 if call_count >= 2:
                     mgr._stopped = True
@@ -186,6 +186,7 @@ class TestMuxClosedErrorDoesntCrash:
             patch.object(PeerManager, "_disconnect_peer", _fake_disconnect),
             patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
         ):
+
             async def _stop_after_three(delay: float) -> None:
                 if call_count >= 3:
                     mgr._stopped = True
@@ -222,6 +223,7 @@ class TestMuxClosedErrorDoesntCrash:
             patch.object(PeerManager, "_disconnect_peer", _fake_disconnect),
             patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
         ):
+
             async def _stop_after_two(delay: float) -> None:
                 if call_count >= 2:
                     mgr._stopped = True

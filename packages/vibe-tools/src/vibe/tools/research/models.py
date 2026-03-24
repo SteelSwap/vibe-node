@@ -2,9 +2,9 @@
 
 All pipeline stage inputs/outputs are strictly typed.
 """
+
 from __future__ import annotations
 
-import uuid
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -53,7 +53,9 @@ class Priority(str, Enum):
 class ExtractedRule(BaseModel):
     """A single rule/definition/equation extracted from a spec chunk."""
 
-    section_id: str = Field(description="Stable identifier, e.g. 'shelley-ledger:rule-utxo-transition'")
+    section_id: str = Field(
+        description="Stable identifier, e.g. 'shelley-ledger:rule-utxo-transition'"
+    )
     title: str = Field(description="Human-readable title")
     section_type: SectionType
     verbatim: str = Field(description="Exact text from the spec")
@@ -92,9 +94,7 @@ class LinkDecision(BaseModel):
     relationship: RelationshipType | None = Field(
         default=None, description="Relationship type if linked"
     )
-    confidence: float = Field(
-        default=0.0, ge=0.0, le=1.0, description="Confidence in the link"
-    )
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Confidence in the link")
     notes: str | None = Field(default=None, description="Brief explanation")
 
 

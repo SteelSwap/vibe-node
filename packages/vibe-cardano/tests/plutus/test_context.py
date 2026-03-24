@@ -12,20 +12,15 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
-
 from uplc.ast import (
     PlutusByteString,
     PlutusConstr,
-    PlutusData,
     PlutusInteger,
     PlutusList,
     PlutusMap,
 )
 
 from vibe.cardano.plutus.context import (
-    ScriptPurpose,
-    ScriptPurposeTag,
     TxInfoBuilder,
     address_to_data,
     build_script_context_v1,
@@ -39,7 +34,6 @@ from vibe.cardano.plutus.context import (
     tx_out_ref_to_data,
     value_to_data,
 )
-
 
 # ---------------------------------------------------------------------------
 # ScriptPurpose
@@ -465,9 +459,9 @@ class TestScriptContextVersionIncompatibility:
         builder.set_tx_id(b"\xaa" * 32)
         v1_info = builder.build_v1()
         v2_info = builder.build_v2()
-        assert len(v1_info.fields) != len(v2_info.fields), (
-            "V1 and V2 TxInfo should have different field counts"
-        )
+        assert len(v1_info.fields) != len(
+            v2_info.fields
+        ), "V1 and V2 TxInfo should have different field counts"
 
     def test_v1_txinfo_field_count_differs_from_v3(self) -> None:
         """V1 TxInfo cannot be mistaken for V3 TxInfo (different field count)."""
@@ -475,9 +469,9 @@ class TestScriptContextVersionIncompatibility:
         builder.set_tx_id(b"\xaa" * 32)
         v1_info = builder.build_v1()
         v3_info = builder.build_v3()
-        assert len(v1_info.fields) != len(v3_info.fields), (
-            "V1 and V3 TxInfo should have different field counts"
-        )
+        assert len(v1_info.fields) != len(
+            v3_info.fields
+        ), "V1 and V3 TxInfo should have different field counts"
 
     def test_v2_txinfo_field_count_differs_from_v3(self) -> None:
         """V2 TxInfo cannot be mistaken for V3 TxInfo (different field count)."""
@@ -485,9 +479,9 @@ class TestScriptContextVersionIncompatibility:
         builder.set_tx_id(b"\xaa" * 32)
         v2_info = builder.build_v2()
         v3_info = builder.build_v3()
-        assert len(v2_info.fields) != len(v3_info.fields), (
-            "V2 and V3 TxInfo should have different field counts"
-        )
+        assert len(v2_info.fields) != len(
+            v3_info.fields
+        ), "V2 and V3 TxInfo should have different field counts"
 
     def test_v1_v2_script_context_same_shape_different_txinfo(self) -> None:
         """V1 and V2 ScriptContext have same outer shape (2 fields) but different TxInfo.
@@ -527,6 +521,6 @@ class TestScriptContextVersionIncompatibility:
 
         assert len(ctx_v1.fields) == 2
         assert len(ctx_v3.fields) == 3
-        assert len(ctx_v1.fields) != len(ctx_v3.fields), (
-            "V1 and V3 ScriptContext must have different field counts"
-        )
+        assert len(ctx_v1.fields) != len(
+            ctx_v3.fields
+        ), "V1 and V3 ScriptContext must have different field counts"

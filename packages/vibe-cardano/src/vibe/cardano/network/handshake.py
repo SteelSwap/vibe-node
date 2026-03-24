@@ -21,7 +21,7 @@ Version data encoding (N2N V14+):
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Union
 
 import cbor2pure as cbor2
@@ -423,7 +423,7 @@ def encode_refuse(refuse: MsgRefuse) -> bytes:
     reason = refuse.reason
     if isinstance(reason, RefuseReasonVersionMismatch):
         reason_term = [_REFUSE_VERSION_MISMATCH, reason.versions]
-    elif isinstance(reason, RefuseReasonDecodeError):
+    elif isinstance(reason, RefuseReasonDecodeError):  # noqa: F821
         reason_term = [_REFUSE_DECODE_ERROR, reason.version, reason.message]
     elif isinstance(reason, RefuseReasonRefused):
         reason_term = [_REFUSE_REFUSED, reason.version, reason.message]
@@ -461,9 +461,7 @@ def _decode_refuse_reason(reason_term: list) -> RefuseReason:
     elif tag == _REFUSE_DECODE_ERROR:
         # [1, versionNumber, errorMessage]
         if len(reason_term) != 3:
-            raise ValueError(
-                f"HandshakeDecodeError expects 3 elements, got {len(reason_term)}"
-            )
+            raise ValueError(f"HandshakeDecodeError expects 3 elements, got {len(reason_term)}")
         return RefuseReasonHandshakeDecodeError(
             version_number=reason_term[1],
             message=reason_term[2],
@@ -507,9 +505,7 @@ def decode_handshake_response(cbor_bytes: bytes) -> HandshakeResponse:
     if tag == _MSG_ACCEPT_VERSION:
         # [1, versionNumber, versionData]
         if len(decoded) != 3:
-            raise ValueError(
-                f"MsgAcceptVersion expects list of 3, got {len(decoded)}"
-            )
+            raise ValueError(f"MsgAcceptVersion expects list of 3, got {len(decoded)}")
         version_number = decoded[1]
         version_data = _decode_version_data(decoded[2])
         return MsgAcceptVersion(
@@ -525,6 +521,4 @@ def decode_handshake_response(cbor_bytes: bytes) -> HandshakeResponse:
         return MsgRefuse(reason=reason)
 
     else:
-        raise ValueError(
-            f"Expected MsgAcceptVersion (tag=1) or MsgRefuse (tag=2), got tag={tag}"
-        )
+        raise ValueError(f"Expected MsgAcceptVersion (tag=1) or MsgRefuse (tag=2), got tag={tag}")

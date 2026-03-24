@@ -36,32 +36,26 @@ from __future__ import annotations
 import hashlib
 
 import cbor2
-import pytest
 from pycardano import (
     Asset,
     AssetName,
     MultiAsset,
-    NativeScript,
-    ScriptAll,
-    ScriptPubkey,
     TransactionBody,
     TransactionInput,
     TransactionOutput,
     Value,
 )
 from pycardano.address import Address
-from pycardano.hash import ScriptHash, TransactionId, VerificationKeyHash
+from pycardano.hash import ScriptHash, TransactionId
 from pycardano.key import PaymentSigningKey, PaymentVerificationKey
 from pycardano.network import Network
 from pycardano.witness import TransactionWitnessSet, VerificationKeyWitness
 
 from vibe.cardano.ledger.allegra_mary import ValidityInterval
 from vibe.cardano.ledger.alonzo import (
-    AlonzoValidationError,
-    _total_ex_units,
     _ex_units_too_big,
     _insufficient_collateral,
-    alonzo_min_utxo_value,
+    _total_ex_units,
     calculate_script_fee,
     validate_alonzo_tx,
     validate_alonzo_utxo,
@@ -77,7 +71,6 @@ from vibe.cardano.ledger.alonzo_types import (
     compute_script_integrity_hash,
 )
 from vibe.cardano.ledger.shelley import ShelleyUTxO
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
@@ -148,9 +141,7 @@ def make_script_address(seed: int = 0, network: Network = Network.TESTNET) -> Ad
     return Address(payment_part=script_hash, network=network)
 
 
-def sign_tx_body(
-    tx_body: TransactionBody, sk: PaymentSigningKey
-) -> VerificationKeyWitness:
+def sign_tx_body(tx_body: TransactionBody, sk: PaymentSigningKey) -> VerificationKeyWitness:
     """Sign a transaction body and return a VKey witness."""
     tx_body_hash = tx_body.hash()
     signature = sk.sign(tx_body_hash)
@@ -807,9 +798,7 @@ class TestUtxowValidPaths:
         languages = {Language.PLUTUS_V1}
 
         # Compute the integrity hash
-        integrity_hash = compute_script_integrity_hash(
-            redeemers, datums, cost_models, languages
-        )
+        integrity_hash = compute_script_integrity_hash(redeemers, datums, cost_models, languages)
         assert len(integrity_hash) == 32
 
         tx_body = TransactionBody(
@@ -854,16 +843,22 @@ class TestUtxowValidPaths:
 
         redeemers = [
             Redeemer(
-                tag=RedeemerTag.SPEND, index=0,
-                data=cbor2.dumps(1), ex_units=ExUnits(mem=500, steps=500),
+                tag=RedeemerTag.SPEND,
+                index=0,
+                data=cbor2.dumps(1),
+                ex_units=ExUnits(mem=500, steps=500),
             ),
             Redeemer(
-                tag=RedeemerTag.MINT, index=0,
-                data=cbor2.dumps(2), ex_units=ExUnits(mem=500, steps=500),
+                tag=RedeemerTag.MINT,
+                index=0,
+                data=cbor2.dumps(2),
+                ex_units=ExUnits(mem=500, steps=500),
             ),
             Redeemer(
-                tag=RedeemerTag.CERT, index=0,
-                data=cbor2.dumps(3), ex_units=ExUnits(mem=500, steps=500),
+                tag=RedeemerTag.CERT,
+                index=0,
+                data=cbor2.dumps(3),
+                ex_units=ExUnits(mem=500, steps=500),
             ),
         ]
         datums = [cbor2.dumps(0)]

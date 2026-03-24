@@ -86,7 +86,16 @@ exclude = ["vendor/", ".venv/", "build/", "dist/", "*.egg-info"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "W"]
-ignore = ["E501"]
+ignore = [
+    "E402",   # module-import-not-at-top (lazy imports in functions)
+    "E501",   # line length (handled by formatter)
+    "E741",   # ambiguous variable name (k, l, etc. — common in crypto)
+    "F841",   # unused variable (cleanup over time, not in format pass)
+    "UP007",  # non-pep604-union (X | Y syntax — adopt incrementally)
+    "UP042",  # replace-str-enum (adopt incrementally)
+    "UP046",  # non-pep695-generic-class (adopt incrementally)
+    "UP047",  # non-pep695-generic-function (adopt incrementally)
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["vibe"]

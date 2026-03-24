@@ -25,50 +25,40 @@ Haskell reference: Ouroboros/Network/Protocol/ChainSync/Type.hs
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
 
 import pytest
 
-from vibe.core.protocols.agency import Agency, PeerRole, ProtocolError, Message
-from vibe.core.protocols.codec import CodecError
 from vibe.cardano.network.chainsync import (
-    MsgRequestNext,
-    MsgAwaitReply,
-    MsgRollForward,
-    MsgRollBackward,
-    MsgFindIntersect,
-    MsgIntersectFound,
-    MsgIntersectNotFound,
-    MsgDone,
-    Point,
-    Origin,
     ORIGIN,
+    MsgRollForward,
+    Point,
     Tip,
-    encode_request_next,
     encode_await_reply,
-    encode_roll_forward,
-    encode_roll_backward,
+    encode_done,
     encode_find_intersect,
     encode_intersect_found,
     encode_intersect_not_found,
-    encode_done,
+    encode_request_next,
+    encode_roll_backward,
+    encode_roll_forward,
 )
 from vibe.cardano.network.chainsync_protocol import (
-    ChainSyncState,
-    ChainSyncProtocol,
-    ChainSyncCodec,
     ChainSyncClient,
-    CsMsgRequestNext,
+    ChainSyncCodec,
+    ChainSyncProtocol,
+    ChainSyncState,
     CsMsgAwaitReply,
-    CsMsgRollForward,
-    CsMsgRollBackward,
+    CsMsgDone,
     CsMsgFindIntersect,
     CsMsgIntersectFound,
     CsMsgIntersectNotFound,
-    CsMsgDone,
+    CsMsgRequestNext,
+    CsMsgRollBackward,
+    CsMsgRollForward,
     run_chain_sync,
 )
-
+from vibe.core.protocols.agency import Agency, Message, PeerRole, ProtocolError
+from vibe.core.protocols.codec import CodecError
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -484,9 +474,7 @@ class TestChainSyncClient:
         # Server will respond with IntersectFound
         async def server():
             _sent = await channel.drain()  # client's FindIntersect
-            await channel.inject(
-                encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP)
-            )
+            await channel.inject(encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP))
 
         server_task = asyncio.create_task(server())
         point, tip = await client.find_intersection([SAMPLE_POINT, ORIGIN])
@@ -519,9 +507,7 @@ class TestChainSyncClient:
         # First do FindIntersect to stay in valid state
         async def do_intersect():
             await channel.drain()
-            await channel.inject(
-                encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP)
-            )
+            await channel.inject(encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP))
 
         t = asyncio.create_task(do_intersect())
         await client.find_intersection([SAMPLE_POINT])
@@ -530,9 +516,7 @@ class TestChainSyncClient:
         # Now request_next
         async def server():
             await channel.drain()
-            await channel.inject(
-                encode_roll_forward(b"\xbe\xef", SAMPLE_TIP)
-            )
+            await channel.inject(encode_roll_forward(b"\xbe\xef", SAMPLE_TIP))
 
         server_task = asyncio.create_task(server())
         response = await client.request_next()
@@ -549,9 +533,7 @@ class TestChainSyncClient:
 
         async def do_intersect():
             await channel.drain()
-            await channel.inject(
-                encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP)
-            )
+            await channel.inject(encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP))
 
         t = asyncio.create_task(do_intersect())
         await client.find_intersection([SAMPLE_POINT])
@@ -559,9 +541,7 @@ class TestChainSyncClient:
 
         async def server():
             await channel.drain()
-            await channel.inject(
-                encode_roll_backward(ORIGIN, GENESIS_TIP)
-            )
+            await channel.inject(encode_roll_backward(ORIGIN, GENESIS_TIP))
 
         server_task = asyncio.create_task(server())
         response = await client.request_next()
@@ -578,9 +558,7 @@ class TestChainSyncClient:
 
         async def do_intersect():
             await channel.drain()
-            await channel.inject(
-                encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP)
-            )
+            await channel.inject(encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP))
 
         t = asyncio.create_task(do_intersect())
         await client.find_intersection([SAMPLE_POINT])
@@ -605,9 +583,7 @@ class TestChainSyncClient:
         # Intersect
         async def do_intersect():
             await channel.drain()
-            await channel.inject(
-                encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP)
-            )
+            await channel.inject(encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP))
 
         t = asyncio.create_task(do_intersect())
         await client.find_intersection([SAMPLE_POINT])
@@ -625,9 +601,7 @@ class TestChainSyncClient:
 
         # Now recv_after_await -> RollForward
         async def server_roll():
-            await channel.inject(
-                encode_roll_forward(b"\xca\xfe", SAMPLE_TIP)
-            )
+            await channel.inject(encode_roll_forward(b"\xca\xfe", SAMPLE_TIP))
 
         t3 = asyncio.create_task(server_roll())
         response = await client.recv_after_await()
@@ -643,9 +617,7 @@ class TestChainSyncClient:
 
         async def do_intersect():
             await channel.drain()
-            await channel.inject(
-                encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP)
-            )
+            await channel.inject(encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP))
 
         t = asyncio.create_task(do_intersect())
         await client.find_intersection([SAMPLE_POINT])
@@ -660,9 +632,7 @@ class TestChainSyncClient:
         await t2
 
         async def server_roll():
-            await channel.inject(
-                encode_roll_backward(ORIGIN, GENESIS_TIP)
-            )
+            await channel.inject(encode_roll_backward(ORIGIN, GENESIS_TIP))
 
         t3 = asyncio.create_task(server_roll())
         response = await client.recv_after_await()
@@ -722,21 +692,15 @@ class TestRunChainSync:
         async def fake_server():
             # Expect FindIntersect
             await channel.drain()
-            await channel.inject(
-                encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP)
-            )
+            await channel.inject(encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP))
 
             # Expect RequestNext #1 -> RollForward
             await channel.drain()
-            await channel.inject(
-                encode_roll_forward(b"\x01", SAMPLE_TIP)
-            )
+            await channel.inject(encode_roll_forward(b"\x01", SAMPLE_TIP))
 
             # Expect RequestNext #2 -> RollBackward
             await channel.drain()
-            await channel.inject(
-                encode_roll_backward(ORIGIN, GENESIS_TIP)
-            )
+            await channel.inject(encode_roll_backward(ORIGIN, GENESIS_TIP))
 
             # Expect RequestNext #3 — but stop_event should be set
             # The loop will send Done instead of requesting next
@@ -778,18 +742,14 @@ class TestRunChainSync:
         async def fake_server():
             # FindIntersect
             await channel.drain()
-            await channel.inject(
-                encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP)
-            )
+            await channel.inject(encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP))
 
             # RequestNext -> AwaitReply
             await channel.drain()
             await channel.inject(encode_await_reply())
 
             # Then RollForward (must-reply after await)
-            await channel.inject(
-                encode_roll_forward(b"\x42", SAMPLE_TIP)
-            )
+            await channel.inject(encode_roll_forward(b"\x42", SAMPLE_TIP))
 
             # Done
             await channel.drain()
@@ -852,9 +812,7 @@ class TestRunChainSync:
         async def fake_server():
             # Should receive FindIntersect with Origin
             sent = await channel.drain()
-            await channel.inject(
-                encode_intersect_found(ORIGIN, GENESIS_TIP)
-            )
+            await channel.inject(encode_intersect_found(ORIGIN, GENESIS_TIP))
             # Will get Done since stop is already set
             await channel.drain()
 
@@ -961,14 +919,10 @@ class TestFindIntersectBehavior:
         async def server():
             await channel.drain()  # FindIntersect
             # Server responds: intersection at POINT_C (the newest known)
-            await channel.inject(
-                encode_intersect_found(POINT_C, TIP_HIGH)
-            )
+            await channel.inject(encode_intersect_found(POINT_C, TIP_HIGH))
 
         server_task = asyncio.create_task(server())
-        point, tip = await client.find_intersection(
-            [POINT_D, POINT_C, POINT_B, POINT_A, ORIGIN]
-        )
+        point, tip = await client.find_intersection([POINT_D, POINT_C, POINT_B, POINT_A, ORIGIN])
         await server_task
 
         assert point == POINT_C
@@ -1000,9 +954,7 @@ class TestFindIntersectBehavior:
         # Do FindIntersect
         async def server_intersect():
             await channel.drain()
-            await channel.inject(
-                encode_intersect_found(POINT_B, TIP_HIGH)
-            )
+            await channel.inject(encode_intersect_found(POINT_B, TIP_HIGH))
 
         t = asyncio.create_task(server_intersect())
         point, tip = await client.find_intersection([POINT_B])
@@ -1036,9 +988,7 @@ class TestFindIntersectBehavior:
         async def server():
             await channel.drain()
             # Server always knows Origin
-            await channel.inject(
-                encode_intersect_found(ORIGIN, GENESIS_TIP)
-            )
+            await channel.inject(encode_intersect_found(ORIGIN, GENESIS_TIP))
 
         server_task = asyncio.create_task(server())
         point, tip = await client.find_intersection([ORIGIN])
@@ -1070,14 +1020,10 @@ class TestFindIntersectBehavior:
         async def server():
             await channel.drain()
             # Server only knows POINT_A from the list
-            await channel.inject(
-                encode_intersect_found(POINT_A, TIP_HIGH)
-            )
+            await channel.inject(encode_intersect_found(POINT_A, TIP_HIGH))
 
         server_task = asyncio.create_task(server())
-        point, tip = await client.find_intersection(
-            [POINT_D, POINT_C, POINT_A]
-        )
+        point, tip = await client.find_intersection([POINT_D, POINT_C, POINT_A])
         await server_task
 
         # The server found POINT_A (the only known point)
@@ -1124,9 +1070,7 @@ class TestPostIntersectionBehavior:
         # Step 1: Find intersection
         async def do_intersect():
             await channel.drain()
-            await channel.inject(
-                encode_intersect_found(POINT_C, TIP_HIGH)
-            )
+            await channel.inject(encode_intersect_found(POINT_C, TIP_HIGH))
 
         t = asyncio.create_task(do_intersect())
         await client.find_intersection([POINT_C])
@@ -1135,9 +1079,7 @@ class TestPostIntersectionBehavior:
         # Step 2: RequestNext -> RollBackward to POINT_A
         async def server_rollback():
             await channel.drain()
-            await channel.inject(
-                encode_roll_backward(POINT_A, TIP_HIGH)
-            )
+            await channel.inject(encode_roll_backward(POINT_A, TIP_HIGH))
 
         t2 = asyncio.create_task(server_rollback())
         response = await client.request_next()
@@ -1152,9 +1094,7 @@ class TestPostIntersectionBehavior:
         # Step 4: Next RequestNext should resume from POINT_A
         async def server_resume():
             await channel.drain()
-            await channel.inject(
-                encode_roll_forward(b"\xaa\xbb", TIP_HIGH)
-            )
+            await channel.inject(encode_roll_forward(b"\xaa\xbb", TIP_HIGH))
 
         t3 = asyncio.create_task(server_resume())
         response2 = await client.request_next()
@@ -1187,9 +1127,7 @@ class TestPostIntersectionBehavior:
         # Intersect first
         async def do_intersect():
             await channel.drain()
-            await channel.inject(
-                encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP)
-            )
+            await channel.inject(encode_intersect_found(SAMPLE_POINT, SAMPLE_TIP))
 
         t = asyncio.create_task(do_intersect())
         await client.find_intersection([SAMPLE_POINT])
@@ -1260,9 +1198,7 @@ class TestPostIntersectionBehavior:
         # Intersect at POINT_B (slot 200)
         async def do_intersect():
             await channel.drain()
-            await channel.inject(
-                encode_intersect_found(POINT_B, TIP_HIGH)
-            )
+            await channel.inject(encode_intersect_found(POINT_B, TIP_HIGH))
 
         t = asyncio.create_task(do_intersect())
         point, tip = await client.find_intersection([POINT_B])
@@ -1277,9 +1213,7 @@ class TestPostIntersectionBehavior:
 
         async def server_next():
             await channel.drain()
-            await channel.inject(
-                encode_roll_forward(b"\x01\x02\x03", next_tip)
-            )
+            await channel.inject(encode_roll_forward(b"\x01\x02\x03", next_tip))
 
         t2 = asyncio.create_task(server_next())
         response = await client.request_next()

@@ -17,8 +17,6 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vibe.core.protocols import Agency, Message, ProtocolError
-
 from vibe.cardano.network.keepalive import (
     MsgDone,
     MsgKeepAlive,
@@ -33,7 +31,7 @@ from vibe.cardano.network.keepalive_protocol import (
     KeepAliveProtocol,
     KeepAliveState,
 )
-
+from vibe.core.protocols import Agency, ProtocolError
 
 # ---------------------------------------------------------------------------
 # Protocol state machine tests
@@ -426,11 +424,11 @@ class TestDirectClientServer:
 
         Returns the list of cookies received.
         """
+        from vibe.cardano.network.keepalive import MsgKeepAlive as RawKeepAlive
         from vibe.cardano.network.keepalive import (
             decode_client_message,
             encode_keep_alive_response,
         )
-        from vibe.cardano.network.keepalive import MsgKeepAlive as RawKeepAlive
 
         cookies: list[int] = []
         for _ in range(num_pings):
@@ -451,12 +449,12 @@ class TestDirectClientServer:
     @pytest.mark.asyncio
     async def test_single_ping_pong(self) -> None:
         """Client sends one ping, server echoes cookie, client sends done."""
-        from vibe.core.protocols.agency import PeerRole
         from vibe.cardano.network.keepalive_protocol import (
-            KeepAliveProtocol,
-            KeepAliveCodec,
             KeepAliveClient,
+            KeepAliveCodec,
+            KeepAliveProtocol,
         )
+        from vibe.core.protocols.agency import PeerRole
         from vibe.core.protocols.runner import ProtocolRunner
 
         client_ch, server_ch = self._make_connected_channels()
@@ -469,9 +467,7 @@ class TestDirectClientServer:
         client = KeepAliveClient(runner)
 
         cookie = 12345
-        server_task = asyncio.create_task(
-            self._mock_server(server_ch, num_pings=1)
-        )
+        server_task = asyncio.create_task(self._mock_server(server_ch, num_pings=1))
 
         echoed = await client.ping(cookie=cookie)
         assert echoed == cookie
@@ -484,12 +480,12 @@ class TestDirectClientServer:
     @pytest.mark.asyncio
     async def test_multiple_ping_pong_rounds(self) -> None:
         """Multiple ping/pong rounds with different cookies."""
-        from vibe.core.protocols.agency import PeerRole
         from vibe.cardano.network.keepalive_protocol import (
-            KeepAliveProtocol,
-            KeepAliveCodec,
             KeepAliveClient,
+            KeepAliveCodec,
+            KeepAliveProtocol,
         )
+        from vibe.core.protocols.agency import PeerRole
         from vibe.core.protocols.runner import ProtocolRunner
 
         client_ch, server_ch = self._make_connected_channels()
@@ -502,9 +498,7 @@ class TestDirectClientServer:
         client = KeepAliveClient(runner)
 
         cookies = [0, 42, 1000, 65535]
-        server_task = asyncio.create_task(
-            self._mock_server(server_ch, num_pings=len(cookies))
-        )
+        server_task = asyncio.create_task(self._mock_server(server_ch, num_pings=len(cookies)))
 
         for cookie in cookies:
             echoed = await client.ping(cookie=cookie)
@@ -518,12 +512,12 @@ class TestDirectClientServer:
     @pytest.mark.asyncio
     async def test_clean_termination(self) -> None:
         """Protocol terminates cleanly with MsgDone (no pings)."""
-        from vibe.core.protocols.agency import PeerRole
         from vibe.cardano.network.keepalive_protocol import (
-            KeepAliveProtocol,
-            KeepAliveCodec,
             KeepAliveClient,
+            KeepAliveCodec,
+            KeepAliveProtocol,
         )
+        from vibe.core.protocols.agency import PeerRole
         from vibe.core.protocols.runner import ProtocolRunner
 
         client_ch, server_ch = self._make_connected_channels()
@@ -535,9 +529,7 @@ class TestDirectClientServer:
         )
         client = KeepAliveClient(runner)
 
-        server_task = asyncio.create_task(
-            self._mock_server(server_ch, num_pings=0)
-        )
+        server_task = asyncio.create_task(self._mock_server(server_ch, num_pings=0))
 
         await client.done()
         server_cookies = await server_task
@@ -549,12 +541,12 @@ class TestDirectClientServer:
     @pytest.mark.asyncio
     async def test_hypothesis_direct_pairing(self, cookies: list[int]) -> None:
         """Property: any sequence of uint16 cookies roundtrips correctly."""
-        from vibe.core.protocols.agency import PeerRole
         from vibe.cardano.network.keepalive_protocol import (
-            KeepAliveProtocol,
-            KeepAliveCodec,
             KeepAliveClient,
+            KeepAliveCodec,
+            KeepAliveProtocol,
         )
+        from vibe.core.protocols.agency import PeerRole
         from vibe.core.protocols.runner import ProtocolRunner
 
         client_ch, server_ch = self._make_connected_channels()
@@ -566,9 +558,7 @@ class TestDirectClientServer:
         )
         client = KeepAliveClient(runner)
 
-        server_task = asyncio.create_task(
-            self._mock_server(server_ch, num_pings=len(cookies))
-        )
+        server_task = asyncio.create_task(self._mock_server(server_ch, num_pings=len(cookies)))
 
         for cookie in cookies:
             echoed = await client.ping(cookie=cookie)

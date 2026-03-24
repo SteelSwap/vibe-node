@@ -25,11 +25,9 @@ from vibe.cardano.consensus.hfc import (
     PROTOCOL_VERSION_ERA,
     Era,
     EraParams,
-    EraValidationError,
     HardForkConfig,
     HFCState,
     PastHorizonError,
-    TranslatedState,
     _era_start_slots,
     current_era,
     detect_era_transition,
@@ -44,7 +42,6 @@ from vibe.cardano.consensus.slot_arithmetic import (
     BYRON_EPOCH_LENGTH,
     SHELLEY_EPOCH_LENGTH,
 )
-
 
 # ---------------------------------------------------------------------------
 # Era enumeration
@@ -108,7 +105,7 @@ class TestHardForkConfig:
         for i in range(len(epochs) - 1):
             assert epochs[i] < epochs[i + 1], (
                 f"Era {Era(i).name} epoch {epochs[i]} >= "
-                f"Era {Era(i+1).name} epoch {epochs[i+1]}"
+                f"Era {Era(i + 1).name} epoch {epochs[i + 1]}"
             )
 
     def test_config_requires_byron(self) -> None:
@@ -332,10 +329,9 @@ class TestDetectEraTransition:
         ]
         for from_era, pv, expected in transitions:
             result = detect_era_transition(from_era, pv)
-            assert result == expected, (
-                f"Expected {from_era.name} + PV{pv} -> {expected.name}, "
-                f"got {result}"
-            )
+            assert (
+                result == expected
+            ), f"Expected {from_era.name} + PV{pv} -> {expected.name}, got {result}"
 
 
 # ---------------------------------------------------------------------------
@@ -548,9 +544,9 @@ class TestProtocolVersionEraMapping:
         prev_version = 0
         for era in Era:
             version = ERA_MIN_PROTOCOL_VERSION[era]
-            assert version >= prev_version, (
-                f"{era.name} min PV {version} < previous {prev_version}"
-            )
+            assert (
+                version >= prev_version
+            ), f"{era.name} min PV {version} < previous {prev_version}"
             prev_version = version
 
     def test_protocol_version_era_covers_1_through_10(self) -> None:
@@ -619,10 +615,9 @@ class TestHypothesisProperties:
             slot1, slot2 = slot2, slot1
         era1 = current_era(slot1, MAINNET_HFC_CONFIG)
         era2 = current_era(slot2, MAINNET_HFC_CONFIG)
-        assert era1 <= era2, (
-            f"Era monotonicity violated: slot {slot1} -> {era1.name}, "
-            f"slot {slot2} -> {era2.name}"
-        )
+        assert (
+            era1 <= era2
+        ), f"Era monotonicity violated: slot {slot1} -> {era1.name}, slot {slot2} -> {era2.name}"
 
     @given(epoch=st.integers(min_value=0, max_value=10000))
     @settings(max_examples=100)
@@ -870,11 +865,15 @@ class TestInvariantCheck:
         # Manually construct an invalid config (bypass __post_init__ by using
         # a config where the epoch ordering is violated but Byron is still 0)
         config = HardForkConfig.__new__(HardForkConfig)
-        object.__setattr__(config, "era_transitions", {
-            Era.BYRON: 0,
-            Era.SHELLEY: 100,
-            Era.ALLEGRA: 50,  # violation: 50 < 100
-        })
+        object.__setattr__(
+            config,
+            "era_transitions",
+            {
+                Era.BYRON: 0,
+                Era.SHELLEY: 100,
+                Era.ALLEGRA: 50,  # violation: 50 < 100
+            },
+        )
         object.__setattr__(config, "era_params", dict(DEFAULT_ERA_PARAMS))
         object.__setattr__(config, "safe_zone", None)
         violations = invariant_check(config)
@@ -953,18 +952,28 @@ class TestInvariantCheck:
     def test_multiple_violations_reported(self) -> None:
         """invariant_check reports ALL violations, not just the first."""
         config = HardForkConfig.__new__(HardForkConfig)
-        object.__setattr__(config, "era_transitions", {
-            Era.BYRON: 5,       # violation: not epoch 0
-            Era.ALONZO: 3,      # violation: gap (missing Shelley/Allegra/Mary)
-        })
-        object.__setattr__(config, "era_params", {
-            Era.BYRON: EraParams(epoch_length=0, slot_length=-1.0),  # two violations
-            Era.ALONZO: EraParams(epoch_length=432000, slot_length=1.0),
-        })
+        object.__setattr__(
+            config,
+            "era_transitions",
+            {
+                Era.BYRON: 5,  # violation: not epoch 0
+                Era.ALONZO: 3,  # violation: gap (missing Shelley/Allegra/Mary)
+            },
+        )
+        object.__setattr__(
+            config,
+            "era_params",
+            {
+                Era.BYRON: EraParams(epoch_length=0, slot_length=-1.0),  # two violations
+                Era.ALONZO: EraParams(epoch_length=432000, slot_length=1.0),
+            },
+        )
         object.__setattr__(config, "safe_zone", None)
         violations = invariant_check(config)
         # Should have at least: epoch 0 violation, gap violation, epoch_length, slot_length
-        assert len(violations) >= 4, f"Expected >= 4 violations, got {len(violations)}: {violations}"
+        assert (
+            len(violations) >= 4
+        ), f"Expected >= 4 violations, got {len(violations)}: {violations}"
 
 
 # ---------------------------------------------------------------------------
@@ -990,9 +999,9 @@ class TestEpochInfoAdapter:
         for slot in test_slots:
             epoch = slot_to_epoch_hfc(slot, MAINNET_HFC_CONFIG)
             first_slot = epoch_to_first_slot_hfc(epoch, MAINNET_HFC_CONFIG)
-            assert first_slot <= slot, (
-                f"Slot {slot}: epoch={epoch}, first_slot_of_epoch={first_slot} > slot"
-            )
+            assert (
+                first_slot <= slot
+            ), f"Slot {slot}: epoch={epoch}, first_slot_of_epoch={first_slot} > slot"
 
     def test_epoch_to_first_slot_to_epoch_identity(self) -> None:
         """For any epoch E: slot_to_epoch(epoch_to_first_slot(E)) == E.
@@ -1003,9 +1012,9 @@ class TestEpochInfoAdapter:
         for epoch in test_epochs:
             first_slot = epoch_to_first_slot_hfc(epoch, MAINNET_HFC_CONFIG)
             recovered_epoch = slot_to_epoch_hfc(first_slot, MAINNET_HFC_CONFIG)
-            assert recovered_epoch == epoch, (
-                f"Epoch {epoch}: first_slot={first_slot}, recovered={recovered_epoch}"
-            )
+            assert (
+                recovered_epoch == epoch
+            ), f"Epoch {epoch}: first_slot={first_slot}, recovered={recovered_epoch}"
 
     def test_roundtrip_slot_epoch_first_slot(self) -> None:
         """Round-trip: slot -> epoch -> first_slot_of_epoch -> verify <= original.
@@ -1106,18 +1115,18 @@ class TestHFCSkeleton:
         for i in range(len(sorted_eras) - 1):
             era_a, epoch_a = sorted_eras[i]
             era_b, epoch_b = sorted_eras[i + 1]
-            assert epoch_b > epoch_a, (
-                f"Epochs not ascending: {era_a.name}={epoch_a}, {era_b.name}={epoch_b}"
-            )
+            assert (
+                epoch_b > epoch_a
+            ), f"Epochs not ascending: {era_a.name}={epoch_a}, {era_b.name}={epoch_b}"
 
         # 3. Era start slots are strictly ascending.
         era_slots = _era_start_slots(config)
         for i in range(len(era_slots) - 1):
             era_a, slot_a = era_slots[i]
             era_b, slot_b = era_slots[i + 1]
-            assert slot_b > slot_a, (
-                f"Slots not ascending: {era_a.name}={slot_a}, {era_b.name}={slot_b}"
-            )
+            assert (
+                slot_b > slot_a
+            ), f"Slots not ascending: {era_a.name}={slot_a}, {era_b.name}={slot_b}"
 
         # 4. All era params are valid.
         for era in Era:
@@ -1131,9 +1140,9 @@ class TestHFCSkeleton:
         for era in Era:
             start_slot = era_slot_dict[era]
             result_era = state.advance_to_slot(start_slot)
-            assert result_era == era, (
-                f"At slot {start_slot}: expected {era.name}, got {result_era.name}"
-            )
+            assert (
+                result_era == era
+            ), f"At slot {start_slot}: expected {era.name}, got {result_era.name}"
             assert state.current_era == era
             assert state.tip_slot == start_slot
 
@@ -1156,9 +1165,9 @@ class TestHFCSkeleton:
         era_slots = _era_start_slots(MAINNET_HFC_CONFIG)
 
         for era, start_slot in era_slots:
-            assert state.is_era_boundary(start_slot), (
-                f"Slot {start_slot} should be an era boundary for {era.name}"
-            )
+            assert state.is_era_boundary(
+                start_slot
+            ), f"Slot {start_slot} should be an era boundary for {era.name}"
             # One slot before should NOT be a boundary (except slot 0).
             if start_slot > 0:
                 assert not state.is_era_boundary(start_slot - 1)

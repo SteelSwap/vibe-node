@@ -83,12 +83,14 @@ _QUERY_GOVERNANCE_STATE: int = 10
 # Failure reasons
 # ---------------------------------------------------------------------------
 
+
 class AcquireFailureReason(enum.Enum):
     """Reason for acquisition failure.
 
     Haskell ref: AcquireFailure in
         Ouroboros.Network.Protocol.LocalStateQuery.Type
     """
+
     AcquireFailurePointTooOld = 0
     """The requested point has been pruned (beyond k blocks back)."""
 
@@ -100,8 +102,10 @@ class AcquireFailureReason(enum.Enum):
 # Query type enum
 # ---------------------------------------------------------------------------
 
+
 class QueryType(enum.Enum):
     """Discriminator for the type of ledger query."""
+
     LedgerTip = "ledger_tip"
     StakeAddresses = "stake_addresses"
     UTxOByAddress = "utxo_by_address"
@@ -118,6 +122,7 @@ class QueryType(enum.Enum):
 # Message dataclasses
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True, slots=True)
 class Point:
     """A chain point: slot number + block header hash.
@@ -127,6 +132,7 @@ class Point:
 
     Haskell ref: Point in Ouroboros.Network.Block
     """
+
     slot: int
     block_hash: bytes
 
@@ -138,9 +144,7 @@ class Point:
     def from_cbor_list(cls, data: list) -> Point:
         """Construct from a decoded CBOR list [slot, hash]."""
         if len(data) != 2:
-            raise ValueError(
-                f"Point: expected 2 elements [slot, hash], got {len(data)}"
-            )
+            raise ValueError(f"Point: expected 2 elements [slot, hash], got {len(data)}")
         slot = data[0]
         block_hash = data[1]
         if isinstance(block_hash, memoryview):
@@ -159,6 +163,7 @@ class Query:
     This is a simplified representation — the actual wire format uses
     nested CBOR arrays with era indexes.
     """
+
     query_type: QueryType
     params: Any = None
     era_index: int = 5
@@ -171,6 +176,7 @@ class MsgAcquire:
 
     Wire format: ``[0, point]``
     """
+
     point: Point | None
     """None means origin."""
     msg_id: int = field(default=_MSG_ACQUIRE, init=False)
@@ -182,6 +188,7 @@ class MsgFailure:
 
     Wire format: ``[1, reason]``
     """
+
     reason: AcquireFailureReason
     msg_id: int = field(default=_MSG_FAILURE, init=False)
 
@@ -192,6 +199,7 @@ class MsgAcquired:
 
     Wire format: ``[2]``
     """
+
     msg_id: int = field(default=_MSG_ACQUIRED, init=False)
 
 
@@ -201,6 +209,7 @@ class MsgQuery:
 
     Wire format: ``[3, query]``
     """
+
     query: Query
     msg_id: int = field(default=_MSG_QUERY, init=False)
 
@@ -214,6 +223,7 @@ class MsgResult:
     The result type depends on the query. We store it as Any and let
     the higher-level code interpret it.
     """
+
     result: Any
     msg_id: int = field(default=_MSG_RESULT, init=False)
 
@@ -224,6 +234,7 @@ class MsgRelease:
 
     Wire format: ``[5]``
     """
+
     msg_id: int = field(default=_MSG_RELEASE, init=False)
 
 
@@ -233,6 +244,7 @@ class MsgReAcquire:
 
     Wire format: ``[6, point]``
     """
+
     point: Point | None
     """None means origin."""
     msg_id: int = field(default=_MSG_REACQUIRE, init=False)
@@ -244,6 +256,7 @@ class MsgDone:
 
     Wire format: ``[7]``
     """
+
     msg_id: int = field(default=_MSG_DONE, init=False)
 
 
@@ -255,14 +268,21 @@ ServerMessage = Union[MsgFailure, MsgAcquired, MsgResult]
 
 #: Union of all local state-query message types.
 LocalStateQueryMessage = Union[
-    MsgAcquire, MsgFailure, MsgAcquired, MsgQuery, MsgResult,
-    MsgRelease, MsgReAcquire, MsgDone,
+    MsgAcquire,
+    MsgFailure,
+    MsgAcquired,
+    MsgQuery,
+    MsgResult,
+    MsgRelease,
+    MsgReAcquire,
+    MsgDone,
 ]
 
 
 # ---------------------------------------------------------------------------
 # Encode — helper functions
 # ---------------------------------------------------------------------------
+
 
 def _encode_point(point: Point | None) -> list:
     """Encode a point for the wire format."""
@@ -308,6 +328,7 @@ def _encode_query(query: Query) -> list:
 # ---------------------------------------------------------------------------
 # Encode — message functions
 # ---------------------------------------------------------------------------
+
 
 def encode_acquire(point: Point | None) -> bytes:
     """Encode MsgAcquire: ``[0, point]``.
@@ -400,6 +421,7 @@ def encode_done() -> bytes:
 # Decode — helper functions
 # ---------------------------------------------------------------------------
 
+
 def _decode_point(data: Any) -> Point | None:
     """Decode a point from CBOR data."""
     if isinstance(data, list):
@@ -415,9 +437,7 @@ def _decode_query(data: Any) -> Query:
     Expected format: [0, era_index, era_query]
     """
     if not isinstance(data, list) or len(data) < 3:
-        raise ValueError(
-            f"Query: expected [0, era_index, era_query], got {data!r}"
-        )
+        raise ValueError(f"Query: expected [0, era_index, era_query], got {data!r}")
 
     wrapper_tag = data[0]
     if wrapper_tag != 0:
@@ -462,6 +482,7 @@ def _decode_query(data: Any) -> Query:
 # Decode — message functions
 # ---------------------------------------------------------------------------
 
+
 def decode_message(cbor_bytes: bytes) -> LocalStateQueryMessage:
     """Decode any local state-query message from CBOR bytes.
 
@@ -483,17 +504,13 @@ def decode_message(cbor_bytes: bytes) -> LocalStateQueryMessage:
 
     if msg_id == _MSG_ACQUIRE:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgAcquire: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgAcquire: expected 2 elements, got {len(msg)}")
         point = _decode_point(msg[1])
         return MsgAcquire(point=point)
 
     elif msg_id == _MSG_FAILURE:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgFailure: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgFailure: expected 2 elements, got {len(msg)}")
         try:
             reason = AcquireFailureReason(msg[1])
         except ValueError:
@@ -502,46 +519,34 @@ def decode_message(cbor_bytes: bytes) -> LocalStateQueryMessage:
 
     elif msg_id == _MSG_ACQUIRED:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgAcquired: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgAcquired: expected 1 element, got {len(msg)}")
         return MsgAcquired()
 
     elif msg_id == _MSG_QUERY:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgQuery: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgQuery: expected 2 elements, got {len(msg)}")
         query = _decode_query(msg[1])
         return MsgQuery(query=query)
 
     elif msg_id == _MSG_RESULT:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgResult: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgResult: expected 2 elements, got {len(msg)}")
         return MsgResult(result=msg[1])
 
     elif msg_id == _MSG_RELEASE:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgRelease: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgRelease: expected 1 element, got {len(msg)}")
         return MsgRelease()
 
     elif msg_id == _MSG_REACQUIRE:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgReAcquire: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgReAcquire: expected 2 elements, got {len(msg)}")
         point = _decode_point(msg[1])
         return MsgReAcquire(point=point)
 
     elif msg_id == _MSG_DONE:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgDone: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgDone: expected 1 element, got {len(msg)}")
         return MsgDone()
 
     else:

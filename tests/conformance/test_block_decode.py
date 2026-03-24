@@ -16,13 +16,13 @@ import json
 import pytest
 import websockets
 
-
 pytestmark = pytest.mark.conformance
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _ogmios_rpc(ws, method: str, params: dict | None = None, rpc_id: str = "req") -> dict:
     """Send a JSON-RPC request and return the result."""
@@ -60,6 +60,7 @@ async def _fetch_blocks_from_origin(ws, count: int = 10) -> list[dict]:
 # Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.timeout(30)
 async def test_fetch_blocks_from_origin(ogmios_client):
     """Fetch first 5 blocks from origin and verify basic structure."""
@@ -87,9 +88,7 @@ async def test_block_heights_are_monotonic(ogmios_client):
     blocks = await _fetch_blocks_from_origin(ogmios_client, count=20)
     heights = [b["height"] for b in blocks]
     for i in range(1, len(heights)):
-        assert heights[i] >= heights[i - 1], (
-            f"Height decreased: {heights[i-1]} -> {heights[i]}"
-        )
+        assert heights[i] >= heights[i - 1], f"Height decreased: {heights[i - 1]} -> {heights[i]}"
 
 
 @pytest.mark.timeout(30)
@@ -99,9 +98,9 @@ async def test_ancestor_chain(ogmios_client):
     for i in range(1, len(blocks)):
         ancestor = blocks[i].get("ancestor")
         prev_id = blocks[i - 1]["id"]
-        assert ancestor == prev_id, (
-            f"Block {i} ancestor {ancestor[:16]}... != prev ID {prev_id[:16]}..."
-        )
+        assert (
+            ancestor == prev_id
+        ), f"Block {i} ancestor {ancestor[:16]}... != prev ID {prev_id[:16]}..."
 
 
 @pytest.mark.timeout(30)
@@ -121,6 +120,7 @@ async def test_recent_blocks_are_conway(ogmios_url):
         assert tip["slot"] > 0
         # The health endpoint confirms current era
         import httpx
+
         health_url = ogmios_url.replace("ws://", "http://") + "/health"
         resp = httpx.get(health_url, timeout=5)
         health = resp.json()

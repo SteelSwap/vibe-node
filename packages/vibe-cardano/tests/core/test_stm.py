@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 
-from vibe.core.stm import TVar, Transaction, atomically, RetryTransaction
+from vibe.core.stm import RetryTransaction, TVar, atomically
 
 
 class TestTVarBasic:
@@ -15,19 +15,23 @@ class TestTVarBasic:
 
     def test_read_write_in_transaction(self):
         v = TVar(10)
+
         def tx(t):
             val = t.read(v)
             t.write(v, val + 5)
             return val
+
         result = atomically(tx)
         assert result == 10
         assert v.value == 15
 
     def test_read_your_own_writes(self):
         v = TVar(0)
+
         def tx(t):
             t.write(v, 100)
             return t.read(v)  # Should see 100, not 0
+
         result = atomically(tx)
         assert result == 100
         assert v.value == 100
@@ -42,9 +46,11 @@ class TestAtomicity:
 
         def worker():
             for _ in range(n_increments):
+
                 def tx(t):
                     val = t.read(counter)
                     t.write(counter, val + 1)
+
                 atomically(tx)
 
         threads = [threading.Thread(target=worker) for _ in range(n_threads)]

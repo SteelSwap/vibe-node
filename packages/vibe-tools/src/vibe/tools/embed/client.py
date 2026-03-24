@@ -41,13 +41,13 @@ class EmbeddingClient:
                 return response.json()["data"][0]["embedding"]
             except httpx.ReadTimeout:
                 if attempt < retries:
-                    logger.warning("Embed timeout (attempt %d/%d), retrying...", attempt + 1, retries + 1)
+                    logger.warning(
+                        "Embed timeout (attempt %d/%d), retrying...", attempt + 1, retries + 1
+                    )
                     continue
                 raise
 
-    async def embed_batch(
-        self, texts: list[str], batch_size: int = 16
-    ) -> list[list[float]]:
+    async def embed_batch(self, texts: list[str], batch_size: int = 16) -> list[list[float]]:
         """Embed a batch of texts. Chunks into sub-batches to avoid timeouts."""
         all_embeddings: list[list[float]] = []
         for i in range(0, len(texts), batch_size):

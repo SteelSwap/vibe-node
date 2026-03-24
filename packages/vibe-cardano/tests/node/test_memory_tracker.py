@@ -11,7 +11,6 @@ import pytest
 from vibe.cardano.node.memory_tracker import MemoryTracker, _RingBuffer, run_memory_tracker
 from vibe.cardano.node.metrics import Gauge
 
-
 # ---------------------------------------------------------------------------
 # Ring buffer unit tests
 # ---------------------------------------------------------------------------

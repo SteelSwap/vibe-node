@@ -90,9 +90,7 @@ class Peer(Generic[St]):
 
         # Terminal state check.
         if ag is Agency.Nobody:
-            raise ProtocolError(
-                f"Cannot send in terminal state {self._state!r}"
-            )
+            raise ProtocolError(f"Cannot send in terminal state {self._state!r}")
 
         # Agency check.
         if not self._has_agency():
@@ -138,9 +136,7 @@ class Peer(Generic[St]):
 
         # Terminal state check.
         if ag is Agency.Nobody:
-            raise ProtocolError(
-                f"Cannot receive in terminal state {self._state!r}"
-            )
+            raise ProtocolError(f"Cannot receive in terminal state {self._state!r}")
 
         # Agency check — we should NOT have agency when receiving.
         if self._has_agency():
@@ -153,16 +149,12 @@ class Peer(Generic[St]):
 
         # Validate the received message.
         if message.from_state != self._state:
-            raise ProtocolError(
-                f"Received {message!r} but current state is "
-                f"{self._state!r}"
-            )
+            raise ProtocolError(f"Received {message!r} but current state is {self._state!r}")
 
         valid = self._protocol.valid_messages(self._state)
         if type(message) not in valid:
             raise ProtocolError(
-                f"Received invalid message type "
-                f"{type(message).__name__} at state {self._state!r}"
+                f"Received invalid message type {type(message).__name__} at state {self._state!r}"
             )
 
         self._state = message.to_state

@@ -16,16 +16,21 @@ import asyncio
 import logging
 from typing import Any
 
-from vibe.core.multiplexer import Bearer, BearerClosedError, MiniProtocolChannel, Multiplexer, MuxClosedError
-
-from vibe.cardano.network.handshake import HANDSHAKE_PROTOCOL_ID
-from vibe.cardano.network.chainsync import CHAIN_SYNC_N2N_ID, CHAIN_SYNC_N2C_ID
 from vibe.cardano.network.blockfetch import BLOCK_FETCH_N2N_ID
-from vibe.cardano.network.txsubmission import TX_SUBMISSION_N2N_ID
+from vibe.cardano.network.chainsync import CHAIN_SYNC_N2C_ID, CHAIN_SYNC_N2N_ID
+from vibe.cardano.network.handshake import HANDSHAKE_PROTOCOL_ID
 from vibe.cardano.network.keepalive import KEEP_ALIVE_PROTOCOL_ID
-from vibe.cardano.network.local_txsubmission import LOCAL_TX_SUBMISSION_ID
 from vibe.cardano.network.local_statequery import LOCAL_STATE_QUERY_PROTOCOL_ID
 from vibe.cardano.network.local_txmonitor import LOCAL_TX_MONITOR_ID
+from vibe.cardano.network.local_txsubmission import LOCAL_TX_SUBMISSION_ID
+from vibe.cardano.network.txsubmission import TX_SUBMISSION_N2N_ID
+from vibe.core.multiplexer import (
+    Bearer,
+    BearerClosedError,
+    MiniProtocolChannel,
+    Multiplexer,
+    MuxClosedError,
+)
 
 __all__ = [
     "N2N_PROTOCOL_IDS",
@@ -50,10 +55,10 @@ logger = logging.getLogger(__name__)
 #   8 = Keep-Alive
 N2N_PROTOCOL_IDS: list[int] = [
     HANDSHAKE_PROTOCOL_ID,  # 0
-    CHAIN_SYNC_N2N_ID,      # 2
-    BLOCK_FETCH_N2N_ID,     # 3
-    TX_SUBMISSION_N2N_ID,   # 4
-    KEEP_ALIVE_PROTOCOL_ID, # 8
+    CHAIN_SYNC_N2N_ID,  # 2
+    BLOCK_FETCH_N2N_ID,  # 3
+    TX_SUBMISSION_N2N_ID,  # 4
+    KEEP_ALIVE_PROTOCOL_ID,  # 8
 ]
 
 # N2C miniprotocol IDs:
@@ -63,11 +68,11 @@ N2N_PROTOCOL_IDS: list[int] = [
 #   7 = Local State-Query
 #   9 = Local Tx-Monitor
 N2C_PROTOCOL_IDS: list[int] = [
-    HANDSHAKE_PROTOCOL_ID,          # 0
-    CHAIN_SYNC_N2C_ID,              # 5
-    LOCAL_TX_SUBMISSION_ID,         # 6
+    HANDSHAKE_PROTOCOL_ID,  # 0
+    CHAIN_SYNC_N2C_ID,  # 5
+    LOCAL_TX_SUBMISSION_ID,  # 6
     LOCAL_STATE_QUERY_PROTOCOL_ID,  # 7
-    LOCAL_TX_MONITOR_ID,            # 9
+    LOCAL_TX_MONITOR_ID,  # 9
 ]
 
 
@@ -146,7 +151,11 @@ async def run_n2n_server(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         peer_info = writer.get_extra_info("peername")
-        logger.info("Peer %s connected (inbound)", peer_info, extra={"event": "peer.inbound", "peer": str(peer_info)})
+        logger.info(
+            "Peer %s connected (inbound)",
+            peer_info,
+            extra={"event": "peer.inbound", "peer": str(peer_info)},
+        )
 
         bearer = Bearer(reader, writer)
         mux = Multiplexer(bearer, is_initiator=False)
@@ -165,14 +174,24 @@ async def run_n2n_server(
             # Run handshake responder on channel 0.
             hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
             result = await run_handshake_server(hs_channel, network_magic)
-            logger.info("Peer %s handshake accepted (inbound, v%d)", peer_info, result.version_number, extra={"event": "peer.handshake", "peer": str(peer_info), "direction": "inbound", "version": result.version_number})
+            logger.info(
+                "Peer %s handshake accepted (inbound, v%d)",
+                peer_info,
+                result.version_number,
+                extra={
+                    "event": "peer.handshake",
+                    "peer": str(peer_info),
+                    "direction": "inbound",
+                    "version": result.version_number,
+                },
+            )
 
             # Helper: wrap server coroutines so MuxClosedError on
             # peer disconnect doesn't produce "Task exception never retrieved"
             async def _safe_server(coro, name: str) -> None:
                 try:
                     await coro
-                except (MuxClosedError, BearerClosedError):
+                except MuxClosedError, BearerClosedError:
                     logger.debug("N2N inbound %s: %s disconnected", peer_info, name)
                 except asyncio.CancelledError:
                     pass
@@ -183,7 +202,8 @@ async def run_n2n_server(
             asyncio.create_task(
                 _safe_server(
                     run_keep_alive_server(
-                        channels[KEEP_ALIVE_PROTOCOL_ID], stop_event=stop,
+                        channels[KEEP_ALIVE_PROTOCOL_ID],
+                        stop_event=stop,
                     ),
                     "keep-alive",
                 ),
@@ -230,18 +250,24 @@ async def run_n2n_server(
                 async def _on_tx_ids(txids: list[tuple[bytes, int]]) -> None:
                     logger.debug(
                         "N2N inbound %s: received %d tx IDs",
-                        peer_info, len(txids),
+                        peer_info,
+                        len(txids),
                     )
 
                 async def _on_txs(txs: list[bytes]) -> None:
                     for tx_cbor in txs:
                         try:
                             await mempool.add_tx(tx_cbor)
-                            logger.debug("N2N inbound %s: added tx to mempool (%d bytes)", peer_info, len(tx_cbor))
+                            logger.debug(
+                                "N2N inbound %s: added tx to mempool (%d bytes)",
+                                peer_info,
+                                len(tx_cbor),
+                            )
                         except Exception as exc:
                             logger.debug(
                                 "N2N inbound %s: tx rejected: %s",
-                                peer_info, exc,
+                                peer_info,
+                                exc,
                             )
 
                 asyncio.create_task(
@@ -276,13 +302,17 @@ async def run_n2n_server(
                 mux_task.cancel()
                 try:
                     await mux_task
-                except (asyncio.CancelledError, Exception):
+                except asyncio.CancelledError, Exception:
                     pass
 
     try:
         server = await asyncio.start_server(handle_connection, host, port)
         addrs = [s.getsockname() for s in server.sockets]
-        logger.info("N2N server listening on %s", addrs, extra={"event": "server.n2n.listening", "addresses": str(addrs)})
+        logger.info(
+            "N2N server listening on %s",
+            addrs,
+            extra={"event": "server.n2n.listening", "addresses": str(addrs)},
+        )
 
         await shutdown_event.wait()
     except asyncio.CancelledError:
@@ -337,7 +367,11 @@ async def run_n2c_server(
     async def handle_connection(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
-        logger.info("N2C client connected via %s", socket_path, extra={"event": "n2c.connected", "socket": socket_path})
+        logger.info(
+            "N2C client connected via %s",
+            socket_path,
+            extra={"event": "n2c.connected", "socket": socket_path},
+        )
 
         bearer = Bearer(reader, writer)
         mux = Multiplexer(bearer, is_initiator=False)
@@ -355,21 +389,29 @@ async def run_n2c_server(
             # Run N2C handshake responder on channel 0.
             hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
             hs_result = await run_handshake_server_n2c(hs_channel, network_magic)
-            logger.info("N2C handshake accepted (v%d, query=%s)", hs_result.version_number, hs_result.version_data.query, extra={"event": "n2c.handshake", "version": hs_result.version_number, "query": hs_result.version_data.query})
+            logger.info(
+                "N2C handshake accepted (v%d, query=%s)",
+                hs_result.version_number,
+                hs_result.version_data.query,
+                extra={
+                    "event": "n2c.handshake",
+                    "version": hs_result.version_number,
+                    "query": hs_result.version_data.query,
+                },
+            )
 
             # Launch local chain-sync server (protocol 5).
             if chain_db is not None:
                 cs_server = create_local_chainsync_server(
-                    channels[CHAIN_SYNC_N2C_ID], chain_db,
+                    channels[CHAIN_SYNC_N2C_ID],
+                    chain_db,
                 )
                 asyncio.create_task(
                     cs_server.run(),
                     name="n2c-local-chainsync",
                 )
             else:
-                logger.warning(
-                    "N2C local chain-sync: skipped (no ChainDB available)"
-                )
+                logger.warning("N2C local chain-sync: skipped (no ChainDB available)")
 
             # Launch local tx-submission server (protocol 6).
             async def _validate_and_add_tx(era_id: int, tx_bytes: bytes) -> bytes | None:
@@ -399,9 +441,7 @@ async def run_n2c_server(
                     name="n2c-local-statequery",
                 )
             else:
-                logger.warning(
-                    "N2C local state-query: skipped (no LedgerDB available)"
-                )
+                logger.warning("N2C local state-query: skipped (no LedgerDB available)")
 
             # Launch local tx-monitor server (protocol 9).
             _monitor_snapshot = None
@@ -461,12 +501,16 @@ async def run_n2c_server(
                 mux_task.cancel()
                 try:
                     await mux_task
-                except (asyncio.CancelledError, Exception):
+                except asyncio.CancelledError, Exception:
                     pass
 
     try:
         server = await asyncio.start_unix_server(handle_connection, socket_path)
-        logger.info("N2C server listening on %s", socket_path, extra={"event": "server.n2c.listening", "socket": socket_path})
+        logger.info(
+            "N2C server listening on %s",
+            socket_path,
+            extra={"event": "server.n2c.listening", "socket": socket_path},
+        )
 
         await shutdown_event.wait()
     except asyncio.CancelledError:

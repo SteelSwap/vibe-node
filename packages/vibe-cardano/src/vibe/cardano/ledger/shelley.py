@@ -38,16 +38,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from nacl.signing import VerifyKey
-
 from pycardano import (
     Transaction,
     TransactionBody,
     TransactionInput,
     TransactionOutput,
 )
-from pycardano.hash import ScriptHash, TransactionId, VerificationKeyHash
 from pycardano.key import VerificationKey
-from pycardano.nativescript import NativeScript
 from pycardano.witness import TransactionWitnessSet, VerificationKeyWitness
 
 if TYPE_CHECKING:
@@ -277,27 +274,20 @@ def validate_shelley_utxo(
     # Spec: slot < txttl txb
     # Haskell: ExpiredUTxO
     if tx_body.ttl is not None and current_slot >= tx_body.ttl:
-        errors.append(
-            f"ExpiredUTxO: current_slot={current_slot}, ttl={tx_body.ttl}"
-        )
+        errors.append(f"ExpiredUTxO: current_slot={current_slot}, ttl={tx_body.ttl}")
 
     # --- Rule 3: Tx size within limits ---
     # Spec: txsize txb ≤ maxTxSize pp
     # Haskell: MaxTxSizeUTxO
     if tx_size > params.max_tx_size:
-        errors.append(
-            f"MaxTxSizeUTxO: tx_size={tx_size}, max={params.max_tx_size}"
-        )
+        errors.append(f"MaxTxSizeUTxO: tx_size={tx_size}, max={params.max_tx_size}")
 
     # --- Rule 4: Fee >= minimum fee ---
     # Spec: minfee pp tx ≤ txfee txb
     # Haskell: FeeTooSmallUTxO
     min_fee = shelley_min_fee(tx_size, params)
     if tx_body.fee < min_fee:
-        errors.append(
-            f"FeeTooSmallUTxO: fee={tx_body.fee}, min_fee={min_fee} "
-            f"(tx_size={tx_size})"
-        )
+        errors.append(f"FeeTooSmallUTxO: fee={tx_body.fee}, min_fee={min_fee} (tx_size={tx_size})")
 
     # --- Rule 5: All output values >= min_utxo_value ---
     # Spec: ∀ txout ∈ txouts txb, coin txout ≥ minUTxOValue pp
@@ -306,8 +296,7 @@ def validate_shelley_utxo(
         out_value = _output_lovelace(txout)
         if out_value < params.min_utxo_value:
             errors.append(
-                f"OutputTooSmallUTxO: output[{i}] value={out_value}, "
-                f"min={params.min_utxo_value}"
+                f"OutputTooSmallUTxO: output[{i}] value={out_value}, min={params.min_utxo_value}"
             )
 
     # --- Rule 5b: Output address network ID must match ---
@@ -351,10 +340,7 @@ def validate_shelley_utxo(
         produced = output_sum + tx_body.fee
 
         if consumed != produced:
-            errors.append(
-                f"ValueNotConservedUTxO: consumed={consumed}, "
-                f"produced={produced}"
-            )
+            errors.append(f"ValueNotConservedUTxO: consumed={consumed}, produced={produced}")
 
     return errors
 
@@ -448,8 +434,7 @@ def validate_shelley_witnesses(
 
         if not _verify_vkey_signature(vkey_bytes, sig_bytes, tx_body_hash):
             errors.append(
-                f"InvalidWitnessesUTxOW: invalid signature for "
-                f"vkey={vkey_bytes.hex()[:16]}..."
+                f"InvalidWitnessesUTxOW: invalid signature for vkey={vkey_bytes.hex()[:16]}..."
             )
         else:
             # Only count valid witnesses toward required signers
@@ -499,7 +484,7 @@ def validate_shelley_witnesses(
                 if (header & 0x10) == 0:
                     # VKey credential — needs a witness
                     required_key_hashes.add(cred_hash)
-            elif hasattr(reward_addr, 'payment_part') and reward_addr.payment_part:
+            elif hasattr(reward_addr, "payment_part") and reward_addr.payment_part:
                 # pycardano Address object (fallback)
                 required_key_hashes.add(bytes(reward_addr.payment_part))
 
@@ -513,8 +498,7 @@ def validate_shelley_witnesses(
     if missing:
         for key_hash in missing:
             errors.append(
-                f"MissingVKeyWitnessesUTxOW: missing witness for "
-                f"key_hash={key_hash.hex()[:16]}..."
+                f"MissingVKeyWitnessesUTxOW: missing witness for key_hash={key_hash.hex()[:16]}..."
             )
 
     # --- Check 3: Script witness validation ---
@@ -532,8 +516,9 @@ def validate_shelley_witnesses(
             # Script addresses have a payment_part that is a ScriptHash.
             # In pycardano, Address header type indicates script vs key:
             #   header & 0x10 (bit 4) set = script payment credential
-            if hasattr(addr, 'payment_part') and addr.payment_part is not None:
+            if hasattr(addr, "payment_part") and addr.payment_part is not None:
                 from pycardano.hash import ScriptHash as SH
+
                 if isinstance(addr.payment_part, SH):
                     required_script_hashes.add(bytes(addr.payment_part))
 
@@ -618,10 +603,7 @@ def _produced_utxos(
     Each output is keyed by (tx_id, output_index).
     """
     tx_id = tx_body.id
-    return {
-        TransactionInput(tx_id, i): txout
-        for i, txout in enumerate(tx_body.outputs)
-    }
+    return {TransactionInput(tx_id, i): txout for i, txout in enumerate(tx_body.outputs)}
 
 
 def apply_shelley_tx(
@@ -656,9 +638,7 @@ def apply_shelley_tx(
     # Calculate tx size from CBOR encoding
     tx_size = len(tx.to_cbor())
 
-    errors = validate_shelley_tx(
-        tx_body, witness_set, utxo_set, params, current_slot, tx_size
-    )
+    errors = validate_shelley_tx(tx_body, witness_set, utxo_set, params, current_slot, tx_size)
     if errors:
         raise ShelleyValidationError(errors)
 
@@ -711,9 +691,7 @@ def apply_shelley_block(
         try:
             current_utxo = apply_shelley_tx(tx, current_utxo, params, current_slot)
         except ShelleyValidationError as e:
-            raise ShelleyValidationError(
-                [f"Transaction {i}: {err}" for err in e.errors]
-            ) from e
+            raise ShelleyValidationError([f"Transaction {i}: {err}" for err in e.errors]) from e
 
     return current_utxo
 

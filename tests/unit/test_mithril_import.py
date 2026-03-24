@@ -15,12 +15,10 @@ Test spec references (from test_specifications DB):
 
 from __future__ import annotations
 
-import hashlib
 import struct
 from pathlib import Path
 
 import cbor2
-import pyarrow as pa
 import pytest
 
 from vibe.cardano.storage import ImmutableDB, LedgerDB
@@ -31,7 +29,6 @@ from vibe.cardano.sync.mithril import (
     import_mithril_snapshot,
     parse_immutable_chunks,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers: build synthetic Haskell-format chunk + primary index
@@ -49,21 +46,21 @@ def _make_shelley_block(slot: int, block_number: int = 1) -> bytes:
                    proto_major, proto_minor]
     """
     header_body = [
-        block_number,           # [0] block_number
-        slot,                   # [1] slot
-        b"\x00" * 32,          # [2] prev_hash
-        b"\x01" * 32,          # [3] issuer_vkey
-        b"\x02" * 32,          # [4] vrf_vkey
+        block_number,  # [0] block_number
+        slot,  # [1] slot
+        b"\x00" * 32,  # [2] prev_hash
+        b"\x01" * 32,  # [3] issuer_vkey
+        b"\x02" * 32,  # [4] vrf_vkey
         [b"\x03" * 32, b"\x04" * 64],  # [5] nonce_vrf
         [b"\x05" * 32, b"\x06" * 64],  # [6] leader_vrf
-        100,                    # [7] block_body_size
-        b"\x07" * 32,          # [8] block_body_hash
-        b"\x08" * 32,          # [9] hot_vkey (op cert)
-        1,                      # [10] sequence_number
-        100,                    # [11] kes_period
-        b"\x09" * 64,          # [12] sigma
-        7,                      # [13] proto major
-        0,                      # [14] proto minor
+        100,  # [7] block_body_size
+        b"\x07" * 32,  # [8] block_body_hash
+        b"\x08" * 32,  # [9] hot_vkey (op cert)
+        1,  # [10] sequence_number
+        100,  # [11] kes_period
+        b"\x09" * 64,  # [12] sigma
+        7,  # [13] proto major
+        0,  # [14] proto minor
     ]
     header = [header_body, b"\xaa" * 448]  # body_signature
     block = [header, [], {}, None]  # [header, txs, witnesses, aux]
@@ -354,9 +351,7 @@ class TestImportMithrilSnapshot:
         ledger_db = LedgerDB()
 
         with pytest.raises(FileNotFoundError):
-            await import_mithril_snapshot(
-                tmp_path / "nonexistent", immutable_db, ledger_db
-            )
+            await import_mithril_snapshot(tmp_path / "nonexistent", immutable_db, ledger_db)
 
     @pytest.mark.asyncio
     async def test_missing_immutable_dir_raises(self, tmp_path: Path) -> None:
@@ -369,9 +364,7 @@ class TestImportMithrilSnapshot:
         ledger_db = LedgerDB()
 
         with pytest.raises(FileNotFoundError):
-            await import_mithril_snapshot(
-                snapshot_dir, immutable_db, ledger_db
-            )
+            await import_mithril_snapshot(snapshot_dir, immutable_db, ledger_db)
 
     @pytest.mark.asyncio
     async def test_empty_snapshot_raises(self, tmp_path: Path) -> None:
@@ -384,9 +377,7 @@ class TestImportMithrilSnapshot:
         ledger_db = LedgerDB()
 
         with pytest.raises(ValueError, match="No blocks imported"):
-            await import_mithril_snapshot(
-                tmp_path / "snapshot", immutable_db, ledger_db
-            )
+            await import_mithril_snapshot(tmp_path / "snapshot", immutable_db, ledger_db)
 
     @pytest.mark.asyncio
     async def test_idempotent_import(self, tmp_path: Path) -> None:
@@ -404,13 +395,9 @@ class TestImportMithrilSnapshot:
         ledger_db = LedgerDB(k=10)
 
         # First import succeeds.
-        tip_slot, _ = await import_mithril_snapshot(
-            tmp_path / "snapshot", immutable_db, ledger_db
-        )
+        tip_slot, _ = await import_mithril_snapshot(tmp_path / "snapshot", immutable_db, ledger_db)
         assert tip_slot == 10
 
         # Second import of same data — should raise (all blocks skipped).
         with pytest.raises(ValueError, match="No blocks imported"):
-            await import_mithril_snapshot(
-                tmp_path / "snapshot", immutable_db, ledger_db
-            )
+            await import_mithril_snapshot(tmp_path / "snapshot", immutable_db, ledger_db)

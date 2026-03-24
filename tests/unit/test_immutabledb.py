@@ -25,14 +25,8 @@ from vibe.cardano.storage.immutable import (
     AppendBlockNotNewerThanTipError,
     ClosedDBError,
     ImmutableDB,
-    ImmutableDBIterator,
-    _PRI_ENTRY_FMT,
-    _PRI_ENTRY_SIZE,
-    _SEC_ENTRY_FMT,
-    _SEC_ENTRY_SIZE,
 )
 from vibe.core.storage.interfaces import AppendStore
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -898,9 +892,9 @@ class TestPrimaryIndex:
 
         # Slots 2-4 should carry forward the same offset (empty)
         for s in [2, 3, 4]:
-            assert offsets[s] == end_of_slot_0, (
-                f"Empty slot {s} should carry forward offset {end_of_slot_0}"
-            )
+            assert (
+                offsets[s] == end_of_slot_0
+            ), f"Empty slot {s} should carry forward offset {end_of_slot_0}"
 
         # Slot 5 starts where the last empty slot pointed
         assert offsets[5] == end_of_slot_0

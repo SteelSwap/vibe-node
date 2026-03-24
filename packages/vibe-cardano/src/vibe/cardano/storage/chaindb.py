@@ -31,7 +31,6 @@ Key invariants maintained:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import threading
 from dataclasses import dataclass, field
@@ -134,6 +133,7 @@ class ChainDB:
         # single-threaded mode).
         if lock is None:
             from vibe.core.rwlock import RWLock
+
             lock = RWLock()
         self._lock = lock
 
@@ -155,6 +155,7 @@ class ChainDB:
         # STM TVars for cross-thread shared state.
         # Haskell ref: cdbChain :: TVar (AnchoredFragment)
         from vibe.core.stm import TVar
+
         self.tip_tvar: TVar = TVar(None)  # _ChainTip | None
         self.fragment_tvar: TVar = TVar(([], {}))  # (fragment_list, index_dict)
 
@@ -186,6 +187,7 @@ class ChainDB:
     def get_tip_as_tip(self) -> Any:
         """Return the current tip as a chainsync Tip object."""
         from vibe.cardano.network.chainsync import Point, Tip
+
         if self._tip:
             return Tip(
                 point=Point(slot=self._tip.slot, hash=self._tip.block_hash),
@@ -203,6 +205,7 @@ class ChainDB:
         Haskell ref: ChainDB.newFollower
         """
         from vibe.cardano.storage.chain_follower import ChainFollower
+
         fid = self._next_follower_id
         self._next_follower_id += 1
         follower = ChainFollower(fid, self)
@@ -214,7 +217,9 @@ class ChainDB:
         self._followers.pop(follower_id, None)
 
     def _notify_fork_switch(
-        self, removed_hashes: set[bytes], intersection_point: Any,
+        self,
+        removed_hashes: set[bytes],
+        intersection_point: Any,
     ) -> None:
         """Notify all followers of a fork switch.
 
@@ -260,15 +265,15 @@ class ChainDB:
             and block_number <= self._immutable_tip_block_number
         ):
             logger.debug(
-                "ChainDB: ignoring block %s at blockNo %d "
-                "(immutable tip at blockNo %d)",
+                "ChainDB: ignoring block %s at blockNo %d (immutable tip at blockNo %d)",
                 block_hash.hex()[:16],
                 block_number,
                 self._immutable_tip_block_number,
             )
             tip_tuple = (
                 (self._tip.slot, self._tip.block_hash, self._tip.block_number)
-                if self._tip else None
+                if self._tip
+                else None
             )
             return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
 
@@ -303,17 +308,15 @@ class ChainDB:
             # VRF tiebreaker: lower raw VRF output wins
             # Haskell ref: compare (Down ptvTieBreakVRF) — Down reverses,
             # so lower OutputVRF is preferred (ShouldSwitch)
-            if (
-                new_vrf
-                and self._tip.vrf_output
-                and new_vrf < self._tip.vrf_output
-            ):
+            if new_vrf and self._tip.vrf_output and new_vrf < self._tip.vrf_output:
                 should_adopt = True
                 logger.info(
                     "ChainDB: VRF tiebreak — switching to block %s at slot %d "
                     "(new_vrf=%s < tip_vrf=%s)",
-                    block_hash.hex()[:16], slot,
-                    new_vrf.hex()[:16], self._tip.vrf_output.hex()[:16],
+                    block_hash.hex()[:16],
+                    slot,
+                    new_vrf.hex()[:16],
+                    self._tip.vrf_output.hex()[:16],
                 )
 
         if should_adopt:
@@ -330,12 +333,13 @@ class ChainDB:
 
             if old_tip is not None and predecessor_hash != old_tip.block_hash:
                 # Fork switch — compute diff
-                rollback_depth, removed_hashes, intersection_hash = (
-                    self._compute_chain_diff(block_hash)
+                rollback_depth, removed_hashes, intersection_hash = self._compute_chain_diff(
+                    block_hash
                 )
                 # Notify followers BEFORE updating fragment (atomic)
                 if rollback_depth > 0 and intersection_hash is not None:
                     from vibe.cardano.network.chainsync import Point
+
                     intersection_info = self.volatile_db._block_info.get(
                         intersection_hash,
                     )
@@ -352,10 +356,7 @@ class ChainDB:
             # Rebuild or extend fragment
             if rollback_depth > 0 or old_tip is None:
                 # Full rebuild (fork switch or first block)
-                header_map = {
-                    e.block_hash: e.header_cbor
-                    for e in self._chain_fragment
-                }
+                header_map = {e.block_hash: e.header_cbor for e in self._chain_fragment}
                 header_map[block_hash] = header_cbor
                 self._rebuild_fragment_from_tip(block_hash, header_map)
             else:
@@ -377,19 +378,18 @@ class ChainDB:
                 # Reindex after trim
                 if len(self._chain_fragment) < idx + 1:
                     self._fragment_index = {
-                        e.block_hash: i
-                        for i, e in enumerate(self._chain_fragment)
+                        e.block_hash: i for i, e in enumerate(self._chain_fragment)
                     }
                 # Update STM TVar
-                self.fragment_tvar._write(
-                    (list(self._chain_fragment), dict(self._fragment_index))
-                )
+                self.fragment_tvar._write((list(self._chain_fragment), dict(self._fragment_index)))
 
             logger.debug(
-                "ChainDB: new tip block %s at slot %d, blockNo %d "
-                "(rollback=%d, fragment=%d)",
-                block_hash.hex()[:16], slot, block_number,
-                rollback_depth, len(self._chain_fragment),
+                "ChainDB: new tip block %s at slot %d, blockNo %d (rollback=%d, fragment=%d)",
+                block_hash.hex()[:16],
+                slot,
+                block_number,
+                rollback_depth,
+                len(self._chain_fragment),
             )
 
             # Set tip_changed — stays set until consumers clear it.
@@ -410,8 +410,7 @@ class ChainDB:
         # Not adopted — stored but didn't change tip
         await self._maybe_advance_immutable()
         tip_tuple = (
-            (self._tip.slot, self._tip.block_hash, self._tip.block_number)
-            if self._tip else None
+            (self._tip.slot, self._tip.block_hash, self._tip.block_number) if self._tip else None
         )
         return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
 
@@ -422,6 +421,7 @@ class ChainDB:
         threads' event loops.
         """
         import asyncio as _asyncio
+
         # Get or create a thread-local event loop
         try:
             loop = _asyncio.get_event_loop()
@@ -462,7 +462,9 @@ class ChainDB:
         return await self.immutable_db.get_block(block_hash)
 
     async def get_blocks(
-        self, point_from: Any, point_to: Any,
+        self,
+        point_from: Any,
+        point_to: Any,
     ) -> list[bytes] | None:
         """Get blocks in a range, for block-fetch serving.
 
@@ -471,7 +473,8 @@ class ChainDB:
 
         Haskell ref: ChainDB iterator API
         """
-        from vibe.cardano.network.chainsync import Point, ORIGIN
+        from vibe.cardano.network.chainsync import ORIGIN, Point
+
         if not self._chain_fragment:
             return None
 
@@ -514,7 +517,9 @@ class ChainDB:
     # ------------------------------------------------------------------
 
     def _rebuild_fragment_from_tip(
-        self, tip_hash: bytes, header_cbor_map: dict[bytes, Any],
+        self,
+        tip_hash: bytes,
+        header_cbor_map: dict[bytes, Any],
     ) -> None:
         """Rebuild chain fragment by walking backward from tip.
 
@@ -526,26 +531,27 @@ class ChainDB:
         while h and h in self.volatile_db._block_info and len(fragment) < self._k:
             info = self.volatile_db._block_info[h]
             hdr = header_cbor_map.get(h)
-            fragment.append(FragmentEntry(
-                slot=info.slot,
-                block_hash=info.block_hash,
-                block_number=info.block_number,
-                predecessor_hash=info.predecessor_hash,
-                header_cbor=hdr,
-            ))
+            fragment.append(
+                FragmentEntry(
+                    slot=info.slot,
+                    block_hash=info.block_hash,
+                    block_number=info.block_number,
+                    predecessor_hash=info.predecessor_hash,
+                    header_cbor=hdr,
+                )
+            )
             h = info.predecessor_hash
         fragment.reverse()  # oldest first
         # Ensure monotonic slot ordering (required by Haskell chain-sync)
         fragment.sort(key=lambda e: e.slot)
         self._chain_fragment = fragment
-        self._fragment_index = {
-            e.block_hash: i for i, e in enumerate(fragment)
-        }
+        self._fragment_index = {e.block_hash: i for i, e in enumerate(fragment)}
         # Update STM TVar
         self.fragment_tvar._write((list(fragment), dict(self._fragment_index)))
 
     def _compute_chain_diff(
-        self, new_block_hash: bytes,
+        self,
+        new_block_hash: bytes,
     ) -> tuple[int, set[bytes], bytes | None]:
         """Compute rollback depth and removed hashes for a fork switch.
 
@@ -573,7 +579,7 @@ class ChainDB:
         removed: set[bytes] = set()
         idx = self._fragment_index.get(intersection)
         if idx is not None:
-            for e in self._chain_fragment[idx + 1:]:
+            for e in self._chain_fragment[idx + 1 :]:
                 removed.add(e.block_hash)
 
         return (len(removed), removed, intersection)
@@ -590,8 +596,7 @@ class ChainDB:
         """
         all_info = await self.volatile_db.get_all_block_info()
         to_promote: list[BlockInfo] = [
-            info for info in all_info.values()
-            if info.slot <= new_immutable_slot
+            info for info in all_info.values() if info.slot <= new_immutable_slot
         ]
         to_promote.sort(key=lambda bi: bi.slot)
 
@@ -611,14 +616,16 @@ class ChainDB:
             except Exception:
                 logger.debug(
                     "ChainDB: skipped promoting block %s (slot %d)",
-                    info.block_hash.hex()[:16], info.slot,
+                    info.block_hash.hex()[:16],
+                    info.slot,
                     exc_info=True,
                 )
 
         gc_count = await self.volatile_db.gc(new_immutable_slot)
         logger.debug(
             "ChainDB: GC removed %d volatile blocks at or below slot %d",
-            gc_count, new_immutable_slot,
+            gc_count,
+            new_immutable_slot,
         )
         return copied
 
@@ -694,9 +701,7 @@ class ChainDB:
 
     def __repr__(self) -> str:
         tip_str = (
-            f"slot={self._tip.slot}, blockNo={self._tip.block_number}"
-            if self._tip
-            else "empty"
+            f"slot={self._tip.slot}, blockNo={self._tip.block_number}" if self._tip else "empty"
         )
         return (
             f"ChainDB(tip=({tip_str}), "

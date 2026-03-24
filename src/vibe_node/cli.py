@@ -1,7 +1,6 @@
 """CLI entry point for vibe-node."""
 
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +10,7 @@ import typer
 _env_file = Path.cwd() / ".env"
 if _env_file.exists():
     from dotenv import load_dotenv
+
     load_dotenv(_env_file)
 
 from vibe_node import __version__
@@ -35,7 +35,9 @@ app.add_typer(eval_app, name="eval")
 register_db_extras(db_app)
 
 # Register cross-referencing and test-specs subcommands
-from vibe_node.cli_xref import xref_app, test_spec_app
+from datetime import UTC
+
+from vibe_node.cli_xref import test_spec_app, xref_app
 
 db_app.add_typer(xref_app, name="xref")
 db_app.add_typer(test_spec_app, name="test-specs")
@@ -51,7 +53,11 @@ def version_callback(value: bool) -> None:
 def main(
     ctx: typer.Context,
     version: bool = typer.Option(
-        False, "--version", "-v", callback=version_callback, is_eager=True,
+        False,
+        "--version",
+        "-v",
+        callback=version_callback,
+        is_eager=True,
         help="Show version and exit.",
     ),
 ) -> None:
@@ -75,26 +81,51 @@ def ingest_callback(ctx: typer.Context) -> None:
 def serve(
     host: str = typer.Option("0.0.0.0", envvar="VIBE_HOST", help="Host to bind to."),
     port: int = typer.Option(3001, envvar="VIBE_NODE_PORT", help="Port to listen on."),
-    network_magic: int = typer.Option(764824073, envvar="VIBE_NETWORK_MAGIC", help="Network magic number."),
-    peers: str = typer.Option("", envvar="VIBE_PEERS", help="Comma-separated peer list (host:port,...)."),
-    genesis_dir: str = typer.Option(None, envvar="VIBE_GENESIS_DIR", help="Path to genesis files directory."),
-    db_path: str = typer.Option("./db", envvar="VIBE_DATA_DIR", help="Data directory for chain storage."),
-    socket_path: str = typer.Option(None, envvar="VIBE_SOCKET_PATH", help="Unix socket path for N2C."),
+    network_magic: int = typer.Option(
+        764824073, envvar="VIBE_NETWORK_MAGIC", help="Network magic number."
+    ),
+    peers: str = typer.Option(
+        "", envvar="VIBE_PEERS", help="Comma-separated peer list (host:port,...)."
+    ),
+    genesis_dir: str = typer.Option(
+        None, envvar="VIBE_GENESIS_DIR", help="Path to genesis files directory."
+    ),
+    db_path: str = typer.Option(
+        "./db", envvar="VIBE_DATA_DIR", help="Data directory for chain storage."
+    ),
+    socket_path: str = typer.Option(
+        None, envvar="VIBE_SOCKET_PATH", help="Unix socket path for N2C."
+    ),
     kes_key: str = typer.Option(None, envvar="VIBE_KES_KEY", help="Path to KES signing key file."),
     vrf_key: str = typer.Option(None, envvar="VIBE_VRF_KEY", help="Path to VRF signing key file."),
-    vrf_vkey: str = typer.Option(None, envvar="VIBE_VRF_VKEY", help="Path to VRF verification key file."),
-    opcert: str = typer.Option(None, envvar="VIBE_OPCERT", help="Path to operational certificate file."),
-    cold_vkey: str = typer.Option(None, envvar="VIBE_COLD_VKEY", help="Path to cold verification key file."),
-    cold_skey: str = typer.Option(None, envvar="VIBE_COLD_SKEY", help="Path to cold signing key file."),
-    permissive_validation: bool = typer.Option(False, envvar="VIBE_PERMISSIVE_VALIDATION", help="Log validation errors but still store blocks."),
-    mithril_snapshot: str = typer.Option(None, envvar="VIBE_MITHRIL_SNAPSHOT", help="Path to Mithril snapshot directory for fast bootstrap."),
+    vrf_vkey: str = typer.Option(
+        None, envvar="VIBE_VRF_VKEY", help="Path to VRF verification key file."
+    ),
+    opcert: str = typer.Option(
+        None, envvar="VIBE_OPCERT", help="Path to operational certificate file."
+    ),
+    cold_vkey: str = typer.Option(
+        None, envvar="VIBE_COLD_VKEY", help="Path to cold verification key file."
+    ),
+    cold_skey: str = typer.Option(
+        None, envvar="VIBE_COLD_SKEY", help="Path to cold signing key file."
+    ),
+    permissive_validation: bool = typer.Option(
+        False,
+        envvar="VIBE_PERMISSIVE_VALIDATION",
+        help="Log validation errors but still store blocks.",
+    ),
+    mithril_snapshot: str = typer.Option(
+        None,
+        envvar="VIBE_MITHRIL_SNAPSHOT",
+        help="Path to Mithril snapshot directory for fast bootstrap.",
+    ),
 ) -> None:
     """Start the Cardano node."""
-    import asyncio
     import hashlib
     import json
     import logging
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from vibe.cardano.node import NodeConfig, PeerAddress, PoolKeys, run_node
 
@@ -107,7 +138,7 @@ def serve(
     typer.echo(f"Starting node on {host}:{port} (magic={network_magic})")
 
     # Parse genesis parameters from shelley-genesis.json if available
-    system_start = datetime(2017, 9, 23, 21, 44, 51, tzinfo=timezone.utc)
+    system_start = datetime(2017, 9, 23, 21, 44, 51, tzinfo=UTC)
     slot_length = 1.0
     epoch_length = 432000
     security_param = 2160
@@ -124,7 +155,7 @@ def serve(
                 sg = json.load(f)
             system_start = datetime.fromisoformat(sg["systemStart"])
             if system_start.tzinfo is None:
-                system_start = system_start.replace(tzinfo=timezone.utc)
+                system_start = system_start.replace(tzinfo=UTC)
             slot_length = sg.get("slotLength", slot_length)
             epoch_length = sg.get("epochLength", epoch_length)
             security_param = sg.get("securityParam", security_param)
@@ -134,9 +165,11 @@ def serve(
             genesis_bytes = genesis_path.read_bytes()  # Hash raw file bytes, not re-encoded JSON
             genesis_hash = hashlib.blake2b(genesis_bytes, digest_size=32).digest()
             initial_pool_stakes = _parse_genesis_stake(sg)
-            typer.echo(f"Genesis: systemStart={system_start.isoformat()}, "
-                       f"slotLength={slot_length}s, epochLength={epoch_length}, "
-                       f"pools={len(initial_pool_stakes)}")
+            typer.echo(
+                f"Genesis: systemStart={system_start.isoformat()}, "
+                f"slotLength={slot_length}s, epochLength={epoch_length}, "
+                f"pools={len(initial_pool_stakes)}"
+            )
 
     # Parse peers
     peer_list: list[PeerAddress] = []
@@ -267,7 +300,9 @@ def _load_pool_keys(
 @db_app.command()
 def reset(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip first confirmation."),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip ALL confirmations (use in scripts)."),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip ALL confirmations (use in scripts)."
+    ),
 ) -> None:
     """Drop all tables and recreate the database schema.
 
@@ -285,9 +320,7 @@ def reset(
                 typer.echo("Aborted.")
                 raise typer.Exit()
 
-        confirm2 = typer.confirm(
-            "FINAL CONFIRMATION: Type 'y' to permanently delete all data"
-        )
+        confirm2 = typer.confirm("FINAL CONFIRMATION: Type 'y' to permanently delete all data")
         if not confirm2:
             typer.echo("Aborted.")
             raise typer.Exit()
@@ -298,8 +331,17 @@ def reset(
     # Terminate active connections first
     subprocess.run(
         [
-            "docker", "compose", "exec", "-T", "paradedb",
-            "psql", "-U", "vibenode", "-d", "vibenode", "-c",
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "paradedb",
+            "psql",
+            "-U",
+            "vibenode",
+            "-d",
+            "vibenode",
+            "-c",
             "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
             "WHERE datname = 'vibenode' AND pid <> pg_backend_pid();",
         ],
@@ -310,8 +352,17 @@ def reset(
     # Drop and recreate via docker compose
     result = subprocess.run(
         [
-            "docker", "compose", "exec", "-T", "paradedb",
-            "psql", "-U", "vibenode", "-d", "vibenode", "-c",
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "paradedb",
+            "psql",
+            "-U",
+            "vibenode",
+            "-d",
+            "vibenode",
+            "-c",
             "DROP SCHEMA public CASCADE; CREATE SCHEMA public;",
         ],
         capture_output=True,
@@ -327,9 +378,18 @@ def reset(
     # Re-run the init.sql
     result = subprocess.run(
         [
-            "docker", "compose", "exec", "-T", "paradedb",
-            "psql", "-U", "vibenode", "-d", "vibenode",
-            "-f", "/docker-entrypoint-initdb.d/init.sql",
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "paradedb",
+            "psql",
+            "-U",
+            "vibenode",
+            "-d",
+            "vibenode",
+            "-f",
+            "/docker-entrypoint-initdb.d/init.sql",
         ],
         capture_output=True,
         text=True,
@@ -347,8 +407,17 @@ def status() -> None:
     """Show database table row counts and connection status."""
     result = subprocess.run(
         [
-            "docker", "compose", "exec", "-T", "paradedb",
-            "psql", "-U", "vibenode", "-d", "vibenode", "-c",
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "paradedb",
+            "psql",
+            "-U",
+            "vibenode",
+            "-d",
+            "vibenode",
+            "-c",
             """
             SELECT 'spec_documents' as table_name, count(*) FROM spec_documents
             UNION ALL
@@ -387,15 +456,20 @@ def status() -> None:
 @ingest_app.command()
 def issues(
     repo: str = typer.Option(
-        None, "--repo", "-r",
+        None,
+        "--repo",
+        "-r",
         help="Single repo to ingest (e.g. IntersectMBO/cardano-node). Omit for all.",
     ),
     limit: int = typer.Option(
-        None, "--limit", "-n",
+        None,
+        "--limit",
+        "-n",
         help="Max issues/PRs per repo (for testing). Omit for all.",
     ),
     rescan: bool = typer.Option(
-        False, "--rescan",
+        False,
+        "--rescan",
         help="Re-fetch all issues/PRs to check for new comments and updates.",
     ),
 ) -> None:
@@ -414,7 +488,15 @@ def issues(
         typer.echo("Get one: https://github.com/settings/tokens (no special scopes needed)")
         raise typer.Exit(1)
 
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn, TimeRemainingColumn
+    from rich.progress import (
+        BarColumn,
+        Progress,
+        SpinnerColumn,
+        TaskProgressColumn,
+        TextColumn,
+        TimeElapsedColumn,
+        TimeRemainingColumn,
+    )
 
     logging.basicConfig(
         level=logging.WARNING,
@@ -447,8 +529,11 @@ def issues(
             ) as progress:
                 async with get_session() as session:
                     results = await ingestor.ingest_all(
-                        session, embed_client, repos,
-                        limit=limit, progress=progress,
+                        session,
+                        embed_client,
+                        repos,
+                        limit=limit,
+                        progress=progress,
                         rescan=rescan,
                     )
 
@@ -471,19 +556,26 @@ def issues(
 @ingest_app.command()
 def specs(
     format: str = typer.Option(
-        None, "--format", "-f",
+        None,
+        "--format",
+        "-f",
         help="Only ingest this format: markdown, cddl, latex, agda, pdf",
     ),
     source: str = typer.Option(
-        None, "--source", "-s",
+        None,
+        "--source",
+        "-s",
         help="Only ingest sources matching this substring (e.g. 'consensus').",
     ),
     limit: int = typer.Option(
-        None, "--limit", "-n",
+        None,
+        "--limit",
+        "-n",
         help="Max files per source (for testing).",
     ),
     history: bool = typer.Option(
-        False, "--history",
+        False,
+        "--history",
         help="Walk git commit history for versioned spec tracking (slow).",
     ),
 ) -> None:
@@ -491,7 +583,15 @@ def specs(
     import asyncio
     import logging
 
-    from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+    from rich.progress import (
+        BarColumn,
+        Progress,
+        SpinnerColumn,
+        TaskProgressColumn,
+        TextColumn,
+        TimeElapsedColumn,
+        TimeRemainingColumn,
+    )
 
     logging.basicConfig(
         level=logging.WARNING,
@@ -529,7 +629,8 @@ def specs(
                 async with get_session() as session:
                     if history:
                         results = await ingestor.ingest_history(
-                            session, embed_client,
+                            session,
+                            embed_client,
                             format_filter=format,
                             source_filter=source,
                             limit=limit,
@@ -537,7 +638,8 @@ def specs(
                         )
                     else:
                         results = await ingestor.ingest_all(
-                            session, embed_client,
+                            session,
+                            embed_client,
                             format_filter=format,
                             source_filter=source,
                             limit=limit,
@@ -560,11 +662,15 @@ def specs(
 @ingest_app.command()
 def code(
     repo: str = typer.Option(
-        None, "--repo", "-r",
+        None,
+        "--repo",
+        "-r",
         help="Single repo to ingest (e.g. cardano-node). Omit for all.",
     ),
     limit: int = typer.Option(
-        None, "--limit", "-n",
+        None,
+        "--limit",
+        "-n",
         help="Max tags per repo (for testing).",
     ),
 ) -> None:
@@ -572,7 +678,15 @@ def code(
     import asyncio
     import logging
 
-    from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+    from rich.progress import (
+        BarColumn,
+        Progress,
+        SpinnerColumn,
+        TaskProgressColumn,
+        TextColumn,
+        TimeElapsedColumn,
+        TimeRemainingColumn,
+    )
 
     logging.basicConfig(
         level=logging.WARNING,
@@ -603,8 +717,11 @@ def code(
             ) as progress:
                 async with get_session() as session:
                     results = await ingestor.ingest_all(
-                        session, embed_client, repos,
-                        limit=limit, progress=progress,
+                        session,
+                        embed_client,
+                        repos,
+                        limit=limit,
+                        progress=progress,
                     )
 
             typer.echo("")
@@ -648,10 +765,23 @@ def create_indexes() -> None:
 
     typer.echo("Creating BM25 and HNSW indexes (this may take a few minutes)...")
     result = subprocess.run(
-        ["docker", "compose", "exec", "-T", "paradedb",
-         "psql", "-U", "vibenode", "-d", "vibenode", "-f", "/dev/stdin"],
+        [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "paradedb",
+            "psql",
+            "-U",
+            "vibenode",
+            "-d",
+            "vibenode",
+            "-f",
+            "/dev/stdin",
+        ],
         input=sql_path.read_text(),
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         typer.echo(f"Error creating indexes:\n{result.stderr}", err=True)
@@ -673,8 +803,16 @@ def research_callback(ctx: typer.Context):
 
 
 VALID_SUBSYSTEMS = [
-    "networking", "miniprotocols-n2n", "miniprotocols-n2c", "consensus",
-    "ledger", "plutus", "serialization", "mempool", "storage", "block-production",
+    "networking",
+    "miniprotocols-n2n",
+    "miniprotocols-n2c",
+    "consensus",
+    "ledger",
+    "plutus",
+    "serialization",
+    "mempool",
+    "storage",
+    "block-production",
 ]
 
 
@@ -706,7 +844,7 @@ def research_reset(
                 raise typer.Exit()
 
     async def _run():
-        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.db.pool import close_pool, get_pool
 
         pool = await get_pool()
         async with pool.acquire() as conn:
@@ -732,8 +870,12 @@ def extract_rules(
         "networking, miniprotocols-n2n, miniprotocols-n2c, consensus, "
         "ledger, plutus, serialization, mempool, storage, block-production",
     ),
-    limit: int | None = typer.Option(None, "--limit", "-n", help="Max spec chunks to process per subsystem"),
-    concurrency: int = typer.Option(3, "--concurrency", "-c", help="Number of chunks to process in parallel"),
+    limit: int | None = typer.Option(
+        None, "--limit", "-n", help="Max spec chunks to process per subsystem"
+    ),
+    concurrency: int = typer.Option(
+        3, "--concurrency", "-c", help="Number of chunks to process in parallel"
+    ),
 ) -> None:
     """Run the PydanticAI rule extraction and linking pipeline.
 
@@ -752,29 +894,31 @@ def extract_rules(
     for s in subsystems:
         if s not in VALID_SUBSYSTEMS:
             typer.echo(
-                f"Invalid subsystem: '{s}'\n"
-                f"Valid options: all, {', '.join(VALID_SUBSYSTEMS)}",
+                f"Invalid subsystem: '{s}'\nValid options: all, {', '.join(VALID_SUBSYSTEMS)}",
                 err=True,
             )
             raise typer.Exit(1)
 
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
     async def _run():
-        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.db.pool import close_pool, get_pool
         from vibe.tools.research.pipeline import run_pipeline
 
         total_stats = {
-            "chunks_processed": 0, "rules_extracted": 0,
-            "links_created": 0, "gaps_found": 0, "tests_proposed": 0,
+            "chunks_processed": 0,
+            "rules_extracted": 0,
+            "links_created": 0,
+            "gaps_found": 0,
+            "tests_proposed": 0,
         }
 
         for s in subsystems:
             pool = await get_pool()
             async with pool.acquire() as conn:
-                typer.echo(f"\n{'='*60}")
+                typer.echo(f"\n{'=' * 60}")
                 typer.echo(f"  Extracting rules for: {s}")
-                typer.echo(f"{'='*60}")
+                typer.echo(f"{'=' * 60}")
 
                 with Progress(
                     SpinnerColumn(),
@@ -784,7 +928,9 @@ def extract_rules(
                     TimeElapsedColumn(),
                 ) as progress:
                     task = progress.add_task(f"[green]{s}", total=0)
-                    stats = await run_pipeline(conn, s, limit=limit, progress=progress, concurrency=concurrency)
+                    stats = await run_pipeline(
+                        conn, s, limit=limit, progress=progress, concurrency=concurrency
+                    )
 
             for key in total_stats:
                 total_stats[key] += stats.get(key, 0)
@@ -792,7 +938,8 @@ def extract_rules(
             # Query per-subsystem totals
             pool2 = await get_pool()
             async with pool2.acquire() as conn2:
-                db_stats = await conn2.fetchrow("""
+                db_stats = await conn2.fetchrow(
+                    """
                     SELECT
                         (SELECT COUNT(*) FROM spec_sections WHERE subsystem = $1) AS rules,
                         (SELECT COUNT(*) FROM cross_references cr
@@ -800,17 +947,21 @@ def extract_rules(
                          WHERE ss.subsystem = $1) AS links,
                         (SELECT COUNT(*) FROM gap_analysis WHERE subsystem = $1) AS gaps,
                         (SELECT COUNT(*) FROM test_specifications WHERE subsystem = $1) AS tests
-                """, s)
+                """,
+                    s,
+                )
 
-            typer.echo(f"\n  {s}: {db_stats['rules']} rules, {db_stats['links']} links, "
-                       f"{db_stats['gaps']} gaps, {db_stats['tests']} tests")
+            typer.echo(
+                f"\n  {s}: {db_stats['rules']} rules, {db_stats['links']} links, "
+                f"{db_stats['gaps']} gaps, {db_stats['tests']} tests"
+            )
 
         await close_pool()
 
         if len(subsystems) > 1:
-            typer.echo(f"\n{'='*60}")
-            typer.echo(f"  ALL SUBSYSTEMS COMPLETE")
-            typer.echo(f"{'='*60}")
+            typer.echo(f"\n{'=' * 60}")
+            typer.echo("  ALL SUBSYSTEMS COMPLETE")
+            typer.echo(f"{'=' * 60}")
             typer.echo(f"  Chunks processed:  {total_stats['chunks_processed']}")
             typer.echo(f"  Rules extracted:   {total_stats['rules_extracted']}")
             typer.echo(f"  Links created:     {total_stats['links_created']}")
@@ -828,10 +979,16 @@ def qa_validate(
         "networking, miniprotocols-n2n, miniprotocols-n2c, consensus, "
         "ledger, plutus, serialization, mempool, storage, block-production",
     ),
-    limit: int | None = typer.Option(None, "--limit", "-n", help="Max entries to validate per subsystem"),
+    limit: int | None = typer.Option(
+        None, "--limit", "-n", help="Max entries to validate per subsystem"
+    ),
     concurrency: int = typer.Option(5, "--concurrency", "-c", help="Parallel validations"),
-    gaps_only: bool = typer.Option(False, "--gaps-only", help="Only validate gaps, skip xref checks"),
-    xrefs_only: bool = typer.Option(False, "--xrefs-only", help="Only validate cross-references, skip gaps"),
+    gaps_only: bool = typer.Option(
+        False, "--gaps-only", help="Only validate gaps, skip xref checks"
+    ),
+    xrefs_only: bool = typer.Option(
+        False, "--xrefs-only", help="Only validate cross-references, skip gaps"
+    ),
 ) -> None:
     """QA validation of extracted rules, gaps, and cross-references.
 
@@ -853,25 +1010,24 @@ def qa_validate(
     for s in subsystems:
         if s not in VALID_SUBSYSTEMS:
             typer.echo(
-                f"Invalid subsystem: '{s}'\n"
-                f"Valid options: all, {', '.join(VALID_SUBSYSTEMS)}",
+                f"Invalid subsystem: '{s}'\nValid options: all, {', '.join(VALID_SUBSYSTEMS)}",
                 err=True,
             )
             raise typer.Exit(1)
 
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
     async def _run():
-        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.db.pool import close_pool, get_pool
         from vibe.tools.research.qa_validate import validate_gaps, validate_xrefs
 
         pool = await get_pool()
 
         for s in subsystems:
             if len(subsystems) > 1:
-                typer.echo(f"\n{'='*60}")
+                typer.echo(f"\n{'=' * 60}")
                 typer.echo(f"  QA Validating: {s}")
-                typer.echo(f"{'='*60}")
+                typer.echo(f"{'=' * 60}")
 
             with Progress(
                 SpinnerColumn(),
@@ -883,8 +1039,12 @@ def qa_validate(
                 if not xrefs_only:
                     gap_task = progress.add_task(f"[green]{s} gaps", total=0)
                     gap_stats = await validate_gaps(
-                        pool, s, limit=limit,
-                        concurrency=concurrency, progress=progress, task_id=gap_task,
+                        pool,
+                        s,
+                        limit=limit,
+                        concurrency=concurrency,
+                        progress=progress,
+                        task_id=gap_task,
                     )
                     typer.echo(f"\n=== Gap Validation ({s}) ===")
                     typer.echo(f"  Validated:          {gap_stats['gaps_validated']}")
@@ -897,8 +1057,12 @@ def qa_validate(
                 if not gaps_only:
                     xref_task = progress.add_task(f"[blue]{s} xrefs", total=0)
                     xref_stats = await validate_xrefs(
-                        pool, s, limit=limit,
-                        concurrency=concurrency, progress=progress, task_id=xref_task,
+                        pool,
+                        s,
+                        limit=limit,
+                        concurrency=concurrency,
+                        progress=progress,
+                        task_id=xref_task,
                     )
                     typer.echo(f"\n=== Cross-Reference Validation ({s}) ===")
                     typer.echo(f"  Checked:            {xref_stats['checked']}")
@@ -926,7 +1090,8 @@ def eval_callback(ctx: typer.Context):
 def eval_pycardano(
     ogmios_url: str = typer.Option(
         "ws://localhost:1337",
-        "--ogmios-url", "-u",
+        "--ogmios-url",
+        "-u",
         help="Ogmios WebSocket URL.",
     ),
 ) -> None:
@@ -940,7 +1105,7 @@ def eval_pycardano(
     """
     import asyncio
 
-    from vibe.cardano.serialization.eval_pycardano import run_evaluation, print_results
+    from vibe.cardano.serialization.eval_pycardano import print_results, run_evaluation
 
     typer.echo("pycardano Deserialization Coverage Evaluation")
     typer.echo(f"Ogmios: {ogmios_url}")

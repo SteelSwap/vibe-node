@@ -162,7 +162,7 @@ class Bearer:
         try:
             self._writer.close()
             await self._writer.wait_closed()
-        except (ConnectionError, OSError):
+        except ConnectionError, OSError:
             # Already broken — nothing to do.
             pass
 

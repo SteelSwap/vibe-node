@@ -21,32 +21,25 @@ Haskell references:
 
 from __future__ import annotations
 
-import os
-
 import pytest
-from hypothesis import given, settings, assume
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from vibe.cardano.crypto.vrf import (
-    HAS_VRF_NATIVE,
-    VRF_OUTPUT_SIZE,
-    VRF_PK_SIZE,
-    VRF_PROOF_SIZE,
-    VRF_SK_SIZE,
-    certified_nat_max_check,
-    vrf_keypair,
-    vrf_proof_to_hash,
-    vrf_prove,
-    vrf_verify,
-)
 from vibe.cardano.crypto.kes import (
-    CARDANO_KES_DEPTH,
     kes_derive_vk,
     kes_keygen,
     kes_keygen_from_seed,
     kes_sign,
     kes_update,
     kes_verify,
+)
+from vibe.cardano.crypto.vrf import (
+    HAS_VRF_NATIVE,
+    certified_nat_max_check,
+    vrf_keypair,
+    vrf_proof_to_hash,
+    vrf_prove,
+    vrf_verify,
 )
 
 # Mark to skip VRF native tests when the C extension is not built
@@ -143,9 +136,7 @@ class TestVRFOutputUniqueness:
         alpha2=st.binary(min_size=1, max_size=256),
     )
     @settings(max_examples=50, deadline=10000)
-    def test_different_alpha_different_output(
-        self, alpha1: bytes, alpha2: bytes
-    ) -> None:
+    def test_different_alpha_different_output(self, alpha1: bytes, alpha2: bytes) -> None:
         """Different alpha strings produce different VRF outputs."""
         assume(alpha1 != alpha2)
         pk, sk = vrf_keypair()
@@ -153,9 +144,7 @@ class TestVRFOutputUniqueness:
         proof2 = vrf_prove(sk, alpha2)
         out1 = vrf_proof_to_hash(proof1)
         out2 = vrf_proof_to_hash(proof2)
-        assert out1 != out2, (
-            f"VRF collision: different alphas produced same output"
-        )
+        assert out1 != out2, "VRF collision: different alphas produced same output"
 
     def test_different_keys_different_output(self) -> None:
         """Different keys produce different outputs for the same alpha."""
@@ -166,9 +155,7 @@ class TestVRFOutputUniqueness:
         proof2 = vrf_prove(sk2, alpha)
         out1 = vrf_proof_to_hash(proof1)
         out2 = vrf_proof_to_hash(proof2)
-        assert out1 != out2, (
-            "Different VRF keys should produce different outputs"
-        )
+        assert out1 != out2, "Different VRF keys should produce different outputs"
 
     def test_sequential_slots_unique_outputs(self) -> None:
         """Simulates VRF evaluation across 100 sequential slot numbers.
@@ -208,9 +195,7 @@ class TestKESEvolutionCorrectness:
         msg=st.binary(min_size=1, max_size=128),
     )
     @settings(max_examples=30, deadline=15000)
-    def test_evolved_key_signs_new_period(
-        self, depth: int, msg: bytes
-    ) -> None:
+    def test_evolved_key_signs_new_period(self, depth: int, msg: bytes) -> None:
         """After evolving from period t to t+1, signing at t+1 succeeds."""
         sk = kes_keygen(depth)
         vk = kes_derive_vk(sk)
@@ -228,27 +213,25 @@ class TestKESEvolutionCorrectness:
 
         # Sign at the target period
         sig = kes_sign(evolved_sk, period, msg)
-        assert kes_verify(vk, depth, period, sig, msg), (
-            f"Evolved key failed to sign at period {period}"
-        )
+        assert kes_verify(
+            vk, depth, period, sig, msg
+        ), f"Evolved key failed to sign at period {period}"
 
         # Evolve one more step
         evolved_sk = kes_update(evolved_sk, period)
         if evolved_sk is not None and period + 1 < total:
             # Sign at the NEW period should succeed
             sig_new = kes_sign(evolved_sk, period + 1, msg)
-            assert kes_verify(vk, depth, period + 1, sig_new, msg), (
-                f"Evolved key failed to sign at period {period + 1}"
-            )
+            assert kes_verify(
+                vk, depth, period + 1, sig_new, msg
+            ), f"Evolved key failed to sign at period {period + 1}"
 
     @given(
         depth=st.integers(min_value=1, max_value=3),
         msg=st.binary(min_size=1, max_size=64),
     )
     @settings(max_examples=30, deadline=15000)
-    def test_old_signature_still_verifies_after_evolution(
-        self, depth: int, msg: bytes
-    ) -> None:
+    def test_old_signature_still_verifies_after_evolution(self, depth: int, msg: bytes) -> None:
         """Signatures produced BEFORE evolution still verify afterward.
 
         This is critical for chain sync: a verifying node must be able to
@@ -266,9 +249,9 @@ class TestKESEvolutionCorrectness:
             assert sk is not None
 
         # The old signature at period 0 still verifies
-        assert kes_verify(vk, depth, 0, sig0, msg), (
-            "Old signature must still verify after key evolution"
-        )
+        assert kes_verify(
+            vk, depth, 0, sig0, msg
+        ), "Old signature must still verify after key evolution"
 
     @given(
         depth=st.integers(min_value=1, max_value=3),
@@ -287,16 +270,16 @@ class TestKESEvolutionCorrectness:
         sig_0 = kes_sign(sk, 0, msg)
 
         # Must NOT verify at period 1
-        assert not kes_verify(vk, depth, 1, sig_0, msg), (
-            "Period-0 signature must not verify at period 1"
-        )
+        assert not kes_verify(
+            vk, depth, 1, sig_0, msg
+        ), "Period-0 signature must not verify at period 1"
 
         # Sign at last period, must NOT verify at period 0
         total = 1 << depth
         sig_last = kes_sign(sk, total - 1, msg)
-        assert not kes_verify(vk, depth, 0, sig_last, msg), (
-            "Last-period signature must not verify at period 0"
-        )
+        assert not kes_verify(
+            vk, depth, 0, sig_last, msg
+        ), "Last-period signature must not verify at period 0"
 
 
 # ---------------------------------------------------------------------------
@@ -333,9 +316,7 @@ class TestKESForwardSecurity:
         sk = kes_update(sk, 1)
         assert sk is not None
         # Now the left subtree should be erased
-        assert sk.left is None, (
-            "Left subtree should be erased after evolving past midpoint"
-        )
+        assert sk.left is None, "Left subtree should be erased after evolving past midpoint"
 
         # But we can still sign at period 2 (right half)
         sig2 = kes_sign(sk, 2, b"right half")
@@ -409,9 +390,7 @@ class TestKESVKStabilityHypothesis:
             sk = kes_update(sk, period)
             assert sk is not None
             current_vk = kes_derive_vk(sk)
-            assert current_vk == original_vk, (
-                f"VK changed after evolution at period {period}"
-            )
+            assert current_vk == original_vk, f"VK changed after evolution at period {period}"
 
     @given(
         seed=st.binary(min_size=32, max_size=32),
@@ -451,9 +430,7 @@ class TestVRFLeaderCheckIntegration:
         slot=st.integers(min_value=0, max_value=1_000_000),
     )
     @settings(max_examples=50, deadline=10000)
-    def test_vrf_output_accepted_by_leader_check(
-        self, sigma: float, slot: int
-    ) -> None:
+    def test_vrf_output_accepted_by_leader_check(self, sigma: float, slot: int) -> None:
         """Leader check accepts all VRF outputs without error."""
         pk, sk = vrf_keypair()
         alpha = slot.to_bytes(8, byteorder="big")
@@ -468,9 +445,7 @@ class TestVRFLeaderCheckIntegration:
         sigma=st.floats(min_value=0.001, max_value=0.999),
     )
     @settings(max_examples=30, deadline=10000)
-    def test_verified_output_matches_hash_for_leader_check(
-        self, sigma: float
-    ) -> None:
+    def test_verified_output_matches_hash_for_leader_check(self, sigma: float) -> None:
         """Both vrf_verify and vrf_proof_to_hash produce the same
         leader election result."""
         pk, sk = vrf_keypair()
@@ -483,6 +458,4 @@ class TestVRFLeaderCheckIntegration:
         assert out_verify is not None
         result_v = certified_nat_max_check(out_verify, sigma=sigma, f=0.05)
         result_h = certified_nat_max_check(out_hash, sigma=sigma, f=0.05)
-        assert result_v == result_h, (
-            "Leader check must agree for verify-output and proof-to-hash"
-        )
+        assert result_v == result_h, "Leader check must agree for verify-output and proof-to-hash"

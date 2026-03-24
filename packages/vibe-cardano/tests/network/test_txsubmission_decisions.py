@@ -23,26 +23,19 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-from hypothesis import given, settings, assume, HealthCheck
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
-from vibe.core.protocols.agency import PeerRole
-from vibe.core.protocols.runner import ProtocolRunner
-
 from vibe.cardano.network.txsubmission_protocol import (
-    TxSubmissionState,
-    TxSubmissionProtocol,
-    TxSubmissionCodec,
-    TsMsgInit,
     TsMsgRequestTxIds,
-    TsMsgReplyTxIds,
     TsMsgRequestTxs,
-    TsMsgReplyTxs,
-    TsMsgDone,
     TxSubmissionClient,
+    TxSubmissionCodec,
+    TxSubmissionProtocol,
     run_tx_submission_server,
 )
-
+from vibe.core.protocols.agency import PeerRole
+from vibe.core.protocols.runner import ProtocolRunner
 
 # ---------------------------------------------------------------------------
 # SharedTxState -- decision engine model
@@ -117,9 +110,7 @@ class SharedTxState:
             self.in_flight_tx_ids -= peer.requested_tx_ids
             del self.peers[peer_id]
 
-    def receive_tx_ids(
-        self, peer_id: str, tx_ids: list[tuple[bytes, int]]
-    ) -> None:
+    def receive_tx_ids(self, peer_id: str, tx_ids: list[tuple[bytes, int]]) -> None:
         """Record tx IDs announced by a peer.
 
         Haskell ref: receivedTxIdsImpl
@@ -154,9 +145,7 @@ class SharedTxState:
         peer.acknowledged_tx_ids.extend(acked)
         return acked
 
-    def split_acknowledged_tx_ids(
-        self, peer_id: str
-    ) -> tuple[list[bytes], list[bytes]]:
+    def split_acknowledged_tx_ids(self, peer_id: str) -> tuple[list[bytes], list[bytes]]:
         """Split acknowledged tx IDs into those in mempool and those not.
 
         Returns (in_mempool, not_in_mempool).
@@ -166,15 +155,9 @@ class SharedTxState:
         if peer_id not in self.peers:
             return [], []
         peer = self.peers[peer_id]
-        in_mempool = [
-            txid
-            for txid in peer.acknowledged_tx_ids
-            if txid in self.mempool_tx_ids
-        ]
+        in_mempool = [txid for txid in peer.acknowledged_tx_ids if txid in self.mempool_tx_ids]
         not_in_mempool = [
-            txid
-            for txid in peer.acknowledged_tx_ids
-            if txid not in self.mempool_tx_ids
+            txid for txid in peer.acknowledged_tx_ids if txid not in self.mempool_tx_ids
         ]
         return in_mempool, not_in_mempool
 
@@ -214,9 +197,7 @@ class SharedTxState:
 
         return to_request
 
-    def receive_txs(
-        self, peer_id: str, txs: dict[bytes, bytes]
-    ) -> None:
+    def receive_txs(self, peer_id: str, txs: dict[bytes, bytes]) -> None:
         """Record received transactions from a peer.
 
         Haskell ref: part of the decision loop
@@ -283,10 +264,7 @@ class SharedTxState:
                     continue
                 if txid in peer.requested_tx_ids:
                     continue
-                if (
-                    len(self.in_flight_tx_ids) + len(to_request)
-                    >= MAX_TXS_IN_FLIGHT
-                ):
+                if len(self.in_flight_tx_ids) + len(to_request) >= MAX_TXS_IN_FLIGHT:
                     break
                 to_request.append(txid)
 
@@ -359,11 +337,11 @@ class MockChannel:
     _b_to_a: asyncio.Queue[bytes] = field(default_factory=asyncio.Queue)
 
     @property
-    def client_side(self) -> "_MockChannelEnd":
+    def client_side(self) -> _MockChannelEnd:
         return _MockChannelEnd(send_q=self._a_to_b, recv_q=self._b_to_a)
 
     @property
-    def server_side(self) -> "_MockChannelEnd":
+    def server_side(self) -> _MockChannelEnd:
         return _MockChannelEnd(send_q=self._b_to_a, recv_q=self._a_to_b)
 
 
@@ -386,9 +364,7 @@ class _MockChannelEnd:
 txid_strategy = st.binary(min_size=32, max_size=32)
 size_strategy = st.integers(min_value=1, max_value=65535)
 txid_size_pair = st.tuples(txid_strategy, size_strategy)
-peer_id_strategy = st.text(
-    alphabet="abcdefghijklmnop", min_size=1, max_size=8
-)
+peer_id_strategy = st.text(alphabet="abcdefghijklmnop", min_size=1, max_size=8)
 
 
 @st.composite
@@ -412,9 +388,7 @@ def shared_tx_state_strategy(draw: st.DrawFn) -> SharedTxState:
     unique_txids = list(set(all_tx_ids))
 
     # Some go to mempool
-    mempool_count = draw(
-        st.integers(min_value=0, max_value=max(0, len(unique_txids) // 3))
-    )
+    mempool_count = draw(st.integers(min_value=0, max_value=max(0, len(unique_txids) // 3)))
     mempool_txids = unique_txids[:mempool_count]
     state.mempool_tx_ids = set(mempool_txids)
 
@@ -425,9 +399,7 @@ def shared_tx_state_strategy(draw: st.DrawFn) -> SharedTxState:
         pid = draw(st.sampled_from(peer_ids))
         sz = draw(size_strategy)
         state.peers[pid].available_tx_ids[txid] = sz
-        state.peers[pid].unacked_count = len(
-            state.peers[pid].available_tx_ids
-        )
+        state.peers[pid].unacked_count = len(state.peers[pid].available_tx_ids)
         state.known_tx_ids.add(txid)
 
     return state
@@ -453,18 +425,13 @@ class TestAcknowledgeTxIds:
         max_examples=_MAX_EXAMPLES,
         suppress_health_check=[HealthCheck.too_slow],
     )
-    def test_acknowledge_removes_from_outstanding(
-        self, data: st.DataObject
-    ) -> None:
+    def test_acknowledge_removes_from_outstanding(self, data: st.DataObject) -> None:
         state = SharedTxState()
         state.add_peer("peer_0")
 
         # Announce some tx IDs
         num_txs = data.draw(st.integers(min_value=1, max_value=10))
-        tx_ids = [
-            (data.draw(txid_strategy), data.draw(size_strategy))
-            for _ in range(num_txs)
-        ]
+        tx_ids = [(data.draw(txid_strategy), data.draw(size_strategy)) for _ in range(num_txs)]
         # Ensure unique tx IDs
         seen = set()
         unique_tx_ids = []
@@ -479,9 +446,7 @@ class TestAcknowledgeTxIds:
         assert initial_count == len(tx_ids)
 
         # Acknowledge some
-        ack_count = data.draw(
-            st.integers(min_value=0, max_value=len(tx_ids))
-        )
+        ack_count = data.draw(st.integers(min_value=0, max_value=len(tx_ids)))
         acked = state.acknowledge_tx_ids("peer_0", ack_count)
 
         # Verify acknowledgment
@@ -559,9 +524,7 @@ class TestCollectTxsImpl:
         assume(txid_shared != txid_unique)
 
         # peer_0 announces both, peer_1 also has shared one
-        state.receive_tx_ids(
-            "peer_0", [(txid_shared, 100), (txid_unique, 200)]
-        )
+        state.receive_tx_ids("peer_0", [(txid_shared, 100), (txid_unique, 200)])
         state.receive_tx_ids("peer_1", [(txid_shared, 100)])
 
         # Collect from peer_1 first (puts txid_shared in-flight)
@@ -639,9 +602,7 @@ class TestMakeDecisionsAcknowledged:
         decisions = state.make_decisions()
 
         # No request_txs decisions since all are acknowledged (removed from available)
-        request_txs = [
-            d for d in decisions if d[1] == "request_txs" and d[0] == "peer_0"
-        ]
+        request_txs = [d for d in decisions if d[1] == "request_txs" and d[0] == "peer_0"]
         assert len(request_txs) == 0
 
 
@@ -680,11 +641,7 @@ class TestMakeDecisionsExhaustive:
 
         decisions = state.make_decisions()
 
-        req_ids = [
-            d
-            for d in decisions
-            if d[0] == "peer_0" and d[1] == "request_tx_ids"
-        ]
+        req_ids = [d for d in decisions if d[0] == "peer_0" and d[1] == "request_tx_ids"]
         assert len(req_ids) == 1
         _, _, (blocking, _, _) = req_ids[0]
         assert blocking is True  # Blocking because no available txs
@@ -733,11 +690,7 @@ class TestMakeDecisionsInFlight:
         assert txid in state.in_flight_tx_ids
 
         # Only one peer should have a request_txs for this txid
-        request_txs = [
-            (pid, data)
-            for pid, action, data in decisions1
-            if action == "request_txs"
-        ]
+        request_txs = [(pid, data) for pid, action, data in decisions1 if action == "request_txs"]
         all_requested = []
         for _, tx_list in request_txs:
             all_requested.extend(tx_list)
@@ -777,19 +730,13 @@ class TestMakeDecisionsPolicy:
         state.add_peer("peer_0")
 
         # Fill up to max
-        tx_ids = [
-            (bytes([i]) * 32, 100) for i in range(MAX_UNACKED_TX_IDS)
-        ]
+        tx_ids = [(bytes([i]) * 32, 100) for i in range(MAX_UNACKED_TX_IDS)]
         state.receive_tx_ids("peer_0", tx_ids)
 
         decisions = state.make_decisions()
 
         # No request_tx_ids decision since we're at max
-        req_ids = [
-            d
-            for d in decisions
-            if d[0] == "peer_0" and d[1] == "request_tx_ids"
-        ]
+        req_ids = [d for d in decisions if d[0] == "peer_0" and d[1] == "request_tx_ids"]
         assert len(req_ids) == 0
 
     def test_request_count_bounded(self) -> None:
@@ -799,11 +746,7 @@ class TestMakeDecisionsPolicy:
         # Peer has no txs, so we request some
         decisions = state.make_decisions()
 
-        req_ids = [
-            d
-            for d in decisions
-            if d[0] == "peer_0" and d[1] == "request_tx_ids"
-        ]
+        req_ids = [d for d in decisions if d[0] == "peer_0" and d[1] == "request_tx_ids"]
         if req_ids:
             _, _, (_, _, req_count) = req_ids[0]
             assert req_count <= MAX_TX_IDS_TO_REQUEST
@@ -814,10 +757,7 @@ class TestMakeDecisionsPolicy:
         state.add_peer("peer_0")
 
         # Announce many txs
-        tx_ids = [
-            (bytes([i]) * 32, 100)
-            for i in range(MAX_TXS_IN_FLIGHT + 10)
-        ]
+        tx_ids = [(bytes([i]) * 32, 100) for i in range(MAX_TXS_IN_FLIGHT + 10)]
         state.receive_tx_ids("peer_0", tx_ids)
 
         state.make_decisions()
@@ -841,9 +781,7 @@ class TestMakeDecisionsSharedState:
         max_examples=_MAX_EXAMPLES,
         suppress_health_check=[HealthCheck.too_slow],
     )
-    def test_invariant_holds_after_decisions(
-        self, state: SharedTxState
-    ) -> None:
+    def test_invariant_holds_after_decisions(self, state: SharedTxState) -> None:
         """SharedTxState invariant holds before and after make_decisions."""
         assert state.check_invariant()
         state.make_decisions()
@@ -1048,9 +986,7 @@ class TestSharedTxStateGenerator:
         max_examples=_MAX_EXAMPLES,
         suppress_health_check=[HealthCheck.too_slow],
     )
-    def test_generated_state_no_mempool_in_available(
-        self, state: SharedTxState
-    ) -> None:
+    def test_generated_state_no_mempool_in_available(self, state: SharedTxState) -> None:
         """Mempool tx IDs don't appear in any peer's available set."""
         for peer in state.peers.values():
             for txid in peer.available_tx_ids:
@@ -1121,9 +1057,7 @@ class TestSharedTxStateInvariant:
                 # Write mempool
                 state.write_mempool()
 
-            assert state.check_invariant(), (
-                f"Invariant violated after op={op} for {pid}"
-            )
+            assert state.check_invariant(), f"Invariant violated after op={op} for {pid}"
 
 
 # ---------------------------------------------------------------------------
@@ -1190,9 +1124,7 @@ class TestSplitAcknowledgedTxIds:
         state.acknowledge_tx_ids("peer_0", len(tx_ids))
 
         # Put some in mempool
-        mempool_count = data.draw(
-            st.integers(min_value=0, max_value=len(tx_ids))
-        )
+        mempool_count = data.draw(st.integers(min_value=0, max_value=len(tx_ids)))
         for txid, _ in tx_ids[:mempool_count]:
             state.mempool_tx_ids.add(txid)
 
@@ -1262,9 +1194,7 @@ class TestFilterActivePeersNotLimitingDecisions:
         max_examples=_MAX_EXAMPLES,
         suppress_health_check=[HealthCheck.too_slow],
     )
-    def test_decisions_not_limited_by_active_filter(
-        self, state: SharedTxState
-    ) -> None:
+    def test_decisions_not_limited_by_active_filter(self, state: SharedTxState) -> None:
         """Peers with room in their window get at least a request_tx_ids."""
         decisions = state.make_decisions()
         peers_in_decisions = {pid for pid, _, _ in decisions}

@@ -122,47 +122,108 @@ def is_plutus_version_available(
 # We use string names matching the uplc BuiltInFun enum names.
 
 BUILTINS_INTRODUCED_IN: dict[PlutusVersion, frozenset[str]] = {
-    PlutusVersion.V1: frozenset({
-        # All base builtins (0-50) — the original Alonzo set
-        "AddInteger", "SubtractInteger", "MultiplyInteger", "DivideInteger",
-        "QuotientInteger", "RemainderInteger", "ModInteger",
-        "EqualsInteger", "LessThanInteger", "LessThanEqualsInteger",
-        "AppendByteString", "ConsByteString", "SliceByteString",
-        "LengthOfByteString", "IndexByteString", "EqualsByteString",
-        "LessThanByteString", "LessThanEqualsByteString",
-        "Sha2_256", "Sha3_256", "Blake2b_256", "VerifyEd25519Signature",
-        "AppendString", "EqualsString", "EncodeUtf8", "DecodeUtf8",
-        "IfThenElse", "ChooseUnit", "Trace",
-        "FstPair", "SndPair",
-        "ChooseList", "MkCons", "HeadList", "TailList", "NullList",
-        "ChooseData", "ConstrData", "MapData", "ListData",
-        "IData", "BData", "UnConstrData", "UnMapData", "UnListData",
-        "UnIData", "UnBData", "EqualsData",
-        "MkPairData", "MkNilData", "MkNilPairData",
-    }),
-    PlutusVersion.V2: frozenset({
-        # V2 additions (Babbage): serialiseData and secp256k1 builtins
-        "SerialiseData",
-        "VerifyEcdsaSecp256k1Signature",
-        "VerifySchnorrSecp256k1Signature",
-    }),
-    PlutusVersion.V3: frozenset({
-        # V3 additions (Conway): BLS12-381, bitwise operations, new hashes
-        "Bls12_381_G1_Add", "Bls12_381_G1_Neg", "Bls12_381_G1_ScalarMul",
-        "Bls12_381_G1_Equal", "Bls12_381_G1_Compress", "Bls12_381_G1_Uncompress",
-        "Bls12_381_G1_HashToGroup",
-        "Bls12_381_G2_Add", "Bls12_381_G2_Neg", "Bls12_381_G2_ScalarMul",
-        "Bls12_381_G2_Equal", "Bls12_381_G2_Compress", "Bls12_381_G2_Uncompress",
-        "Bls12_381_G2_HashToGroup",
-        "Bls12_381_MillerLoop", "Bls12_381_MulMlResult", "Bls12_381_FinalVerify",
-        "Keccak_256", "Blake2b_224",
-        "IntegerToByteString", "ByteStringToInteger",
-        "AndByteString", "OrByteString", "XorByteString", "ComplementByteString",
-        "ReadBit", "WriteBits", "ReplicateByte",
-        "ShiftByteString", "RotateByteString",
-        "CountSetBits", "FindFirstSetBit",
-        "Ripemd_160",
-    }),
+    PlutusVersion.V1: frozenset(
+        {
+            # All base builtins (0-50) — the original Alonzo set
+            "AddInteger",
+            "SubtractInteger",
+            "MultiplyInteger",
+            "DivideInteger",
+            "QuotientInteger",
+            "RemainderInteger",
+            "ModInteger",
+            "EqualsInteger",
+            "LessThanInteger",
+            "LessThanEqualsInteger",
+            "AppendByteString",
+            "ConsByteString",
+            "SliceByteString",
+            "LengthOfByteString",
+            "IndexByteString",
+            "EqualsByteString",
+            "LessThanByteString",
+            "LessThanEqualsByteString",
+            "Sha2_256",
+            "Sha3_256",
+            "Blake2b_256",
+            "VerifyEd25519Signature",
+            "AppendString",
+            "EqualsString",
+            "EncodeUtf8",
+            "DecodeUtf8",
+            "IfThenElse",
+            "ChooseUnit",
+            "Trace",
+            "FstPair",
+            "SndPair",
+            "ChooseList",
+            "MkCons",
+            "HeadList",
+            "TailList",
+            "NullList",
+            "ChooseData",
+            "ConstrData",
+            "MapData",
+            "ListData",
+            "IData",
+            "BData",
+            "UnConstrData",
+            "UnMapData",
+            "UnListData",
+            "UnIData",
+            "UnBData",
+            "EqualsData",
+            "MkPairData",
+            "MkNilData",
+            "MkNilPairData",
+        }
+    ),
+    PlutusVersion.V2: frozenset(
+        {
+            # V2 additions (Babbage): serialiseData and secp256k1 builtins
+            "SerialiseData",
+            "VerifyEcdsaSecp256k1Signature",
+            "VerifySchnorrSecp256k1Signature",
+        }
+    ),
+    PlutusVersion.V3: frozenset(
+        {
+            # V3 additions (Conway): BLS12-381, bitwise operations, new hashes
+            "Bls12_381_G1_Add",
+            "Bls12_381_G1_Neg",
+            "Bls12_381_G1_ScalarMul",
+            "Bls12_381_G1_Equal",
+            "Bls12_381_G1_Compress",
+            "Bls12_381_G1_Uncompress",
+            "Bls12_381_G1_HashToGroup",
+            "Bls12_381_G2_Add",
+            "Bls12_381_G2_Neg",
+            "Bls12_381_G2_ScalarMul",
+            "Bls12_381_G2_Equal",
+            "Bls12_381_G2_Compress",
+            "Bls12_381_G2_Uncompress",
+            "Bls12_381_G2_HashToGroup",
+            "Bls12_381_MillerLoop",
+            "Bls12_381_MulMlResult",
+            "Bls12_381_FinalVerify",
+            "Keccak_256",
+            "Blake2b_224",
+            "IntegerToByteString",
+            "ByteStringToInteger",
+            "AndByteString",
+            "OrByteString",
+            "XorByteString",
+            "ComplementByteString",
+            "ReadBit",
+            "WriteBits",
+            "ReplicateByte",
+            "ShiftByteString",
+            "RotateByteString",
+            "CountSetBits",
+            "FindFirstSetBit",
+            "Ripemd_160",
+        }
+    ),
 }
 
 
@@ -241,6 +302,7 @@ def _load_param_names(version: PlutusVersion) -> tuple[str, ...]:
     # Walk up to find the uplc package's config
     try:
         import uplc.cost_model as uplc_cm
+
         config_dir = Path(uplc_cm.__file__).parent / "cost_model_files"
     except ImportError:
         return ()
@@ -291,9 +353,7 @@ def param_name_to_index(version: PlutusVersion, name: str) -> int:
     try:
         return names.index(name)
     except ValueError:
-        raise KeyError(
-            f"Parameter '{name}' not found in {version.name} cost model"
-        ) from None
+        raise KeyError(f"Parameter '{name}' not found in {version.name} cost model") from None
 
 
 def param_index_to_name(version: PlutusVersion, index: int) -> str:

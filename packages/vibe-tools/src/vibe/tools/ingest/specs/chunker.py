@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 @dataclass
 class SpecChunk:
     """A chunk of a spec document ready for DB insertion."""
+
     document_title: str
     section_title: str | None
     subsection_title: str | None
@@ -27,13 +28,13 @@ class SpecChunk:
 
 def _strip_markdown(text: str) -> str:
     """Strip markdown formatting for plain text BM25 indexing."""
-    text = re.sub(r'```[\s\S]*?```', '', text)
-    text = re.sub(r'`[^`]+`', '', text)
-    text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
-    text = re.sub(r'\[([^\]]+)\]\(.*?\)', r'\1', text)
-    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
-    text = re.sub(r'[*_]{1,3}([^*_]+)[*_]{1,3}', r'\1', text)
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"```[\s\S]*?```", "", text)
+    text = re.sub(r"`[^`]+`", "", text)
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+    text = re.sub(r"\[([^\]]+)\]\(.*?\)", r"\1", text)
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"[*_]{1,3}([^*_]+)[*_]{1,3}", r"\1", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
 
@@ -83,9 +84,9 @@ def chunk_markdown(
     sections: list[tuple[str | None, str | None, str]] = []
 
     for line in content.split("\n"):
-        h1_match = re.match(r'^#\s+(.+)$', line)
-        h2_match = re.match(r'^##\s+(.+)$', line)
-        h3_match = re.match(r'^###\s+(.+)$', line)
+        h1_match = re.match(r"^#\s+(.+)$", line)
+        h2_match = re.match(r"^##\s+(.+)$", line)
+        h3_match = re.match(r"^###\s+(.+)$", line)
 
         if h1_match:
             # Save previous section
@@ -131,8 +132,12 @@ def chunk_markdown(
             merged_md = prev.content_markdown + "\n\n" + md_content
             merged_plain = prev.content_plain + "\n\n" + plain
             merged_embed = _build_embed_text(
-                doc_title, prev.section_title, prev.subsection_title,
-                merged_plain, source_repo, source_path,
+                doc_title,
+                prev.section_title,
+                prev.subsection_title,
+                merged_plain,
+                source_repo,
+                source_path,
             )
             chunks[-1] = SpecChunk(
                 document_title=doc_title,
@@ -146,18 +151,25 @@ def chunk_markdown(
             )
         else:
             embed = _build_embed_text(
-                doc_title, sec, subsec, plain, source_repo, source_path,
+                doc_title,
+                sec,
+                subsec,
+                plain,
+                source_repo,
+                source_path,
             )
-            chunks.append(SpecChunk(
-                document_title=doc_title,
-                section_title=sec,
-                subsection_title=subsec,
-                content_markdown=md_content,
-                content_plain=plain,
-                embed_text=embed,
-                chunk_type="section",
-                content_hash=_content_hash(md_content),
-            ))
+            chunks.append(
+                SpecChunk(
+                    document_title=doc_title,
+                    section_title=sec,
+                    subsection_title=subsec,
+                    content_markdown=md_content,
+                    content_plain=plain,
+                    embed_text=embed,
+                    chunk_type="section",
+                    content_hash=_content_hash(md_content),
+                )
+            )
 
     return chunks
 
@@ -179,18 +191,25 @@ def chunk_cddl(
             if text:
                 md = f"```cddl\n{text}\n```"
                 embed = _build_embed_text(
-                    doc_title, current_name, None, text, source_repo, source_path,
+                    doc_title,
+                    current_name,
+                    None,
+                    text,
+                    source_repo,
+                    source_path,
                 )
-                chunks.append(SpecChunk(
-                    document_title=doc_title,
-                    section_title=current_name,
-                    subsection_title=None,
-                    content_markdown=md,
-                    content_plain=text,
-                    embed_text=embed,
-                    chunk_type="schema",
-                    content_hash=_content_hash(md),
-                ))
+                chunks.append(
+                    SpecChunk(
+                        document_title=doc_title,
+                        section_title=current_name,
+                        subsection_title=None,
+                        content_markdown=md,
+                        content_plain=text,
+                        embed_text=embed,
+                        chunk_type="schema",
+                        content_hash=_content_hash(md),
+                    )
+                )
             current_name = line.split("=")[0].strip()
             current_lines = [line]
         else:
@@ -201,17 +220,24 @@ def chunk_cddl(
         if text:
             md = f"```cddl\n{text}\n```"
             embed = _build_embed_text(
-                doc_title, current_name, None, text, source_repo, source_path,
+                doc_title,
+                current_name,
+                None,
+                text,
+                source_repo,
+                source_path,
             )
-            chunks.append(SpecChunk(
-                document_title=doc_title,
-                section_title=current_name,
-                subsection_title=None,
-                content_markdown=md,
-                content_plain=text,
-                embed_text=embed,
-                chunk_type="schema",
-                content_hash=_content_hash(md),
-            ))
+            chunks.append(
+                SpecChunk(
+                    document_title=doc_title,
+                    section_title=current_name,
+                    subsection_title=None,
+                    content_markdown=md,
+                    content_plain=text,
+                    embed_text=embed,
+                    chunk_type="schema",
+                    content_hash=_content_hash(md),
+                )
+            )
 
     return chunks

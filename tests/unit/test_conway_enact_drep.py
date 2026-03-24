@@ -48,7 +48,6 @@ from vibe.cardano.ledger.conway import (
     check_ratification,
     expire_proposals,
     get_active_dreps,
-    process_conway_certificate,
     process_deleg_vote,
     process_drep_deregistration,
     process_drep_registration,
@@ -59,7 +58,6 @@ from vibe.cardano.ledger.conway import (
 from vibe.cardano.ledger.conway_types import (
     Anchor,
     ConwayProtocolParams,
-    DEFAULT_RATIFICATION_THRESHOLDS,
     DelegVote,
     DRep,
     DRepDeregistration,
@@ -76,7 +74,6 @@ from vibe.cardano.ledger.conway_types import (
     VoterRole,
     VotingProcedure,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
@@ -108,9 +105,7 @@ def _tx_id(seed: int = 0) -> bytes:
 
 def _anchor(seed: int = 0) -> Anchor:
     """Create a test anchor."""
-    data_hash = hashlib.blake2b(
-        f"anchor-{seed}".encode(), digest_size=32
-    ).digest()
+    data_hash = hashlib.blake2b(f"anchor-{seed}".encode(), digest_size=32).digest()
     return Anchor(url=f"https://example.com/proposal-{seed}", data_hash=data_hash)
 
 
@@ -345,9 +340,9 @@ class TestHardForkInitiation:
         state.committee = cc_members
         state.votes[action_id] = {}
         for cc_cred in cc_members:
-            state.votes[action_id][
-                Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)] = (
+                VotingProcedure(vote=Vote.YES)
+            )
 
         # 2 SPOs vote yes out of 3
         for i in range(3):
@@ -356,9 +351,9 @@ class TestHardForkInitiation:
             state.pool_stake[pool_id] = 1_000_000
         for i in range(2):
             pool_id = _cred(50 + i)
-            state.votes[action_id][
-                Voter(VoterRole.STAKE_POOL, pool_id)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.STAKE_POOL, pool_id)] = VotingProcedure(
+                vote=Vote.YES
+            )
 
         assert check_ratification(action_id, state, TEST_PARAMS, bootstrap_thresholds)
 
@@ -404,13 +399,13 @@ class TestActionPriorityAndOrdering:
         Actions are ordered by type for enactment within an epoch.
         """
         action_types = [
-            GovActionType.PARAMETER_CHANGE,      # 0 — highest
-            GovActionType.HARD_FORK_INITIATION,   # 1
-            GovActionType.TREASURY_WITHDRAWALS,   # 2
-            GovActionType.NO_CONFIDENCE,          # 3
-            GovActionType.UPDATE_COMMITTEE,       # 4
-            GovActionType.NEW_CONSTITUTION,       # 5
-            GovActionType.INFO_ACTION,            # 6 — lowest
+            GovActionType.PARAMETER_CHANGE,  # 0 — highest
+            GovActionType.HARD_FORK_INITIATION,  # 1
+            GovActionType.TREASURY_WITHDRAWALS,  # 2
+            GovActionType.NO_CONFIDENCE,  # 3
+            GovActionType.UPDATE_COMMITTEE,  # 4
+            GovActionType.NEW_CONSTITUTION,  # 5
+            GovActionType.INFO_ACTION,  # 6 — lowest
         ]
 
         # Verify enum ordering is consistent
@@ -696,9 +691,7 @@ class TestConwayDelegation:
         # Delegate vote to DRep
         drep = DRep(drep_type=DRepType.KEY_HASH, credential=drep_cred)
         vote_cert = DelegVote(credential=delegator, drep=drep)
-        state = process_deleg_vote(
-            vote_cert, state, registered_credentials={delegator}
-        )
+        state = process_deleg_vote(vote_cert, state, registered_credentials={delegator})
 
         assert delegator in state.drep_delegations
         assert state.drep_delegations[delegator].credential == drep_cred
@@ -721,9 +714,7 @@ class TestConwayDelegation:
 
         # Re-delegate to same DRep
         cert = DelegVote(credential=delegator, drep=drep)
-        new_state = process_deleg_vote(
-            cert, state, registered_credentials={delegator}
-        )
+        new_state = process_deleg_vote(cert, state, registered_credentials={delegator})
 
         assert new_state.drep_delegations[delegator] == drep
 
@@ -740,9 +731,7 @@ class TestConwayDelegation:
         cert = DelegVote(credential=delegator, drep=drep)
 
         with pytest.raises(ConwayGovernanceError, match="DRepNotRegistered"):
-            process_deleg_vote(
-                cert, state, registered_credentials={delegator}
-            )
+            process_deleg_vote(cert, state, registered_credentials={delegator})
 
 
 class TestProposalLifecycle:
@@ -802,8 +791,8 @@ class TestProposalLifecycle:
         state.votes[old_id] = {}
 
         proposal_epochs = {
-            fresh_id: 8,   # Proposed at epoch 8 — still alive at epoch 10
-            old_id: 2,     # Proposed at epoch 2 — expired at epoch 10
+            fresh_id: 8,  # Proposed at epoch 8 — still alive at epoch 10
+            old_id: 2,  # Proposed at epoch 2 — expired at epoch 10
         }
 
         new_state = expire_proposals(state, 10, proposal_epochs, TEST_PARAMS)
@@ -882,7 +871,7 @@ class TestDRepActivityTracking:
                 inactive_cred: params.drep_deposit,
             },
             drep_activity_epoch={
-                active_cred: 18,   # Active at epoch 18
+                active_cred: 18,  # Active at epoch 18
                 inactive_cred: 10,  # Last active at epoch 10
             },
         )

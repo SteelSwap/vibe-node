@@ -37,10 +37,7 @@ class MemoryAppendStore:
     async def append(self, key: bytes, value: bytes) -> None:
         """Append a key-value pair, enforcing sequential ordering."""
         if self._entries and key <= self._entries[-1][0]:
-            msg = (
-                f"Key must be greater than the current tip: "
-                f"{key!r} <= {self._entries[-1][0]!r}"
-            )
+            msg = f"Key must be greater than the current tip: {key!r} <= {self._entries[-1][0]!r}"
             raise ValueError(msg)
         self._index[key] = len(self._entries)
         self._entries.append((key, value))

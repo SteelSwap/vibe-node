@@ -14,8 +14,6 @@ Spec references:
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -31,7 +29,6 @@ from vibe.cardano.crypto.kes import (
     kes_update,
     kes_verify,
 )
-
 
 # ---------------------------------------------------------------------------
 # Signature size tests
@@ -122,9 +119,9 @@ class TestKesSignVerify:
         msg = b"verify all periods"
         for period in range(total):
             sig = kes_sign(sk, period, msg)
-            assert kes_verify(vk, depth, period, sig, msg), (
-                f"Verification failed at period {period}"
-            )
+            assert kes_verify(
+                vk, depth, period, sig, msg
+            ), f"Verification failed at period {period}"
 
     def test_roundtrip_depth_6_sample_periods(self) -> None:
         """Test a few periods at Cardano mainnet depth (6)."""
@@ -133,9 +130,9 @@ class TestKesSignVerify:
         msg = b"cardano mainnet depth test"
         for period in [0, 1, 31, 32, 63]:
             sig = kes_sign(sk, period, msg)
-            assert kes_verify(vk, 6, period, sig, msg), (
-                f"Depth 6 verification failed at period {period}"
-            )
+            assert kes_verify(
+                vk, 6, period, sig, msg
+            ), f"Depth 6 verification failed at period {period}"
 
 
 # ---------------------------------------------------------------------------
@@ -272,9 +269,7 @@ class TestKesUpdate:
 
         for period in range(4):
             sig = kes_sign(sk, period, msg)
-            assert kes_verify(vk, 2, period, sig, msg), (
-                f"Failed at period {period}"
-            )
+            assert kes_verify(vk, 2, period, sig, msg), f"Failed at period {period}"
             if period < 3:
                 sk = kes_update(sk, period)
                 assert sk is not None
@@ -454,9 +449,9 @@ class TestKesMultiBlockReplay:
 
         # Verify all signatures against the original VK
         for period, msg, sig in signatures:
-            assert kes_verify(vk, depth, period, sig, msg), (
-                f"Signature at period {period} failed verification"
-            )
+            assert kes_verify(
+                vk, depth, period, sig, msg
+            ), f"Signature at period {period} failed verification"
 
     def test_sign_all_periods_depth_3_verify_after_full_evolution(self) -> None:
         """Sign at all 8 periods of depth-3 key, verify all after full evolution."""
@@ -481,9 +476,9 @@ class TestKesMultiBlockReplay:
 
         # All signatures still verify against the original VK
         for period, msg, sig in signatures:
-            assert kes_verify(vk, depth, period, sig, msg), (
-                f"Post-evolution verification failed at period {period}"
-            )
+            assert kes_verify(
+                vk, depth, period, sig, msg
+            ), f"Post-evolution verification failed at period {period}"
 
     def test_vk_stable_through_evolution_chain(self) -> None:
         """VK derived from the evolved key matches the original VK at each step."""
@@ -494,9 +489,9 @@ class TestKesMultiBlockReplay:
         for period in range(7):  # 0..6, evolve 7 times for depth 3
             sk = kes_update(sk, period)
             assert sk is not None
-            assert kes_derive_vk(sk) == original_vk, (
-                f"VK changed after evolution at period {period}"
-            )
+            assert (
+                kes_derive_vk(sk) == original_vk
+            ), f"VK changed after evolution at period {period}"
 
     def test_evolved_key_cannot_sign_past_periods(self) -> None:
         """After evolving past period 0, the period-0 leaf is erased.

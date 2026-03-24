@@ -24,13 +24,12 @@ import asyncio
 import cbor2
 import pytest
 
-from vibe.core.protocols import Agency, Peer, PeerRole, ProtocolError
 from vibe.cardano.network.handshake import (
     HANDSHAKE_TIMEOUT_S,
     MAINNET_NETWORK_MAGIC,
-    PREPROD_NETWORK_MAGIC,
     N2N_V14,
     N2N_V15,
+    PREPROD_NETWORK_MAGIC,
     MsgAcceptVersion,
     MsgProposeVersions,
     MsgRefuse,
@@ -53,7 +52,7 @@ from vibe.cardano.network.handshake_protocol import (
     negotiate_version,
     run_handshake_client,
 )
-
+from vibe.core.protocols import Agency, Peer, PeerRole, ProtocolError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -400,12 +399,8 @@ class TestNegotiateVersion:
 
     def test_peer_sharing_uses_server_preference(self) -> None:
         """Server's peer sharing preference wins in merge."""
-        client = {
-            N2N_V14: _make_version_data(magic=1, peer_sharing=PeerSharing.ENABLED)
-        }
-        server = {
-            N2N_V14: _make_version_data(magic=1, peer_sharing=PeerSharing.DISABLED)
-        }
+        client = {N2N_V14: _make_version_data(magic=1, peer_sharing=PeerSharing.ENABLED)}
+        server = {N2N_V14: _make_version_data(magic=1, peer_sharing=PeerSharing.DISABLED)}
         result = negotiate_version(client, server)
         assert result is not None
         assert result.version_data.peer_sharing == PeerSharing.DISABLED
@@ -435,11 +430,13 @@ class TestRunHandshakeClient:
     async def test_accept_version(self) -> None:
         """Successful handshake returns MsgAcceptVersion."""
         # Server will respond with AcceptVersion for V15
-        response_bytes = cbor2.dumps([
-            1,
-            N2N_V15,
-            [PREPROD_NETWORK_MAGIC, False, 0, False],
-        ])
+        response_bytes = cbor2.dumps(
+            [
+                1,
+                N2N_V15,
+                [PREPROD_NETWORK_MAGIC, False, 0, False],
+            ]
+        )
         channel = MockChannel(response_bytes)
 
         result = await run_handshake_client(channel, PREPROD_NETWORK_MAGIC)
@@ -512,11 +509,13 @@ class TestRunHandshakeClient:
     @pytest.mark.asyncio
     async def test_mainnet_magic_in_proposal(self) -> None:
         """Verify mainnet magic is encoded correctly in the proposal."""
-        response_bytes = cbor2.dumps([
-            1,
-            N2N_V15,
-            [MAINNET_NETWORK_MAGIC, False, 0, False],
-        ])
+        response_bytes = cbor2.dumps(
+            [
+                1,
+                N2N_V15,
+                [MAINNET_NETWORK_MAGIC, False, 0, False],
+            ]
+        )
         channel = MockChannel(response_bytes)
 
         result = await run_handshake_client(channel, MAINNET_NETWORK_MAGIC)
@@ -610,14 +609,14 @@ class TestHandshakeMuxSegment:
         The handshake is always miniprotocol 0. The segment header must
         reflect this so the demux routes it correctly.
         """
-        from vibe.core.multiplexer.segment import (
-            MuxSegment,
-            SEGMENT_HEADER_SIZE,
-            encode_segment,
-        )
         from vibe.cardano.network.handshake import (
             HANDSHAKE_PROTOCOL_ID,
             encode_propose_versions,
+        )
+        from vibe.core.multiplexer.segment import (
+            SEGMENT_HEADER_SIZE,
+            MuxSegment,
+            encode_segment,
         )
 
         version_table = build_version_table(PREPROD_NETWORK_MAGIC)
@@ -651,14 +650,14 @@ class TestHandshakeMuxSegment:
         header carry the mode bit (bit 15) and protocol ID (bits 14-0).
         For handshake (protocol 0) from the initiator, both bytes must be 0x00.
         """
-        from vibe.core.multiplexer.segment import (
-            MuxSegment,
-            encode_segment,
-            decode_segment,
-        )
         from vibe.cardano.network.handshake import (
             HANDSHAKE_PROTOCOL_ID,
             encode_propose_versions,
+        )
+        from vibe.core.multiplexer.segment import (
+            MuxSegment,
+            decode_segment,
+            encode_segment,
         )
 
         version_table = build_version_table(PREPROD_NETWORK_MAGIC)
@@ -740,16 +739,10 @@ class TestVersionNegotiationProperty:
 
         @given(client_versions=version_sets, server_versions=version_sets)
         @settings(max_examples=200, deadline=None)
-        def check(
-            client_versions: frozenset[int], server_versions: frozenset[int]
-        ) -> None:
+        def check(client_versions: frozenset[int], server_versions: frozenset[int]) -> None:
             magic = 1  # Use same magic so mismatch doesn't interfere
-            client_table = {
-                v: _make_version_data(magic=magic) for v in client_versions
-            }
-            server_table = {
-                v: _make_version_data(magic=magic) for v in server_versions
-            }
+            client_table = {v: _make_version_data(magic=magic) for v in client_versions}
+            server_table = {v: _make_version_data(magic=magic) for v in server_versions}
 
             result = negotiate_version(client_table, server_table)
             common = client_versions & server_versions
@@ -791,11 +784,11 @@ class DuplexMockChannel:
         self._b_to_a: asyncio.Queue[bytes] = asyncio.Queue()
 
     @property
-    def side_a(self) -> "_ChannelEnd":
+    def side_a(self) -> _ChannelEnd:
         return _ChannelEnd(send_queue=self._a_to_b, recv_queue=self._b_to_a)
 
     @property
-    def side_b(self) -> "_ChannelEnd":
+    def side_b(self) -> _ChannelEnd:
         return _ChannelEnd(send_queue=self._b_to_a, recv_queue=self._a_to_b)
 
 
@@ -840,8 +833,7 @@ def _acceptable_version(
     return NodeToNodeVersionData(
         network_magic=local.network_magic,
         initiator_only_diffusion_mode=(
-            local.initiator_only_diffusion_mode
-            or remote.initiator_only_diffusion_mode
+            local.initiator_only_diffusion_mode or remote.initiator_only_diffusion_mode
         ),
         peer_sharing=min(local.peer_sharing, remote.peer_sharing),
         query=local.query or remote.query,
@@ -873,11 +865,15 @@ async def _run_simultaneous_handshake(
     """
     if versions_a is None:
         versions_a = build_version_table(
-            magic_a, query=query_a, peer_sharing=peer_sharing_a,
+            magic_a,
+            query=query_a,
+            peer_sharing=peer_sharing_a,
         )
     if versions_b is None:
         versions_b = build_version_table(
-            magic_b, query=query_b, peer_sharing=peer_sharing_b,
+            magic_b,
+            query=query_b,
+            peer_sharing=peer_sharing_b,
         )
 
     duplex = DuplexMockChannel()
@@ -891,9 +887,8 @@ async def _run_simultaneous_handshake(
         and responds as if it were the server (negotiate_version).
         """
         from vibe.cardano.network.handshake import (
-            _encode_version_data,
-            encode_propose_versions,
             _decode_version_data,
+            encode_propose_versions,
         )
 
         # 1. Send our proposal
@@ -914,9 +909,11 @@ async def _run_simultaneous_handshake(
         result = negotiate_version(remote_version_table, own_versions)
         if result is None:
             raise HandshakeRefusedError(
-                MsgRefuse(reason=RefuseReasonVersionMismatch(
-                    versions=sorted(own_versions.keys()),
-                ))
+                MsgRefuse(
+                    reason=RefuseReasonVersionMismatch(
+                        versions=sorted(own_versions.keys()),
+                    )
+                )
             )
         return result
 
@@ -983,8 +980,10 @@ class TestSimultaneousOpen:
             N2N_V14: _make_version_data(magic=magic),
         }
         result_a, result_b = await _run_simultaneous_handshake(
-            magic_a=magic, magic_b=magic,
-            versions_a=versions_a, versions_b=versions_b,
+            magic_a=magic,
+            magic_b=magic,
+            versions_a=versions_a,
+            versions_b=versions_b,
         )
         assert isinstance(result_a, MsgAcceptVersion)
         assert isinstance(result_b, MsgAcceptVersion)
@@ -998,8 +997,10 @@ class TestSimultaneousOpen:
         versions_a = {N2N_V14: _make_version_data(magic=magic)}
         versions_b = {N2N_V15: _make_version_data(magic=magic)}
         result_a, result_b = await _run_simultaneous_handshake(
-            magic_a=magic, magic_b=magic,
-            versions_a=versions_a, versions_b=versions_b,
+            magic_a=magic,
+            magic_b=magic,
+            versions_a=versions_a,
+            versions_b=versions_b,
         )
         assert isinstance(result_a, Exception)
         assert isinstance(result_b, Exception)
@@ -1111,16 +1112,19 @@ class TestQueryVersionMode:
         from vibe.cardano.network.handshake import _decode_version_data
 
         # Build a response that accepts with query=True
-        response_bytes = cbor2.dumps([
-            1,  # MsgAcceptVersion tag
-            N2N_V15,
-            [PREPROD_NETWORK_MAGIC, False, 0, True],  # query=True
-        ])
+        response_bytes = cbor2.dumps(
+            [
+                1,  # MsgAcceptVersion tag
+                N2N_V15,
+                [PREPROD_NETWORK_MAGIC, False, 0, True],  # query=True
+            ]
+        )
         channel = MockChannel(response_bytes)
 
         # Use build_version_table with query=True
         result = await run_handshake_client(
-            channel, PREPROD_NETWORK_MAGIC,
+            channel,
+            PREPROD_NETWORK_MAGIC,
         )
         # The server accepted with query=True
         assert result.version_data.query is True
@@ -1280,24 +1284,21 @@ class TestAcceptableSymmetric:
 
             if result_ab is None:
                 # Both must refuse
-                assert result_ba is None, (
-                    f"acceptable(a, b) refused but acceptable(b, a) accepted: "
-                    f"a={a}, b={b}"
-                )
+                assert (
+                    result_ba is None
+                ), f"acceptable(a, b) refused but acceptable(b, a) accepted: a={a}, b={b}"
             else:
                 # Both must accept
-                assert result_ba is not None, (
-                    f"acceptable(a, b) accepted but acceptable(b, a) refused: "
-                    f"a={a}, b={b}"
-                )
+                assert (
+                    result_ba is not None
+                ), f"acceptable(a, b) accepted but acceptable(b, a) refused: a={a}, b={b}"
                 # Merged data must be equal (Haskell's Eq for
                 # ArbitraryNodeToNodeVersionData ignores query, but
                 # our _acceptable_version uses || which is commutative,
                 # so full equality holds)
-                assert result_ab == result_ba, (
-                    f"Asymmetric merge: acceptable(a,b)={result_ab}, "
-                    f"acceptable(b,a)={result_ba}"
-                )
+                assert (
+                    result_ab == result_ba
+                ), f"Asymmetric merge: acceptable(a,b)={result_ab}, acceptable(b,a)={result_ba}"
 
         check()
 
@@ -1364,9 +1365,7 @@ class TestAcceptOrRefuseSymmetric:
             result_ba = negotiate_version(table_b, table_a)
 
             if result_ab is None:
-                assert result_ba is None, (
-                    f"negotiate(A->B) refused but negotiate(B->A) accepted"
-                )
+                assert result_ba is None, "negotiate(A->B) refused but negotiate(B->A) accepted"
             else:
                 assert result_ba is not None, (
                     f"negotiate(A->B) accepted v={result_ab.version_number} "
@@ -1546,11 +1545,13 @@ class StreamPairChannel:
         self.sent.append(data)
         # Length-prefix the data (4-byte big-endian)
         import struct
+
         self._writer.write(struct.pack("!I", len(data)) + data)
         await self._writer.drain()
 
     async def recv(self) -> bytes:
         import struct
+
         header = await self._reader.readexactly(4)
         length = struct.unpack("!I", header)[0]
         return await self._reader.readexactly(length)
@@ -1567,10 +1568,14 @@ async def _make_stream_pair_channels() -> tuple[StreamPairChannel, StreamPairCha
     reader_b = asyncio.StreamReader()
 
     # Minimal writers that feed data into the corresponding readers
-    transport_a, protocol_a = await asyncio.get_event_loop().create_connection(
-        lambda: asyncio.StreamReaderProtocol(reader_b),
-        sock=None,
-    ) if False else (None, None)  # type: ignore  # noqa: E501
+    transport_a, protocol_a = (
+        await asyncio.get_event_loop().create_connection(
+            lambda: asyncio.StreamReaderProtocol(reader_b),
+            sock=None,
+        )
+        if False
+        else (None, None)
+    )  # type: ignore  # noqa: E501
 
     # Simpler approach: use connected sockets via asyncio
     # We'll use a TCP loopback connection for true stream semantics
@@ -1614,9 +1619,13 @@ class TestHandshakeBufferTransport:
     @pytest.mark.asyncio
     async def test_accept_via_buffer_channel(self) -> None:
         """Successful handshake using pre-loaded AcceptVersion response."""
-        response = cbor2.dumps([
-            1, N2N_V15, [PREPROD_NETWORK_MAGIC, False, 0, False],
-        ])
+        response = cbor2.dumps(
+            [
+                1,
+                N2N_V15,
+                [PREPROD_NETWORK_MAGIC, False, 0, False],
+            ]
+        )
         channel = BufferChannel(responses=[response])
 
         result = await run_handshake_client(channel, PREPROD_NETWORK_MAGIC)
@@ -1692,15 +1701,16 @@ class TestHandshakeStreamTransport:
                 remote_msg = cbor2.loads(remote_bytes)
                 assert remote_msg[0] == 0
                 remote_table = {
-                    vnum: _decode_version_data(vdata)
-                    for vnum, vdata in remote_msg[1].items()
+                    vnum: _decode_version_data(vdata) for vnum, vdata in remote_msg[1].items()
                 }
                 result = negotiate_version(remote_table, own_versions)
                 if result is None:
                     return HandshakeRefusedError(
-                        MsgRefuse(reason=RefuseReasonVersionMismatch(
-                            versions=sorted(own_versions.keys()),
-                        ))
+                        MsgRefuse(
+                            reason=RefuseReasonVersionMismatch(
+                                versions=sorted(own_versions.keys()),
+                            )
+                        )
                     )
                 return result
             except Exception as exc:
@@ -1751,8 +1761,7 @@ class TestHandshakeStreamTransport:
             remote_bytes = await asyncio.wait_for(ch.recv(), timeout=2.0)
             remote_msg = cbor2.loads(remote_bytes)
             remote_table = {
-                vnum: _decode_version_data(vdata)
-                for vnum, vdata in remote_msg[1].items()
+                vnum: _decode_version_data(vdata) for vnum, vdata in remote_msg[1].items()
             }
             return negotiate_version(remote_table, own_versions)
 
@@ -1797,8 +1806,7 @@ class TestHandshakeStreamTransport:
             remote_bytes = await asyncio.wait_for(ch.recv(), timeout=2.0)
             remote_msg = cbor2.loads(remote_bytes)
             remote_table = {
-                vnum: _decode_version_data(vdata)
-                for vnum, vdata in remote_msg[1].items()
+                vnum: _decode_version_data(vdata) for vnum, vdata in remote_msg[1].items()
             }
             return negotiate_version(remote_table, own_versions)
 
@@ -1834,8 +1842,10 @@ class TestHandshakeDuplexQueueTransport:
         """
         magic = PREPROD_NETWORK_MAGIC
         result_a, result_b = await _run_simultaneous_handshake(
-            magic_a=magic, magic_b=magic,
-            query_a=True, query_b=True,
+            magic_a=magic,
+            magic_b=magic,
+            query_a=True,
+            query_b=True,
         )
         assert isinstance(result_a, MsgAcceptVersion)
         assert isinstance(result_b, MsgAcceptVersion)
@@ -1851,7 +1861,8 @@ class TestHandshakeDuplexQueueTransport:
         """
         magic = PREPROD_NETWORK_MAGIC
         result_a, result_b = await _run_simultaneous_handshake(
-            magic_a=magic, magic_b=magic,
+            magic_a=magic,
+            magic_b=magic,
             peer_sharing_a=PeerSharing.ENABLED,
             peer_sharing_b=PeerSharing.DISABLED,
         )
@@ -1874,8 +1885,10 @@ class TestHandshakeDuplexQueueTransport:
             N2N_V14: _make_version_data(magic=magic),
         }
         result_a, result_b = await _run_simultaneous_handshake(
-            magic_a=magic, magic_b=magic,
-            versions_a=versions_a, versions_b=versions_b,
+            magic_a=magic,
+            magic_b=magic,
+            versions_a=versions_a,
+            versions_b=versions_b,
         )
         assert isinstance(result_a, MsgAcceptVersion)
         assert isinstance(result_b, MsgAcceptVersion)

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import hashlib
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from pycardano import (
@@ -49,7 +48,6 @@ from vibe.cardano.ledger.babbage import (
     validate_babbage_utxo,
 )
 from vibe.cardano.ledger.babbage_types import (
-    BABBAGE_MAINNET_PARAMS,
     BabbageOutputExtension,
     BabbageProtocolParams,
     DatumOption,
@@ -57,7 +55,6 @@ from vibe.cardano.ledger.babbage_types import (
     ReferenceScript,
 )
 from vibe.cardano.ledger.shelley import ShelleyUTxO
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
@@ -108,9 +105,7 @@ def make_address(vk: PaymentVerificationKey) -> Address:
     return Address(payment_part=vk.hash(), network=Network.TESTNET)
 
 
-def sign_tx_body(
-    tx_body: TransactionBody, sk: PaymentSigningKey
-) -> VerificationKeyWitness:
+def sign_tx_body(tx_body: TransactionBody, sk: PaymentSigningKey) -> VerificationKeyWitness:
     """Sign a transaction body and return a VKey witness."""
     tx_body_hash = tx_body.hash()
     signature = sk.sign(tx_body_hash)
@@ -249,9 +244,7 @@ class TestCollateralReturn:
 
         return_out = TransactionOutput(addr, 2_000_000)
         # total = 5M - 2M = 3M
-        errors = _validate_collateral_return(
-            [txin], utxo, return_out, 3_000_000
-        )
+        errors = _validate_collateral_return([txin], utxo, return_out, 3_000_000)
         assert errors == []
 
     def test_incorrect_total_with_return(self):
@@ -264,9 +257,7 @@ class TestCollateralReturn:
 
         return_out = TransactionOutput(addr, 2_000_000)
         # total should be 3M but we claim 4M
-        errors = _validate_collateral_return(
-            [txin], utxo, return_out, 4_000_000
-        )
+        errors = _validate_collateral_return([txin], utxo, return_out, 4_000_000)
         assert len(errors) == 1
         assert "IncorrectTotalCollateralField" in errors[0]
 
@@ -310,46 +301,54 @@ class TestInlineDatumValidation:
 
     def test_valid_inline_datum(self):
         """Well-formed inline datum should pass."""
-        ext = {0: BabbageOutputExtension(
-            datum_option=DatumOption(
-                tag=DatumOptionTag.INLINE,
-                data=b"\xa1\x01\x02",  # some CBOR data
+        ext = {
+            0: BabbageOutputExtension(
+                datum_option=DatumOption(
+                    tag=DatumOptionTag.INLINE,
+                    data=b"\xa1\x01\x02",  # some CBOR data
+                )
             )
-        )}
+        }
         errors = _validate_inline_datums(ext)
         assert errors == []
 
     def test_empty_inline_datum_fails(self):
         """Empty inline datum data should fail."""
-        ext = {0: BabbageOutputExtension(
-            datum_option=DatumOption(
-                tag=DatumOptionTag.INLINE,
-                data=b"",
+        ext = {
+            0: BabbageOutputExtension(
+                datum_option=DatumOption(
+                    tag=DatumOptionTag.INLINE,
+                    data=b"",
+                )
             )
-        )}
+        }
         errors = _validate_inline_datums(ext)
         assert len(errors) == 1
         assert "InlineDatumEmpty" in errors[0]
 
     def test_valid_datum_hash(self):
         """32-byte datum hash should pass."""
-        ext = {0: BabbageOutputExtension(
-            datum_option=DatumOption(
-                tag=DatumOptionTag.HASH,
-                data=b"\x00" * 32,
+        ext = {
+            0: BabbageOutputExtension(
+                datum_option=DatumOption(
+                    tag=DatumOptionTag.HASH,
+                    data=b"\x00" * 32,
+                )
             )
-        )}
+        }
         errors = _validate_inline_datums(ext)
         assert errors == []
 
     def test_wrong_size_datum_hash(self):
         """Non-32-byte datum hash should fail."""
-        ext = {0: BabbageOutputExtension(
-            datum_option=DatumOption(
-                tag=DatumOptionTag.HASH,
-                data=b"\x00" * 16,
+        ext = {
+            0: BabbageOutputExtension(
+                datum_option=DatumOption(
+                    tag=DatumOptionTag.HASH,
+                    data=b"\x00" * 16,
+                )
             )
-        )}
+        }
         errors = _validate_inline_datums(ext)
         assert len(errors) == 1
         assert "DatumHashWrongSize" in errors[0]

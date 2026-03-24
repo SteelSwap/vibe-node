@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from vibe.cardano.network.chainsync import Point, Tip, ORIGIN, PointOrOrigin
+from vibe.cardano.network.chainsync import ORIGIN, Point, PointOrOrigin, Tip
 
 if TYPE_CHECKING:
     from vibe.cardano.storage.chaindb import ChainDB
@@ -40,7 +40,9 @@ class ChainFollower:
         self._last_seen_generation: int = 0
 
     def notify_fork_switch(
-        self, removed_hashes: set[bytes], intersection_point: Point,
+        self,
+        removed_hashes: set[bytes],
+        intersection_point: Point,
     ) -> None:
         """Called by ChainDB when a fork switch removes blocks.
 
@@ -54,7 +56,8 @@ class ChainFollower:
                 self._pending_rollback = intersection_point
 
     async def find_intersect(
-        self, points: list[PointOrOrigin],
+        self,
+        points: list[PointOrOrigin],
     ) -> tuple[PointOrOrigin | None, Tip]:
         """Find intersection and update follower position.
 
@@ -145,7 +148,7 @@ class ChainFollower:
                 timeout=0.6,
             )
             self._chain_db.tip_changed.clear()
-        except (TimeoutError, asyncio.TimeoutError):
+        except TimeoutError:
             pass
         self._last_seen_generation = self._chain_db._tip_generation
 

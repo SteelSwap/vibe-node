@@ -148,8 +148,12 @@ class GitHubPRComment(SQLModel, table=True):
     comment_type: str = Field(max_length=32)  # "comment", "review", "review_comment"
     author: str = Field(max_length=128)
     body: str = Field(sa_column=Column(Text))
-    file_path: str | None = Field(default=None, max_length=1024)  # for review comments on specific files
-    diff_hunk: str | None = Field(default=None, sa_column=Column(Text))  # code context for review comments
+    file_path: str | None = Field(
+        default=None, max_length=1024
+    )  # for review comments on specific files
+    diff_hunk: str | None = Field(
+        default=None, sa_column=Column(Text)
+    )  # code context for review comments
     created_at: datetime
     updated_at: datetime | None = Field(default=None)
     metadata_: dict | None = Field(default=None, sa_column=Column("metadata", JSON))
@@ -173,7 +177,9 @@ class SpecSection(SQLModel, table=True):
     era: str
     subsystem: str
     verbatim: str = Field(sa_column=Column(Text), description="Exact spec text")
-    extracted_rule: str = Field(sa_column=Column(Text), description="Context-enriched semantic extraction")
+    extracted_rule: str = Field(
+        sa_column=Column(Text), description="Context-enriched semantic extraction"
+    )
     metadata_: dict | None = Field(default=None, sa_column=Column("metadata", JSON))
 
 
@@ -183,7 +189,9 @@ class CrossReference(SQLModel, table=True):
     __tablename__ = "cross_references"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    source_type: str = Field(description="spec_section, code_chunk, github_issue, github_pr, gap_analysis")
+    source_type: str = Field(
+        description="spec_section, code_chunk, github_issue, github_pr, gap_analysis"
+    )
     source_id: uuid.UUID
     target_type: str
     target_id: uuid.UUID

@@ -25,31 +25,26 @@ from __future__ import annotations
 
 import hashlib
 import os
-from decimal import Decimal, getcontext
+from decimal import getcontext
 
-import pytest
-from hypothesis import given, settings, assume
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from vibe.cardano.consensus.chain_selection import (
-    SECURITY_PARAM_K,
     ChainCandidate,
     Preference,
     compare_chains,
     is_chain_better,
     should_switch_to,
 )
-from vibe.cardano.consensus.praos import (
-    MAINNET_ACTIVE_SLOT_COEFF,
-    ActiveSlotCoeff,
-    leader_check,
-)
 from vibe.cardano.consensus.nonce import (
-    NEUTRAL_NONCE,
-    EpochNonce,
     accumulate_vrf_output,
     evolve_nonce,
     mk_nonce,
+)
+from vibe.cardano.consensus.praos import (
+    MAINNET_ACTIVE_SLOT_COEFF,
+    leader_check,
 )
 
 
@@ -90,9 +85,7 @@ class TestChainSelectionLongerChainWins:
         delta=st.integers(min_value=1, max_value=1000),
     )
     @settings(max_examples=200)
-    def test_longer_chain_always_preferred(
-        self, bn_short: int, delta: int
-    ) -> None:
+    def test_longer_chain_always_preferred(self, bn_short: int, delta: int) -> None:
         """For any two chains where one is strictly longer, prefer the longer."""
         bn_long = bn_short + delta
         short = _make_candidate(block_number=bn_short, tip_hash=b"\xff" * 32)
@@ -164,13 +157,9 @@ class TestChainSelectionOrderProperties:
         vrf_bytes=st.binary(min_size=64, max_size=64),
     )
     @settings(max_examples=100)
-    def test_reflexivity(
-        self, bn: int, hash_bytes: bytes, vrf_bytes: bytes
-    ) -> None:
+    def test_reflexivity(self, bn: int, hash_bytes: bytes, vrf_bytes: bytes) -> None:
         """compare_chains(x, x) == EQUAL for any chain."""
-        chain = _make_candidate(
-            block_number=bn, tip_hash=hash_bytes, vrf_output=vrf_bytes
-        )
+        chain = _make_candidate(block_number=bn, tip_hash=hash_bytes, vrf_output=vrf_bytes)
         assert compare_chains(chain, chain) == Preference.EQUAL
 
     @given(
@@ -201,9 +190,7 @@ class TestChainSelectionOrderProperties:
         bn_c=st.integers(min_value=0, max_value=10000),
     )
     @settings(max_examples=300)
-    def test_transitivity_full(
-        self, bn_a: int, bn_b: int, bn_c: int
-    ) -> None:
+    def test_transitivity_full(self, bn_a: int, bn_b: int, bn_c: int) -> None:
         """If A >= B and B >= C then A >= C (transitivity)."""
         a = _make_candidate(block_number=bn_a, tip_hash=b"\x01" * 32)
         b = _make_candidate(block_number=bn_b, tip_hash=b"\x02" * 32)
@@ -239,9 +226,7 @@ class TestChainSelectionKDeepFork:
         k=st.integers(min_value=10, max_value=2160),
     )
     @settings(max_examples=100)
-    def test_deep_fork_rejected(
-        self, our_bn: int, candidate_delta: int, k: int
-    ) -> None:
+    def test_deep_fork_rejected(self, our_bn: int, candidate_delta: int, k: int) -> None:
         """A fork deeper than k is rejected even if candidate is longer."""
         candidate_bn = our_bn + candidate_delta
         fork_point = our_bn - k - 1  # deeper than k
@@ -249,12 +234,8 @@ class TestChainSelectionKDeepFork:
         ours = _make_candidate(block_number=our_bn)
         candidate = _make_candidate(block_number=candidate_bn)
 
-        result = should_switch_to(
-            ours, candidate, k=k, fork_point_block_number=fork_point
-        )
-        assert result is False, (
-            f"Fork at depth {our_bn - fork_point} > k={k} should be rejected"
-        )
+        result = should_switch_to(ours, candidate, k=k, fork_point_block_number=fork_point)
+        assert result is False, f"Fork at depth {our_bn - fork_point} > k={k} should be rejected"
 
     @given(
         our_bn=st.integers(min_value=100, max_value=10000),
@@ -273,9 +254,7 @@ class TestChainSelectionKDeepFork:
         candidate = _make_candidate(block_number=candidate_bn)
 
         # With default k=2160, fork_depth <= 99 is always within k
-        result = should_switch_to(
-            ours, candidate, fork_point_block_number=fork_point
-        )
+        result = should_switch_to(ours, candidate, fork_point_block_number=fork_point)
         assert result is True
 
 
@@ -337,9 +316,7 @@ class TestPraosLeaderThresholdMonotonic:
         result_low = leader_check(vrf_bytes, sigma, f_low)
         if result_low:
             result_high = leader_check(vrf_bytes, sigma, f_high)
-            assert result_high, (
-                f"Elected at f={f_low} but not at f={f_high}"
-            )
+            assert result_high, f"Elected at f={f_low} but not at f={f_high}"
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +379,7 @@ class TestPraosFullStakeLowVRF:
     def test_full_stake_threshold_is_f(self, f: float) -> None:
         """sigma=1.0 means threshold = f. Check consistency."""
         import hashlib
+
         zero_vrf = b"\x00" * 64
         leader_hash = hashlib.blake2b(b"L" + zero_vrf, digest_size=32).digest()
         leader_val = int.from_bytes(leader_hash, "big") / (2**256)
@@ -416,6 +394,7 @@ class TestPraosFullStakeLowVRF:
         against the threshold (= f at sigma=1.0).
         """
         import hashlib
+
         getcontext().prec = 40
         f = 0.05
         # Use a known VRF output whose leader hash we can compute
@@ -468,9 +447,7 @@ class TestEpochNonceMultiEpochEvolution:
         assert eta_2 != eta_3
 
         # Verify manually: eta_1 = blake2b(eta_0 || eta_v_0)
-        expected_1 = hashlib.blake2b(
-            eta_0.value + eta_v_0, digest_size=32
-        ).digest()
+        expected_1 = hashlib.blake2b(eta_0.value + eta_v_0, digest_size=32).digest()
         assert eta_1.value == expected_1
 
         # Chain is deterministic: re-running gives the same result
@@ -504,15 +481,9 @@ class TestEpochNonceMultiEpochEvolution:
         vrf_a = b"\x01" * 32
         vrf_b = b"\x02" * 32
 
-        result_ab = accumulate_vrf_output(
-            accumulate_vrf_output(eta, vrf_a), vrf_b
-        )
-        result_ba = accumulate_vrf_output(
-            accumulate_vrf_output(eta, vrf_b), vrf_a
-        )
-        assert result_ab != result_ba, (
-            "VRF accumulation order must matter"
-        )
+        result_ab = accumulate_vrf_output(accumulate_vrf_output(eta, vrf_a), vrf_b)
+        result_ba = accumulate_vrf_output(accumulate_vrf_output(eta, vrf_b), vrf_a)
+        assert result_ab != result_ba, "VRF accumulation order must matter"
 
     @given(
         vrf_outputs=st.lists(
@@ -522,9 +493,7 @@ class TestEpochNonceMultiEpochEvolution:
         ),
     )
     @settings(max_examples=50)
-    def test_vrf_accumulation_deterministic(
-        self, vrf_outputs: list[bytes]
-    ) -> None:
+    def test_vrf_accumulation_deterministic(self, vrf_outputs: list[bytes]) -> None:
         """Accumulating the same VRF outputs in the same order always
         gives the same result."""
         eta = b"\x00" * 32
@@ -574,13 +543,9 @@ class TestEpochNonceMultiEpochEvolution:
         seen = {nonce.value}
 
         for i in range(n_epochs):
-            eta_v = hashlib.blake2b(
-                i.to_bytes(4, "big"), digest_size=32
-            ).digest()
+            eta_v = hashlib.blake2b(i.to_bytes(4, "big"), digest_size=32).digest()
             nonce = evolve_nonce(nonce, eta_v)
-            assert nonce.value not in seen, (
-                f"Nonce collision at epoch {i}"
-            )
+            assert nonce.value not in seen, f"Nonce collision at epoch {i}"
             seen.add(nonce.value)
 
         assert len(seen) == n_epochs + 1
@@ -621,9 +586,9 @@ class TestPraosLeaderDistribution:
         )
         fraction = n_elected / n_trials
         # Expected ~1.27%, generous bounds [0.8%, 1.8%]
-        assert 0.008 <= fraction <= 0.018, (
-            f"Quarter-stake election rate {fraction:.4f} outside [0.008, 0.018]"
-        )
+        assert (
+            0.008 <= fraction <= 0.018
+        ), f"Quarter-stake election rate {fraction:.4f} outside [0.008, 0.018]"
 
     def test_three_quarter_stake_election_rate(self) -> None:
         """sigma=0.75, f=0.05: expected ~3.80% election rate.
@@ -645,9 +610,9 @@ class TestPraosLeaderDistribution:
         )
         fraction = n_elected / n_trials
         # Expected ~3.80%, generous bounds [2.8%, 4.8%]
-        assert 0.028 <= fraction <= 0.048, (
-            f"3/4 stake election rate {fraction:.4f} outside [0.028, 0.048]"
-        )
+        assert (
+            0.028 <= fraction <= 0.048
+        ), f"3/4 stake election rate {fraction:.4f} outside [0.028, 0.048]"
 
     def test_election_rate_increases_monotonically_statistical(self) -> None:
         """Statistical verification: higher stake => more elections.
@@ -660,22 +625,16 @@ class TestPraosLeaderDistribution:
         n_trials = 10_000
         sigmas = [0.1, 0.3, 0.5, 0.7, 0.9]
 
-        vrf_outputs = [
-            bytes(rng.getrandbits(8) for _ in range(64))
-            for _ in range(n_trials)
-        ]
+        vrf_outputs = [bytes(rng.getrandbits(8) for _ in range(64)) for _ in range(n_trials)]
 
         win_counts = []
         for sigma in sigmas:
-            wins = sum(
-                1 for v in vrf_outputs
-                if leader_check(v, sigma, 0.05)
-            )
+            wins = sum(1 for v in vrf_outputs if leader_check(v, sigma, 0.05))
             win_counts.append(wins)
 
         # Each higher stake level should win more
         for i in range(len(win_counts) - 1):
             assert win_counts[i] < win_counts[i + 1], (
                 f"sigma={sigmas[i]} won {win_counts[i]} but "
-                f"sigma={sigmas[i+1]} won only {win_counts[i+1]}"
+                f"sigma={sigmas[i + 1]} won only {win_counts[i + 1]}"
             )

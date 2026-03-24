@@ -1,4 +1,5 @@
 """CLI commands for cross-referencing, coverage, and test specifications."""
+
 import asyncio
 import uuid as _uuid
 
@@ -24,16 +25,23 @@ def xref_add(
     created_by: str = typer.Option("manual", "--by"),
 ):
     """Add a cross-reference between two entities."""
+
     async def _run():
-        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.db.pool import close_pool, get_pool
         from vibe.tools.db.xref import add_xref
 
         pool = await get_pool()
         async with pool.acquire() as conn:
             row_id = await add_xref(
-                conn, source_type, _uuid.UUID(source_id),
-                target_type, _uuid.UUID(target_id),
-                relationship, confidence, notes, created_by,
+                conn,
+                source_type,
+                _uuid.UUID(source_id),
+                target_type,
+                _uuid.UUID(target_id),
+                relationship,
+                confidence,
+                notes,
+                created_by,
             )
         await close_pool()
         console.print(f"[green]Cross-reference added:[/green] {row_id}")
@@ -49,15 +57,19 @@ def xref_query(
     target_type: str | None = typer.Option(None, "--target", "-t"),
 ):
     """Query cross-references for an entity."""
+
     async def _run():
-        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.db.pool import close_pool, get_pool
         from vibe.tools.db.xref import query_xrefs
 
         pool = await get_pool()
         async with pool.acquire() as conn:
             rows = await query_xrefs(
-                conn, entity_type, _uuid.UUID(entity_id),
-                relationship, target_type,
+                conn,
+                entity_type,
+                _uuid.UUID(entity_id),
+                relationship,
+                target_type,
             )
         await close_pool()
 
@@ -70,8 +82,12 @@ def xref_query(
         table.add_column("By")
         for r in rows:
             table.add_row(
-                r["direction"], r["relationship"], r["entity_type"],
-                r["id"][:12] + "...", f"{r['confidence']:.1f}", r["created_by"],
+                r["direction"],
+                r["relationship"],
+                r["entity_type"],
+                r["id"][:12] + "...",
+                f"{r['confidence']:.1f}",
+                r["created_by"],
             )
         console.print(table)
 
@@ -84,15 +100,21 @@ def coverage(
     era: str | None = typer.Option(None, "--era", "-e"),
 ):
     """Show spec coverage report — which rules have tests and implementations."""
+
     async def _run():
-        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.db.pool import close_pool, get_pool
         from vibe.tools.db.xref import coverage_report, uncovered_sections
 
         pool = await get_pool()
         async with pool.acquire() as conn:
             report = await coverage_report(conn, subsystem, era)
             uncovered = await uncovered_sections(
-                conn, subsystem, era, no_tests=True, no_implementation=True, limit=20,
+                conn,
+                subsystem,
+                era,
+                no_tests=True,
+                no_implementation=True,
+                limit=20,
             )
         await close_pool()
 
@@ -104,7 +126,7 @@ def coverage(
         console.print(f"  [red]Uncovered (neither):[/red]  {report['uncovered']}")
 
         if uncovered:
-            console.print(f"\n[bold]Uncovered Sections[/bold] (no tests, no implementation):\n")
+            console.print("\n[bold]Uncovered Sections[/bold] (no tests, no implementation):\n")
             table = Table()
             table.add_column("Section ID")
             table.add_column("Title")
@@ -126,14 +148,20 @@ def test_specs_list(
     limit: int = typer.Option(50, "--limit", "-n"),
 ):
     """List planned test specifications."""
+
     async def _run():
-        from vibe.tools.db.pool import get_pool, close_pool
+        from vibe.tools.db.pool import close_pool, get_pool
         from vibe.tools.db.test_specs import list_test_specs
 
         pool = await get_pool()
         async with pool.acquire() as conn:
             rows, total = await list_test_specs(
-                conn, subsystem, phase, test_type, priority, limit,
+                conn,
+                subsystem,
+                phase,
+                test_type,
+                priority,
+                limit,
             )
         await close_pool()
 
@@ -145,8 +173,11 @@ def test_specs_list(
         table.add_column("Phase")
         for r in rows:
             table.add_row(
-                r["test_name"][:40], r["subsystem"], r["test_type"],
-                r["priority"], r["phase"],
+                r["test_name"][:40],
+                r["subsystem"],
+                r["test_type"],
+                r["priority"],
+                r["phase"],
             )
         console.print(table)
 

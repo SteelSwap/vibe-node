@@ -63,6 +63,7 @@ class NodeKernel:
         # Thread-safety: RWLock for concurrent nonce reads / exclusive writes
         if lock is None:
             from vibe.core.rwlock import RWLock
+
             lock = RWLock()
         self._lock = lock
 
@@ -72,6 +73,7 @@ class NodeKernel:
 
         # STM TVar for epoch nonce — used by forge loop for atomic reads
         from vibe.core.stm import TVar
+
         self.nonce_tvar: TVar = TVar(self._epoch_nonce.value)
         self.stake_tvar: TVar = TVar({})
         self._evolving_nonce: bytes = b"\x00" * 32
@@ -131,26 +133,26 @@ class NodeKernel:
     # Delegation and stake
     # ------------------------------------------------------------------
 
-    def apply_delegation_certs(
-        self, transactions: list[Any], current_epoch: int
-    ) -> None:
+    def apply_delegation_certs(self, transactions: list[Any], current_epoch: int) -> None:
         """Apply delegation certificates from a block's transactions."""
         self._delegation_state = apply_block_certs(
-            self._delegation_state, transactions, current_epoch,
+            self._delegation_state,
+            transactions,
+            current_epoch,
         )
 
-    def update_stake_distribution(
-        self, utxo_stakes: dict[bytes, int]
-    ) -> dict[bytes, int]:
+    def update_stake_distribution(self, utxo_stakes: dict[bytes, int]) -> dict[bytes, int]:
         """Recompute the per-pool stake distribution."""
         self._stake_distribution = compute_pool_stake_distribution(
-            self._delegation_state, utxo_stakes,
+            self._delegation_state,
+            utxo_stakes,
         )
         self.stake_tvar._write(dict(self._stake_distribution))
         total = sum(self._stake_distribution.values())
         logger.info(
             "Stake distribution updated: %d pools, total stake=%d",
-            len(self._stake_distribution), total,
+            len(self._stake_distribution),
+            total,
             extra={
                 "event": "stake.updated",
                 "pool_count": len(self._stake_distribution),
@@ -176,7 +178,8 @@ class NodeKernel:
         self._pending_param_updates.clear()
         if count:
             logger.info(
-                "Applied %d protocol parameter updates", count,
+                "Applied %d protocol parameter updates",
+                count,
                 extra={"event": "params.updated", "update_count": count},
             )
 
@@ -206,7 +209,9 @@ class NodeKernel:
         self._active_slot_coeff = active_slot_coeff
         logger.info(
             "Epoch nonce initialised (epoch_length=%d, k=%d, f=%.4f)",
-            epoch_length, security_param, active_slot_coeff,
+            epoch_length,
+            security_param,
+            active_slot_coeff,
             extra={
                 "event": "nonce.init",
                 "nonce": genesis_hash.hex()[:16],
@@ -236,16 +241,20 @@ class NodeKernel:
             return
 
         from vibe.cardano.crypto.vrf import vrf_nonce_value
+
         vrf_nonce = vrf_nonce_value(vrf_output)
 
         self._evolving_nonce = self._combine_nonces(
-            self._evolving_nonce, vrf_nonce,
+            self._evolving_nonce,
+            vrf_nonce,
         )
 
         block_epoch = slot // epoch_len
         first_slot_next_epoch = (block_epoch + 1) * epoch_len
         stab_window = stability_window(
-            epoch_len, self._security_param, self._active_slot_coeff,
+            epoch_len,
+            self._security_param,
+            self._active_slot_coeff,
         )
         if slot + stab_window < first_slot_next_epoch:
             self._candidate_nonce = self._evolving_nonce
@@ -261,11 +270,13 @@ class NodeKernel:
             return
 
         new_nonce_bytes = self._combine_nonces(
-            self._candidate_nonce, self._last_epoch_block_nonce,
+            self._candidate_nonce,
+            self._last_epoch_block_nonce,
         )
         if extra_entropy is not None:
             new_nonce_bytes = self._combine_nonces(
-                new_nonce_bytes, extra_entropy,
+                new_nonce_bytes,
+                extra_entropy,
             )
 
         old_epoch = self._current_epoch
@@ -275,7 +286,9 @@ class NodeKernel:
         self._current_epoch = new_epoch
         logger.info(
             "Epoch transition %d -> %d (nonce=%s)",
-            old_epoch, new_epoch, new_nonce_bytes.hex()[:16],
+            old_epoch,
+            new_epoch,
+            new_nonce_bytes.hex()[:16],
             extra={
                 "event": "epoch.transition",
                 "from_epoch": old_epoch,
@@ -324,7 +337,10 @@ class NodeKernel:
         return True
 
     def on_block_adopted(
-        self, slot: int, block_hash: bytes, prev_hash: bytes,
+        self,
+        slot: int,
+        block_hash: bytes,
+        prev_hash: bytes,
         vrf_output: bytes | None,
     ) -> None:
         """Update Praos state after a block is adopted by ChainDB.
@@ -390,5 +406,6 @@ class NodeKernel:
 
         logger.debug(
             "Nonce state rolled back to %s and re-applied %d blocks",
-            intersection_hash.hex()[:16], len(new_chain_blocks),
+            intersection_hash.hex()[:16],
+            len(new_chain_blocks),
         )

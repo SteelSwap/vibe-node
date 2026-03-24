@@ -1,6 +1,6 @@
 """CRUD operations for cross_references table."""
+
 import uuid
-from typing import Optional
 
 # Maps canonical relationship names to their inverses (computed at query time)
 INVERSE_MAP = {
@@ -36,7 +36,7 @@ async def add_xref(
     target_id: uuid.UUID,
     relationship: str,
     confidence: float = 1.0,
-    notes: Optional[str] = None,
+    notes: str | None = None,
     created_by: str = "manual",
 ) -> uuid.UUID:
     """Insert a cross-reference and return its ID."""
@@ -49,8 +49,15 @@ async def add_xref(
         ON CONFLICT (source_type, source_id, target_type, target_id, relationship)
         DO UPDATE SET confidence = EXCLUDED.confidence, notes = EXCLUDED.notes
         """,
-        row_id, source_type, source_id, target_type, target_id,
-        relationship, confidence, notes, created_by,
+        row_id,
+        source_type,
+        source_id,
+        target_type,
+        target_id,
+        relationship,
+        confidence,
+        notes,
+        created_by,
     )
     return row_id
 
@@ -59,8 +66,8 @@ async def query_xrefs(
     conn,
     entity_type: str,
     entity_id: uuid.UUID,
-    relationship: Optional[str] = None,
-    target_type: Optional[str] = None,
+    relationship: str | None = None,
+    target_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[dict]:
@@ -74,35 +81,41 @@ async def query_xrefs(
     # Outgoing (this entity is source)
     out_rows = await conn.fetch(
         "SELECT * FROM cross_references WHERE source_type = $1 AND source_id = $2 ORDER BY relationship",
-        entity_type, entity_id,
+        entity_type,
+        entity_id,
     )
     for row in out_rows:
-        results.append({
-            "direction": "outgoing",
-            "relationship": row["relationship"],
-            "entity_type": row["target_type"],
-            "id": str(row["target_id"]),
-            "confidence": row["confidence"],
-            "notes": row["notes"],
-            "created_by": row["created_by"],
-        })
+        results.append(
+            {
+                "direction": "outgoing",
+                "relationship": row["relationship"],
+                "entity_type": row["target_type"],
+                "id": str(row["target_id"]),
+                "confidence": row["confidence"],
+                "notes": row["notes"],
+                "created_by": row["created_by"],
+            }
+        )
 
     # Incoming (this entity is target) — show inverse relationship name
     in_rows = await conn.fetch(
         "SELECT * FROM cross_references WHERE target_type = $1 AND target_id = $2 ORDER BY relationship",
-        entity_type, entity_id,
+        entity_type,
+        entity_id,
     )
     for row in in_rows:
         inverse = INVERSE_MAP.get(row["relationship"], f"inv_{row['relationship']}")
-        results.append({
-            "direction": "incoming",
-            "relationship": inverse,
-            "entity_type": row["source_type"],
-            "id": str(row["source_id"]),
-            "confidence": row["confidence"],
-            "notes": row["notes"],
-            "created_by": row["created_by"],
-        })
+        results.append(
+            {
+                "direction": "incoming",
+                "relationship": inverse,
+                "entity_type": row["source_type"],
+                "id": str(row["source_id"]),
+                "confidence": row["confidence"],
+                "notes": row["notes"],
+                "created_by": row["created_by"],
+            }
+        )
 
     # Apply filters
     if relationship:
@@ -112,10 +125,10 @@ async def query_xrefs(
         results = [r for r in results if r["entity_type"] == target_type]
 
     total = len(results)
-    return results[offset:offset + limit]
+    return results[offset : offset + limit]
 
 
-async def coverage_report(conn, subsystem: Optional[str] = None, era: Optional[str] = None) -> dict:
+async def coverage_report(conn, subsystem: str | None = None, era: str | None = None) -> dict:
     """Generate spec coverage report.
 
     Returns counts of spec sections with/without implementations, tests, and gaps.
@@ -133,7 +146,8 @@ async def coverage_report(conn, subsystem: Optional[str] = None, era: Optional[s
         idx += 1
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-    result = await conn.fetchrow(f"""
+    result = await conn.fetchrow(
+        f"""
         WITH section_coverage AS (
             SELECT
                 ss.id,
@@ -160,14 +174,16 @@ async def coverage_report(conn, subsystem: Optional[str] = None, era: Optional[s
             COUNT(*) FILTER (WHERE has_gap) AS with_gaps,
             COUNT(*) FILTER (WHERE NOT has_implementation AND NOT has_test) AS uncovered
         FROM section_coverage
-    """, *params)
+    """,
+        *params,
+    )
     return dict(result)
 
 
 async def uncovered_sections(
     conn,
-    subsystem: Optional[str] = None,
-    era: Optional[str] = None,
+    subsystem: str | None = None,
+    era: str | None = None,
     no_tests: bool = False,
     no_implementation: bool = False,
     limit: int = 50,

@@ -12,10 +12,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import subprocess
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import text
@@ -81,7 +80,9 @@ def _get_release_tags(repo_path: Path, repo_name: str) -> list[str]:
     if max_tags is not None and len(tags) > max_tags:
         logger.info(
             "Capping %s from %d to %d most recent tags",
-            repo_name, len(tags), max_tags,
+            repo_name,
+            len(tags),
+            max_tags,
         )
         tags = tags[-max_tags:]
 
@@ -105,7 +106,7 @@ def _get_tag_info(repo_path: Path, tag: str) -> tuple[str, datetime]:
     commit_date = datetime.fromisoformat(lines[1])
     # Ensure timezone-aware
     if commit_date.tzinfo is None:
-        commit_date = commit_date.replace(tzinfo=timezone.utc)
+        commit_date = commit_date.replace(tzinfo=UTC)
     return commit_hash, commit_date
 
 
@@ -218,7 +219,8 @@ class CodeIngestor:
         for partial_tag in partial_tags:
             logger.info(
                 "Tag %s for %s has partial data but no completion marker — will re-process",
-                partial_tag, repo_name,
+                partial_tag,
+                repo_name,
             )
 
         # Filter to un-ingested or partially-ingested tags
@@ -233,7 +235,9 @@ class CodeIngestor:
             logger.info("All %d tags already ingested for %s", len(tags), repo_name)
             if progress:
                 progress.add_task(
-                    f"[green]{repo_name} tags", total=len(tags), completed=len(tags),
+                    f"[green]{repo_name} tags",
+                    total=len(tags),
+                    completed=len(tags),
                 )
             # Still restore submodule to latest tag
             if latest_tag:
@@ -251,7 +255,10 @@ class CodeIngestor:
 
         logger.info(
             "Processing %d tags for %s (%d already ingested, %d total selected)",
-            len(pending_tags), repo_name, len(ingested_tags), len(tags),
+            len(pending_tags),
+            repo_name,
+            len(ingested_tags),
+            len(tags),
         )
 
         total_chunks = 0
@@ -259,7 +266,11 @@ class CodeIngestor:
         try:
             for tag in pending_tags:
                 tag_chunks = await self._process_tag(
-                    repo_name, repo_path, tag, session, embed_client,
+                    repo_name,
+                    repo_path,
+                    tag,
+                    session,
+                    embed_client,
                     progress=progress,
                 )
                 total_chunks += tag_chunks
@@ -281,7 +292,10 @@ class CodeIngestor:
                     progress.update(task, advance=1)
 
                 logger.info(
-                    "  %s @ %s — %d chunks", repo_name, tag, tag_chunks,
+                    "  %s @ %s — %d chunks",
+                    repo_name,
+                    tag,
+                    tag_chunks,
                 )
         finally:
             # Always restore submodule to the latest selected tag
@@ -294,7 +308,9 @@ class CodeIngestor:
 
         logger.info(
             "Completed %s: %d chunks across %d tags",
-            repo_name, total_chunks, len(pending_tags),
+            repo_name,
+            total_chunks,
+            len(pending_tags),
         )
         return total_chunks
 
@@ -382,7 +398,8 @@ class CodeIngestor:
                     except Exception:
                         logger.warning(
                             "Embedding failed for %s::%s — skipping",
-                            chunk.module_name, chunk.function_name,
+                            chunk.module_name,
+                            chunk.function_name,
                             exc_info=True,
                         )
                         continue
@@ -390,7 +407,11 @@ class CodeIngestor:
                 chunk_id = uuid.uuid4()
 
                 # Detect test files by path convention
-                is_test = "/test/" in chunk.file_path or "/Test/" in chunk.file_path or "/testlib/" in chunk.file_path
+                is_test = (
+                    "/test/" in chunk.file_path
+                    or "/Test/" in chunk.file_path
+                    or "/testlib/" in chunk.file_path
+                )
 
                 await session.execute(
                     text("""
@@ -472,8 +493,7 @@ class CodeIngestor:
         to fix gaps from partial indexing.
         """
         # Use a subquery with ROW_NUMBER to deduplicate before inserting
-        result = await session.execute(
-            text("""
+        result = await session.execute(text("""
                 INSERT INTO code_tag_manifest (repo, release_tag, file_path, function_name, content_hash)
                 SELECT repo, release_tag, file_path, function_name, content_hash
                 FROM (
@@ -487,8 +507,7 @@ class CodeIngestor:
                 WHERE rn = 1
                 ON CONFLICT (repo, release_tag, file_path, function_name)
                 DO UPDATE SET content_hash = EXCLUDED.content_hash
-            """)
-        )
+            """))
         await session.commit()
         count_result = await session.execute(text("SELECT count(*) FROM code_tag_manifest"))
         return count_result.scalar()
@@ -508,8 +527,7 @@ class CodeIngestor:
         from vibe.tools.ingest.config import CODE_REPOS
 
         # Get all tags with data, grouped by repo
-        result = await session.execute(
-            text("""
+        result = await session.execute(text("""
                 SELECT repo, release_tag,
                        COUNT(*) as chunk_count,
                        COUNT(DISTINCT file_path) as db_file_count,
@@ -517,21 +535,16 @@ class CodeIngestor:
                 FROM code_chunks
                 GROUP BY repo, release_tag
                 ORDER BY repo, release_tag
-            """)
-        )
+            """))
         tag_rows = result.fetchall()
 
         # Get manifest file counts per tag
-        manifest_result = await session.execute(
-            text("""
+        manifest_result = await session.execute(text("""
                 SELECT repo, release_tag, COUNT(DISTINCT file_path) as manifest_file_count
                 FROM code_tag_manifest
                 GROUP BY repo, release_tag
-            """)
-        )
-        manifest_map = {
-            (row[0], row[1]): row[2] for row in manifest_result.fetchall()
-        }
+            """))
+        manifest_map = {(row[0], row[1]): row[2] for row in manifest_result.fetchall()}
 
         project_root = Path(__file__).resolve().parents[6]
         marked = 0
@@ -542,7 +555,10 @@ class CodeIngestor:
             if embedded_count < chunk_count:
                 logger.info(
                     "  SKIP %s @ %s: %d/%d chunks missing embeddings",
-                    repo, tag, chunk_count - embedded_count, chunk_count,
+                    repo,
+                    tag,
+                    chunk_count - embedded_count,
+                    chunk_count,
                 )
                 skipped += 1
                 continue
@@ -557,7 +573,10 @@ class CodeIngestor:
             if manifest_file_count != db_file_count:
                 logger.info(
                     "  SKIP %s @ %s: manifest has %d files, chunks has %d files",
-                    repo, tag, manifest_file_count, db_file_count,
+                    repo,
+                    tag,
+                    manifest_file_count,
+                    db_file_count,
                 )
                 skipped += 1
                 continue
@@ -579,7 +598,10 @@ class CodeIngestor:
             try:
                 hs_result = subprocess.run(
                     ["git", "ls-tree", "-r", "--name-only", tag],
-                    cwd=repo_path, capture_output=True, text=True, timeout=30,
+                    cwd=repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 if hs_result.returncode != 0:
                     logger.info("  SKIP %s @ %s: git ls-tree failed", repo, tag)
@@ -588,12 +610,15 @@ class CodeIngestor:
 
                 git_files = hs_result.stdout.strip().splitlines()
                 git_source_files = [
-                    f for f in git_files
-                    if f.endswith(".hs") or f.endswith(".agda")
-                    or f.endswith(".lagda") or f.endswith(".lagda.md")
+                    f
+                    for f in git_files
+                    if f.endswith(".hs")
+                    or f.endswith(".agda")
+                    or f.endswith(".lagda")
+                    or f.endswith(".lagda.md")
                 ]
                 git_file_count = len(git_source_files)
-            except (subprocess.TimeoutExpired, OSError):
+            except subprocess.TimeoutExpired, OSError:
                 logger.info("  SKIP %s @ %s: git ls-tree timed out", repo, tag)
                 skipped += 1
                 continue
@@ -606,7 +631,11 @@ class CodeIngestor:
                 if coverage < 0.5:
                     logger.info(
                         "  SKIP %s @ %s: only %d/%d files in DB (%.0f%% coverage)",
-                        repo, tag, db_file_count, git_file_count, coverage * 100,
+                        repo,
+                        tag,
+                        db_file_count,
+                        git_file_count,
+                        coverage * 100,
                     )
                     skipped += 1
                     continue
@@ -623,7 +652,11 @@ class CodeIngestor:
             marked += 1
             logger.info(
                 "  OK   %s @ %s: %d chunks, %d/%d files (%.0f%% of %d on disk)",
-                repo, tag, chunk_count, db_file_count, manifest_file_count,
+                repo,
+                tag,
+                chunk_count,
+                db_file_count,
+                manifest_file_count,
                 (db_file_count / git_file_count * 100) if git_file_count > 0 else 100,
                 git_file_count,
             )

@@ -26,10 +26,9 @@ from __future__ import annotations
 
 import enum
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # State machine model (test-only, not production code)
@@ -46,6 +45,7 @@ class PeerState(enum.Enum):
         COOLING_OFF  ~ post-disconnect backoff (not in Haskell's SM
                        directly, but modelled by the governor's backoff logic)
     """
+
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
     CONNECTED = "connected"
@@ -256,17 +256,11 @@ class TestAllValidTransitions:
     @pytest.mark.parametrize(
         "from_state,to_state",
         sorted(
-            [
-                (src, dst)
-                for src, dsts in VALID_TRANSITIONS.items()
-                for dst in dsts
-            ],
+            [(src, dst) for src, dsts in VALID_TRANSITIONS.items() for dst in dsts],
             key=lambda x: (x[0].value, x[1].value),
         ),
     )
-    def test_valid_transition_succeeds(
-        self, from_state: PeerState, to_state: PeerState
-    ) -> None:
+    def test_valid_transition_succeeds(self, from_state: PeerState, to_state: PeerState) -> None:
         peer = PeerInfo(peer_id="test", state=from_state)
         peer.transition_to(to_state)
         assert peer.state == to_state
@@ -287,9 +281,7 @@ class TestAllInvalidTransitions:
             key=lambda x: (x[0].value, x[1].value),
         ),
     )
-    def test_invalid_transition_raises(
-        self, from_state: PeerState, to_state: PeerState
-    ) -> None:
+    def test_invalid_transition_raises(self, from_state: PeerState, to_state: PeerState) -> None:
         peer = PeerInfo(peer_id="test", state=from_state)
         with pytest.raises(InvalidTransitionError):
             peer.transition_to(to_state)
@@ -311,7 +303,7 @@ class TestPruneInactivePeers:
         # Backdate the stale peer's last_connected
         now = time.monotonic()
         mgr.get_peer("stale").last_connected = now - 120  # 2 min ago
-        mgr.get_peer("active").last_connected = now - 5   # 5s ago
+        mgr.get_peer("active").last_connected = now - 5  # 5s ago
 
         pruned = mgr.prune(max_idle=60, now=now)
 

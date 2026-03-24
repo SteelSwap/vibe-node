@@ -27,7 +27,6 @@ from vibe.cardano.storage.immutable import (
     ImmutableDB,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -154,6 +153,7 @@ class TestImmutableDBTipTracking:
         assert len(tip_key) == 40
         # First 8 bytes encode the slot
         import struct
+
         tip_slot = struct.unpack(">Q", tip_key[:8])[0]
         assert tip_slot == 100
         assert tip_key[8:40] == bh

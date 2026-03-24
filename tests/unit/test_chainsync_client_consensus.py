@@ -26,40 +26,37 @@ from unittest.mock import AsyncMock
 
 import cbor2
 import pytest
-from hypothesis import given, settings, HealthCheck
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from vibe.core.protocols.agency import Agency, PeerRole, ProtocolError
 from vibe.cardano.network.chainsync import (
-    Point,
-    Origin,
     ORIGIN,
-    Tip,
+    Point,
     PointOrOrigin,
-    encode_request_next,
+    Tip,
     encode_find_intersect,
-    encode_done,
-    encode_await_reply,
-    encode_roll_forward,
-    encode_roll_backward,
     encode_intersect_found,
     encode_intersect_not_found,
+    encode_request_next,
+    encode_roll_backward,
+    encode_roll_forward,
 )
 from vibe.cardano.network.chainsync_protocol import (
-    ChainSyncState,
-    ChainSyncProtocol,
-    ChainSyncCodec,
     ChainSyncClient,
-    CsMsgRequestNext,
+    ChainSyncCodec,
+    ChainSyncProtocol,
+    ChainSyncState,
     CsMsgAwaitReply,
-    CsMsgRollForward,
-    CsMsgRollBackward,
+    CsMsgDone,
     CsMsgFindIntersect,
     CsMsgIntersectFound,
     CsMsgIntersectNotFound,
-    CsMsgDone,
+    CsMsgRequestNext,
+    CsMsgRollBackward,
+    CsMsgRollForward,
     run_chain_sync,
 )
+from vibe.core.protocols.agency import PeerRole, ProtocolError
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -185,9 +182,7 @@ class TestRollbackValidation:
         client, runner = _make_client()
 
         # Server rolls back to point 5 -- within bounds
-        runner.recv_message.return_value = CsMsgRollBackward(
-            point=POINT_5, tip=TIP_10
-        )
+        runner.recv_message.return_value = CsMsgRollBackward(point=POINT_5, tip=TIP_10)
 
         result = await client.request_next()
         assert isinstance(result, CsMsgRollBackward)
@@ -207,9 +202,7 @@ class TestRollbackValidation:
 
         client, runner = _make_client()
         rollback_point = Point(slot=rollback_to_slot, hash=HASH_A)
-        runner.recv_message.return_value = CsMsgRollBackward(
-            point=rollback_point, tip=TIP_100
-        )
+        runner.recv_message.return_value = CsMsgRollBackward(point=rollback_point, tip=TIP_100)
 
         result = await client.request_next()
         assert isinstance(result, CsMsgRollBackward)
@@ -222,9 +215,7 @@ class TestRollbackValidation:
     async def test_rollback_to_origin_is_max_depth(self) -> None:
         """Rollback to Origin is the maximum possible rollback depth."""
         client, runner = _make_client()
-        runner.recv_message.return_value = CsMsgRollBackward(
-            point=ORIGIN, tip=TIP_10
-        )
+        runner.recv_message.return_value = CsMsgRollBackward(point=ORIGIN, tip=TIP_10)
 
         result = await client.request_next()
         assert isinstance(result, CsMsgRollBackward)
@@ -300,13 +291,9 @@ class TestIntersectionFound:
         """Server finds intersection at one of the client's known points."""
         client, runner = _make_client()
 
-        runner.recv_message.return_value = CsMsgIntersectFound(
-            point=POINT_5, tip=TIP_10
-        )
+        runner.recv_message.return_value = CsMsgIntersectFound(point=POINT_5, tip=TIP_10)
 
-        point, tip = await client.find_intersection(
-            [POINT_10, POINT_5, POINT_1, ORIGIN]
-        )
+        point, tip = await client.find_intersection([POINT_10, POINT_5, POINT_1, ORIGIN])
         assert point == POINT_5
         assert tip == TIP_10
 
@@ -315,9 +302,7 @@ class TestIntersectionFound:
         """Intersection found at Origin when chains diverge completely."""
         client, runner = _make_client()
 
-        runner.recv_message.return_value = CsMsgIntersectFound(
-            point=ORIGIN, tip=TIP_10
-        )
+        runner.recv_message.return_value = CsMsgIntersectFound(point=ORIGIN, tip=TIP_10)
 
         point, tip = await client.find_intersection([ORIGIN])
         assert point == ORIGIN
@@ -357,9 +342,7 @@ class TestNoIntersection:
 
         runner.recv_message.return_value = CsMsgIntersectNotFound(tip=TIP_10)
 
-        point, tip = await client.find_intersection(
-            [POINT_1, POINT_2, POINT_3]
-        )
+        point, tip = await client.find_intersection([POINT_1, POINT_2, POINT_3])
         assert point is None
         assert tip == TIP_10
 
@@ -370,9 +353,7 @@ class TestNoIntersection:
         codec = ChainSyncCodec()
 
         # Encode FindIntersect response: IntersectNotFound
-        channel.recv.return_value = codec.encode(
-            CsMsgIntersectNotFound(tip=TIP_10)
-        )
+        channel.recv.return_value = codec.encode(CsMsgIntersectNotFound(tip=TIP_10))
         channel.send = AsyncMock()
 
         async def on_fwd(header, tip):
@@ -563,9 +544,7 @@ class TestChainSyncOverMockChannel:
 
                 # Respond with RollForward
                 header = _make_header(slot)
-                response = codec.encode(
-                    CsMsgRollForward(header=header, tip=TIP_5)
-                )
+                response = codec.encode(CsMsgRollForward(header=header, tip=TIP_5))
                 await server_to_client.put(response)
 
             # 3. Client sends RequestNext, server says AwaitReply then RollForward
@@ -639,9 +618,7 @@ class TestChainSyncOverMockChannel:
 
         channel = AsyncMock()
         channel.send = AsyncMock()
-        channel.recv = AsyncMock(
-            return_value=codec.encode(CsMsgIntersectNotFound(tip=TIP_5))
-        )
+        channel.recv = AsyncMock(return_value=codec.encode(CsMsgIntersectNotFound(tip=TIP_5)))
 
         from vibe.core.protocols.runner import ProtocolRunner
 

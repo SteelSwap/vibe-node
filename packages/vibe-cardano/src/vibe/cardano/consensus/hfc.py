@@ -33,11 +33,7 @@ from typing import Any, Final
 from vibe.cardano.consensus.slot_arithmetic import (
     BYRON_EPOCH_LENGTH,
     SHELLEY_EPOCH_LENGTH,
-    SlotConfig,
-    epoch_to_first_slot,
-    slot_to_epoch,
 )
-
 
 # ---------------------------------------------------------------------------
 # PastHorizonError — safe zone boundary exception
@@ -102,16 +98,16 @@ class Era(IntEnum):
 #: Spec ref: cardano-node ProtocolTransitionParams.
 #: Haskell ref: ``protocolInfo`` in ``Cardano.Node.Protocol.Cardano``
 PROTOCOL_VERSION_ERA: Final[dict[int, Era]] = {
-    1: Era.BYRON,       # Byron genesis
-    2: Era.SHELLEY,     # Byron -> Shelley hard fork
-    3: Era.ALLEGRA,     # Shelley -> Allegra (Shelley-MA)
-    4: Era.MARY,        # Allegra -> Mary (multi-asset)
-    5: Era.ALONZO,      # Mary -> Alonzo (Plutus V1)
-    6: Era.ALONZO,      # Alonzo intra-era update
-    7: Era.BABBAGE,     # Alonzo -> Babbage (Vasil)
-    8: Era.BABBAGE,     # Babbage intra-era update
-    9: Era.CONWAY,      # Babbage -> Conway (governance)
-    10: Era.CONWAY,     # Conway intra-era update
+    1: Era.BYRON,  # Byron genesis
+    2: Era.SHELLEY,  # Byron -> Shelley hard fork
+    3: Era.ALLEGRA,  # Shelley -> Allegra (Shelley-MA)
+    4: Era.MARY,  # Allegra -> Mary (multi-asset)
+    5: Era.ALONZO,  # Mary -> Alonzo (Plutus V1)
+    6: Era.ALONZO,  # Alonzo intra-era update
+    7: Era.BABBAGE,  # Alonzo -> Babbage (Vasil)
+    8: Era.BABBAGE,  # Babbage intra-era update
+    9: Era.CONWAY,  # Babbage -> Conway (governance)
+    10: Era.CONWAY,  # Conway intra-era update
 }
 
 #: Minimum major protocol version that triggers each era.
@@ -206,12 +202,12 @@ class HardForkConfig:
 #: Source: cardano-db-sync and cardano-node genesis files.
 MAINNET_TRANSITIONS: Final[dict[Era, int]] = {
     Era.BYRON: 0,
-    Era.SHELLEY: 208,    # Epoch 208 (2020-07-29)
-    Era.ALLEGRA: 236,    # Epoch 236 (2020-12-16)
-    Era.MARY: 251,       # Epoch 251 (2021-03-01)
-    Era.ALONZO: 290,     # Epoch 290 (2021-09-12)
-    Era.BABBAGE: 365,    # Epoch 365 (2022-09-22)
-    Era.CONWAY: 519,     # Epoch 519 (2025-01-29)
+    Era.SHELLEY: 208,  # Epoch 208 (2020-07-29)
+    Era.ALLEGRA: 236,  # Epoch 236 (2020-12-16)
+    Era.MARY: 251,  # Epoch 251 (2021-03-01)
+    Era.ALONZO: 290,  # Epoch 290 (2021-09-12)
+    Era.BABBAGE: 365,  # Epoch 365 (2022-09-22)
+    Era.CONWAY: 519,  # Epoch 519 (2025-01-29)
 }
 
 #: Pre-built mainnet config.
@@ -529,6 +525,7 @@ def validate_block(
     # Import era-specific validators lazily to avoid circular imports
     if era == Era.BYRON:
         from vibe.cardano.ledger.byron_rules import validate_byron_tx
+
         # Byron block validation: validate each transaction
         # block is expected to be a list of ByronTxAux
         errors: list[str] = []
@@ -541,6 +538,7 @@ def validate_block(
 
     elif era == Era.SHELLEY:
         from vibe.cardano.ledger.shelley import validate_shelley_tx
+
         errors = []
         if isinstance(block, list):
             for i, tx in enumerate(block):
@@ -558,6 +556,7 @@ def validate_block(
 
     elif era == Era.ALLEGRA:
         from vibe.cardano.ledger.allegra_mary import validate_allegra_utxo
+
         errors = []
         if isinstance(block, list):
             for i, tx in enumerate(block):
@@ -574,6 +573,7 @@ def validate_block(
 
     elif era == Era.MARY:
         from vibe.cardano.ledger.allegra_mary import validate_mary_tx
+
         errors = []
         if isinstance(block, list):
             for i, tx in enumerate(block):
@@ -590,6 +590,7 @@ def validate_block(
 
     elif era == Era.ALONZO:
         from vibe.cardano.ledger.alonzo import validate_alonzo_tx
+
         errors = []
         if isinstance(block, list):
             for i, tx in enumerate(block):
@@ -607,6 +608,7 @@ def validate_block(
 
     elif era == Era.BABBAGE:
         from vibe.cardano.ledger.babbage import validate_babbage_tx
+
         errors = []
         if isinstance(block, list):
             for i, tx in enumerate(block):
@@ -627,6 +629,7 @@ def validate_block(
         # For now, dispatch to Babbage validation — governance rules are
         # applied separately via conway.py.
         from vibe.cardano.ledger.babbage import validate_babbage_tx
+
         errors = []
         if isinstance(block, list):
             for i, tx in enumerate(block):
@@ -757,9 +760,7 @@ def translate_through_eras(
         ValueError: If to_era < from_era.
     """
     if to_era < from_era:
-        raise ValueError(
-            f"Cannot translate backward: {from_era.name} -> {to_era.name}"
-        )
+        raise ValueError(f"Cannot translate backward: {from_era.name} -> {to_era.name}")
 
     if to_era == from_era:
         return TranslatedState(
@@ -774,9 +775,7 @@ def translate_through_eras(
 
     while current_era < to_era:
         next_era = Era(current_era + 1)
-        result = translate_ledger_state(
-            current_era, next_era, current_utxo, current_params
-        )
+        result = translate_ledger_state(current_era, next_era, current_utxo, current_params)
         current_utxo = result.utxo_set
         current_params = result.protocol_params
         current_era = next_era
@@ -984,9 +983,7 @@ def invariant_check(config: HardForkConfig) -> list[str]:
     # Invariant 5: First era starts at epoch 0
     first_era, first_epoch = sorted_eras[0]
     if first_epoch != 0:
-        violations.append(
-            f"First era ({first_era.name}) must start at epoch 0, got {first_epoch}"
-        )
+        violations.append(f"First era ({first_era.name}) must start at epoch 0, got {first_epoch}")
 
     # Invariant 1: Era transition epochs are strictly increasing
     # Check in era enum order (chronological), not sorted-by-epoch order,
@@ -1023,9 +1020,7 @@ def invariant_check(config: HardForkConfig) -> list[str]:
                 f"{era.name} epoch_length must be positive, got {params.epoch_length}"
             )
         if params.slot_length <= 0:
-            violations.append(
-                f"{era.name} slot_length must be positive, got {params.slot_length}"
-            )
+            violations.append(f"{era.name} slot_length must be positive, got {params.slot_length}")
 
     # Invariant 2: Era start slots are contiguous (no overlap, no gap)
     # This is implied by the epoch-based transitions + epoch_length but

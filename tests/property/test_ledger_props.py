@@ -28,28 +28,27 @@ from __future__ import annotations
 import hashlib
 
 import pytest
-from hypothesis import given, settings, assume
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
-
 from pycardano import (
     Transaction,
     TransactionBody,
     TransactionInput,
     TransactionOutput,
 )
+from pycardano.address import Address
 from pycardano.hash import TransactionId
 from pycardano.key import PaymentSigningKey, PaymentVerificationKey
-from pycardano.witness import TransactionWitnessSet, VerificationKeyWitness
-from pycardano.address import Address
 from pycardano.network import Network
+from pycardano.witness import TransactionWitnessSet, VerificationKeyWitness
 
 from vibe.cardano.ledger.shelley import (
     ShelleyProtocolParams,
     ShelleyUTxO,
     ShelleyValidationError,
+    _output_lovelace,
     apply_shelley_tx,
     shelley_min_fee,
-    _output_lovelace,
 )
 
 # Mark all tests in this module as property tests
@@ -166,9 +165,7 @@ class TestNoDoubleSpend:
             tx = Transaction(tx_body, TransactionWitnessSet(vkey_witnesses=[wit]))
 
             try:
-                current_utxo = apply_shelley_tx(
-                    tx, current_utxo, TEST_PARAMS, current_slot=0
-                )
+                current_utxo = apply_shelley_tx(tx, current_utxo, TEST_PARAMS, current_slot=0)
             except ShelleyValidationError:
                 break
 
@@ -176,9 +173,9 @@ class TestNoDoubleSpend:
             all_consumed.append(txin)
 
         # Verify: no input was consumed twice
-        assert len(all_consumed) == len(set(all_consumed)), (
-            f"Double spend detected! Consumed inputs: {all_consumed}"
-        )
+        assert len(all_consumed) == len(
+            set(all_consumed)
+        ), f"Double spend detected! Consumed inputs: {all_consumed}"
 
 
 # ---------------------------------------------------------------------------
@@ -228,9 +225,7 @@ class TestOutputsAppearInUtxo:
         tx_id = tx_body.id
         for i in range(num_outputs):
             expected_txin = TransactionInput(tx_id, i)
-            assert expected_txin in new_utxo, (
-                f"Output {i} not found in UTxO after tx application"
-            )
+            assert expected_txin in new_utxo, f"Output {i} not found in UTxO after tx application"
             assert _output_lovelace(new_utxo[expected_txin]) == 2_000_000
 
 
@@ -264,13 +259,9 @@ class TestFeeMonotonicity:
         fee2 = shelley_min_fee(size2, params)
 
         if size1 < size2:
-            assert fee1 < fee2, (
-                f"Fee should increase: size={size1}->{size2}, fee={fee1}->{fee2}"
-            )
+            assert fee1 < fee2, f"Fee should increase: size={size1}->{size2}, fee={fee1}->{fee2}"
         else:
-            assert fee1 > fee2, (
-                f"Fee should decrease: size={size1}->{size2}, fee={fee1}->{fee2}"
-            )
+            assert fee1 > fee2, f"Fee should decrease: size={size1}->{size2}, fee={fee1}->{fee2}"
 
 
 # ---------------------------------------------------------------------------

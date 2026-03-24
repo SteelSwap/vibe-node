@@ -24,16 +24,6 @@ import enum
 import logging
 import random
 
-from vibe.core.protocols.agency import (
-    Agency,
-    Message,
-    Protocol,
-    ProtocolError,
-    PeerRole,
-)
-from vibe.core.protocols.codec import Codec, CodecError
-from vibe.core.protocols.runner import ProtocolRunner
-
 from vibe.cardano.network.keepalive import (
     COOKIE_MAX,
     COOKIE_MIN,
@@ -45,6 +35,15 @@ from vibe.cardano.network.keepalive import (
     encode_keep_alive,
     encode_keep_alive_response,
 )
+from vibe.core.protocols.agency import (
+    Agency,
+    Message,
+    PeerRole,
+    Protocol,
+    ProtocolError,
+)
+from vibe.core.protocols.codec import CodecError
+from vibe.core.protocols.runner import ProtocolRunner
 
 __all__ = [
     "KeepAliveState",
@@ -149,12 +148,8 @@ class KaMsgDone(Message[KeepAliveState]):
 # ---------------------------------------------------------------------------
 
 # Pre-computed frozen sets for valid_messages.
-_CLIENT_MESSAGES: frozenset[type[Message[KeepAliveState]]] = frozenset(
-    {KaMsgKeepAlive, KaMsgDone}
-)
-_SERVER_MESSAGES: frozenset[type[Message[KeepAliveState]]] = frozenset(
-    {KaMsgKeepAliveResponse}
-)
+_CLIENT_MESSAGES: frozenset[type[Message[KeepAliveState]]] = frozenset({KaMsgKeepAlive, KaMsgDone})
+_SERVER_MESSAGES: frozenset[type[Message[KeepAliveState]]] = frozenset({KaMsgKeepAliveResponse})
 _DONE_MESSAGES: frozenset[type[Message[KeepAliveState]]] = frozenset()
 
 
@@ -194,9 +189,7 @@ class KeepAliveProtocol(Protocol[KeepAliveState]):
         except KeyError:
             raise ProtocolError(f"Unknown keep-alive state: {state!r}")
 
-    def valid_messages(
-        self, state: KeepAliveState
-    ) -> frozenset[type[Message[KeepAliveState]]]:
+    def valid_messages(self, state: KeepAliveState) -> frozenset[type[Message[KeepAliveState]]]:
         try:
             return self._VALID_MESSAGES[state]
         except KeyError:
@@ -226,9 +219,7 @@ class KeepAliveCodec:
         elif isinstance(message, KaMsgDone):
             return encode_done()
         else:
-            raise CodecError(
-                f"Unknown keep-alive message type: {type(message).__name__}"
-            )
+            raise CodecError(f"Unknown keep-alive message type: {type(message).__name__}")
 
     def decode(self, data: bytes) -> Message[KeepAliveState]:
         """Decode CBOR bytes into a typed keep-alive message."""
@@ -244,9 +235,7 @@ class KeepAliveCodec:
         elif isinstance(msg, MsgDone):
             return KaMsgDone()
         else:
-            raise CodecError(
-                f"Failed to decode keep-alive message ({len(data)} bytes)"
-            )
+            raise CodecError(f"Failed to decode keep-alive message ({len(data)} bytes)")
 
 
 # ---------------------------------------------------------------------------
@@ -307,15 +296,10 @@ class KeepAliveClient:
         response = await self._runner.recv_message()
 
         if not isinstance(response, KaMsgKeepAliveResponse):
-            raise ProtocolError(
-                f"Expected MsgKeepAliveResponse, got: "
-                f"{type(response).__name__}"
-            )
+            raise ProtocolError(f"Expected MsgKeepAliveResponse, got: {type(response).__name__}")
 
         if response.cookie != cookie:
-            raise ProtocolError(
-                f"Cookie mismatch: sent {cookie}, got {response.cookie}"
-            )
+            raise ProtocolError(f"Cookie mismatch: sent {cookie}, got {response.cookie}")
 
         return response.cookie
 

@@ -421,18 +421,14 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
 
     elif msg_id == MSG_INTERSECT_FOUND:
         if len(msg) != 3:
-            raise ValueError(
-                f"MsgIntersectFound: expected 3 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgIntersectFound: expected 3 elements, got {len(msg)}")
         point = _decode_point(msg[1])
         tip = _decode_tip(msg[2])
         return MsgIntersectFound(point=point, tip=tip)
 
     elif msg_id == MSG_INTERSECT_NOT_FOUND:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgIntersectNotFound: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgIntersectNotFound: expected 2 elements, got {len(msg)}")
         tip = _decode_tip(msg[1])
         return MsgIntersectNotFound(tip=tip)
 
@@ -471,16 +467,12 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
 
     if msg_id == MSG_REQUEST_NEXT:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgRequestNext: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgRequestNext: expected 1 element, got {len(msg)}")
         return MsgRequestNext()
 
     elif msg_id == MSG_FIND_INTERSECT:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgFindIntersect: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgFindIntersect: expected 2 elements, got {len(msg)}")
         points = [_decode_point(p) for p in msg[1]]
         return MsgFindIntersect(points=points)
 

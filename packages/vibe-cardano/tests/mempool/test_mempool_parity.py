@@ -33,10 +33,9 @@ import asyncio
 from typing import Any
 
 import pytest
-from hypothesis import given, settings, HealthCheck
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from vibe.cardano.mempool.types import MempoolConfig
 from vibe.cardano.mempool.mempool import (
     Mempool,
     MempoolCapacityError,
@@ -45,7 +44,7 @@ from vibe.cardano.mempool.mempool import (
     MempoolValidationError,
     _compute_tx_id,
 )
-
+from vibe.cardano.mempool.types import MempoolConfig
 
 # ---------------------------------------------------------------------------
 # Mock validator with configurable rejection
@@ -324,7 +323,7 @@ async def test_concurrent_add_remove_snapshot_consistency():
     async def add_task(seed: int) -> None:
         try:
             await pool.add_tx(_make_tx(seed, 100))
-        except (MempoolCapacityError, MempoolDuplicateError):
+        except MempoolCapacityError, MempoolDuplicateError:
             pass
 
     async def remove_task(tx_id: bytes) -> None:
@@ -336,8 +335,7 @@ async def test_concurrent_add_remove_snapshot_consistency():
         computed = sum(t.validated_tx.tx_size for t in snap.tickets)
         if computed != snap.total_size_bytes:
             errors.append(
-                f"Snapshot inconsistency: computed={computed} "
-                f"vs reported={snap.total_size_bytes}"
+                f"Snapshot inconsistency: computed={computed} vs reported={snap.total_size_bytes}"
             )
 
     tasks = []
@@ -501,9 +499,7 @@ async def test_remove_all_then_readd():
 
     # Ticket numbers should continue from where gen1 left off.
     first_ticket = snap.tickets[0].ticket_no
-    assert first_ticket >= 5, (
-        f"Ticket numbers should not reset; got {first_ticket}"
-    )
+    assert first_ticket >= 5, f"Ticket numbers should not reset; got {first_ticket}"
 
 
 # ---------------------------------------------------------------------------
@@ -613,7 +609,7 @@ async def test_property_add_remove_cycle_capacity_invariant(
             try:
                 vtx = await pool.add_tx(tx)
                 added_ids.append(vtx.tx_id)
-            except (MempoolCapacityError, MempoolDuplicateError, MempoolValidationError):
+            except MempoolCapacityError, MempoolDuplicateError, MempoolValidationError:
                 pass
         elif op == "remove" and added_ids:
             tx_id = added_ids.pop(0)

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import os
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -94,24 +93,16 @@ class TestVRFTieBreaking:
         same_vrf = b"\xab" * 64
         low_hash = b"\x00" * 32
         high_hash = b"\xff" * 32
-        a = _make_candidate(
-            block_number=100, tip_hash=low_hash, vrf_output=same_vrf
-        )
-        b = _make_candidate(
-            block_number=100, tip_hash=high_hash, vrf_output=same_vrf
-        )
+        a = _make_candidate(block_number=100, tip_hash=low_hash, vrf_output=same_vrf)
+        b = _make_candidate(block_number=100, tip_hash=high_hash, vrf_output=same_vrf)
         assert compare_chains(a, b) == Preference.PREFER_FIRST
 
     def test_only_one_has_vrf_falls_to_hash(self) -> None:
         """When only one chain has VRF output, fall through to hash."""
         low_hash = b"\x00" * 32
         high_hash = b"\xff" * 32
-        a = _make_candidate(
-            block_number=100, tip_hash=low_hash, vrf_output=b"\xff" * 64
-        )
-        b = _make_candidate(
-            block_number=100, tip_hash=high_hash, vrf_output=None
-        )
+        a = _make_candidate(block_number=100, tip_hash=low_hash, vrf_output=b"\xff" * 64)
+        b = _make_candidate(block_number=100, tip_hash=high_hash, vrf_output=None)
         # VRF comparison skipped (only one has it), falls to hash
         assert compare_chains(a, b) == Preference.PREFER_FIRST
 
@@ -178,25 +169,19 @@ class TestShouldSwitchTo:
         ours = _make_candidate(block_number=100)
         candidate = _make_candidate(block_number=101)
         # Fork point at block 99 — depth 1, well within k=2160
-        assert should_switch_to(
-            ours, candidate, fork_point_block_number=99
-        ) is True
+        assert should_switch_to(ours, candidate, fork_point_block_number=99) is True
 
     def test_fork_at_exactly_k_allows_switch(self) -> None:
         ours = _make_candidate(block_number=2260)
         candidate = _make_candidate(block_number=2261)
         # Fork point at block 100 — depth = 2260 - 100 = 2160 = k
-        assert should_switch_to(
-            ours, candidate, fork_point_block_number=100
-        ) is True
+        assert should_switch_to(ours, candidate, fork_point_block_number=100) is True
 
     def test_fork_deeper_than_k_rejects(self) -> None:
         ours = _make_candidate(block_number=2261)
         candidate = _make_candidate(block_number=2262)
         # Fork point at block 100 — depth = 2261 - 100 = 2161 > k
-        assert should_switch_to(
-            ours, candidate, fork_point_block_number=100
-        ) is False
+        assert should_switch_to(ours, candidate, fork_point_block_number=100) is False
 
     def test_no_fork_point_only_checks_length(self) -> None:
         """Without fork point info, only length is checked."""
@@ -208,13 +193,9 @@ class TestShouldSwitchTo:
         ours = _make_candidate(block_number=20)
         candidate = _make_candidate(block_number=21)
         # Fork at block 0, depth = 20, k = 10 — too deep
-        assert should_switch_to(
-            ours, candidate, k=10, fork_point_block_number=0
-        ) is False
+        assert should_switch_to(ours, candidate, k=10, fork_point_block_number=0) is False
         # Same scenario with k=20 — exactly at limit, allowed
-        assert should_switch_to(
-            ours, candidate, k=20, fork_point_block_number=0
-        ) is True
+        assert should_switch_to(ours, candidate, k=20, fork_point_block_number=0) is True
 
     def test_security_param_constant(self) -> None:
         assert SECURITY_PARAM_K == 2160

@@ -38,7 +38,7 @@ from __future__ import annotations
 import os
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -58,14 +58,16 @@ __all__ = [
 # Arrow schema for the UTxO table
 # ---------------------------------------------------------------------------
 
-UTXO_SCHEMA = pa.schema([
-    pa.field("key", pa.binary()),          # 34-byte TxIn: tx_hash(32) + tx_index(2)
-    pa.field("tx_hash", pa.binary()),      # 32-byte transaction hash
-    pa.field("tx_index", pa.uint16()),     # Output index within the transaction
-    pa.field("address", pa.string()),      # Bech32 or hex address
-    pa.field("value", pa.uint64()),        # Lovelace value
-    pa.field("datum_hash", pa.binary()),   # Optional datum hash (empty bytes if none)
-])
+UTXO_SCHEMA = pa.schema(
+    [
+        pa.field("key", pa.binary()),  # 34-byte TxIn: tx_hash(32) + tx_index(2)
+        pa.field("tx_hash", pa.binary()),  # 32-byte transaction hash
+        pa.field("tx_index", pa.uint16()),  # Output index within the transaction
+        pa.field("address", pa.string()),  # Bech32 or hex address
+        pa.field("value", pa.uint64()),  # Lovelace value
+        pa.field("datum_hash", pa.binary()),  # Optional datum hash (empty bytes if none)
+    ]
+)
 
 
 # ---------------------------------------------------------------------------
@@ -106,8 +108,7 @@ class ExceededRollbackError(Exception):
         self.rollback_maximum = rollback_maximum
         self.rollback_requested = rollback_requested
         super().__init__(
-            f"Exceeded rollback: requested={rollback_requested}, "
-            f"maximum={rollback_maximum}"
+            f"Exceeded rollback: requested={rollback_requested}, maximum={rollback_maximum}"
         )
 
 
@@ -407,10 +408,7 @@ class LedgerDB:
 
         # Rebuild the index.
         old_to_new = {old: new for new, old in enumerate(live_indices)}
-        self._index = {
-            key: old_to_new[old_idx]
-            for key, old_idx in self._index.items()
-        }
+        self._index = {key: old_to_new[old_idx] for key, old_idx in self._index.items()}
         self._free_rows.clear()
 
     # -- StateStore protocol: batch operations --------------------------------
@@ -525,7 +523,4 @@ class LedgerDB:
         return key in self._index
 
     def __repr__(self) -> str:
-        return (
-            f"LedgerDB(k={self._k}, utxos={self.utxo_count}, "
-            f"diffs={len(self._diffs)})"
-        )
+        return f"LedgerDB(k={self._k}, utxos={self.utxo_count}, diffs={len(self._diffs)})"

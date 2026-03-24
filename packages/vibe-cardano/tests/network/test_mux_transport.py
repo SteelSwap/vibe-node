@@ -23,11 +23,8 @@ import pytest
 
 from vibe.core.multiplexer import (
     Bearer,
-    BearerClosedError,
-    MiniProtocolChannel,
     Multiplexer,
     MuxClosedError,
-    MuxSegment,
 )
 
 # ---------------------------------------------------------------------------
@@ -73,16 +70,13 @@ async def _force_close_mux(mux: Multiplexer, task: asyncio.Task) -> None:
         task.cancel()
     try:
         await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
-    except (asyncio.CancelledError, MuxClosedError, ConnectionError,
-            TimeoutError, Exception):
+    except asyncio.CancelledError, MuxClosedError, ConnectionError, TimeoutError, Exception:
         pass
     # Brief delay to let OS release the socket (prevents port conflict with next test)
     await asyncio.sleep(0.01)
 
 
-async def _cleanup(
-    *bearers: Bearer, server: asyncio.Server | None = None
-) -> None:
+async def _cleanup(*bearers: Bearer, server: asyncio.Server | None = None) -> None:
     """Close bearers and server."""
     for b in bearers:
         await b.close()
@@ -190,8 +184,7 @@ async def test_mux_close_tcp() -> None:
             t_init.cancel()
             try:
                 await asyncio.wait_for(t_init, timeout=2.0)
-            except (asyncio.CancelledError, MuxClosedError, ConnectionError,
-                    TimeoutError):
+            except asyncio.CancelledError, MuxClosedError, ConnectionError, TimeoutError:
                 pass
 
         # Responder run() should exit due to bearer disconnect.
@@ -272,7 +265,7 @@ async def test_mux_trailing_bytes_tcp() -> None:
         client_b._writer.write(b"\xff\xff\xff\xff")
         try:
             await client_b._writer.drain()
-        except (ConnectionError, OSError):
+        except ConnectionError, OSError:
             pass
 
         # Force-close both sides

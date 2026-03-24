@@ -22,11 +22,10 @@ Haskell references:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
 
 from vibe.cardano.ledger.alonzo_types import AlonzoProtocolParams
-
 
 # ---------------------------------------------------------------------------
 # Datum option — inline datum vs datum hash

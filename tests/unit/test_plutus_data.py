@@ -18,21 +18,19 @@ Haskell references:
 
 from __future__ import annotations
 
-import pytest
-
 from uplc.ast import (
+    PlutusByteString,
     PlutusConstr,
     PlutusData,
     PlutusInteger,
-    PlutusByteString,
     PlutusList,
     PlutusMap,
-    plutus_cbor_dumps,
     data_from_cbor,
     data_from_json_dict,
+    plutus_cbor_dumps,
 )
-from uplc.tools import parse, eval as uplc_eval
-
+from uplc.tools import eval as uplc_eval
+from uplc.tools import parse
 
 # ---------------------------------------------------------------------------
 # 1. PlutusData CBOR round-trip
@@ -86,11 +84,15 @@ class TestPlutusDataCborRoundtrip:
         self._assert_roundtrip(PlutusList([PlutusInteger(i) for i in range(5)]))
 
     def test_heterogeneous_list(self):
-        self._assert_roundtrip(PlutusList([
-            PlutusInteger(1),
-            PlutusByteString(b"abc"),
-            PlutusList([]),
-        ]))
+        self._assert_roundtrip(
+            PlutusList(
+                [
+                    PlutusInteger(1),
+                    PlutusByteString(b"abc"),
+                    PlutusList([]),
+                ]
+            )
+        )
 
     # --- Maps ---
 
@@ -98,16 +100,24 @@ class TestPlutusDataCborRoundtrip:
         self._assert_roundtrip(PlutusMap(()))
 
     def test_simple_map(self):
-        self._assert_roundtrip(PlutusMap((
-            (PlutusInteger(1), PlutusByteString(b"one")),
-            (PlutusInteger(2), PlutusByteString(b"two")),
-        )))
+        self._assert_roundtrip(
+            PlutusMap(
+                (
+                    (PlutusInteger(1), PlutusByteString(b"one")),
+                    (PlutusInteger(2), PlutusByteString(b"two")),
+                )
+            )
+        )
 
     def test_map_with_bytestring_keys(self):
-        self._assert_roundtrip(PlutusMap((
-            (PlutusByteString(b"key1"), PlutusInteger(1)),
-            (PlutusByteString(b"key2"), PlutusInteger(2)),
-        )))
+        self._assert_roundtrip(
+            PlutusMap(
+                (
+                    (PlutusByteString(b"key1"), PlutusInteger(1)),
+                    (PlutusByteString(b"key2"), PlutusInteger(2)),
+                )
+            )
+        )
 
     # --- Constructors ---
 
@@ -145,16 +155,18 @@ class TestPlutusDataCborRoundtrip:
     # --- Nested structures ---
 
     def test_nested_constr_in_list(self):
-        self._assert_roundtrip(PlutusList([
-            PlutusConstr(0, [PlutusInteger(1)]),
-            PlutusConstr(1, [PlutusByteString(b"x")]),
-        ]))
+        self._assert_roundtrip(
+            PlutusList(
+                [
+                    PlutusConstr(0, [PlutusInteger(1)]),
+                    PlutusConstr(1, [PlutusByteString(b"x")]),
+                ]
+            )
+        )
 
     def test_deeply_nested(self):
         """3 levels deep: constr containing list containing map."""
-        inner_map = PlutusMap((
-            (PlutusInteger(1), PlutusByteString(b"v")),
-        ))
+        inner_map = PlutusMap(((PlutusInteger(1), PlutusByteString(b"v")),))
         inner_list = PlutusList([inner_map, PlutusInteger(99)])
         outer = PlutusConstr(0, [inner_list])
         self._assert_roundtrip(outer)
@@ -188,9 +200,7 @@ class TestPlutusDataJsonRoundtrip:
         assert data_from_json_dict(data.to_json()) == data
 
     def test_map(self):
-        data = PlutusMap((
-            (PlutusInteger(1), PlutusByteString(b"a")),
-        ))
+        data = PlutusMap(((PlutusInteger(1), PlutusByteString(b"a")),))
         assert data_from_json_dict(data.to_json()) == data
 
     def test_constr(self):
@@ -244,9 +254,7 @@ class TestTraceOutput:
     def test_trace_before_error(self):
         """Error after trace — CEK machine may or may not preserve traces."""
         prog = parse(
-            "(program 1.0.0 "
-            '[[(force (builtin trace)) (con string "before error")] '
-            "(error)])"
+            '(program 1.0.0 [[(force (builtin trace)) (con string "before error")] (error)])'
         )
         result = uplc_eval(prog)
         assert isinstance(result.result, Exception)

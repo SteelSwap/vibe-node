@@ -10,6 +10,7 @@ from dataclasses import dataclass
 @dataclass
 class Paper:
     """A research paper to download and ingest."""
+
     name: str
     url: str
     filename: str
@@ -61,7 +62,6 @@ PAPERS: list[Paper] = [
         era="multi-era",
         relevance="Clock synchronization and time assumptions for slot timing.",
     ),
-
     # ── Ledger & UTxO ───────────────────────────────────────────
     Paper(
         name="Formal Specification of the Cardano Blockchain Ledger (Agda)",
@@ -87,7 +87,6 @@ PAPERS: list[Paper] = [
         era="multi-era",
         relevance="UTxO set optimization and state management.",
     ),
-
     # ── Implementation Architecture ──────────────────────────────
     Paper(
         name="Cardano Consensus and Storage Layer (Technical Report)",

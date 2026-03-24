@@ -16,29 +16,25 @@ from __future__ import annotations
 
 import cbor2
 import pytest
-
 from uplc.ast import (
+    PlutusByteString,
     PlutusConstr,
     PlutusData,
     PlutusInteger,
-    PlutusByteString,
     PlutusList,
     PlutusMap,
     Program,
 )
-from uplc.cost_model import Budget
 from uplc.tools import flatten, parse
 
-from vibe.cardano.plutus.cost_model import CostModel, ExUnits, PlutusVersion
+from vibe.cardano.plutus.cost_model import ExUnits, PlutusVersion
 from vibe.cardano.plutus.evaluate import (
-    EvalResult,
     _cbor_tag_to_plutus_data,
     _cbor_value_to_plutus_data,
     deserialize_script,
     evaluate_script,
     pycardano_to_uplc_data,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -77,9 +73,9 @@ def _make_trace_script() -> bytes:
       ))))
     """
     program = parse(
-        '(program 1.1.0 (lam d (lam r (lam ctx '
+        "(program 1.1.0 (lam d (lam r (lam ctx "
         '[(force (builtin trace)) (con string "hello from plutus") (con unit ())]'
-        '))))'
+        "))))"
     )
     flat_bytes = flatten(program)
     return cbor2.dumps(flat_bytes)
@@ -394,7 +390,7 @@ class TestPlutusMapDuplicateKeys:
         val_b = PlutusInteger(200)
 
         # Dict input deduplicates (Python semantics)
-        m = PlutusMap({key1: val_a, key1: val_b})
+        m = PlutusMap({key1: val_a, key1: val_b})  # noqa: F602
         assert len(m.value) == 1
 
         # Tuple-of-pairs input preserves duplicates
@@ -403,16 +399,18 @@ class TestPlutusMapDuplicateKeys:
 
     def test_distinct_keys_preserved(self) -> None:
         """Verify distinct keys are all preserved."""
-        m = PlutusMap({
-            PlutusInteger(1): PlutusInteger(10),
-            PlutusInteger(2): PlutusInteger(20),
-            PlutusInteger(3): PlutusInteger(30),
-        })
+        m = PlutusMap(
+            {
+                PlutusInteger(1): PlutusInteger(10),
+                PlutusInteger(2): PlutusInteger(20),
+                PlutusInteger(3): PlutusInteger(30),
+            }
+        )
         assert len(m.value) == 3
 
     def test_cbor_round_trip_preserves_entries(self) -> None:
         """PlutusMap CBOR round-trip preserves entries."""
-        from uplc.ast import plutus_cbor_dumps, data_from_cbor
+        from uplc.ast import data_from_cbor, plutus_cbor_dumps
 
         key1 = PlutusInteger(1)
         key2 = PlutusInteger(2)

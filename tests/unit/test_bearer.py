@@ -29,7 +29,6 @@ from vibe.core.multiplexer.segment import (
     encode_segment,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers — mock stream factory
 # ---------------------------------------------------------------------------
@@ -107,7 +106,9 @@ class TestReadSegment:
     async def test_read_max_payload(self) -> None:
         """Read a segment with maximum payload size (65535 bytes)."""
         payload = b"\xab" * MAX_PAYLOAD_SIZE
-        seg = MuxSegment(timestamp=0xFFFFFFFF, protocol_id=0x7FFF, is_initiator=True, payload=payload)
+        seg = MuxSegment(
+            timestamp=0xFFFFFFFF, protocol_id=0x7FFF, is_initiator=True, payload=payload
+        )
         wire = encode_segment(seg)
         bearer, _ = _make_bearer(wire)
 
@@ -122,7 +123,9 @@ class TestReadSegment:
         DB test_specifications: test_bytestream_ordering_preserved_per_protocol
         """
         seg_a = MuxSegment(timestamp=100, protocol_id=2, is_initiator=True, payload=b"chain-sync")
-        seg_b = MuxSegment(timestamp=200, protocol_id=5, is_initiator=False, payload=b"block-fetch")
+        seg_b = MuxSegment(
+            timestamp=200, protocol_id=5, is_initiator=False, payload=b"block-fetch"
+        )
         wire = encode_segment(seg_a) + encode_segment(seg_b)
         bearer, _ = _make_bearer(wire)
 
@@ -231,7 +234,7 @@ class TestConnectionErrors:
         seg = MuxSegment(timestamp=0, protocol_id=0, is_initiator=True, payload=b"\x00" * 10)
         wire = encode_segment(seg)
         # Truncate: header (8 bytes) + only 5 of 10 payload bytes
-        bearer, _ = _make_bearer(wire[:SEGMENT_HEADER_SIZE + 5])
+        bearer, _ = _make_bearer(wire[: SEGMENT_HEADER_SIZE + 5])
 
         with pytest.raises(asyncio.IncompleteReadError):
             await bearer.read_segment()
@@ -331,7 +334,12 @@ class TestMultiProtocol:
     async def test_mini_protocols_share_single_bearer(self) -> None:
         """Multiple protocol_ids interleaved on one bearer demux correctly."""
         segments = [
-            MuxSegment(timestamp=i * 100, protocol_id=pid, is_initiator=True, payload=f"msg-{pid}".encode())
+            MuxSegment(
+                timestamp=i * 100,
+                protocol_id=pid,
+                is_initiator=True,
+                payload=f"msg-{pid}".encode(),
+            )
             for i, pid in enumerate([0, 2, 3, 5, 7])
         ]
         wire = b"".join(encode_segment(s) for s in segments)
@@ -357,7 +365,9 @@ class TestConnect:
         mock_reader = asyncio.StreamReader()
         mock_writer = _make_writer()
 
-        with patch("vibe.core.multiplexer.bearer.asyncio.open_connection", new_callable=AsyncMock) as mock_open:
+        with patch(
+            "vibe.core.multiplexer.bearer.asyncio.open_connection", new_callable=AsyncMock
+        ) as mock_open:
             mock_open.return_value = (mock_reader, mock_writer)
             bearer = await connect("127.0.0.1", 3001)
 
@@ -367,7 +377,9 @@ class TestConnect:
 
     async def test_connect_propagates_connection_error(self) -> None:
         """connect() propagates connection failures."""
-        with patch("vibe.core.multiplexer.bearer.asyncio.open_connection", new_callable=AsyncMock) as mock_open:
+        with patch(
+            "vibe.core.multiplexer.bearer.asyncio.open_connection", new_callable=AsyncMock
+        ) as mock_open:
             mock_open.side_effect = ConnectionRefusedError("refused")
 
             with pytest.raises(ConnectionRefusedError):

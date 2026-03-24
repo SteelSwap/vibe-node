@@ -17,8 +17,6 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any
 
-import pytest
-
 from pycardano.certificate import (
     PoolParams,
     PoolRegistration,
@@ -32,13 +30,12 @@ from pycardano.hash import PoolKeyHash, VerificationKeyHash, VrfKeyHash
 
 from vibe.cardano.ledger.delegation import (
     DelegationState,
+    _apply_cert_lenient,
     apply_block_certs,
     compute_pool_stake_distribution,
     extract_certs_from_tx,
-    _apply_cert_lenient,
 )
 from vibe.cardano.node.kernel import NodeKernel
-
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -88,12 +85,14 @@ def _make_pool_params(
 @dataclass
 class FakeTxBody:
     """Minimal transaction body with certificates."""
+
     certificates: list[Any] | None = None
 
 
 @dataclass
 class FakeTx:
     """Minimal transaction for testing cert extraction."""
+
     body: FakeTxBody | None = None
     valid: bool = True
 

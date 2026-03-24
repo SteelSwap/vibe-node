@@ -67,8 +67,14 @@ HAS_VRF_NATIVE: bool = False
 try:
     from vibe.cardano.crypto._vrf_native import (
         vrf_keypair as _native_keypair,
-        vrf_prove as _native_prove,
+    )
+    from vibe.cardano.crypto._vrf_native import (
         vrf_proof_to_hash as _native_proof_to_hash,
+    )
+    from vibe.cardano.crypto._vrf_native import (
+        vrf_prove as _native_prove,
+    )
+    from vibe.cardano.crypto._vrf_native import (
         vrf_verify as _native_verify,
     )
 
@@ -317,10 +323,7 @@ def certified_nat_max_check(
         out of range.
     """
     if len(vrf_output) != VRF_OUTPUT_SIZE:
-        msg = (
-            f"VRF output must be {VRF_OUTPUT_SIZE} bytes, "
-            f"got {len(vrf_output)}"
-        )
+        msg = f"VRF output must be {VRF_OUTPUT_SIZE} bytes, got {len(vrf_output)}"
         raise ValueError(msg)
 
     if not (0.0 <= sigma <= 1.0):

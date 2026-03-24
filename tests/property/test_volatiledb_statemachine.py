@@ -24,18 +24,16 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from hypothesis import settings, HealthCheck
+from hypothesis import HealthCheck, settings
+from hypothesis import strategies as st
 from hypothesis.stateful import (
     RuleBasedStateMachine,
-    initialize,
     invariant,
     precondition,
     rule,
 )
-from hypothesis import strategies as st
 
 from vibe.cardano.storage.volatile import BlockInfo, VolatileDB
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -120,10 +118,7 @@ class VolatileDBModel:
         return list(self.successors.get(block_hash, []))
 
     def gc(self, immutable_tip_slot: int) -> int:
-        to_remove = [
-            h for h, (info, _) in self.blocks.items()
-            if info.slot <= immutable_tip_slot
-        ]
+        to_remove = [h for h, (info, _) in self.blocks.items() if info.slot <= immutable_tip_slot]
         for h in to_remove:
             self._remove_block(h)
         return len(to_remove)
@@ -250,15 +245,12 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         real_removed = run_async(self._db.gc(gc_slot))
         model_removed = self._model.gc(gc_slot)
 
-        assert real_removed == model_removed, (
-            f"GC at slot {gc_slot}: real removed {real_removed}, "
-            f"model removed {model_removed}"
-        )
+        assert (
+            real_removed == model_removed
+        ), f"GC at slot {gc_slot}: real removed {real_removed}, model removed {model_removed}"
 
         # Clean up _added_hashes to reflect GC
-        self._added_hashes = [
-            h for h in self._added_hashes if h in self._model.blocks
-        ]
+        self._added_hashes = [h for h in self._added_hashes if h in self._model.blocks]
 
     @rule()
     @precondition(lambda self: not self._closed)
@@ -267,9 +259,7 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         real_max = run_async(self._db.get_max_slot())
         model_max = self._model.max_slot
 
-        assert real_max == model_max, (
-            f"max_slot mismatch: real={real_max}, model={model_max}"
-        )
+        assert real_max == model_max, f"max_slot mismatch: real={real_max}, model={model_max}"
 
     @rule()
     @precondition(lambda self: not self._closed)
@@ -320,20 +310,28 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         info, cbor = entry
         count_before = self._db.block_count
 
-        run_async(self._db.add_block(
-            block_hash, info.slot, info.predecessor_hash,
-            info.block_number, cbor,
-        ))
+        run_async(
+            self._db.add_block(
+                block_hash,
+                info.slot,
+                info.predecessor_hash,
+                info.block_number,
+                cbor,
+            )
+        )
         # Model: re-add is idempotent (same hash overwrites same data)
         self._model.add_block(
-            block_hash, info.slot, info.predecessor_hash,
-            info.block_number, cbor,
+            block_hash,
+            info.slot,
+            info.predecessor_hash,
+            info.block_number,
+            cbor,
         )
 
         # Block count should not increase
-        assert self._db.block_count == count_before, (
-            f"Duplicate add changed count: {count_before} -> {self._db.block_count}"
-        )
+        assert (
+            self._db.block_count == count_before
+        ), f"Duplicate add changed count: {count_before} -> {self._db.block_count}"
 
     # -- Invariants (checked after every step) --
 
@@ -342,10 +340,9 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         """len(real.all_blocks) == len(model)."""
         if self._closed:
             return
-        assert self._db.block_count == len(self._model.blocks), (
-            f"Block count: real={self._db.block_count}, "
-            f"model={len(self._model.blocks)}"
-        )
+        assert self._db.block_count == len(
+            self._model.blocks
+        ), f"Block count: real={self._db.block_count}, model={len(self._model.blocks)}"
 
     @invariant()
     def max_slot_matches(self):
@@ -354,9 +351,7 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
             return
         real_max = run_async(self._db.get_max_slot())
         model_max = self._model.max_slot
-        assert real_max == model_max, (
-            f"Max slot: real={real_max}, model={model_max}"
-        )
+        assert real_max == model_max, f"Max slot: real={real_max}, model={model_max}"
 
     @invariant()
     def successor_map_consistent(self):

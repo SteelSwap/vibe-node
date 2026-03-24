@@ -13,18 +13,15 @@ import asyncio
 
 import pytest
 
-from vibe.cardano.network.chainsync import Point, PointOrOrigin
 from vibe.cardano.network.blockfetch_protocol import (
-    BlockFetchCodec,
-    BfMsgRequestRange,
-    BfMsgClientDone,
-    BfMsgStartBatch,
-    BfMsgNoBlocks,
-    BfMsgBlock,
     BfMsgBatchDone,
+    BfMsgBlock,
+    BfMsgNoBlocks,
+    BfMsgStartBatch,
+    BlockFetchCodec,
     run_block_fetch_continuous,
 )
-
+from vibe.cardano.network.chainsync import Point, PointOrOrigin
 
 # ---------------------------------------------------------------------------
 # Fake channel (same pattern as test_blockfetch_pipelined.py)
@@ -75,9 +72,7 @@ class TestBlockFetchContinuousMultipleRanges:
     async def test_two_ranges_same_session(self) -> None:
         """Two ranges are fetched without tearing down the runner."""
         channel = FakeBlockFetchChannel()
-        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = (
-            asyncio.Queue()
-        )
+        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = asyncio.Queue()
         stop_event = asyncio.Event()
 
         received_blocks: list[bytes] = []
@@ -128,9 +123,7 @@ class TestBlockFetchContinuousMultipleRanges:
     async def test_three_ranges_all_blocks_arrive(self) -> None:
         """Three ranges produce correct total block count."""
         channel = FakeBlockFetchChannel()
-        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = (
-            asyncio.Queue()
-        )
+        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = asyncio.Queue()
         stop_event = asyncio.Event()
 
         received_blocks: list[bytes] = []
@@ -165,9 +158,7 @@ class TestBlockFetchContinuousMultipleRanges:
 
         await server_task
 
-        expected = [
-            f"r{r}-b{b}".encode() for r in range(3) for b in range(2)
-        ]
+        expected = [f"r{r}-b{b}".encode() for r in range(3) for b in range(2)]
         assert received_blocks == expected
 
 
@@ -178,9 +169,7 @@ class TestBlockFetchContinuousStopEvent:
     async def test_stop_event_on_empty_queue(self) -> None:
         """stop_event exits even when queue is empty."""
         channel = FakeBlockFetchChannel()
-        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = (
-            asyncio.Queue()
-        )
+        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = asyncio.Queue()
         stop_event = asyncio.Event()
 
         async def on_block(block_cbor: bytes) -> None:
@@ -211,9 +200,7 @@ class TestBlockFetchContinuousStopEvent:
     async def test_stop_after_one_range(self) -> None:
         """Process one range, then stop_event terminates before next."""
         channel = FakeBlockFetchChannel()
-        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = (
-            asyncio.Queue()
-        )
+        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = asyncio.Queue()
         stop_event = asyncio.Event()
 
         received_blocks: list[bytes] = []
@@ -255,9 +242,7 @@ class TestBlockFetchContinuousNoBlocks:
     async def test_no_blocks_callback_fires(self) -> None:
         """on_no_blocks is invoked when server responds with NoBlocks."""
         channel = FakeBlockFetchChannel()
-        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = (
-            asyncio.Queue()
-        )
+        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = asyncio.Queue()
         stop_event = asyncio.Event()
 
         no_blocks_calls: list[tuple[PointOrOrigin, PointOrOrigin]] = []
@@ -265,9 +250,7 @@ class TestBlockFetchContinuousNoBlocks:
         async def on_block(block_cbor: bytes) -> None:
             pytest.fail("No blocks should be received")
 
-        async def on_no_blocks(
-            p_from: PointOrOrigin, p_to: PointOrOrigin
-        ) -> None:
+        async def on_no_blocks(p_from: PointOrOrigin, p_to: PointOrOrigin) -> None:
             no_blocks_calls.append((p_from, p_to))
 
         await range_queue.put((_point(0), _point(100)))
@@ -299,9 +282,7 @@ class TestBlockFetchContinuousNoBlocks:
     async def test_mixed_no_blocks_and_blocks(self) -> None:
         """Mix of NoBlocks and block-bearing ranges in continuous mode."""
         channel = FakeBlockFetchChannel()
-        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = (
-            asyncio.Queue()
-        )
+        range_queue: asyncio.Queue[tuple[PointOrOrigin, PointOrOrigin]] = asyncio.Queue()
         stop_event = asyncio.Event()
 
         received_blocks: list[bytes] = []
@@ -310,9 +291,7 @@ class TestBlockFetchContinuousNoBlocks:
         async def on_block(block_cbor: bytes) -> None:
             received_blocks.append(block_cbor)
 
-        async def on_no_blocks(
-            p_from: PointOrOrigin, p_to: PointOrOrigin
-        ) -> None:
+        async def on_no_blocks(p_from: PointOrOrigin, p_to: PointOrOrigin) -> None:
             nonlocal no_blocks_count
             no_blocks_count += 1
 

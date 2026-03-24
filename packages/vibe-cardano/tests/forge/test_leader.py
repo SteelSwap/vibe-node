@@ -35,7 +35,6 @@ from vibe.cardano.forge.leader import (
     check_leadership,
 )
 
-
 # ---------------------------------------------------------------------------
 # VRF input construction
 # ---------------------------------------------------------------------------
@@ -276,6 +275,4 @@ class TestLeaderProbabilityMonotonic:
 
         # Monotonicity: if elected at lower stake, must be elected at higher
         if elected_low:
-            assert elected_high, (
-                f"Elected at stake {low_stake} but not at {high_stake}"
-            )
+            assert elected_high, f"Elected at stake {low_stake} but not at {high_stake}"

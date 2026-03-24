@@ -28,7 +28,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from vibe.cardano.mempool.types import (
     MempoolConfig,
@@ -489,7 +490,16 @@ class Mempool:
             self._total_size = new_total_size
 
             if removed_ids:
-                logger.info("Mempool sync: removed %d txs, %d remaining", len(removed_ids), len(self._tickets), extra={"event": "mempool.sync", "removed": len(removed_ids), "remaining": len(self._tickets)})
+                logger.info(
+                    "Mempool sync: removed %d txs, %d remaining",
+                    len(removed_ids),
+                    len(self._tickets),
+                    extra={
+                        "event": "mempool.sync",
+                        "removed": len(removed_ids),
+                        "remaining": len(self._tickets),
+                    },
+                )
 
             return removed_ids
 
@@ -547,7 +557,16 @@ class Mempool:
             self._tickets = new_tickets
 
             if evicted:
-                logger.info("Mempool eviction: %d expired txs, %d remaining", len(evicted), len(self._tickets), extra={"event": "mempool.eviction", "evicted": len(evicted), "remaining": len(self._tickets)})
+                logger.info(
+                    "Mempool eviction: %d expired txs, %d remaining",
+                    len(evicted),
+                    len(self._tickets),
+                    extra={
+                        "event": "mempool.eviction",
+                        "evicted": len(evicted),
+                        "remaining": len(self._tickets),
+                    },
+                )
 
             return evicted
 
@@ -605,10 +624,7 @@ class Mempool:
             List of (tx_id, size_bytes) pairs.
         """
         async with self._lock:
-            return [
-                (t.validated_tx.tx_id, t.validated_tx.tx_size)
-                for t in self._tickets
-            ]
+            return [(t.validated_tx.tx_id, t.validated_tx.tx_size) for t in self._tickets]
 
     async def get_tx(self, tx_id: bytes) -> bytes | None:
         """Look up a transaction's CBOR bytes by its ID.
@@ -729,8 +745,7 @@ class MempoolValidationError(MempoolError):
         self.tx_id = tx_id
         self.errors = errors
         super().__init__(
-            f"Transaction {tx_id.hex()[:16]}... failed validation: "
-            f"{'; '.join(errors)}"
+            f"Transaction {tx_id.hex()[:16]}... failed validation: {'; '.join(errors)}"
         )
 
 
@@ -748,8 +763,7 @@ class MempoolCapacityError(MempoolError):
         self.available = available
         self.capacity = capacity
         super().__init__(
-            f"Mempool full: need {needed} bytes, "
-            f"available={available}, capacity={capacity}"
+            f"Mempool full: need {needed} bytes, available={available}, capacity={capacity}"
         )
 
 
@@ -762,6 +776,4 @@ class MempoolDuplicateError(MempoolError):
 
     def __init__(self, tx_id: bytes) -> None:
         self.tx_id = tx_id
-        super().__init__(
-            f"Duplicate transaction: {tx_id.hex()[:16]}..."
-        )
+        super().__init__(f"Duplicate transaction: {tx_id.hex()[:16]}...")

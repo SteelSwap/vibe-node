@@ -29,22 +29,24 @@ class CodeChunkData:
 
 # Node types that represent top-level declarations we want to index.
 # Discovered from the tree-sitter-haskell grammar's node-types.json.
-_DECLARATION_TYPES = frozenset({
-    "function",
-    "bind",
-    "data_type",
-    "newtype",
-    "type_synomym",      # sic — typo in the tree-sitter-haskell grammar
-    "type_family",
-    "data_family",
-    "class",
-    "instance",
-    "deriving_instance",
-    "foreign_import",
-    "foreign_export",
-    "pattern_synonym",
-    "kind_signature",
-})
+_DECLARATION_TYPES = frozenset(
+    {
+        "function",
+        "bind",
+        "data_type",
+        "newtype",
+        "type_synomym",  # sic — typo in the tree-sitter-haskell grammar
+        "type_family",
+        "data_family",
+        "class",
+        "instance",
+        "deriving_instance",
+        "foreign_import",
+        "foreign_export",
+        "pattern_synonym",
+        "kind_signature",
+    }
+)
 
 
 def _node_name(node, source: bytes) -> str:
@@ -56,19 +58,15 @@ def _node_name(node, source: bytes) -> str:
     # Most declaration nodes have an explicit "name" field
     name_node = node.child_by_field_name("name")
     if name_node is not None:
-        return source[name_node.start_byte:name_node.end_byte].decode(
-            "utf-8", errors="replace"
-        )
+        return source[name_node.start_byte : name_node.end_byte].decode("utf-8", errors="replace")
 
     # Fallback: grab the first named child that is a variable/constructor
     for child in node.named_children:
         if child.type in ("variable", "prefix_id", "name", "constructor"):
-            return source[child.start_byte:child.end_byte].decode(
-                "utf-8", errors="replace"
-            )
+            return source[child.start_byte : child.end_byte].decode("utf-8", errors="replace")
 
     # Last resort: first token-ish content
-    text = source[node.start_byte:min(node.start_byte + 60, node.end_byte)]
+    text = source[node.start_byte : min(node.start_byte + 60, node.end_byte)]
     first_line = text.decode("utf-8", errors="replace").split("\n", 1)[0]
     # Try to grab the first word after any keyword
     parts = first_line.split()
@@ -88,15 +86,13 @@ def _extract_module_name(root_node, source: bytes) -> str:
             # The module name lives in a "module" field or as a child
             mod_node = child.child_by_field_name("module")
             if mod_node is not None:
-                return source[mod_node.start_byte:mod_node.end_byte].decode(
+                return source[mod_node.start_byte : mod_node.end_byte].decode(
                     "utf-8", errors="replace"
                 )
             # Fallback: look for a qualified name child
             for sub in child.named_children:
                 if sub.type in ("module", "qualified", "name"):
-                    return source[sub.start_byte:sub.end_byte].decode(
-                        "utf-8", errors="replace"
-                    )
+                    return source[sub.start_byte : sub.end_byte].decode("utf-8", errors="replace")
     return "<unknown>"
 
 
@@ -135,7 +131,7 @@ class HaskellParser:
         for node in children:
             if node.type == "signature":
                 sig_name = _node_name(node, source)
-                sig_text = source[node.start_byte:node.end_byte].decode(
+                sig_text = source[node.start_byte : node.end_byte].decode(
                     "utf-8", errors="replace"
                 )
                 signatures[sig_name] = sig_text
@@ -175,22 +171,24 @@ class HaskellParser:
 
                 line_start = start_node.start_point[0] + 1
                 line_end = end_node.end_point[0] + 1
-                content = source[
-                    start_node.start_byte:end_node.end_byte
-                ].decode("utf-8", errors="replace")
+                content = source[start_node.start_byte : end_node.end_byte].decode(
+                    "utf-8", errors="replace"
+                )
                 sig = signatures.get(name)
 
                 # Skip trivially small chunks (< 2 lines)
                 if line_end - line_start + 1 >= 2 or sig is not None:
-                    chunks.append(CodeChunkData(
-                        file_path=file_path,
-                        module_name=module_name,
-                        function_name=name,
-                        line_start=line_start,
-                        line_end=line_end,
-                        content=content,
-                        signature=sig,
-                    ))
+                    chunks.append(
+                        CodeChunkData(
+                            file_path=file_path,
+                            module_name=module_name,
+                            function_name=name,
+                            line_start=line_start,
+                            line_end=line_end,
+                            content=content,
+                            signature=sig,
+                        )
+                    )
 
                 i = j
                 continue
@@ -198,20 +196,20 @@ class HaskellParser:
             # Non-function declaration (data, class, instance, etc.)
             line_start = node.start_point[0] + 1
             line_end = node.end_point[0] + 1
-            content = source[node.start_byte:node.end_byte].decode(
-                "utf-8", errors="replace"
-            )
+            content = source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
 
             if line_end - line_start + 1 >= 2:
-                chunks.append(CodeChunkData(
-                    file_path=file_path,
-                    module_name=module_name,
-                    function_name=name,
-                    line_start=line_start,
-                    line_end=line_end,
-                    content=content,
-                    signature=signatures.get(name),
-                ))
+                chunks.append(
+                    CodeChunkData(
+                        file_path=file_path,
+                        module_name=module_name,
+                        function_name=name,
+                        line_start=line_start,
+                        line_end=line_end,
+                        content=content,
+                        signature=signatures.get(name),
+                    )
+                )
 
             i += 1
 

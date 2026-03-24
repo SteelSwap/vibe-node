@@ -11,10 +11,7 @@ from __future__ import annotations
 
 import hashlib
 
-import pytest
-
-from vibe.cardano.node.kernel import NodeKernel, StakeDistribution
-
+from vibe.cardano.node.kernel import StakeDistribution
 
 # ---------------------------------------------------------------------------
 # StakeDistribution unit tests
@@ -78,13 +75,13 @@ class TestStakeDistribution:
 # ---------------------------------------------------------------------------
 
 
-
 class TestParseGenesisStake:
     """Test the CLI's _parse_genesis_stake helper."""
 
     def _parse(self, sg: dict) -> dict[bytes, int]:
         """Import and call the parser."""
         from vibe_node.cli import _parse_genesis_stake
+
         return _parse_genesis_stake(sg)
 
     def test_devnet_genesis_structure(self) -> None:

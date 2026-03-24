@@ -14,10 +14,9 @@ Haskell reference: typed-protocols/src/Network/TypedProtocol/Core.hs
 
 from __future__ import annotations
 
-from hypothesis import given, settings, assume
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vibe.core.protocols.agency import Agency, Message
 from vibe.cardano.network.chainsync import (
     MSG_AWAIT_REPLY,
     MSG_DONE,
@@ -27,39 +26,27 @@ from vibe.cardano.network.chainsync import (
     MSG_REQUEST_NEXT,
     MSG_ROLL_BACKWARD,
     MSG_ROLL_FORWARD,
-    Point,
-    Origin,
     ORIGIN,
+    Point,
     Tip,
 )
 from vibe.cardano.network.chainsync_protocol import (
-    ChainSyncState,
     ChainSyncProtocol,
-    CsMsgRequestNext,
+    ChainSyncState,
     CsMsgAwaitReply,
-    CsMsgRollForward,
-    CsMsgRollBackward,
+    CsMsgDone,
     CsMsgFindIntersect,
     CsMsgIntersectFound,
     CsMsgIntersectNotFound,
-    CsMsgDone,
-)
-from vibe.cardano.network.handshake_protocol import (
-    HandshakeState,
-    HandshakeProtocol,
-    MsgProposeVersionsMsg,
-    MsgAcceptVersionMsg,
-    MsgRefuseMsg,
+    CsMsgRequestNext,
+    CsMsgRollBackward,
+    CsMsgRollForward,
 )
 from vibe.cardano.network.handshake import (
-    MsgProposeVersions,
-    MsgAcceptVersion,
-    MsgRefuse,
     NodeToNodeVersionData,
     PeerSharing,
-    RefuseReasonVersionMismatch,
 )
-
+from vibe.core.protocols.agency import Agency, Message
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -78,9 +65,7 @@ _VD = NodeToNodeVersionData(
 )
 
 
-def _agency_for_message(
-    protocol: ChainSyncProtocol, msg: Message[ChainSyncState]
-) -> Agency:
+def _agency_for_message(protocol: ChainSyncProtocol, msg: Message[ChainSyncState]) -> Agency:
     """Return the agency of the state this message is sent FROM."""
     return protocol.agency(msg.from_state)
 
@@ -160,11 +145,18 @@ def _pick_valid_message(state: ChainSyncState, choice: str) -> Message[ChainSync
 
 # Strategy: random choices that we'll use to drive the state machine
 _message_choices = st.lists(
-    st.sampled_from([
-        "request_next", "find_intersect", "done",
-        "await_reply", "roll_forward", "roll_backward",
-        "intersect_found", "intersect_not_found",
-    ]),
+    st.sampled_from(
+        [
+            "request_next",
+            "find_intersect",
+            "done",
+            "await_reply",
+            "roll_forward",
+            "roll_backward",
+            "intersect_found",
+            "intersect_not_found",
+        ]
+    ),
     min_size=1,
     max_size=50,
 )
@@ -205,9 +197,7 @@ def test_agency_alternation_property(choices: list[str]) -> None:
 
         # Verify the message is valid for the current state
         valid_types = protocol.valid_messages(state)
-        assert type(msg) in valid_types, (
-            f"Message {type(msg).__name__} not valid in state {state}"
-        )
+        assert type(msg) in valid_types, f"Message {type(msg).__name__} not valid in state {state}"
 
         current_agency = protocol.agency(state)
         agencies.append(current_agency)
@@ -218,9 +208,9 @@ def test_agency_alternation_property(choices: list[str]) -> None:
     for i in range(1, len(agencies)):
         if agencies[i] == agencies[i - 1]:
             # This is only valid for self-transitions (Server -> Server via AwaitReply)
-            assert agencies[i] == Agency.Server, (
-                f"Non-server agency repeated at index {i}: {agencies}"
-            )
+            assert (
+                agencies[i] == Agency.Server
+            ), f"Non-server agency repeated at index {i}: {agencies}"
 
 
 @given(choices=_message_choices)
@@ -268,9 +258,9 @@ def test_chainsync_all_traces_valid(choices: list[str]) -> None:
 
         # Invariant 3: agency is not Nobody (can't send from terminal)
         agency = protocol.agency(state)
-        assert agency != Agency.Nobody, (
-            f"Sending message in terminal state {state}. Trace: {trace}"
-        )
+        assert (
+            agency != Agency.Nobody
+        ), f"Sending message in terminal state {state}. Trace: {trace}"
 
         trace.append(f"{type(msg).__name__}: {state} -> {msg.to_state}")
         state = msg.to_state
@@ -321,9 +311,7 @@ def test_chainsync_message_id_exhaustive() -> None:
     assert len(all_ids) == 8, f"Expected 8 unique message IDs, got {len(all_ids)}"
 
     # Contiguous range [0, 7]
-    assert all_ids == set(range(8)), (
-        f"Message IDs should be {{0..7}}, got {sorted(all_ids)}"
-    )
+    assert all_ids == set(range(8)), f"Message IDs should be {{0..7}}, got {sorted(all_ids)}"
 
     # Verify each constant has the expected value (defense against renaming)
     expected = {
@@ -350,12 +338,13 @@ def test_chainsync_message_id_exhaustive() -> None:
 
     # Verify no ID appears in both client and server message sets
     client_ids = {MSG_REQUEST_NEXT, MSG_FIND_INTERSECT, MSG_DONE}
-    server_ids = {MSG_AWAIT_REPLY, MSG_ROLL_FORWARD, MSG_ROLL_BACKWARD,
-                  MSG_INTERSECT_FOUND, MSG_INTERSECT_NOT_FOUND}
+    server_ids = {
+        MSG_AWAIT_REPLY,
+        MSG_ROLL_FORWARD,
+        MSG_ROLL_BACKWARD,
+        MSG_INTERSECT_FOUND,
+        MSG_INTERSECT_NOT_FOUND,
+    }
 
-    assert client_ids & server_ids == set(), (
-        f"Client/server ID overlap: {client_ids & server_ids}"
-    )
-    assert client_ids | server_ids == all_ids, (
-        "Client + server IDs don't cover all message types"
-    )
+    assert client_ids & server_ids == set(), f"Client/server ID overlap: {client_ids & server_ids}"
+    assert client_ids | server_ids == all_ids, "Client + server IDs don't cover all message types"

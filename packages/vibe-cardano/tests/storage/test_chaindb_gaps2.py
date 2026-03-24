@@ -21,15 +21,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
 from vibe.cardano.storage.chaindb import ChainDB
 from vibe.cardano.storage.immutable import ImmutableDB
-from vibe.cardano.storage.volatile import VolatileDB
 from vibe.cardano.storage.ledger import LedgerDB
-
+from vibe.cardano.storage.volatile import VolatileDB
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -101,9 +99,7 @@ class TestChainDBTraceEvents:
 
             # Should have a "new tip" log message.
             new_tip_logs = [m for m in log_messages if "new tip" in m.lower()]
-            assert len(new_tip_logs) >= 1, (
-                f"Expected 'new tip' log, got: {log_messages}"
-            )
+            assert len(new_tip_logs) >= 1, f"Expected 'new tip' log, got: {log_messages}"
         finally:
             logger.removeHandler(handler)
 

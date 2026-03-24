@@ -12,19 +12,15 @@ from __future__ import annotations
 
 from fractions import Fraction
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from vibe.cardano.consensus.rewards import (
-    MemberRewardResult,
     PoolRewardParams,
-    RewardPot,
     member_rewards,
     pool_reward,
     total_reward_pot,
 )
-
 
 # ---------------------------------------------------------------------------
 # Mainnet-like protocol parameters for testing
@@ -222,7 +218,9 @@ class TestPoolReward:
     def test_reward_is_integer(self) -> None:
         """Pool reward must be an integer (floor of rational calculation)."""
         pool = _make_pool()
-        pr = pool_reward(pool, 25_000_000_000_000_000, 30_000_000_000_000, MAINNET_N_OPT, MAINNET_A0)
+        pr = pool_reward(
+            pool, 25_000_000_000_000_000, 30_000_000_000_000, MAINNET_N_OPT, MAINNET_A0
+        )
         assert isinstance(pr, int)
 
 
@@ -371,10 +369,7 @@ class TestRewardProperties:
     ) -> None:
         """Total member rewards + operator reward <= total pool reward."""
         pool_stake = 100_000_000_000
-        delegators = {
-            bytes([i]) * 28: pool_stake // n_delegators
-            for i in range(n_delegators)
-        }
+        delegators = {bytes([i]) * 28: pool_stake // n_delegators for i in range(n_delegators)}
 
         pool = _make_pool(
             pledge=10_000_000_000,

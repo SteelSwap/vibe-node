@@ -43,21 +43,16 @@ from vibe.cardano.ledger.byron_rules import (
     validate_byron_tx,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
 # ---------------------------------------------------------------------------
 
-BYRON_MAINNET_ADDR = (
-    "Ae2tdPwUPEZFRbyhz3cpfC2CumGzNkFBN2L42rcUc2yjQpEkxDbkPodpMAi"
-)
+BYRON_MAINNET_ADDR = "Ae2tdPwUPEZFRbyhz3cpfC2CumGzNkFBN2L42rcUc2yjQpEkxDbkPodpMAi"
 
 
 def make_dummy_txid(seed: int = 0) -> ByronTxId:
     """Create a deterministic 32-byte TxId from a seed."""
-    digest = hashlib.blake2b(
-        seed.to_bytes(4, "big"), digest_size=32
-    ).digest()
+    digest = hashlib.blake2b(seed.to_bytes(4, "big"), digest_size=32).digest()
     return ByronTxId(digest)
 
 
@@ -106,9 +101,7 @@ def make_valid_tx_aux(
     tx_aux = ByronTxAux(tx=tx, witnesses=[make_dummy_witness()])
 
     utxo_set: ByronUTxO = {
-        (txid.digest, input_index): ByronTxOut(
-            address=make_byron_address(), value=input_value
-        )
+        (txid.digest, input_index): ByronTxOut(address=make_byron_address(), value=input_value)
     }
     return tx_aux, utxo_set
 
@@ -248,9 +241,7 @@ class TestValidateByronTx:
         tx_aux = ByronTxAux(tx=tx, witnesses=[make_dummy_witness()] * 2)
 
         utxo: ByronUTxO = {
-            (txid.digest, 0): ByronTxOut(
-                address=make_byron_address(), value=1_000_000
-            )
+            (txid.digest, 0): ByronTxOut(address=make_byron_address(), value=1_000_000)
         }
         errors = validate_byron_tx(tx_aux, utxo, ZERO_FEE_PARAMS)
         assert any("Duplicate inputs" in e for e in errors)
@@ -281,9 +272,7 @@ class TestValidateByronTx:
         tx_aux = ByronTxAux(tx=tx, witnesses=[make_dummy_witness()])
 
         utxo: ByronUTxO = {
-            (txid.digest, 0): ByronTxOut(
-                address=make_byron_address(), value=1_000_000
-            )
+            (txid.digest, 0): ByronTxOut(address=make_byron_address(), value=1_000_000)
         }
         errors = validate_byron_tx(tx_aux, utxo, ZERO_FEE_PARAMS)
         assert any("non-positive value" in e for e in errors)
@@ -373,9 +362,7 @@ class TestApplyByronTx:
             output_value=1_000_000,
         )
         # Add an unrelated UTxO entry
-        unrelated_key, unrelated_out = make_utxo_entry(
-            tx_id_seed=99, index=0, value=5_000_000
-        )
+        unrelated_key, unrelated_out = make_utxo_entry(tx_id_seed=99, index=0, value=5_000_000)
         utxo[unrelated_key] = unrelated_out
 
         new_utxo = apply_byron_tx(tx_aux, utxo, ZERO_FEE_PARAMS)
@@ -436,14 +423,10 @@ class TestApplyByronBlock:
 
         # Initial UTxO: just the seed entry
         initial_utxo: ByronUTxO = {
-            (txid0.digest, 0): ByronTxOut(
-                address=make_byron_address(), value=10_000_000
-            )
+            (txid0.digest, 0): ByronTxOut(address=make_byron_address(), value=10_000_000)
         }
 
-        new_utxo = apply_byron_block(
-            [tx1_aux, tx2_aux], initial_utxo, ZERO_FEE_PARAMS
-        )
+        new_utxo = apply_byron_block([tx1_aux, tx2_aux], initial_utxo, ZERO_FEE_PARAMS)
 
         # Original input consumed
         assert (txid0.digest, 0) not in new_utxo
@@ -472,9 +455,7 @@ class TestApplyByronBlock:
 
         for seed in range(3):
             txid = make_dummy_txid(seed)
-            utxo[(txid.digest, 0)] = ByronTxOut(
-                address=make_byron_address(), value=10_000_000
-            )
+            utxo[(txid.digest, 0)] = ByronTxOut(address=make_byron_address(), value=10_000_000)
             txin = ByronTxIn(tx_id=txid, index=0)
             txout = ByronTxOut(address=make_byron_address(), value=5_000_000)
             tx = ByronTx(inputs=[txin], outputs=[txout])
@@ -523,11 +504,7 @@ class TestEdgeCases:
         tx = ByronTx(inputs=[txin], outputs=[txout1, txout2])
         tx_aux = ByronTxAux(tx=tx, witnesses=[make_dummy_witness()])
 
-        utxo: ByronUTxO = {
-            (txid.digest, 0): ByronTxOut(
-                address=addr, value=10_000_000
-            )
-        }
+        utxo: ByronUTxO = {(txid.digest, 0): ByronTxOut(address=addr, value=10_000_000)}
         # Fee = 10M - 7M = 3M (more than enough for zero fee params)
         errors = validate_byron_tx(tx_aux, utxo, ZERO_FEE_PARAMS)
         assert errors == []
@@ -545,21 +522,13 @@ class TestEdgeCases:
         txid1 = make_dummy_txid(1)
         txin0 = ByronTxIn(tx_id=txid0, index=0)
         txin1 = ByronTxIn(tx_id=txid1, index=0)
-        txout = ByronTxOut(
-            address=make_byron_address(), value=15_000_000
-        )
+        txout = ByronTxOut(address=make_byron_address(), value=15_000_000)
         tx = ByronTx(inputs=[txin0, txin1], outputs=[txout])
-        tx_aux = ByronTxAux(
-            tx=tx, witnesses=[make_dummy_witness()] * 2
-        )
+        tx_aux = ByronTxAux(tx=tx, witnesses=[make_dummy_witness()] * 2)
 
         utxo: ByronUTxO = {
-            (txid0.digest, 0): ByronTxOut(
-                address=make_byron_address(), value=10_000_000
-            ),
-            (txid1.digest, 0): ByronTxOut(
-                address=make_byron_address(), value=10_000_000
-            ),
+            (txid0.digest, 0): ByronTxOut(address=make_byron_address(), value=10_000_000),
+            (txid1.digest, 0): ByronTxOut(address=make_byron_address(), value=10_000_000),
         }
         # Fee = 20M - 15M = 5M
         errors = validate_byron_tx(tx_aux, utxo, ZERO_FEE_PARAMS)

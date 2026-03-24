@@ -14,10 +14,7 @@ Haskell ref:
 
 from __future__ import annotations
 
-import pytest
-
 from vibe.cardano.mempool.validator import LedgerTxValidator
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -51,9 +48,7 @@ def _make_minimal_tx_cbor() -> bytes:
             TransactionOutput.from_primitive(
                 [
                     # A minimal Shelley-era enterprise address (testnet)
-                    bytes.fromhex(
-                        "60" + "00" * 28
-                    ),
+                    bytes.fromhex("60" + "00" * 28),
                     1_500_000,
                 ]
             )
@@ -85,9 +80,9 @@ class TestLedgerTxValidator:
 
         # Should not contain CBOR decode errors
         for err in errors:
-            assert "CBOR decode error" not in err, (
-                f"Well-formed tx should not produce CBOR decode errors, got: {err}"
-            )
+            assert (
+                "CBOR decode error" not in err
+            ), f"Well-formed tx should not produce CBOR decode errors, got: {err}"
 
     def test_invalid_cbor_rejected(self) -> None:
         """Garbage bytes are rejected with a CBOR decode error."""
@@ -96,9 +91,9 @@ class TestLedgerTxValidator:
         errors = validator.validate_tx(garbage, current_slot=0)
 
         assert len(errors) > 0, "Garbage bytes should produce errors"
-        assert any("CBOR decode error" in e or "Validation error" in e for e in errors), (
-            f"Expected CBOR/validation error, got: {errors}"
-        )
+        assert any(
+            "CBOR decode error" in e or "Validation error" in e for e in errors
+        ), f"Expected CBOR/validation error, got: {errors}"
 
     def test_malformed_tx_rejected(self) -> None:
         """Valid CBOR but not a transaction structure is rejected."""

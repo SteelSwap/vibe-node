@@ -30,11 +30,9 @@ from typing import Union
 import cbor2pure as cbor2
 
 from vibe.cardano.network.chainsync import (
-    Point,
-    Origin,
     PointOrOrigin,
-    _encode_point,
     _decode_point,
+    _encode_point,
 )
 
 # ---------------------------------------------------------------------------
@@ -264,18 +262,14 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
 
     if msg_id == MSG_REQUEST_RANGE:
         if len(msg) != 3:
-            raise ValueError(
-                f"MsgRequestRange: expected 3 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgRequestRange: expected 3 elements, got {len(msg)}")
         point_from = _decode_point(msg[1])
         point_to = _decode_point(msg[2])
         return MsgRequestRange(point_from=point_from, point_to=point_to)
 
     elif msg_id == MSG_CLIENT_DONE:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgClientDone: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgClientDone: expected 1 element, got {len(msg)}")
         return MsgClientDone()
 
     else:

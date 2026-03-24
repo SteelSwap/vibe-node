@@ -23,16 +23,12 @@ import struct
 from pathlib import Path
 from typing import Any
 
-import pyarrow as pa
-import pyarrow.ipc as ipc
-import pytest
-
 from vibe.cardano.storage import BlockDiff, LedgerDB
 from vibe.cardano.storage.recovery import (
-    SNAPSHOT_INTERVAL,
     _DIFF_HEADER_FMT,
     _DIFF_HEADER_SIZE,
     _DIFF_MAGIC,
+    SNAPSHOT_INTERVAL,
     _deserialize_col_vals,
     _read_diff_log,
     _serialize_col_vals,
@@ -41,7 +37,6 @@ from vibe.cardano.storage.recovery import (
     write_diff_log_entry,
     write_snapshot,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -27,46 +27,54 @@ from __future__ import annotations
 import os
 
 import cbor2
-import pytest
 
 from vibe.cardano.network.chainsync import (
     ORIGIN,
-    MsgRollForward,
-    MsgRollBackward,
-    MsgRequestNext,
     MsgFindIntersect,
-    MsgDone as CsMsgDone,
     MsgIntersectFound,
     MsgIntersectNotFound,
+    MsgRequestNext,
+    MsgRollBackward,
+    MsgRollForward,
     Point,
     Tip,
-    decode_server_message as cs_decode_server,
-    decode_client_message as cs_decode_client,
-    encode_roll_forward,
-    encode_roll_backward,
-    encode_request_next,
     encode_find_intersect,
-    encode_done as cs_encode_done,
     encode_intersect_found,
     encode_intersect_not_found,
+    encode_request_next,
+    encode_roll_backward,
+    encode_roll_forward,
+)
+from vibe.cardano.network.chainsync import (
+    decode_client_message as cs_decode_client,
+)
+from vibe.cardano.network.chainsync import (
+    decode_server_message as cs_decode_server,
+)
+from vibe.cardano.network.txsubmission import (
+    MsgDone as TxMsgDone,
 )
 from vibe.cardano.network.txsubmission import (
     MsgInit,
-    MsgRequestTxIds,
     MsgReplyTxIds,
-    MsgRequestTxs,
     MsgReplyTxs,
-    MsgDone as TxMsgDone,
-    decode_server_message as tx_decode_server,
-    decode_client_message as tx_decode_client,
+    MsgRequestTxIds,
+    MsgRequestTxs,
     encode_init,
-    encode_request_tx_ids,
     encode_reply_tx_ids,
-    encode_request_txs,
     encode_reply_txs,
+    encode_request_tx_ids,
+    encode_request_txs,
+)
+from vibe.cardano.network.txsubmission import (
+    decode_client_message as tx_decode_client,
+)
+from vibe.cardano.network.txsubmission import (
+    decode_server_message as tx_decode_server,
+)
+from vibe.cardano.network.txsubmission import (
     encode_done as tx_encode_done,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -81,11 +89,7 @@ def _all_2chunk_splits(data: bytes) -> list[tuple[bytes, bytes]]:
 def _all_3chunk_splits(data: bytes) -> list[tuple[bytes, bytes, bytes]]:
     """Generate all 3-chunk splits of data (all pairs 1 <= i < j < N)."""
     n = len(data)
-    return [
-        (data[:i], data[i:j], data[j:])
-        for i in range(1, n)
-        for j in range(i + 1, n)
-    ]
+    return [(data[:i], data[i:j], data[j:]) for i in range(1, n) for j in range(i + 1, n)]
 
 
 def _make_tip() -> Tip:
@@ -329,9 +333,7 @@ class TestLocalTxSubmission3ChunkSplit:
 
     def test_request_tx_ids_3chunk(self) -> None:
         """MsgRequestTxIds survives all 3-chunk splits."""
-        encoded = encode_request_tx_ids(
-            blocking=False, ack_count=0, req_count=5
-        )
+        encoded = encode_request_tx_ids(blocking=False, ack_count=0, req_count=5)
         for c1, c2, c3 in _all_3chunk_splits(encoded):
             msg = tx_decode_server(c1 + c2 + c3)
             assert isinstance(msg, MsgRequestTxIds)

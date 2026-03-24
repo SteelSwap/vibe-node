@@ -133,9 +133,7 @@ def apply_block_certs(
             try:
                 state = _apply_cert_lenient(state, cert, current_epoch)
             except Exception as exc:
-                logger.debug(
-                    "Delegation cert error (continuing): %s", exc
-                )
+                logger.debug("Delegation cert error (continuing): %s", exc)
 
     return state
 
@@ -167,17 +165,13 @@ def _apply_cert_lenient(
         cred_hash = _credential_hash(cert.stake_credential)
         if cred_hash not in state.rewards:
             state.rewards[cred_hash] = 0
-            logger.debug(
-                "Registered stake key: %s", cred_hash.hex()[:16]
-            )
+            logger.debug("Registered stake key: %s", cred_hash.hex()[:16])
 
     elif isinstance(cert, StakeDeregistration):
         cred_hash = _credential_hash(cert.stake_credential)
         state.rewards.pop(cred_hash, None)
         state.delegations.pop(cred_hash, None)
-        logger.debug(
-            "Deregistered stake key: %s", cred_hash.hex()[:16]
-        )
+        logger.debug("Deregistered stake key: %s", cred_hash.hex()[:16])
 
     elif isinstance(cert, StakeDelegation):
         cred_hash = _credential_hash(cert.stake_credential)
@@ -188,7 +182,8 @@ def _apply_cert_lenient(
         state.delegations[cred_hash] = pool_hash
         logger.debug(
             "Delegated %s -> pool %s",
-            cred_hash.hex()[:16], pool_hash.hex()[:16],
+            cred_hash.hex()[:16],
+            pool_hash.hex()[:16],
         )
 
     elif isinstance(cert, PoolRegistration):
@@ -196,16 +191,15 @@ def _apply_cert_lenient(
         state.pools[pool_hash] = cert.pool_params
         # Cancel any pending retirement on re-registration
         state.retiring.pop(pool_hash, None)
-        logger.debug(
-            "Registered pool: %s", pool_hash.hex()[:16]
-        )
+        logger.debug("Registered pool: %s", pool_hash.hex()[:16])
 
     elif isinstance(cert, PoolRetirement):
         pool_hash = _pool_key_hash(cert.pool_keyhash)
         state.retiring[pool_hash] = cert.epoch
         logger.debug(
             "Pool %s retiring at epoch %d",
-            pool_hash.hex()[:16], cert.epoch,
+            pool_hash.hex()[:16],
+            cert.epoch,
         )
 
     return state

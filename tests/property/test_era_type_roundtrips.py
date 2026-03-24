@@ -27,13 +27,11 @@ Spec references:
 from __future__ import annotations
 
 import hashlib
-from dataclasses import asdict
 
 import cbor2
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-
 from pycardano import (
     Asset,
     MultiAsset,
@@ -49,18 +47,14 @@ from pycardano.hash import (
 )
 from pycardano.network import Network
 
-from vibe.cardano.ledger.shelley import ShelleyProtocolParams
 from vibe.cardano.ledger.allegra_mary import (
-    MaryProtocolParams,
     Timelock,
     TimelockType,
     ValidityInterval,
 )
 from vibe.cardano.ledger.alonzo_types import (
-    AlonzoProtocolParams,
     CostModel,
     ExUnits,
-    ExUnitPrices,
     Language,
     Redeemer,
     RedeemerTag,
@@ -87,9 +81,7 @@ from vibe.cardano.ledger.conway_types import (
     VoterRole,
     VotingProcedure,
 )
-from vibe.cardano.ledger.shelley_delegation import (
-    DelegationState,
-)
+from vibe.cardano.ledger.shelley import ShelleyProtocolParams
 
 # Mark all tests as property tests
 pytestmark = pytest.mark.property
@@ -115,6 +107,7 @@ def _make_address(seed: int = 0) -> Address:
     """Create a deterministic Shelley testnet address."""
     key_hash = _blake2b_256(seed.to_bytes(4, "big"))[:28]
     from pycardano.hash import VerificationKeyHash
+
     return Address(payment_part=VerificationKeyHash(key_hash), network=Network.TESTNET)
 
 
@@ -237,9 +230,13 @@ class TestShelleyProtocolParamsRoundtrip:
     def test_custom_params_roundtrip(self) -> None:
         """Custom params survive dict round-trip."""
         params = ShelleyProtocolParams(
-            min_fee_a=100, min_fee_b=200000, max_tx_size=32768,
-            min_utxo_value=2000000, key_deposit=3000000,
-            pool_deposit=600000000, min_pool_cost=500_000_000,
+            min_fee_a=100,
+            min_fee_b=200000,
+            max_tx_size=32768,
+            min_utxo_value=2000000,
+            key_deposit=3000000,
+            pool_deposit=600000000,
+            min_pool_cost=500_000_000,
         )
         d = {
             "min_fee_a": params.min_fee_a,
@@ -259,7 +256,7 @@ class TestShelleyCertificateRoundtrip:
 
     def test_stake_registration_roundtrip(self) -> None:
         """StakeRegistration certificate round-trips."""
-        from pycardano.certificate import StakeRegistration, StakeCredential
+        from pycardano.certificate import StakeCredential, StakeRegistration
         from pycardano.hash import VerificationKeyHash
 
         cred = StakeCredential(VerificationKeyHash(_make_credential(0)))
@@ -270,7 +267,7 @@ class TestShelleyCertificateRoundtrip:
 
     def test_stake_delegation_roundtrip(self) -> None:
         """StakeDelegation certificate round-trips."""
-        from pycardano.certificate import StakeDelegation, StakeCredential
+        from pycardano.certificate import StakeCredential, StakeDelegation
         from pycardano.hash import PoolKeyHash, VerificationKeyHash
 
         cred = StakeCredential(VerificationKeyHash(_make_credential(0)))
@@ -283,7 +280,8 @@ class TestShelleyCertificateRoundtrip:
     def test_pool_registration_roundtrip(self) -> None:
         """PoolRegistration round-trips (basic params)."""
         from fractions import Fraction
-        from pycardano.certificate import PoolRegistration, PoolParams
+
+        from pycardano.certificate import PoolParams, PoolRegistration
         from pycardano.hash import PoolKeyHash, RewardAccountHash, VerificationKeyHash, VrfKeyHash
 
         pool_params = PoolParams(
@@ -492,10 +490,12 @@ class TestMaryMultiAssetRoundtrip:
         """Multiple policies and asset names round-trip."""
         policy1 = _make_script_hash(1)
         policy2 = _make_script_hash(2)
-        ma = MultiAsset({
-            policy1: Asset({b"TokenA": 500, b"TokenB": 1500}),
-            policy2: Asset({b"NFT": 1}),
-        })
+        ma = MultiAsset(
+            {
+                policy1: Asset({b"TokenA": 500, b"TokenB": 1500}),
+                policy2: Asset({b"NFT": 1}),
+            }
+        )
         val = Value(coin=10_000_000, multi_asset=ma)
         txout = TransactionOutput(_make_address(0), val)
         raw = txout.to_cbor()
@@ -523,9 +523,7 @@ class TestMaryMultiAssetRoundtrip:
         qty=st.integers(min_value=1, max_value=2**63 - 1),
     )
     @settings(max_examples=15)
-    def test_multi_asset_property(
-        self, num_policies: int, num_assets_per: int, qty: int
-    ) -> None:
+    def test_multi_asset_property(self, num_policies: int, num_assets_per: int, qty: int) -> None:
         """MultiAsset values with arbitrary policy/asset counts round-trip."""
         policies: dict[ScriptHash, Asset] = {}
         for p in range(num_policies):
@@ -585,12 +583,14 @@ class TestRedeemerRoundtrip:
 
     def _redeemer_to_cbor(self, r: Redeemer) -> bytes:
         """Serialize a Redeemer to CBOR matching Alonzo wire format."""
-        return cbor2.dumps([
-            r.tag.value,
-            r.index,
-            cbor2.loads(r.data) if r.data else None,
-            [r.ex_units.mem, r.ex_units.steps],
-        ])
+        return cbor2.dumps(
+            [
+                r.tag.value,
+                r.index,
+                cbor2.loads(r.data) if r.data else None,
+                [r.ex_units.mem, r.ex_units.steps],
+            ]
+        )
 
     def _redeemer_from_cbor(self, raw: bytes) -> Redeemer:
         """Deserialize a Redeemer from CBOR."""
@@ -604,8 +604,9 @@ class TestRedeemerRoundtrip:
     def test_spend_redeemer_roundtrip(self) -> None:
         """Spend redeemer (tag 0) round-trips."""
         data = cbor2.dumps(42)
-        r = Redeemer(tag=RedeemerTag.SPEND, index=0, data=data,
-                     ex_units=ExUnits(mem=100000, steps=200000))
+        r = Redeemer(
+            tag=RedeemerTag.SPEND, index=0, data=data, ex_units=ExUnits(mem=100000, steps=200000)
+        )
         raw = self._redeemer_to_cbor(r)
         decoded = self._redeemer_from_cbor(raw)
         assert decoded.tag == r.tag
@@ -616,8 +617,9 @@ class TestRedeemerRoundtrip:
     def test_mint_redeemer_roundtrip(self) -> None:
         """Mint redeemer (tag 1) round-trips."""
         data = cbor2.dumps({"constructor": 0, "fields": []})
-        r = Redeemer(tag=RedeemerTag.MINT, index=2, data=data,
-                     ex_units=ExUnits(mem=500000, steps=1000000))
+        r = Redeemer(
+            tag=RedeemerTag.MINT, index=2, data=data, ex_units=ExUnits(mem=500000, steps=1000000)
+        )
         raw = self._redeemer_to_cbor(r)
         decoded = self._redeemer_from_cbor(raw)
         assert decoded.tag == RedeemerTag.MINT
@@ -626,8 +628,9 @@ class TestRedeemerRoundtrip:
     def test_cert_redeemer_roundtrip(self) -> None:
         """Cert redeemer (tag 2) round-trips."""
         data = cbor2.dumps([1, 2, 3])
-        r = Redeemer(tag=RedeemerTag.CERT, index=0, data=data,
-                     ex_units=ExUnits(mem=300000, steps=600000))
+        r = Redeemer(
+            tag=RedeemerTag.CERT, index=0, data=data, ex_units=ExUnits(mem=300000, steps=600000)
+        )
         raw = self._redeemer_to_cbor(r)
         decoded = self._redeemer_from_cbor(raw)
         assert decoded.tag == RedeemerTag.CERT
@@ -635,8 +638,9 @@ class TestRedeemerRoundtrip:
     def test_reward_redeemer_roundtrip(self) -> None:
         """Reward redeemer (tag 3) round-trips."""
         data = cbor2.dumps(b"redeemer_bytes")
-        r = Redeemer(tag=RedeemerTag.REWARD, index=1, data=data,
-                     ex_units=ExUnits(mem=200000, steps=400000))
+        r = Redeemer(
+            tag=RedeemerTag.REWARD, index=1, data=data, ex_units=ExUnits(mem=200000, steps=400000)
+        )
         raw = self._redeemer_to_cbor(r)
         decoded = self._redeemer_from_cbor(raw)
         assert decoded.tag == RedeemerTag.REWARD
@@ -684,7 +688,8 @@ class TestScriptIntegrityHashRoundtrip:
         """Same inputs produce same script integrity hash."""
         redeemers = [
             Redeemer(
-                tag=RedeemerTag.SPEND, index=0,
+                tag=RedeemerTag.SPEND,
+                index=0,
                 data=cbor2.dumps(42),
                 ex_units=ExUnits(mem=100, steps=200),
             ),
@@ -706,8 +711,10 @@ class TestAlonzoDatumHashInOutputRoundtrip:
         """TransactionOutput with datum_hash field round-trips."""
         datum_hash = _make_hash32(99)
         from pycardano.hash import DatumHash
+
         txout = TransactionOutput(
-            _make_address(0), 5_000_000,
+            _make_address(0),
+            5_000_000,
             datum_hash=DatumHash(datum_hash),
         )
         raw = txout.to_cbor()
@@ -785,10 +792,14 @@ class TestBabbageOutputExtensionRoundtrip:
         )
         ext = BabbageOutputExtension(datum_option=datum, reference_script=ref_script)
         # Encode the extension components
-        encoded = cbor2.dumps({
-            "datum": [datum.tag.value, datum.data] if datum else None,
-            "script": [ref_script.script_bytes, ref_script.script_hash] if ref_script else None,
-        })
+        encoded = cbor2.dumps(
+            {
+                "datum": [datum.tag.value, datum.data] if datum else None,
+                "script": (
+                    [ref_script.script_bytes, ref_script.script_hash] if ref_script else None
+                ),
+            }
+        )
         decoded = cbor2.loads(encoded)
         d = decoded["datum"]
         s = decoded["script"]
@@ -944,13 +955,15 @@ class TestProposalProcedureRoundtrip:
             anchor=anchor,
         )
         # Encode key fields
-        encoded = cbor2.dumps({
-            "deposit": proposal.deposit,
-            "return_addr": proposal.return_addr,
-            "action_type": proposal.gov_action.action_type.value,
-            "anchor_url": proposal.anchor.url,
-            "anchor_hash": proposal.anchor.data_hash,
-        })
+        encoded = cbor2.dumps(
+            {
+                "deposit": proposal.deposit,
+                "return_addr": proposal.return_addr,
+                "action_type": proposal.gov_action.action_type.value,
+                "anchor_url": proposal.anchor.url,
+                "anchor_hash": proposal.anchor.data_hash,
+            }
+        )
         decoded = cbor2.loads(encoded)
         assert decoded["deposit"] == proposal.deposit
         assert decoded["return_addr"] == proposal.return_addr
@@ -988,13 +1001,15 @@ class TestVotingProceduresRoundtrip:
         procedure = VotingProcedure(vote=Vote.YES)
 
         # Serialize the structure
-        encoded = cbor2.dumps({
-            "role": voter.role.value,
-            "credential": voter.credential,
-            "action_tx_id": action_id.tx_id,
-            "action_index": action_id.gov_action_index,
-            "vote": procedure.vote.value,
-        })
+        encoded = cbor2.dumps(
+            {
+                "role": voter.role.value,
+                "credential": voter.credential,
+                "action_tx_id": action_id.tx_id,
+                "action_index": action_id.gov_action_index,
+                "vote": procedure.vote.value,
+            }
+        )
         decoded = cbor2.loads(encoded)
         rec_voter = Voter(
             role=VoterRole(decoded["role"]),
@@ -1088,14 +1103,16 @@ class TestConwayProtocolParamsRoundtrip:
             committee_min_size=7,
             committee_max_term_length=146,
         )
-        encoded = cbor2.dumps({
-            "drep_deposit": params.drep_deposit,
-            "drep_activity": params.drep_activity,
-            "gov_action_lifetime": params.gov_action_lifetime,
-            "gov_action_deposit": params.gov_action_deposit,
-            "committee_min_size": params.committee_min_size,
-            "committee_max_term_length": params.committee_max_term_length,
-        })
+        encoded = cbor2.dumps(
+            {
+                "drep_deposit": params.drep_deposit,
+                "drep_activity": params.drep_activity,
+                "gov_action_lifetime": params.gov_action_lifetime,
+                "gov_action_deposit": params.gov_action_deposit,
+                "committee_min_size": params.committee_min_size,
+                "committee_max_term_length": params.committee_max_term_length,
+            }
+        )
         decoded = cbor2.loads(encoded)
         assert decoded["drep_deposit"] == 500_000_000
         assert decoded["drep_activity"] == 20

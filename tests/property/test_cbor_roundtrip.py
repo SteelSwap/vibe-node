@@ -23,11 +23,11 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-
 # ---------------------------------------------------------------------------
 # Force pure-Python cbor2 — the C extension has bugs that bite Cardano data.
 # We verify this at import time so tests fail loudly if something changes.
 # ---------------------------------------------------------------------------
+
 
 def _ensure_pure_python_cbor2() -> None:
     """Verify we can use cbor2 and it behaves correctly.
@@ -57,25 +57,25 @@ _ensure_pure_python_cbor2()
 # Integers: Cardano uses unsigned for most fields, but signed for some
 # (e.g., transaction metadata). CBOR supports arbitrary precision.
 cardano_integers = st.one_of(
-    st.integers(min_value=0, max_value=0),            # zero
-    st.integers(min_value=1, max_value=23),            # single-byte CBOR
-    st.integers(min_value=24, max_value=255),          # two-byte CBOR
-    st.integers(min_value=256, max_value=65535),        # three-byte CBOR
+    st.integers(min_value=0, max_value=0),  # zero
+    st.integers(min_value=1, max_value=23),  # single-byte CBOR
+    st.integers(min_value=24, max_value=255),  # two-byte CBOR
+    st.integers(min_value=256, max_value=65535),  # three-byte CBOR
     st.integers(min_value=65536, max_value=2**32 - 1),  # five-byte CBOR
     st.integers(min_value=2**32, max_value=2**64 - 1),  # nine-byte CBOR
-    st.integers(min_value=-(2**64), max_value=-1),      # negative
-    st.integers(min_value=2**64, max_value=2**128),     # big integers
+    st.integers(min_value=-(2**64), max_value=-1),  # negative
+    st.integers(min_value=2**64, max_value=2**128),  # big integers
 )
 
 # Bytestrings at boundary lengths (CBOR encoding changes at 24, 256, 65536)
 cardano_bytestrings = st.one_of(
-    st.binary(min_size=0, max_size=0),     # empty
-    st.binary(min_size=1, max_size=1),     # single byte
-    st.binary(min_size=23, max_size=23),   # max single-byte length
-    st.binary(min_size=24, max_size=24),   # triggers two-byte length
+    st.binary(min_size=0, max_size=0),  # empty
+    st.binary(min_size=1, max_size=1),  # single byte
+    st.binary(min_size=23, max_size=23),  # max single-byte length
+    st.binary(min_size=24, max_size=24),  # triggers two-byte length
     st.binary(min_size=255, max_size=255),
-    st.binary(min_size=256, max_size=256), # triggers three-byte length
-    st.binary(min_size=1, max_size=512),   # general range
+    st.binary(min_size=256, max_size=256),  # triggers three-byte length
+    st.binary(min_size=1, max_size=512),  # general range
 )
 
 # Text strings (used in metadata)
@@ -85,6 +85,7 @@ cardano_text = st.text(min_size=0, max_size=64)
 # ---------------------------------------------------------------------------
 # Test 1: Integer round-trip
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestIntegerRoundtrip:
@@ -111,6 +112,7 @@ class TestIntegerRoundtrip:
 # ---------------------------------------------------------------------------
 # Test 2: Bytestring round-trip
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestBytestringRoundtrip:
@@ -223,16 +225,18 @@ class TestNestedStructureRoundtrip:
         decoded = cbor2.loads(encoded)
 
         # cbor2 auto-decodes tag 258 -> frozenset
-        assert isinstance(decoded, (set, frozenset)), (
-            f"Expected set/frozenset for tag 258, got {type(decoded).__name__}"
-        )
+        assert isinstance(
+            decoded, (set, frozenset)
+        ), f"Expected set/frozenset for tag 258, got {type(decoded).__name__}"
         assert set(decoded) == unique_elements
 
         # Verify re-encoding a set produces tag 258
         re_encoded = cbor2.dumps(decoded)
+
         # Decode with tag_hook to verify the tag is preserved in the wire format
         def preserve_tags(decoder, tag):
             return cbor2.CBORTag(tag.tag, tag.value)
+
         re_decoded = cbor2.loads(re_encoded, tag_hook=preserve_tags)
         if isinstance(re_decoded, cbor2.CBORTag):
             assert re_decoded.tag == 258
@@ -241,6 +245,7 @@ class TestNestedStructureRoundtrip:
 # ---------------------------------------------------------------------------
 # Test 4: Canonical CBOR determinism
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestCanonicalCborDeterministic:
@@ -271,6 +276,7 @@ class TestCanonicalCborDeterministic:
 # ---------------------------------------------------------------------------
 # Test 5: Tag preservation
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestTagPreservation:
@@ -365,9 +371,9 @@ class TestTagPreservation:
 
         # Wire-level verification: tag 258 is present in the encoding
         # Verify the raw bytes start with tag 258 marker (0xd9 0x01 0x02)
-        assert encoded[:3] == b"\xd9\x01\x02", (
-            f"Expected tag 258 prefix d90102, got {encoded[:3].hex()}"
-        )
+        assert (
+            encoded[:3] == b"\xd9\x01\x02"
+        ), f"Expected tag 258 prefix d90102, got {encoded[:3].hex()}"
 
     def test_tag258_empty_set(self) -> None:
         """Tag 258 with empty list round-trips as empty set."""
@@ -403,6 +409,7 @@ class TestTagPreservation:
 # ---------------------------------------------------------------------------
 # Test 6: Indefinite-length handling
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestIndefiniteLengthHandling:
@@ -444,9 +451,7 @@ class TestIndefiniteLengthHandling:
         ),
     )
     @settings(max_examples=200)
-    def test_indefinite_map_decode(
-        self, keys: list[bytes], values: list[int]
-    ) -> None:
+    def test_indefinite_map_decode(self, keys: list[bytes], values: list[int]) -> None:
         """Hand-craft indefinite-length map bytes, verify decode matches."""
         # Truncate to min length
         n = min(len(keys), len(values))
@@ -488,6 +493,7 @@ class TestIndefiniteLengthHandling:
 # Test 7: Map key ordering in canonical CBOR
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.property
 class TestMapKeyOrderingCanonical:
     """Verify canonical CBOR produces correctly ordered map keys.
@@ -527,13 +533,13 @@ class TestMapKeyOrderingCanonical:
             if len(a) != len(b):
                 assert len(a) < len(b), (
                     f"Canonical violation: key at index {i} "
-                    f"(len={len(a)}) should come before key at index {i+1} "
+                    f"(len={len(a)}) should come before key at index {i + 1} "
                     f"(len={len(b)})"
                 )
             else:
                 assert a <= b, (
                     f"Canonical violation: keys of equal length at "
-                    f"indices {i},{i+1} are not lexicographically ordered"
+                    f"indices {i},{i + 1} are not lexicographically ordered"
                 )
 
     @given(
@@ -557,9 +563,10 @@ class TestMapKeyOrderingCanonical:
         # Verify ordering
         for i in range(len(encoded_keys) - 1):
             a, b = encoded_keys[i], encoded_keys[i + 1]
-            assert (len(a), a) <= (len(b), b), (
-                f"Bytestring keys not in canonical order at indices {i},{i+1}"
-            )
+            assert (len(a), a) <= (
+                len(b),
+                b,
+            ), f"Bytestring keys not in canonical order at indices {i},{i + 1}"
 
     @given(
         int_keys=st.lists(
@@ -580,15 +587,17 @@ class TestMapKeyOrderingCanonical:
 
         for i in range(len(encoded_keys) - 1):
             a, b = encoded_keys[i], encoded_keys[i + 1]
-            assert (len(a), a) <= (len(b), b), (
-                f"Integer keys not in canonical order at indices {i},{i+1}"
-            )
+            assert (len(a), a) <= (
+                len(b),
+                b,
+            ), f"Integer keys not in canonical order at indices {i},{i + 1}"
 
 
 # ---------------------------------------------------------------------------
 # Test 8: Canonical encoding minimal length for unsigned integers
 # Spec: test_canonical_encoding_minimal_length_for_unsigned_int
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestCanonicalEncodingMinimalLengthUnsignedInt:
@@ -654,6 +663,7 @@ class TestCanonicalEncodingMinimalLengthUnsignedInt:
 # Spec: test_eBS_long_is_indefinite_length
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.property
 class TestIndefiniteBytestringLongEncoding:
     """Verify indefinite-length bytestring encoding for >= 65 bytes.
@@ -679,7 +689,7 @@ class TestIndefiniteBytestringLongEncoding:
         parts = [b"\x5f"]
         offset = 0
         while offset < len(data):
-            chunk = data[offset:offset + 64]
+            chunk = data[offset : offset + 64]
             parts.append(cbor2.dumps(chunk))  # Each chunk as a definite bytestring
             offset += 64
         parts.append(b"\xff")  # break code
@@ -706,14 +716,12 @@ class TestIndefiniteBytestringLongEncoding:
         chunks = []
         offset = 0
         while offset < len(data):
-            chunks.append(data[offset:offset + 64])
+            chunks.append(data[offset : offset + 64])
             offset += 64
 
         # All chunks except the last must be exactly 64 bytes
         for i, chunk in enumerate(chunks[:-1]):
-            assert len(chunk) == 64, (
-                f"Interior chunk {i} is {len(chunk)} bytes, expected 64"
-            )
+            assert len(chunk) == 64, f"Interior chunk {i} is {len(chunk)} bytes, expected 64"
 
         # Last chunk can be 1-64 bytes
         assert 1 <= len(chunks[-1]) <= 64
@@ -726,6 +734,7 @@ class TestIndefiniteBytestringLongEncoding:
 # Test 10: Bounded bytestring max 64 round-trip (dBlock boundary)
 # Spec: test_dblock_valid_bytestrings_roundtrip
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestBoundedBytestringMax64Roundtrip:
@@ -754,7 +763,7 @@ class TestBoundedBytestringMax64Roundtrip:
 
         # For <= 64 bytes, encoding must be definite-length (not indefinite)
         # Major type 2 (bytestring): first byte high nibble = 0x40
-        assert (encoded[0] & 0xe0) == 0x40, (
+        assert (encoded[0] & 0xE0) == 0x40, (
             f"Expected major type 2 (bytestring), got 0x{encoded[0]:02x}. "
             f"Bytestrings <= 64 bytes should use definite-length encoding."
         )
@@ -766,7 +775,7 @@ class TestBoundedBytestringMax64Roundtrip:
         encoded = cbor2.dumps(data_64)
         assert cbor2.loads(encoded) == data_64
         # Must be definite-length
-        assert (encoded[0] & 0xe0) == 0x40
+        assert (encoded[0] & 0xE0) == 0x40
 
         # Empty bytestring — should work
         data_0 = b""
@@ -779,6 +788,7 @@ class TestBoundedBytestringMax64Roundtrip:
 # Test 11: Bounded bytestring 65 bytes rejected by validation
 # Spec: test_dblock_rejects_oversized_bytestrings
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestBoundedBytestring65Rejected:
@@ -808,10 +818,9 @@ class TestBoundedBytestring65Rejected:
         assert decoded == data
 
         # But our validation logic must reject it
-        assert len(decoded) > self.PLUTUS_MAX_BYTESTRING_LEN, (
-            f"Expected bytestring > {self.PLUTUS_MAX_BYTESTRING_LEN} bytes, "
-            f"got {len(decoded)}"
-        )
+        assert (
+            len(decoded) > self.PLUTUS_MAX_BYTESTRING_LEN
+        ), f"Expected bytestring > {self.PLUTUS_MAX_BYTESTRING_LEN} bytes, got {len(decoded)}"
 
         # Simulate the dBlock validation check
         is_valid = len(decoded) <= self.PLUTUS_MAX_BYTESTRING_LEN
@@ -899,9 +908,9 @@ class TestPlutusDataRoundtrip:
 
         # For CBORTag objects, compare structurally
         if isinstance(data, cbor2.CBORTag):
-            assert isinstance(decoded, cbor2.CBORTag), (
-                f"Expected CBORTag, got {type(decoded).__name__}"
-            )
+            assert isinstance(
+                decoded, cbor2.CBORTag
+            ), f"Expected CBORTag, got {type(decoded).__name__}"
             assert decoded.tag == data.tag
             assert decoded.value == data.value
         else:
@@ -916,19 +925,16 @@ class TestPlutusDataRoundtrip:
         re_encoded = cbor2.dumps(decoded, canonical=True)
 
         # Canonical encoding must be deterministic
-        assert encoded == re_encoded, (
-            f"Canonical re-encoding differs: "
-            f"{encoded.hex()} != {re_encoded.hex()}"
-        )
+        assert (
+            encoded == re_encoded
+        ), f"Canonical re-encoding differs: {encoded.hex()} != {re_encoded.hex()}"
 
     @given(
         alt=st.integers(min_value=0, max_value=6),
         fields=st.lists(plutus_leaf, min_size=0, max_size=5),
     )
     @settings(max_examples=200)
-    def test_plutus_constr_tag_roundtrip(
-        self, alt: int, fields: list[object]
-    ) -> None:
+    def test_plutus_constr_tag_roundtrip(self, alt: int, fields: list[object]) -> None:
         """Constr alternatives 0-6 use tags 121-127 and round-trip correctly."""
         tag_number = 121 + alt
         tagged = cbor2.CBORTag(tag_number, fields)
@@ -944,6 +950,7 @@ class TestPlutusDataRoundtrip:
 # Test 13: Map with duplicate keys — cbor2 behavior documentation
 # Spec: Documents uplc issue #35
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestMapWithDuplicateKeysPreserved:
@@ -972,39 +979,41 @@ class TestMapWithDuplicateKeysPreserved:
         # 0A      = value: 10
         # 01      = key: 1 (duplicate!)
         # 14      = value: 20
-        cbor_bytes = bytes([
-            0xa2,  # map(2)
-            0x01,  # key: 1
-            0x0a,  # value: 10
-            0x01,  # key: 1 (duplicate)
-            0x14,  # value: 20
-        ])
+        cbor_bytes = bytes(
+            [
+                0xA2,  # map(2)
+                0x01,  # key: 1
+                0x0A,  # value: 10
+                0x01,  # key: 1 (duplicate)
+                0x14,  # value: 20
+            ]
+        )
 
         decoded = cbor2.loads(cbor_bytes)
         assert isinstance(decoded, dict)
 
         # cbor2 keeps the LAST value for duplicate keys
-        assert decoded[1] == 20, (
-            f"Expected last-writer-wins for duplicate key 1, got {decoded[1]}"
-        )
+        assert decoded[1] == 20, f"Expected last-writer-wins for duplicate key 1, got {decoded[1]}"
         # The first value (10) is silently dropped
-        assert len(decoded) == 1, (
-            f"Expected 1 entry (duplicates merged), got {len(decoded)}"
-        )
+        assert len(decoded) == 1, f"Expected 1 entry (duplicates merged), got {len(decoded)}"
 
     def test_map_with_duplicate_bytestring_keys(self) -> None:
         """Duplicate bytestring keys are also dropped by cbor2."""
         # map {h'CAFE': 1, h'CAFE': 2}
         # A2 42 CAFE 01 42 CAFE 02
-        cbor_bytes = bytes([
-            0xa2,        # map(2)
-            0x42,        # bstr(2)
-            0xca, 0xfe,  # key: h'CAFE'
-            0x01,        # value: 1
-            0x42,        # bstr(2)
-            0xca, 0xfe,  # key: h'CAFE' (duplicate)
-            0x02,        # value: 2
-        ])
+        cbor_bytes = bytes(
+            [
+                0xA2,  # map(2)
+                0x42,  # bstr(2)
+                0xCA,
+                0xFE,  # key: h'CAFE'
+                0x01,  # value: 1
+                0x42,  # bstr(2)
+                0xCA,
+                0xFE,  # key: h'CAFE' (duplicate)
+                0x02,  # value: 2
+            ]
+        )
 
         decoded = cbor2.loads(cbor_bytes)
         assert isinstance(decoded, dict)
@@ -1015,17 +1024,23 @@ class TestMapWithDuplicateKeysPreserved:
         """Multiple different duplicate keys in the same map."""
         # map {1: "a", 2: "b", 1: "c", 2: "d"}
         # A4 01 61 61 02 61 62 01 61 63 02 61 64
-        cbor_bytes = bytes([
-            0xa4,        # map(4)
-            0x01,        # key: 1
-            0x61, 0x61,  # value: "a"
-            0x02,        # key: 2
-            0x61, 0x62,  # value: "b"
-            0x01,        # key: 1 (duplicate)
-            0x61, 0x63,  # value: "c"
-            0x02,        # key: 2 (duplicate)
-            0x61, 0x64,  # value: "d"
-        ])
+        cbor_bytes = bytes(
+            [
+                0xA4,  # map(4)
+                0x01,  # key: 1
+                0x61,
+                0x61,  # value: "a"
+                0x02,  # key: 2
+                0x61,
+                0x62,  # value: "b"
+                0x01,  # key: 1 (duplicate)
+                0x61,
+                0x63,  # value: "c"
+                0x02,  # key: 2 (duplicate)
+                0x61,
+                0x64,  # value: "d"
+            ]
+        )
 
         decoded = cbor2.loads(cbor_bytes)
         assert isinstance(decoded, dict)
@@ -1037,14 +1052,16 @@ class TestMapWithDuplicateKeysPreserved:
     def test_indefinite_map_with_duplicate_keys(self) -> None:
         """Indefinite-length maps with duplicates also drop them."""
         # BF 01 0A 01 14 FF = indef map {1: 10, 1: 20}
-        cbor_bytes = bytes([
-            0xbf,  # indefinite map
-            0x01,  # key: 1
-            0x0a,  # value: 10
-            0x01,  # key: 1 (duplicate)
-            0x14,  # value: 20
-            0xff,  # break
-        ])
+        cbor_bytes = bytes(
+            [
+                0xBF,  # indefinite map
+                0x01,  # key: 1
+                0x0A,  # value: 10
+                0x01,  # key: 1 (duplicate)
+                0x14,  # value: 20
+                0xFF,  # break
+            ]
+        )
 
         decoded = cbor2.loads(cbor_bytes)
         assert isinstance(decoded, dict)
@@ -1096,7 +1113,7 @@ class TestMetadataRoundtripCbor:
     @settings(max_examples=200)
     def test_metadata_roundtrip_cbor(self, key: int, value: object) -> None:
         """Metadata with arbitrary valid values survives CBOR round-trip."""
-        from pycardano.metadata import Metadata, AuxiliaryData
+        from pycardano.metadata import Metadata
 
         try:
             m = Metadata({key: value})
@@ -1117,7 +1134,7 @@ class TestMetadataRoundtripCbor:
     @settings(max_examples=100)
     def test_auxiliary_data_roundtrip(self, key: int, value: object) -> None:
         """AuxiliaryData wrapping Metadata also round-trips."""
-        from pycardano.metadata import Metadata, AuxiliaryData
+        from pycardano.metadata import AuxiliaryData, Metadata
 
         try:
             m = Metadata({key: value})
@@ -1135,6 +1152,7 @@ class TestMetadataRoundtripCbor:
 # Test 15: Protocol version (bver) round-trip
 # Spec: test_bver_roundtrip
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestBverRoundtrip:
@@ -1173,12 +1191,12 @@ class TestBverRoundtrip:
     def test_known_cardano_versions(self) -> None:
         """Known Cardano protocol versions round-trip correctly."""
         versions = [
-            [1, 0],   # Shelley
-            [2, 0],   # Allegra
-            [3, 0],   # Mary
-            [5, 0],   # Alonzo
-            [7, 0],   # Babbage
-            [9, 0],   # Conway
+            [1, 0],  # Shelley
+            [2, 0],  # Allegra
+            [3, 0],  # Mary
+            [5, 0],  # Alonzo
+            [7, 0],  # Babbage
+            [9, 0],  # Conway
             [10, 0],  # Future
         ]
         for v in versions:
@@ -1189,6 +1207,7 @@ class TestBverRoundtrip:
 # Test 16: Metadata rejects invalid value types
 # Spec: test_metadata_rejects_invalid_values
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.property
 class TestMetadataRejectsInvalidValues:

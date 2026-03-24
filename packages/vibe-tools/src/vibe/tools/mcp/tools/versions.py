@@ -1,4 +1,5 @@
 """compare_versions tool — diff entities across versions."""
+
 from __future__ import annotations
 
 from vibe.tools.mcp.app import mcp

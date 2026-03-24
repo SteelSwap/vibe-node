@@ -29,32 +29,30 @@ DB test spec references:
 from __future__ import annotations
 
 import pytest
-from nacl.signing import SigningKey as NaClSigningKey
-
 from pycardano import (
+    Transaction,
     TransactionBody,
     TransactionInput,
     TransactionOutput,
-    Transaction,
 )
-from pycardano.hash import TransactionId
-from pycardano.key import PaymentSigningKey, PaymentVerificationKey, VerificationKey
-from pycardano.witness import TransactionWitnessSet, VerificationKeyWitness
 from pycardano.address import Address
+from pycardano.hash import TransactionId
+from pycardano.key import PaymentSigningKey, PaymentVerificationKey
 from pycardano.network import Network
+from pycardano.witness import TransactionWitnessSet, VerificationKeyWitness
 
 from vibe.cardano.ledger.shelley import (
     SHELLEY_MAINNET_PARAMS,
     ShelleyProtocolParams,
     ShelleyUTxO,
     ShelleyValidationError,
+    _output_lovelace,
     apply_shelley_block,
     apply_shelley_tx,
     shelley_min_fee,
     validate_shelley_tx,
     validate_shelley_utxo,
     validate_shelley_witnesses,
-    _output_lovelace,
 )
 
 # ---------------------------------------------------------------------------
@@ -95,6 +93,7 @@ def make_address(vk: PaymentVerificationKey) -> Address:
 def make_tx_id(seed: int = 0) -> TransactionId:
     """Create a deterministic TransactionId from a seed."""
     import hashlib
+
     digest = hashlib.blake2b(seed.to_bytes(4, "big"), digest_size=32).digest()
     return TransactionId(digest)
 
@@ -157,6 +156,7 @@ def make_valid_tx(
 # shelley_min_fee tests
 # ---------------------------------------------------------------------------
 
+
 class TestShelleyMinFee:
     """Tests for the Shelley minimum fee calculation."""
 
@@ -186,6 +186,7 @@ class TestShelleyMinFee:
 # validate_shelley_utxo tests
 # ---------------------------------------------------------------------------
 
+
 class TestValidateShelleyUtxo:
     """Tests for UTXO transition rules (no witness checks)."""
 
@@ -203,7 +204,9 @@ class TestValidateShelleyUtxo:
             ttl=1000,
         )
         # Use a small tx_size that satisfies min fee
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200
+        )
         assert errors == []
 
     def test_missing_input(self):
@@ -221,7 +224,9 @@ class TestValidateShelleyUtxo:
             fee=2_000_000,
             ttl=1000,
         )
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200
+        )
         assert any("InputsNotInUTxO" in e for e in errors)
 
     def test_ttl_expired(self):
@@ -240,7 +245,9 @@ class TestValidateShelleyUtxo:
             ttl=99,
         )
         # slot=100, ttl=99 => expired
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=100, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=100, tx_size=200
+        )
         assert any("ExpiredUTxO" in e for e in errors)
         assert any("current_slot=100" in e and "ttl=99" in e for e in errors)
 
@@ -258,7 +265,9 @@ class TestValidateShelleyUtxo:
             fee=2_000_000,
             ttl=100,
         )
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=100, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=100, tx_size=200
+        )
         assert any("ExpiredUTxO" in e for e in errors)
 
     def test_ttl_none_means_no_expiry(self):
@@ -271,7 +280,9 @@ class TestValidateShelleyUtxo:
             fee=2_000_000,
             ttl=None,
         )
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=999999, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=999999, tx_size=200
+        )
         assert not any("ExpiredUTxO" in e for e in errors)
 
     def test_max_tx_size_exceeded(self):
@@ -285,7 +296,9 @@ class TestValidateShelleyUtxo:
             ttl=1000,
         )
         # tx_size exceeds max_tx_size (16384)
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=20000)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=20000
+        )
         assert any("MaxTxSizeUTxO" in e for e in errors)
 
     def test_fee_too_small(self):
@@ -300,7 +313,9 @@ class TestValidateShelleyUtxo:
             fee=100,
             ttl=1000,
         )
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200
+        )
         assert any("FeeTooSmallUTxO" in e for e in errors)
 
     def test_output_below_min_utxo(self):
@@ -314,7 +329,9 @@ class TestValidateShelleyUtxo:
             fee=9_500_000,
             ttl=1000,
         )
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200
+        )
         assert any("OutputTooSmallUTxO" in e for e in errors)
 
     def test_value_not_conserved_outputs_exceed_inputs(self):
@@ -331,7 +348,9 @@ class TestValidateShelleyUtxo:
             fee=2_000_000,
             ttl=1000,
         )
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200
+        )
         assert any("ValueNotConservedUTxO" in e for e in errors)
 
     def test_value_preservation_simple_transfer(self):
@@ -349,7 +368,9 @@ class TestValidateShelleyUtxo:
             fee=2_000_000,
             ttl=1000,
         )
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200
+        )
         # Should not contain any value preservation errors
         assert not any("ValueNotConservedUTxO" in e for e in errors)
 
@@ -362,9 +383,11 @@ class TestValidateShelleyUtxo:
             inputs=[fake_txin],
             outputs=[TransactionOutput(dest_addr, 500_000)],  # below min
             fee=100,  # too small
-            ttl=10,   # expired
+            ttl=10,  # expired
         )
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=100, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=100, tx_size=200
+        )
         # Should have: InputsNotInUTxO, ExpiredUTxO, FeeTooSmallUTxO, OutputTooSmallUTxO
         # (no ValueNotConservedUTxO because inputs couldn't be resolved)
         assert any("InputsNotInUTxO" in e for e in errors)
@@ -377,6 +400,7 @@ class TestValidateShelleyUtxo:
 # ---------------------------------------------------------------------------
 # validate_shelley_witnesses tests
 # ---------------------------------------------------------------------------
+
 
 class TestValidateShelleyWitnesses:
     """Tests for UTXOW witness verification rules."""
@@ -449,6 +473,7 @@ class TestValidateShelleyWitnesses:
 # validate_shelley_tx (combined) tests
 # ---------------------------------------------------------------------------
 
+
 class TestValidateShelleyTx:
     """Tests for the combined UTXO + UTXOW validation."""
 
@@ -480,8 +505,7 @@ class TestValidateShelleyTx:
         # No witnesses
         witness_set = TransactionWitnessSet()
         errors = validate_shelley_tx(
-            tx_body, witness_set, utxo_set, TEST_PARAMS,
-            current_slot=100, tx_size=200
+            tx_body, witness_set, utxo_set, TEST_PARAMS, current_slot=100, tx_size=200
         )
         assert any("ExpiredUTxO" in e for e in errors)
         assert any("MissingVKeyWitnessesUTxOW" in e for e in errors)
@@ -490,6 +514,7 @@ class TestValidateShelleyTx:
 # ---------------------------------------------------------------------------
 # apply_shelley_tx tests
 # ---------------------------------------------------------------------------
+
 
 class TestApplyShelleyTx:
     """Tests for single transaction application."""
@@ -559,6 +584,7 @@ class TestApplyShelleyTx:
 # ---------------------------------------------------------------------------
 # apply_shelley_block tests
 # ---------------------------------------------------------------------------
+
 
 class TestApplyShelleyBlock:
     """Tests for block-level transaction application."""
@@ -631,6 +657,7 @@ class TestApplyShelleyBlock:
 # ShelleyProtocolParams tests
 # ---------------------------------------------------------------------------
 
+
 class TestShelleyProtocolParams:
     """Tests for protocol parameters dataclass."""
 
@@ -655,6 +682,7 @@ class TestShelleyProtocolParams:
 # ShelleyValidationError tests
 # ---------------------------------------------------------------------------
 
+
 class TestShelleyValidationError:
     """Tests for the error type."""
 
@@ -674,6 +702,7 @@ class TestShelleyValidationError:
 # ---------------------------------------------------------------------------
 # Edge case tests
 # ---------------------------------------------------------------------------
+
 
 class TestEdgeCases:
     """Edge case and boundary condition tests."""
@@ -697,7 +726,9 @@ class TestEdgeCases:
             fee=2_000_000,
             ttl=101,
         )
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=100, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=100, tx_size=200
+        )
         assert not any("ExpiredUTxO" in e for e in errors)
 
     def test_exact_min_fee_accepted(self):
@@ -711,7 +742,9 @@ class TestEdgeCases:
             fee=300,
             ttl=1000,
         )
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200
+        )
         assert not any("FeeTooSmallUTxO" in e for e in errors)
 
     def test_exact_min_utxo_accepted(self):
@@ -724,7 +757,9 @@ class TestEdgeCases:
             fee=9_000_000,
             ttl=1000,
         )
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200
+        )
         assert not any("OutputTooSmallUTxO" in e for e in errors)
 
 
@@ -752,8 +787,10 @@ class TestPoolStateInvariants:
         Spec ref: Shelley formal spec, Figure 35 (POOL transition rule).
         """
         from fractions import Fraction
+
         from pycardano.certificate import PoolParams, PoolRegistration, PoolRetirement
         from pycardano.hash import PoolKeyHash, VerificationKeyHash
+
         from vibe.cardano.ledger.shelley_delegation import (
             DelegationState,
             process_certificate,
@@ -779,7 +816,9 @@ class TestPoolStateInvariants:
         # Register the pool
         state = process_certificate(
             PoolRegistration(pool_params=pool_params),
-            state, params, current_epoch=0,
+            state,
+            params,
+            current_epoch=0,
         )
 
         # Invariant: registered pool has valid params
@@ -790,14 +829,16 @@ class TestPoolStateInvariants:
         # Retire the pool
         state = process_certificate(
             PoolRetirement(pool_keyhash=pool_hash, epoch=5),
-            state, params, current_epoch=0,
+            state,
+            params,
+            current_epoch=0,
         )
 
         # Invariant: retiring pools are subset of registered pools
         for retiring_key in state.retiring:
-            assert retiring_key in state.pools, (
-                f"Retiring pool {retiring_key.hex()} not in registered pools"
-            )
+            assert (
+                retiring_key in state.pools
+            ), f"Retiring pool {retiring_key.hex()} not in registered pools"
 
     def test_non_negative_deposits(self):
         """Deposits field is never negative after any DELEG/POOL transition.
@@ -808,14 +849,16 @@ class TestPoolStateInvariants:
         Spec ref: Shelley formal spec, Section 8, deposit equations.
         """
         from fractions import Fraction
+
         from pycardano.certificate import (
             PoolParams,
             PoolRegistration,
-            StakeRegistration,
+            StakeCredential,
             StakeDeregistration,
+            StakeRegistration,
         )
         from pycardano.hash import PoolKeyHash, VerificationKeyHash
-        from pycardano.certificate import StakeCredential
+
         from vibe.cardano.ledger.shelley_delegation import (
             DelegationState,
             compute_certificate_deposits,
@@ -854,9 +897,9 @@ class TestPoolStateInvariants:
         # Refund is negative (money returned to tx), registration is positive
         # Net of all three certs should equal key_deposit + pool_deposit - key_deposit = pool_deposit
         net = compute_certificate_deposits([reg, pool_reg, dereg], params)
-        assert net == params.pool_deposit, (
-            f"Net deposits after reg+pool_reg+dereg should be pool_deposit={params.pool_deposit}, got {net}"
-        )
+        assert (
+            net == params.pool_deposit
+        ), f"Net deposits after reg+pool_reg+dereg should be pool_deposit={params.pool_deposit}, got {net}"
 
     def test_preserve_balance_restricted(self):
         """Property: restricted-balance preservation.
@@ -882,14 +925,16 @@ class TestPoolStateInvariants:
         )
 
         # Produced: outputs + fee
-        produced = sum(
-            _output_lovelace(out)
-            for out in tx.transaction_body.outputs
-        ) + tx.transaction_body.fee
-
-        assert consumed == produced, (
-            f"Balance not preserved: consumed={consumed}, produced={produced}"
+        produced = (
+            sum(_output_lovelace(out) for out in tx.transaction_body.outputs)
+            + tx.transaction_body.fee
         )
+
+        assert (
+            consumed == produced
+        ), f"Balance not preserved: consumed={consumed}, produced={produced}"
+
+
 # Withdrawal and staking witness tests
 # ---------------------------------------------------------------------------
 
@@ -982,7 +1027,9 @@ class TestWithdrawalValidation:
             withdraws=withdrawals,
         )
 
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200
+        )
         assert any("ValueNotConservedUTxO" in e for e in errors)
 
     def test_empty_input_set_with_withdrawal_fails(self):
@@ -1010,7 +1057,9 @@ class TestWithdrawalValidation:
             withdraws=withdrawals,
         )
 
-        errors = validate_shelley_utxo(tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200)
+        errors = validate_shelley_utxo(
+            tx_body, utxo_set, TEST_PARAMS, current_slot=50, tx_size=200
+        )
         assert any("InputSetEmptyUTxO" in e for e in errors)
 
 
@@ -1040,8 +1089,9 @@ class TestBootstrapAddressSpending:
         how _from_byron_cbor builds the Address instance.
         """
         import binascii
-        import cbor2
         import hashlib
+
+        import cbor2
 
         # Build a valid Byron address CBOR structure:
         # [CBORTag(24, payload_cbor), crc32]
@@ -1175,7 +1225,10 @@ class TestShelleyTxSizeConformance:
     """
 
     MAINNET_PARAMS = ShelleyProtocolParams(
-        min_fee_a=44, min_fee_b=155381, max_tx_size=16384, min_utxo_value=1000000,
+        min_fee_a=44,
+        min_fee_b=155381,
+        max_tx_size=16384,
+        min_utxo_value=1000000,
     )
 
     def _compute_tx_size(self, tx: Transaction) -> int:
@@ -1186,10 +1239,9 @@ class TestShelleyTxSizeConformance:
         """Assert that the tx fee >= min_fee for the actual serialized size."""
         tx_size = self._compute_tx_size(tx)
         min_fee = shelley_min_fee(tx_size, params)
-        assert tx.transaction_body.fee >= min_fee, (
-            f"Fee {tx.transaction_body.fee} < min_fee {min_fee} "
-            f"for tx_size={tx_size}"
-        )
+        assert (
+            tx.transaction_body.fee >= min_fee
+        ), f"Fee {tx.transaction_body.fee} < min_fee {min_fee} for tx_size={tx_size}"
 
     def test_simple_utxo_tx_size(self):
         """Simple 1-input 1-output UTxO transfer: verify size and fee consistency."""
@@ -1220,12 +1272,14 @@ class TestShelleyTxSizeConformance:
 
         tx_size = self._compute_tx_size(tx)
         simple_size = self._compute_tx_size(
-            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+            make_valid_tx(
+                *make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000
+            )
         )
         # Multi-input should be larger than simple
-        assert tx_size > simple_size, (
-            f"Multi-input tx ({tx_size}) should be larger than simple ({simple_size})"
-        )
+        assert (
+            tx_size > simple_size
+        ), f"Multi-input tx ({tx_size}) should be larger than simple ({simple_size})"
         self._assert_fee_consistent(tx, self.MAINNET_PARAMS)
 
     def test_register_stake_cert_tx_size(self):
@@ -1251,7 +1305,9 @@ class TestShelleyTxSizeConformance:
 
         tx_size = self._compute_tx_size(tx)
         simple_size = self._compute_tx_size(
-            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+            make_valid_tx(
+                *make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000
+            )
         )
         assert tx_size > simple_size, "Cert tx should be larger than simple tx"
 
@@ -1340,7 +1396,9 @@ class TestShelleyTxSizeConformance:
         tx_size = self._compute_tx_size(tx)
         # Pool registration is the largest cert type
         simple_size = self._compute_tx_size(
-            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+            make_valid_tx(
+                *make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000
+            )
         )
         assert tx_size > simple_size + 50, "Pool reg tx should be significantly larger"
 
@@ -1391,14 +1449,16 @@ class TestShelleyTxSizeConformance:
 
         tx_size = self._compute_tx_size(tx)
         simple_size = self._compute_tx_size(
-            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+            make_valid_tx(
+                *make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000
+            )
         )
         assert tx_size > simple_size, "Metadata tx should be larger"
 
     def test_tx_with_multisig_size(self):
         """Tx with native multisig script: verify size overhead."""
-        from pycardano.nativescript import ScriptAll, ScriptPubkey
         from pycardano.hash import VerificationKeyHash
+        from pycardano.nativescript import ScriptAll, ScriptPubkey
 
         utxo_set, txin, sk, vk = make_simple_utxo(value=10_000_000)
         addr = make_address(vk)
@@ -1423,7 +1483,9 @@ class TestShelleyTxSizeConformance:
 
         tx_size = self._compute_tx_size(tx)
         simple_size = self._compute_tx_size(
-            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+            make_valid_tx(
+                *make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000
+            )
         )
         assert tx_size > simple_size, "Multisig tx should be larger"
 
@@ -1450,7 +1512,9 @@ class TestShelleyTxSizeConformance:
 
         tx_size = self._compute_tx_size(tx)
         simple_size = self._compute_tx_size(
-            make_valid_tx(*make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000)
+            make_valid_tx(
+                *make_simple_utxo(value=10_000_000), output_value=8_000_000, fee=2_000_000
+            )
         )
         assert tx_size > simple_size, "Withdrawal tx should be larger"
         self._assert_fee_consistent(tx, self.MAINNET_PARAMS)

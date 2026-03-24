@@ -16,24 +16,21 @@ import hashlib
 import os
 from typing import Any
 
-import pytest
-
 from vibe.cardano.consensus.chain_selection import (
     ChainCandidate,
     Preference,
     compare_chains,
-    is_chain_better,
     should_switch_to,
 )
 from vibe.cardano.mempool.mempool import Mempool
-from vibe.cardano.mempool.types import MempoolConfig, MempoolSnapshot
+from vibe.cardano.mempool.types import MempoolConfig
 from vibe.cardano.storage.ledger import LedgerDB
-from vibe.cardano.storage.volatile import BlockInfo, VolatileDB
-
+from vibe.cardano.storage.volatile import VolatileDB
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_hash(seed: int) -> bytes:
     """Deterministic 32-byte hash from an integer seed."""
@@ -79,6 +76,7 @@ def _make_utxo_entry(tx_idx: int) -> tuple[bytes, dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Chain selection benchmarks
 # ---------------------------------------------------------------------------
+
 
 class TestChainSelection:
     """Benchmark chain selection comparisons.
@@ -144,6 +142,7 @@ class TestChainSelection:
 # ---------------------------------------------------------------------------
 # Mempool benchmarks (sync-only operations — avoid asyncio in benchmarks)
 # ---------------------------------------------------------------------------
+
 
 class _AlwaysValidValidator:
     """A validator that always accepts transactions."""
@@ -237,6 +236,7 @@ class TestMempool:
 # VolatileDB benchmarks
 # ---------------------------------------------------------------------------
 
+
 class TestVolatileDB:
     """Benchmark VolatileDB read/write (in-memory mode)."""
 
@@ -317,6 +317,7 @@ class TestVolatileDB:
 # LedgerDB / UTxO benchmarks
 # ---------------------------------------------------------------------------
 
+
 class TestLedgerDB:
     """Benchmark LedgerDB UTxO operations.
 
@@ -351,6 +352,7 @@ class TestLedgerDB:
         This is the typical block application workload — roughly 300 total
         UTxO mutations per block on mainnet.
         """
+
         def apply_one():
             db = LedgerDB(k=100)
             # Seed with initial UTxOs
@@ -366,6 +368,7 @@ class TestLedgerDB:
 
     def test_rollback_single_block(self, benchmark) -> None:
         """Roll back a single block."""
+
         def rollback_one():
             db = LedgerDB(k=100)
             initial = [_make_utxo_entry(i) for i in range(1000)]

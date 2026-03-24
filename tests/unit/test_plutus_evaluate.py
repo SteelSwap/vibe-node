@@ -20,38 +20,23 @@ Haskell references:
 from __future__ import annotations
 
 import pytest
-
 from uplc.ast import (
-    BuiltIn,
-    BuiltInFun,
-    BuiltinInteger,
-    BuiltinBool,
-    BuiltinUnit,
     PlutusByteString,
     PlutusConstr,
     PlutusInteger,
     PlutusList,
     PlutusMap,
-    Program,
-    Lambda,
-    Variable,
-    Apply,
-    Force,
-    Delay,
-    Error,
 )
-from uplc.cost_model import Budget
-from uplc.tools import flatten, unflatten, parse, eval as uplc_eval
+from uplc.tools import eval as uplc_eval
+from uplc.tools import flatten, parse, unflatten
 
-from vibe.cardano.plutus.cost_model import CostModel, ExUnits, PlutusVersion
+from vibe.cardano.plutus.cost_model import ExUnits, PlutusVersion
 from vibe.cardano.plutus.evaluate import (
-    EvalResult,
+    _get_uplc_cost_models,
     deserialize_script,
     evaluate_script,
     pycardano_to_uplc_data,
-    _get_uplc_cost_models,
 )
-
 
 # ---------------------------------------------------------------------------
 # 1. Script deserialization
@@ -134,7 +119,7 @@ class TestDeserializeScript:
             restored = unflatten(flat_bytes)
             roundtrip_result = uplc_eval(restored)
             # Both should produce the same output type
-            assert type(direct_result.result) == type(roundtrip_result.result)
+            assert type(direct_result.result) is type(roundtrip_result.result)
 
 
 # ---------------------------------------------------------------------------
@@ -190,15 +175,14 @@ class TestBudgetEnforcement:
 
     def _make_script_bytes(self, source: str) -> bytes:
         import cbor2pure as cbor2
+
         prog = parse(source)
         return cbor2.dumps(flatten(prog))
 
     def test_sufficient_budget_succeeds(self):
         """Script with ample budget succeeds."""
         # Script accepts 2 args (redeemer, context) and returns unit
-        script = self._make_script_bytes(
-            "(program 1.0.0 (lam r (lam ctx (con unit ()))))"
-        )
+        script = self._make_script_bytes("(program 1.0.0 (lam r (lam ctx (con unit ()))))")
         result = evaluate_script(
             script_bytes=script,
             datum=None,
@@ -213,9 +197,7 @@ class TestBudgetEnforcement:
 
     def test_tiny_budget_fails(self):
         """Script with impossibly small budget fails."""
-        script = self._make_script_bytes(
-            "(program 1.0.0 (lam r (lam ctx (con unit ()))))"
-        )
+        script = self._make_script_bytes("(program 1.0.0 (lam r (lam ctx (con unit ()))))")
 
         result = evaluate_script(
             script_bytes=script,
@@ -297,15 +279,14 @@ class TestEvaluateScript:
     def _make_script_bytes(self, source: str) -> bytes:
         """Helper: parse → flatten → CBOR-wrap."""
         import cbor2pure as cbor2
+
         prog = parse(source)
         return cbor2.dumps(flatten(prog))
 
     def test_always_succeeds(self):
         """Script that ignores args and returns unit succeeds."""
         # (lam d (lam r (lam ctx (con unit ()))))
-        script = self._make_script_bytes(
-            "(program 1.0.0 (lam d (lam r (lam ctx (con unit ())))))"
-        )
+        script = self._make_script_bytes("(program 1.0.0 (lam d (lam r (lam ctx (con unit ())))))")
         result = evaluate_script(
             script_bytes=script,
             datum=PlutusInteger(0),
@@ -318,9 +299,7 @@ class TestEvaluateScript:
 
     def test_always_fails(self):
         """Script that calls error always fails."""
-        script = self._make_script_bytes(
-            "(program 1.0.0 (lam d (lam r (lam ctx (error)))))"
-        )
+        script = self._make_script_bytes("(program 1.0.0 (lam d (lam r (lam ctx (error)))))")
         result = evaluate_script(
             script_bytes=script,
             datum=PlutusInteger(0),
@@ -333,9 +312,7 @@ class TestEvaluateScript:
 
     def test_v3_single_arg(self):
         """V3 scripts receive a single context argument."""
-        script = self._make_script_bytes(
-            "(program 1.1.0 (lam ctx (con unit ())))"
-        )
+        script = self._make_script_bytes("(program 1.1.0 (lam ctx (con unit ())))")
         result = evaluate_script(
             script_bytes=script,
             datum=None,

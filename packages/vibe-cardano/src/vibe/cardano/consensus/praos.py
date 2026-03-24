@@ -45,7 +45,6 @@ from vibe.cardano.crypto.vrf import certified_nat_max_check
 from .header_validation import (
     HeaderValidationError,
     HeaderValidationParams,
-    PoolInfo,
     StakeDistribution,
     validate_header,
 )
@@ -80,9 +79,7 @@ class ActiveSlotCoeff:
 
     def __post_init__(self) -> None:
         if not (0.0 < self.value < 1.0):
-            raise ValueError(
-                f"Active slot coefficient must be in (0.0, 1.0), got {self.value}"
-            )
+            raise ValueError(f"Active slot coefficient must be in (0.0, 1.0), got {self.value}")
 
 
 # ---------------------------------------------------------------------------
@@ -151,9 +148,7 @@ class PraosState:
     tip_block_number: int = 0
     epoch_nonce: bytes = b"\x00" * 32
     stake_distribution: StakeDistribution = field(default_factory=dict)
-    protocol_params: HeaderValidationParams = field(
-        default_factory=HeaderValidationParams
-    )
+    protocol_params: HeaderValidationParams = field(default_factory=HeaderValidationParams)
 
 
 # ---------------------------------------------------------------------------

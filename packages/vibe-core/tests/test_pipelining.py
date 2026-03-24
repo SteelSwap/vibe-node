@@ -21,7 +21,6 @@ from hypothesis import strategies as st
 
 from vibe.core.protocols.pipelining import PipelinedRunner
 
-
 # ---------------------------------------------------------------------------
 # Fake channel and codec for testing
 # ---------------------------------------------------------------------------
@@ -379,7 +378,9 @@ class TestPipelinedRunnerProperties:
     """Property-based tests with Hypothesis."""
 
     @pytest.mark.asyncio
-    @given(payloads=st.lists(st.integers(min_value=0, max_value=2**31 - 1), min_size=1, max_size=50))
+    @given(
+        payloads=st.lists(st.integers(min_value=0, max_value=2**31 - 1), min_size=1, max_size=50)
+    )
     @settings(max_examples=20, deadline=5000)
     async def test_fifo_ordering_property(self, payloads: list[int]) -> None:
         """For any sequence of requests, responses preserve FIFO order."""

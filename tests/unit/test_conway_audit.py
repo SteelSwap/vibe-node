@@ -21,8 +21,6 @@ from __future__ import annotations
 
 import hashlib
 
-import pytest
-
 from vibe.cardano.ledger.conway import (
     _is_drep_active,
     apply_no_confidence,
@@ -41,13 +39,11 @@ from vibe.cardano.ledger.conway_types import (
     GovActionType,
     GovernanceState,
     ProposalProcedure,
-    RatificationThresholds,
     Vote,
     Voter,
     VoterRole,
     VotingProcedure,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
@@ -79,9 +75,7 @@ def make_tx_id_bytes(seed: int = 0) -> bytes:
 
 def make_anchor(seed: int = 0) -> Anchor:
     """Create a test anchor."""
-    data_hash = hashlib.blake2b(
-        f"anchor-{seed}".encode(), digest_size=32
-    ).digest()
+    data_hash = hashlib.blake2b(f"anchor-{seed}".encode(), digest_size=32).digest()
     return Anchor(url=f"https://example.com/proposal-{seed}", data_hash=data_hash)
 
 
@@ -164,21 +158,17 @@ class TestStakeWeightedDRepVoting:
         )
 
         # Big DRep votes YES
-        state.votes[action_id][
-            Voter(VoterRole.DREP, big_drep)
-        ] = VotingProcedure(vote=Vote.YES)
+        state.votes[action_id][Voter(VoterRole.DREP, big_drep)] = VotingProcedure(vote=Vote.YES)
 
         # All small DReps vote NO
         for sd in small_dreps:
-            state.votes[action_id][
-                Voter(VoterRole.DREP, sd)
-            ] = VotingProcedure(vote=Vote.NO)
+            state.votes[action_id][Voter(VoterRole.DREP, sd)] = VotingProcedure(vote=Vote.NO)
 
         # All CC members vote YES
         for cc_cred in committee:
-            state.votes[action_id][
-                Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)] = (
+                VotingProcedure(vote=Vote.YES)
+            )
 
         # Should pass because 1M YES >> 10K NO in stake weight
         assert check_ratification(action_id, state, TEST_PARAMS)
@@ -208,21 +198,17 @@ class TestStakeWeightedDRepVoting:
         )
 
         # Big DRep votes NO
-        state.votes[action_id][
-            Voter(VoterRole.DREP, big_drep)
-        ] = VotingProcedure(vote=Vote.NO)
+        state.votes[action_id][Voter(VoterRole.DREP, big_drep)] = VotingProcedure(vote=Vote.NO)
 
         # All small DReps vote YES
         for sd in small_dreps:
-            state.votes[action_id][
-                Voter(VoterRole.DREP, sd)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.DREP, sd)] = VotingProcedure(vote=Vote.YES)
 
         # All CC members vote YES
         for cc_cred in committee:
-            state.votes[action_id][
-                Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)] = (
+                VotingProcedure(vote=Vote.YES)
+            )
 
         # Only 10K YES out of 1,010,000 total = ~1% — not enough for 2/3
         assert not check_ratification(action_id, state, TEST_PARAMS)
@@ -254,9 +240,9 @@ class TestStakeWeightedDRepVoting:
         }
         # All CC members vote YES
         for cc_cred in committee:
-            state.votes[action_id][
-                Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)] = (
+                VotingProcedure(vote=Vote.YES)
+            )
 
         assert check_ratification(action_id, state, TEST_PARAMS)
 
@@ -301,26 +287,18 @@ class TestSPOVotingRole:
         )
 
         # SPOs vote YES (1/2 threshold for hard fork)
-        state.votes[action_id][
-            Voter(VoterRole.STAKE_POOL, spo1)
-        ] = VotingProcedure(vote=Vote.YES)
-        state.votes[action_id][
-            Voter(VoterRole.STAKE_POOL, spo2)
-        ] = VotingProcedure(vote=Vote.YES)
+        state.votes[action_id][Voter(VoterRole.STAKE_POOL, spo1)] = VotingProcedure(vote=Vote.YES)
+        state.votes[action_id][Voter(VoterRole.STAKE_POOL, spo2)] = VotingProcedure(vote=Vote.YES)
 
         # DReps vote YES
-        state.votes[action_id][
-            Voter(VoterRole.DREP, drep1)
-        ] = VotingProcedure(vote=Vote.YES)
-        state.votes[action_id][
-            Voter(VoterRole.DREP, drep2)
-        ] = VotingProcedure(vote=Vote.YES)
+        state.votes[action_id][Voter(VoterRole.DREP, drep1)] = VotingProcedure(vote=Vote.YES)
+        state.votes[action_id][Voter(VoterRole.DREP, drep2)] = VotingProcedure(vote=Vote.YES)
 
         # All CC members vote YES
         for cc_cred in committee:
-            state.votes[action_id][
-                Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cc_cred)] = (
+                VotingProcedure(vote=Vote.YES)
+            )
 
         assert check_ratification(action_id, state, TEST_PARAMS)
 
@@ -428,15 +406,13 @@ class TestCommitteeQuorum:
 
         # All DReps vote YES
         for cred in dreps:
-            state.votes[action_id][
-                Voter(VoterRole.DREP, cred)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.DREP, cred)] = VotingProcedure(vote=Vote.YES)
 
         # All CC members vote YES (need 2/3 = 5 of 7)
         for cred in committee:
-            state.votes[action_id][
-                Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cred)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cred)] = (
+                VotingProcedure(vote=Vote.YES)
+            )
 
         assert check_ratification(action_id, state, TEST_PARAMS)
 
@@ -622,9 +598,7 @@ class TestNoConfidenceEffects:
 
         # All DReps vote YES
         for cred in dreps:
-            state.votes[action_id][
-                Voter(VoterRole.DREP, cred)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.DREP, cred)] = VotingProcedure(vote=Vote.YES)
 
         # Should fail: ParameterChange needs CC, but committee is empty
         # (committeeMinSize check fails: 0 < 7)
@@ -721,15 +695,13 @@ class TestDRepActivityTracking:
         )
 
         # active_drep votes YES
-        state.votes[action_id][
-            Voter(VoterRole.DREP, active_drep)
-        ] = VotingProcedure(vote=Vote.YES)
+        state.votes[action_id][Voter(VoterRole.DREP, active_drep)] = VotingProcedure(vote=Vote.YES)
 
         # All CC members vote YES
         for cred in committee:
-            state.votes[action_id][
-                Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cred)
-            ] = VotingProcedure(vote=Vote.YES)
+            state.votes[action_id][Voter(VoterRole.CONSTITUTIONAL_COMMITTEE, cred)] = (
+                VotingProcedure(vote=Vote.YES)
+            )
 
         result = check_ratification(action_id, state, TEST_PARAMS)
         assert result

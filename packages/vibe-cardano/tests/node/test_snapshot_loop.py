@@ -13,14 +13,12 @@ import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from vibe.cardano.node.run import _snapshot_loop, SlotClock
-from vibe.cardano.consensus.slot_arithmetic import SlotConfig
+from vibe.cardano.node.run import _snapshot_loop
 from vibe.core.storage.interfaces import SnapshotHandle
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -224,9 +222,7 @@ async def test_cancellation_stops_snapshot_loop() -> None:
     slot_clock = FakeSlotClock(slot_length=100.0)  # long sleep
     shutdown_event = asyncio.Event()
 
-    task = asyncio.create_task(
-        _snapshot_loop(ledger_db, slot_clock, 2000, shutdown_event)
-    )
+    task = asyncio.create_task(_snapshot_loop(ledger_db, slot_clock, 2000, shutdown_event))
 
     # Give it a moment to enter the sleep, then cancel.
     await asyncio.sleep(0.05)

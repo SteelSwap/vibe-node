@@ -8,16 +8,14 @@ Tests cover:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
 from vibe.cardano.network.chainsync import Point
 from vibe.cardano.node.config import NodeConfig, PeerAddress
 from vibe.cardano.node.run import PeerManager
-
 
 # ---------------------------------------------------------------------------
 # Tests: NodeConfig.mithril_snapshot_path
@@ -41,10 +39,12 @@ def test_node_config_mithril_snapshot_path_set(tmp_path: Path):
 
 def test_node_config_from_dict_mithril_snapshot():
     """from_dict parses mithril_snapshot_path."""
-    cfg = NodeConfig.from_dict({
-        "network_magic": 2,
-        "mithril_snapshot_path": "/tmp/snapshot",
-    })
+    cfg = NodeConfig.from_dict(
+        {
+            "network_magic": 2,
+            "mithril_snapshot_path": "/tmp/snapshot",
+        }
+    )
     assert cfg.mithril_snapshot_path == Path("/tmp/snapshot")
 
 

@@ -45,34 +45,33 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
-from typing import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
+from vibe.cardano.network.txsubmission import (
+    MsgDone,
+    MsgInit,
+    MsgReplyTxIds,
+    MsgReplyTxs,
+    MsgRequestTxIds,
+    MsgRequestTxs,
+    decode_client_message,
+    decode_server_message,
+    encode_done,
+    encode_init,
+    encode_reply_tx_ids,
+    encode_reply_txs,
+    encode_request_tx_ids,
+    encode_request_txs,
+)
 from vibe.core.protocols.agency import (
     Agency,
     Message,
+    PeerRole,
     Protocol,
     ProtocolError,
-    PeerRole,
 )
-from vibe.core.protocols.codec import Codec, CodecError
+from vibe.core.protocols.codec import CodecError
 from vibe.core.protocols.runner import ProtocolRunner
-
-from vibe.cardano.network.txsubmission import (
-    MsgInit,
-    MsgRequestTxIds,
-    MsgReplyTxIds,
-    MsgRequestTxs,
-    MsgReplyTxs,
-    MsgDone,
-    encode_init,
-    encode_request_tx_ids,
-    encode_reply_tx_ids,
-    encode_request_txs,
-    encode_reply_txs,
-    encode_done,
-    decode_server_message,
-    decode_client_message,
-)
 
 __all__ = [
     "TxSubmissionState",
@@ -170,16 +169,12 @@ class TsMsgRequestTxIds(Message[TxSubmissionState]):
 
     __slots__ = ("inner",)
 
-    def __init__(
-        self, blocking: bool, ack_count: int, req_count: int
-    ) -> None:
+    def __init__(self, blocking: bool, ack_count: int, req_count: int) -> None:
         super().__init__(
             from_state=TxSubmissionState.StIdle,
             to_state=TxSubmissionState.StTxIds,
         )
-        self.inner = MsgRequestTxIds(
-            blocking=blocking, ack_count=ack_count, req_count=req_count
-        )
+        self.inner = MsgRequestTxIds(blocking=blocking, ack_count=ack_count, req_count=req_count)
 
     @property
     def blocking(self) -> bool:
@@ -279,18 +274,14 @@ class TsMsgDone(Message[TxSubmissionState]):
 # ---------------------------------------------------------------------------
 
 # Pre-computed frozen sets for valid_messages.
-_INIT_MESSAGES: frozenset[type[Message[TxSubmissionState]]] = frozenset(
-    {TsMsgInit}
-)
+_INIT_MESSAGES: frozenset[type[Message[TxSubmissionState]]] = frozenset({TsMsgInit})
 _IDLE_MESSAGES: frozenset[type[Message[TxSubmissionState]]] = frozenset(
     {TsMsgRequestTxIds, TsMsgRequestTxs}
 )
 _TXIDS_MESSAGES: frozenset[type[Message[TxSubmissionState]]] = frozenset(
     {TsMsgReplyTxIds, TsMsgDone}
 )
-_TXS_MESSAGES: frozenset[type[Message[TxSubmissionState]]] = frozenset(
-    {TsMsgReplyTxs}
-)
+_TXS_MESSAGES: frozenset[type[Message[TxSubmissionState]]] = frozenset({TsMsgReplyTxs})
 _DONE_MESSAGES: frozenset[type[Message[TxSubmissionState]]] = frozenset()
 
 
@@ -364,9 +355,7 @@ class TxSubmissionCodec:
         if isinstance(message, TsMsgInit):
             return encode_init()
         elif isinstance(message, TsMsgRequestTxIds):
-            return encode_request_tx_ids(
-                message.blocking, message.ack_count, message.req_count
-            )
+            return encode_request_tx_ids(message.blocking, message.ack_count, message.req_count)
         elif isinstance(message, TsMsgReplyTxIds):
             return encode_reply_tx_ids(message.txids)
         elif isinstance(message, TsMsgRequestTxs):
@@ -376,9 +365,7 @@ class TxSubmissionCodec:
         elif isinstance(message, TsMsgDone):
             return encode_done()
         else:
-            raise CodecError(
-                f"Unknown tx-submission message type: {type(message).__name__}"
-            )
+            raise CodecError(f"Unknown tx-submission message type: {type(message).__name__}")
 
     def decode(self, data: bytes) -> Message[TxSubmissionState]:
         """Decode CBOR bytes into a typed tx-submission message.
@@ -393,9 +380,7 @@ class TxSubmissionCodec:
             return self._decode_client(data)
         except ValueError:
             pass
-        raise CodecError(
-            f"Failed to decode tx-submission message ({len(data)} bytes)"
-        )
+        raise CodecError(f"Failed to decode tx-submission message ({len(data)} bytes)")
 
     def _decode_server(self, data: bytes) -> Message[TxSubmissionState]:
         """Decode a server-to-client message."""
@@ -410,9 +395,7 @@ class TxSubmissionCodec:
         elif isinstance(msg, MsgRequestTxs):
             return TsMsgRequestTxs(txids=msg.txids)
         else:
-            raise ValueError(
-                f"Unexpected server message: {type(msg).__name__}"
-            )
+            raise ValueError(f"Unexpected server message: {type(msg).__name__}")
 
     def _decode_client(self, data: bytes) -> Message[TxSubmissionState]:
         """Decode a client-to-server message."""
@@ -427,9 +410,7 @@ class TxSubmissionCodec:
         elif isinstance(msg, MsgDone):
             return TsMsgDone()
         else:
-            raise ValueError(
-                f"Unexpected client message: {type(msg).__name__}"
-            )
+            raise ValueError(f"Unexpected client message: {type(msg).__name__}")
 
 
 # ---------------------------------------------------------------------------
@@ -504,10 +485,7 @@ class TxSubmissionClient:
         if isinstance(response, (TsMsgRequestTxIds, TsMsgRequestTxs)):
             return response
         else:
-            raise ProtocolError(
-                f"Unexpected server message in StIdle: "
-                f"{type(response).__name__}"
-            )
+            raise ProtocolError(f"Unexpected server message in StIdle: {type(response).__name__}")
 
     async def reply_tx_ids(self, txids: list[tuple[bytes, int]]) -> None:
         """Reply to MsgRequestTxIds with tx ID and size pairs.

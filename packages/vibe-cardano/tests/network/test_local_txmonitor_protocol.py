@@ -13,26 +13,10 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-import cbor2
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vibe.core.protocols import Agency, Message, ProtocolError
-
-from vibe.cardano.network.local_txmonitor import (
-    MsgAcquire,
-    MsgAcquired,
-    MsgAwaitAcquire,
-    MsgDone,
-    MsgGetSizes,
-    MsgHasTx,
-    MsgNextTx,
-    MsgRelease,
-    MsgReplyGetSizes,
-    MsgReplyHasTx,
-    MsgReplyNextTx,
-)
 from vibe.cardano.network.local_txmonitor_protocol import (
     LocalTxMonitorCodec,
     LocalTxMonitorProtocol,
@@ -51,7 +35,7 @@ from vibe.cardano.network.local_txmonitor_protocol import (
     LtmMsgReplyHasTx,
     LtmMsgReplyNextTx,
 )
-
+from vibe.core.protocols import Agency
 
 # ---------------------------------------------------------------------------
 # Protocol state machine tests
@@ -71,39 +55,22 @@ class TestLocalTxMonitorProtocol:
         assert self.protocol.agency(LocalTxMonitorState.StIdle) == Agency.Client
 
     def test_agency_acquiring(self) -> None:
-        assert (
-            self.protocol.agency(LocalTxMonitorState.StAcquiring)
-            == Agency.Server
-        )
+        assert self.protocol.agency(LocalTxMonitorState.StAcquiring) == Agency.Server
 
     def test_agency_acquired(self) -> None:
-        assert (
-            self.protocol.agency(LocalTxMonitorState.StAcquired)
-            == Agency.Client
-        )
+        assert self.protocol.agency(LocalTxMonitorState.StAcquired) == Agency.Client
 
     def test_agency_busy_next_tx(self) -> None:
-        assert (
-            self.protocol.agency(LocalTxMonitorState.StBusyNextTx)
-            == Agency.Server
-        )
+        assert self.protocol.agency(LocalTxMonitorState.StBusyNextTx) == Agency.Server
 
     def test_agency_busy_has_tx(self) -> None:
-        assert (
-            self.protocol.agency(LocalTxMonitorState.StBusyHasTx)
-            == Agency.Server
-        )
+        assert self.protocol.agency(LocalTxMonitorState.StBusyHasTx) == Agency.Server
 
     def test_agency_busy_get_sizes(self) -> None:
-        assert (
-            self.protocol.agency(LocalTxMonitorState.StBusyGetSizes)
-            == Agency.Server
-        )
+        assert self.protocol.agency(LocalTxMonitorState.StBusyGetSizes) == Agency.Server
 
     def test_agency_done(self) -> None:
-        assert (
-            self.protocol.agency(LocalTxMonitorState.StDone) == Agency.Nobody
-        )
+        assert self.protocol.agency(LocalTxMonitorState.StDone) == Agency.Nobody
 
     def test_valid_messages_idle(self) -> None:
         msgs = self.protocol.valid_messages(LocalTxMonitorState.StIdle)
@@ -137,9 +104,7 @@ class TestLocalTxMonitorProtocol:
         assert len(msgs) == 1
 
     def test_valid_messages_busy_get_sizes(self) -> None:
-        msgs = self.protocol.valid_messages(
-            LocalTxMonitorState.StBusyGetSizes
-        )
+        msgs = self.protocol.valid_messages(LocalTxMonitorState.StBusyGetSizes)
         assert LtmMsgReplyGetSizes in msgs
         assert len(msgs) == 1
 
@@ -215,9 +180,7 @@ class TestTypedMessages:
         assert msg.to_state == LocalTxMonitorState.StBusyGetSizes
 
     def test_ltm_msg_reply_get_sizes(self) -> None:
-        msg = LtmMsgReplyGetSizes(
-            num_txs=10, total_size=5000, num_bytes=6000
-        )
+        msg = LtmMsgReplyGetSizes(num_txs=10, total_size=5000, num_bytes=6000)
         assert msg.from_state == LocalTxMonitorState.StBusyGetSizes
         assert msg.to_state == LocalTxMonitorState.StAcquired
         assert msg.num_txs == 10
@@ -296,9 +259,7 @@ class TestLocalTxMonitorCodec:
         assert isinstance(decoded, LtmMsgGetSizes)
 
     def test_round_trip_reply_get_sizes(self) -> None:
-        original = LtmMsgReplyGetSizes(
-            num_txs=10, total_size=5000, num_bytes=6000
-        )
+        original = LtmMsgReplyGetSizes(num_txs=10, total_size=5000, num_bytes=6000)
         decoded = self.codec.decode(self.codec.encode(original))
         assert isinstance(decoded, LtmMsgReplyGetSizes)
         assert decoded.num_txs == 10
@@ -323,9 +284,7 @@ class TestLocalTxMonitorCodec:
         tx_bytes=st.binary(min_size=1, max_size=500),
     )
     @settings(max_examples=200)
-    def test_hypothesis_round_trip_reply_next_tx(
-        self, era_id: int, tx_bytes: bytes
-    ) -> None:
+    def test_hypothesis_round_trip_reply_next_tx(self, era_id: int, tx_bytes: bytes) -> None:
         original = LtmMsgReplyNextTx(tx=(era_id, tx_bytes))
         decoded = self.codec.decode(self.codec.encode(original))
         assert isinstance(decoded, LtmMsgReplyNextTx)
@@ -401,9 +360,7 @@ class TestFSMTransitions:
         assert state == LocalTxMonitorState.StBusyGetSizes
 
         # ReplyGetSizes
-        reply_sizes = LtmMsgReplyGetSizes(
-            num_txs=5, total_size=1000, num_bytes=1200
-        )
+        reply_sizes = LtmMsgReplyGetSizes(num_txs=5, total_size=1000, num_bytes=1200)
         assert reply_sizes.from_state == state
         state = reply_sizes.to_state
         assert state == LocalTxMonitorState.StAcquired
@@ -508,9 +465,7 @@ class TestLocalTxMonitorServer:
     @pytest.mark.asyncio
     async def test_send_reply_get_sizes(self) -> None:
         server, runner = self._make_server()
-        await server.send_reply_get_sizes(
-            num_txs=10, total_size=5000, num_bytes=6000
-        )
+        await server.send_reply_get_sizes(num_txs=10, total_size=5000, num_bytes=6000)
         sent = runner.send_message.call_args[0][0]
         assert isinstance(sent, LtmMsgReplyGetSizes)
         assert sent.num_txs == 10
@@ -602,9 +557,7 @@ class TestDirectClientServer:
             # Expect GetSizes
             msg = await server.recv_client_message()
             assert isinstance(msg, LtmMsgGetSizes)
-            await server.send_reply_get_sizes(
-                num_txs=5, total_size=1000, num_bytes=1200
-            )
+            await server.send_reply_get_sizes(num_txs=5, total_size=1000, num_bytes=1200)
 
             # Expect Release
             msg = await server.recv_client_message()

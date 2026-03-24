@@ -34,7 +34,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
 
 from .kes import (
-    HASH_SIZE,
     KesSecretKey,
     _ed25519_vk_bytes,
     kes_derive_vk,
@@ -115,9 +114,7 @@ def serialize_kes_sk(sk: KesSecretKey) -> bytes:
         assert sk.ed25519_sk is not None, "Cannot serialize zeroed leaf"
         return _extract_ed25519_seed(sk.ed25519_sk)
 
-    assert sk.left is not None or sk.right is not None, (
-        "Cannot serialize: both subtrees are None"
-    )
+    assert sk.left is not None or sk.right is not None, "Cannot serialize: both subtrees are None"
     assert sk.left_vk is not None and sk.right_vk is not None
 
     # The Haskell format always stores the active (signing) subtree

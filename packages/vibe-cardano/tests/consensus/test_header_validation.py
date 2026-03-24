@@ -9,12 +9,8 @@ from __future__ import annotations
 import hashlib
 import os
 from dataclasses import dataclass
-from typing import Optional
-
-import pytest
 
 from vibe.cardano.consensus.header_validation import (
-    HeaderValidationError,
     HeaderValidationFailure,
     HeaderValidationParams,
     PoolInfo,
@@ -22,7 +18,6 @@ from vibe.cardano.consensus.header_validation import (
     _pool_id_from_vkey,
     validate_header,
 )
-
 
 # ---------------------------------------------------------------------------
 # Mock header types
@@ -47,12 +42,12 @@ class MockOperationalCert:
 class MockBlockHeader:
     slot: int = 100
     block_number: int = 10
-    prev_hash: Optional[bytes] = None
+    prev_hash: bytes | None = None
     issuer_vkey: bytes = b"\x00" * 32
     header_cbor: bytes = b"\x00" * 100
     protocol_version: MockProtocolVersion = None  # type: ignore
     operational_cert: MockOperationalCert = None  # type: ignore
-    vrf_output: Optional[bytes] = None
+    vrf_output: bytes | None = None
     header_body_cbor: bytes = b""
     kes_signature: bytes = b""
 
@@ -118,8 +113,7 @@ class TestSlotCheck:
         dist = _make_stake_dist(curr.issuer_vkey)
         errors = validate_header(curr, dist, prev_header=prev)
         slot_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
+            e for e in errors if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
         ]
         assert len(slot_errors) == 0
 
@@ -128,8 +122,7 @@ class TestSlotCheck:
         dist = _make_stake_dist(curr.issuer_vkey)
         errors = validate_header(curr, dist, prev_header=prev)
         slot_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
+            e for e in errors if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
         ]
         assert len(slot_errors) == 1
 
@@ -138,8 +131,7 @@ class TestSlotCheck:
         dist = _make_stake_dist(curr.issuer_vkey)
         errors = validate_header(curr, dist, prev_header=prev)
         slot_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
+            e for e in errors if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
         ]
         assert len(slot_errors) == 1
 
@@ -148,8 +140,7 @@ class TestSlotCheck:
         dist = _make_stake_dist(curr.issuer_vkey)
         errors = validate_header(curr, dist, prev_header=None)
         slot_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
+            e for e in errors if e.failure == HeaderValidationFailure.SLOT_NOT_INCREASING
         ]
         assert len(slot_errors) == 0
 
@@ -161,38 +152,29 @@ class TestSlotCheck:
 
 class TestBlockNumberCheck:
     def test_valid_sequential_block_number(self) -> None:
-        prev, curr = _make_linked_headers(
-            prev_block_number=9, curr_block_number=10
-        )
+        prev, curr = _make_linked_headers(prev_block_number=9, curr_block_number=10)
         dist = _make_stake_dist(curr.issuer_vkey)
         errors = validate_header(curr, dist, prev_header=prev)
         bn_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.BLOCK_NUMBER_MISMATCH
+            e for e in errors if e.failure == HeaderValidationFailure.BLOCK_NUMBER_MISMATCH
         ]
         assert len(bn_errors) == 0
 
     def test_block_number_gap(self) -> None:
-        prev, curr = _make_linked_headers(
-            prev_block_number=9, curr_block_number=11
-        )
+        prev, curr = _make_linked_headers(prev_block_number=9, curr_block_number=11)
         dist = _make_stake_dist(curr.issuer_vkey)
         errors = validate_header(curr, dist, prev_header=prev)
         bn_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.BLOCK_NUMBER_MISMATCH
+            e for e in errors if e.failure == HeaderValidationFailure.BLOCK_NUMBER_MISMATCH
         ]
         assert len(bn_errors) == 1
 
     def test_block_number_same_as_prev(self) -> None:
-        prev, curr = _make_linked_headers(
-            prev_block_number=10, curr_block_number=10
-        )
+        prev, curr = _make_linked_headers(prev_block_number=10, curr_block_number=10)
         dist = _make_stake_dist(curr.issuer_vkey)
         errors = validate_header(curr, dist, prev_header=prev)
         bn_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.BLOCK_NUMBER_MISMATCH
+            e for e in errors if e.failure == HeaderValidationFailure.BLOCK_NUMBER_MISMATCH
         ]
         assert len(bn_errors) == 1
 
@@ -208,8 +190,7 @@ class TestPrevHashCheck:
         dist = _make_stake_dist(curr.issuer_vkey)
         errors = validate_header(curr, dist, prev_header=prev)
         hash_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.PREV_HASH_MISMATCH
+            e for e in errors if e.failure == HeaderValidationFailure.PREV_HASH_MISMATCH
         ]
         assert len(hash_errors) == 0
 
@@ -220,8 +201,7 @@ class TestPrevHashCheck:
         dist = _make_stake_dist(curr.issuer_vkey)
         errors = validate_header(curr, dist, prev_header=prev)
         hash_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.PREV_HASH_MISMATCH
+            e for e in errors if e.failure == HeaderValidationFailure.PREV_HASH_MISMATCH
         ]
         assert len(hash_errors) == 1
 
@@ -237,7 +217,8 @@ class TestVRFLeaderCheck:
         empty_dist: StakeDistribution = {}
         errors = validate_header(curr, empty_dist, prev_header=None)
         pool_errors = [
-            e for e in errors
+            e
+            for e in errors
             if e.failure == HeaderValidationFailure.POOL_NOT_IN_STAKE_DISTRIBUTION
         ]
         assert len(pool_errors) == 1
@@ -254,14 +235,14 @@ class TestVRFLeaderCheck:
         dist = _make_stake_dist(issuer, stake=0.001)
         errors = validate_header(curr, dist, prev_header=None)
         vrf_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.VRF_LEADER_CHECK_FAILED
+            e for e in errors if e.failure == HeaderValidationFailure.VRF_LEADER_CHECK_FAILED
         ]
         assert len(vrf_errors) == 1
 
     def test_vrf_output_passing_leader_check(self) -> None:
         """A VRF output with ultra-low Praos leader value passes for any positive stake."""
         import struct
+
         issuer = b"\xcc" * 32
         # sha512(929) produces a VRF output with leader_val ~0.0000156
         winner_vrf = hashlib.sha512(struct.pack(">Q", 929)).digest()
@@ -272,8 +253,7 @@ class TestVRFLeaderCheck:
         dist = _make_stake_dist(issuer, stake=0.01)
         errors = validate_header(curr, dist, prev_header=None)
         vrf_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.VRF_LEADER_CHECK_FAILED
+            e for e in errors if e.failure == HeaderValidationFailure.VRF_LEADER_CHECK_FAILED
         ]
         assert len(vrf_errors) == 0
 
@@ -284,8 +264,7 @@ class TestVRFLeaderCheck:
         dist = _make_stake_dist(issuer)
         errors = validate_header(curr, dist, prev_header=None)
         vrf_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.VRF_LEADER_CHECK_FAILED
+            e for e in errors if e.failure == HeaderValidationFailure.VRF_LEADER_CHECK_FAILED
         ]
         assert len(vrf_errors) == 0
 
@@ -310,10 +289,7 @@ class TestOCertCheck:
         )
         dist = _make_stake_dist(issuer)
         errors = validate_header(curr, dist, prev_header=None)
-        ocert_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.OCERT_INVALID
-        ]
+        ocert_errors = [e for e in errors if e.failure == HeaderValidationFailure.OCERT_INVALID]
         # We expect at least the INVALID_SIGNATURE error (cold sig is invalid)
         assert len(ocert_errors) > 0
 
@@ -333,8 +309,7 @@ class TestProtocolVersionCheck:
         dist = _make_stake_dist(issuer)
         errors = validate_header(curr, dist, prev_header=None)
         pv_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.PROTOCOL_VERSION_INVALID
+            e for e in errors if e.failure == HeaderValidationFailure.PROTOCOL_VERSION_INVALID
         ]
         assert len(pv_errors) == 0
 
@@ -348,8 +323,7 @@ class TestProtocolVersionCheck:
         params = HeaderValidationParams(max_major_protocol_version=10)
         errors = validate_header(curr, dist, params=params, prev_header=None)
         pv_errors = [
-            e for e in errors
-            if e.failure == HeaderValidationFailure.PROTOCOL_VERSION_INVALID
+            e for e in errors if e.failure == HeaderValidationFailure.PROTOCOL_VERSION_INVALID
         ]
         assert len(pv_errors) == 1
 

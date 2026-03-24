@@ -28,129 +28,109 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Union
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vibe.core.protocols import Agency, Message, ProtocolError
-from vibe.core.protocols.codec import CodecError
-from vibe.core.protocols.agency import PeerRole
-from vibe.core.protocols.runner import ProtocolRunner
-
-# -- Handshake imports --
-from vibe.cardano.network.handshake import (
-    MAINNET_NETWORK_MAGIC,
-    PREPROD_NETWORK_MAGIC,
-    PREVIEW_NETWORK_MAGIC,
-    N2N_V14,
-    N2N_V15,
-    N2C_V16,
-    N2C_V17,
-    N2C_V18,
-    N2C_V19,
-    N2C_V20,
-    NodeToNodeVersionData,
-    NodeToClientVersionData,
-    PeerSharing,
-    MsgProposeVersions,
-    MsgAcceptVersion,
-    MsgRefuse,
-    RefuseReasonVersionMismatch,
-    RefuseReasonHandshakeDecodeError,
-    RefuseReasonRefused,
-    build_version_table,
-    build_n2c_version_table,
-    encode_propose_versions,
-    encode_refuse,
-    decode_handshake_response,
-)
-from vibe.cardano.network.handshake_protocol import (
-    HandshakeState,
-    HandshakeProtocol,
-    HandshakeError,
-    HandshakeRefusedError,
-    HandshakeTimeoutError,
-    MsgProposeVersionsMsg,
-    MsgAcceptVersionMsg,
-    MsgRefuseMsg,
-    negotiate_version,
-    run_handshake_client,
-    run_handshake_server,
-    run_handshake_server_n2c,
+# -- Block-fetch imports --
+from vibe.cardano.network.blockfetch_protocol import (
+    BLOCK_FETCH_SIZE_LIMITS,
+    BLOCK_FETCH_TIME_LIMITS,
+    BfMsgBatchDone,
+    BfMsgBlock,
+    BfMsgClientDone,
+    BfMsgNoBlocks,
+    BfMsgRequestRange,
+    BfMsgStartBatch,
+    BlockFetchClient,
+    BlockFetchCodec,
+    BlockFetchProtocol,
+    BlockFetchState,
 )
 
 # -- Chain-sync imports --
 from vibe.cardano.network.chainsync import (
-    Point,
-    Tip,
-    Origin,
     ORIGIN,
+    Point,
     PointOrOrigin,
+    Tip,
 )
 from vibe.cardano.network.chainsync_protocol import (
-    ChainSyncState,
-    ChainSyncProtocol,
-    ChainSyncCodec,
     ChainSyncClient,
-    ChainProvider,
-    CsMsgRequestNext,
+    ChainSyncCodec,
+    ChainSyncProtocol,
+    ChainSyncState,
     CsMsgAwaitReply,
-    CsMsgRollForward,
-    CsMsgRollBackward,
+    CsMsgDone,
     CsMsgFindIntersect,
     CsMsgIntersectFound,
     CsMsgIntersectNotFound,
-    CsMsgDone,
-    run_chain_sync_server,
+    CsMsgRequestNext,
+    CsMsgRollBackward,
+    CsMsgRollForward,
 )
 
-# -- Block-fetch imports --
-from vibe.cardano.network.blockfetch_protocol import (
-    BlockFetchState,
-    BlockFetchProtocol,
-    BlockFetchCodec,
-    BlockFetchClient,
-    BlockProvider,
-    BfMsgRequestRange,
-    BfMsgClientDone,
-    BfMsgStartBatch,
-    BfMsgNoBlocks,
-    BfMsgBlock,
-    BfMsgBatchDone,
-    run_block_fetch_server,
-    BLOCK_FETCH_SIZE_LIMITS,
-    BLOCK_FETCH_TIME_LIMITS,
+# -- Handshake imports --
+from vibe.cardano.network.handshake import (
+    MAINNET_NETWORK_MAGIC,
+    N2N_V14,
+    N2N_V15,
+    PREPROD_NETWORK_MAGIC,
+    MsgAcceptVersion,
+    MsgProposeVersions,
+    MsgRefuse,
+    NodeToNodeVersionData,
+    PeerSharing,
+    RefuseReasonRefused,
+    RefuseReasonVersionMismatch,
+    build_version_table,
+    decode_handshake_response,
+    encode_propose_versions,
+    encode_refuse,
+)
+from vibe.cardano.network.handshake_protocol import (
+    HandshakeProtocol,
+    HandshakeRefusedError,
+    HandshakeState,
+    HandshakeTimeoutError,
+    MsgAcceptVersionMsg,
+    MsgProposeVersionsMsg,
+    MsgRefuseMsg,
+    negotiate_version,
+    run_handshake_client,
+    run_handshake_server,
 )
 
 # -- Keep-alive imports --
-from vibe.cardano.network.keepalive import COOKIE_MIN, COOKIE_MAX
+from vibe.cardano.network.keepalive import COOKIE_MAX, COOKIE_MIN
 from vibe.cardano.network.keepalive_protocol import (
-    KeepAliveState,
-    KeepAliveProtocol,
-    KeepAliveCodec,
-    KeepAliveClient,
+    KaMsgDone,
     KaMsgKeepAlive,
     KaMsgKeepAliveResponse,
-    KaMsgDone,
+    KeepAliveClient,
+    KeepAliveCodec,
+    KeepAliveProtocol,
+    KeepAliveState,
     run_keep_alive_server,
 )
 
 # -- Tx-submission imports --
 from vibe.cardano.network.txsubmission_protocol import (
-    TxSubmissionState,
-    TxSubmissionProtocol,
-    TxSubmissionCodec,
-    TxSubmissionClient,
-    TsMsgInit,
-    TsMsgRequestTxIds,
-    TsMsgReplyTxIds,
-    TsMsgRequestTxs,
-    TsMsgReplyTxs,
     TsMsgDone,
+    TsMsgInit,
+    TsMsgReplyTxIds,
+    TsMsgReplyTxs,
+    TsMsgRequestTxIds,
+    TsMsgRequestTxs,
+    TxSubmissionClient,
+    TxSubmissionCodec,
+    TxSubmissionProtocol,
+    TxSubmissionState,
 )
-
+from vibe.core.protocols import Agency
+from vibe.core.protocols.agency import PeerRole
+from vibe.core.protocols.runner import ProtocolRunner
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -165,11 +145,11 @@ class MockChannel:
     _b_to_a: asyncio.Queue[bytes] = field(default_factory=asyncio.Queue)
 
     @property
-    def client_side(self) -> "_MockChannelEnd":
+    def client_side(self) -> _MockChannelEnd:
         return _MockChannelEnd(send_q=self._a_to_b, recv_q=self._b_to_a)
 
     @property
-    def server_side(self) -> "_MockChannelEnd":
+    def server_side(self) -> _MockChannelEnd:
         return _MockChannelEnd(send_q=self._b_to_a, recv_q=self._a_to_b)
 
 
@@ -279,12 +259,8 @@ class TestHandshakeVersionNegotiation:
 
     def test_negotiate_uses_client_query(self) -> None:
         """Merged version data uses client's query flag."""
-        client_vd = NodeToNodeVersionData(
-            network_magic=MAINNET_NETWORK_MAGIC, query=True
-        )
-        server_vd = NodeToNodeVersionData(
-            network_magic=MAINNET_NETWORK_MAGIC, query=False
-        )
+        client_vd = NodeToNodeVersionData(network_magic=MAINNET_NETWORK_MAGIC, query=True)
+        server_vd = NodeToNodeVersionData(network_magic=MAINNET_NETWORK_MAGIC, query=False)
         client = {N2N_V15: client_vd}
         server = {N2N_V15: server_vd}
         result = negotiate_version(client, server)
@@ -404,9 +380,7 @@ class TestHandshakeServerN2N:
             await mock.server_side.send(proposal_bytes)
 
         asyncio.create_task(feed_proposal())
-        result = await run_handshake_server(
-            mock.client_side, MAINNET_NETWORK_MAGIC, timeout=5.0
-        )
+        result = await run_handshake_server(mock.client_side, MAINNET_NETWORK_MAGIC, timeout=5.0)
         assert result.version_number == N2N_V15
         assert result.version_data.network_magic == MAINNET_NETWORK_MAGIC
 
@@ -422,9 +396,7 @@ class TestHandshakeServerN2N:
 
         asyncio.create_task(feed_proposal())
         with pytest.raises(HandshakeRefusedError):
-            await run_handshake_server(
-                mock.client_side, MAINNET_NETWORK_MAGIC, timeout=5.0
-            )
+            await run_handshake_server(mock.client_side, MAINNET_NETWORK_MAGIC, timeout=5.0)
 
 
 class TestHandshakeClientServer:
@@ -439,18 +411,12 @@ class TestHandshakeClientServer:
         mock = MockChannel()
 
         async def run_client() -> MsgAcceptVersion:
-            return await run_handshake_client(
-                mock.client_side, MAINNET_NETWORK_MAGIC, timeout=5.0
-            )
+            return await run_handshake_client(mock.client_side, MAINNET_NETWORK_MAGIC, timeout=5.0)
 
         async def run_server() -> MsgAcceptVersion:
-            return await run_handshake_server(
-                mock.server_side, MAINNET_NETWORK_MAGIC, timeout=5.0
-            )
+            return await run_handshake_server(mock.server_side, MAINNET_NETWORK_MAGIC, timeout=5.0)
 
-        client_result, server_result = await asyncio.gather(
-            run_client(), run_server()
-        )
+        client_result, server_result = await asyncio.gather(run_client(), run_server())
         assert client_result.version_number == server_result.version_number
         assert client_result.version_number == N2N_V15
 
@@ -460,15 +426,11 @@ class TestHandshakeClientServer:
         mock = MockChannel()
 
         async def run_client() -> MsgAcceptVersion:
-            return await run_handshake_client(
-                mock.client_side, PREPROD_NETWORK_MAGIC, timeout=5.0
-            )
+            return await run_handshake_client(mock.client_side, PREPROD_NETWORK_MAGIC, timeout=5.0)
 
         async def run_server() -> None:
             with pytest.raises(HandshakeRefusedError):
-                await run_handshake_server(
-                    mock.server_side, MAINNET_NETWORK_MAGIC, timeout=5.0
-                )
+                await run_handshake_server(mock.server_side, MAINNET_NETWORK_MAGIC, timeout=5.0)
 
         with pytest.raises(HandshakeRefusedError):
             await asyncio.gather(run_client(), run_server())
@@ -485,9 +447,7 @@ class TestHandshakeTimeout:
         """Client raises HandshakeTimeoutError if server never responds."""
         mock = MockChannel()
         with pytest.raises(HandshakeTimeoutError):
-            await run_handshake_client(
-                mock.client_side, MAINNET_NETWORK_MAGIC, timeout=0.1
-            )
+            await run_handshake_client(mock.client_side, MAINNET_NETWORK_MAGIC, timeout=0.1)
 
 
 # =========================================================================
@@ -712,9 +672,7 @@ class TestChainSyncStateTransitions:
         for i in range(5):
             state = CsMsgRequestNext().to_state
             assert state == ChainSyncState.StNext
-            state = CsMsgRollForward(
-                header=f"block-{i}".encode(), tip=_tip(i + 1)
-            ).to_state
+            state = CsMsgRollForward(header=f"block-{i}".encode(), tip=_tip(i + 1)).to_state
             assert state == ChainSyncState.StIdle
 
         done = CsMsgDone()
@@ -773,17 +731,13 @@ class TestChainSyncDirectPairing:
             # Receive FindIntersect
             msg = await runner.recv_message()
             assert isinstance(msg, CsMsgFindIntersect)
-            await runner.send_message(
-                CsMsgIntersectFound(point=_point(0), tip=_tip(3))
-            )
+            await runner.send_message(CsMsgIntersectFound(point=_point(0), tip=_tip(3)))
             # Serve 3 blocks
             for i in range(1, 4):
                 msg = await runner.recv_message()
                 assert isinstance(msg, CsMsgRequestNext)
                 await runner.send_message(
-                    CsMsgRollForward(
-                        header=f"block-{i}".encode(), tip=_tip(i)
-                    )
+                    CsMsgRollForward(header=f"block-{i}".encode(), tip=_tip(i))
                 )
             # Receive Done
             msg = await runner.recv_message()
@@ -1228,10 +1182,12 @@ class TestTxSubmissionRoundTripFlow:
             # Server requests tx IDs (non-blocking)
             req = await client.recv_server_request()
             assert isinstance(req, TsMsgRequestTxIds)
-            await client.reply_tx_ids([
-                (tx_id_1, len(tx_body_1)),
-                (tx_id_2, len(tx_body_2)),
-            ])
+            await client.reply_tx_ids(
+                [
+                    (tx_id_1, len(tx_body_1)),
+                    (tx_id_2, len(tx_body_2)),
+                ]
+            )
 
             # Server requests full txs
             req = await client.recv_server_request()
@@ -1257,9 +1213,7 @@ class TestTxSubmissionRoundTripFlow:
             assert isinstance(msg, TsMsgInit)
 
             # Request tx IDs
-            await runner.send_message(
-                TsMsgRequestTxIds(blocking=False, ack_count=0, req_count=10)
-            )
+            await runner.send_message(TsMsgRequestTxIds(blocking=False, ack_count=0, req_count=10))
             reply = await runner.recv_message()
             assert isinstance(reply, TsMsgReplyTxIds)
             assert len(reply.txids) == 2
@@ -1272,9 +1226,7 @@ class TestTxSubmissionRoundTripFlow:
             server_got_txs.extend(tx_reply.txs)
 
             # Blocking request -> Done
-            await runner.send_message(
-                TsMsgRequestTxIds(blocking=True, ack_count=2, req_count=5)
-            )
+            await runner.send_message(TsMsgRequestTxIds(blocking=True, ack_count=2, req_count=5))
             msg = await runner.recv_message()
             assert isinstance(msg, TsMsgDone)
 
@@ -1350,9 +1302,7 @@ class TestKeepAliveDirectPairingWithServer:
             stop.set()
             return echoed
 
-        server_task = asyncio.create_task(
-            run_keep_alive_server(mock.server_side, stop_event=stop)
-        )
+        server_task = asyncio.create_task(run_keep_alive_server(mock.server_side, stop_event=stop))
         echoed = await run_client()
         await server_task
 
@@ -1374,9 +1324,7 @@ class TestKeepAliveDirectPairingWithServer:
             client = KeepAliveClient(runner)
             await client.done()
 
-        server_task = asyncio.create_task(
-            run_keep_alive_server(mock.server_side, stop_event=stop)
-        )
+        server_task = asyncio.create_task(run_keep_alive_server(mock.server_side, stop_event=stop))
         await run_client()
         await server_task
 
@@ -1571,9 +1519,7 @@ class TestHypothesisBlockFetch:
     )
     @settings(max_examples=100)
     def test_request_range_arbitrary_slots(self, slot_from: int, slot_to: int) -> None:
-        msg = BfMsgRequestRange(
-            point_from=_point(slot_from), point_to=_point(slot_to)
-        )
+        msg = BfMsgRequestRange(point_from=_point(slot_from), point_to=_point(slot_to))
         decoded = self.codec.decode(self.codec.encode(msg))
         assert isinstance(decoded, BfMsgRequestRange)
         assert decoded.point_from.slot == slot_from

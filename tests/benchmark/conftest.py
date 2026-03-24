@@ -6,20 +6,18 @@ test data used across benchmark modules.
 
 from __future__ import annotations
 
-import hashlib
-import os
-
 import cbor2pure as cbor2
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Synthetic CBOR block builders — one per era
 # ---------------------------------------------------------------------------
 
+
 def _random_bytes(n: int, seed: int = 42) -> bytes:
     """Deterministic pseudo-random bytes for reproducible benchmarks."""
     import random
+
     rng = random.Random(seed)
     return bytes(rng.getrandbits(8) for _ in range(n))
 
@@ -33,8 +31,8 @@ def _make_op_cert() -> list:
     """Synthetic operational certificate as CBOR array."""
     return [
         _random_bytes(32, seed=20),  # hot_vkey (kes_vk)
-        1,                            # sequence_number
-        0,                            # kes_period
+        1,  # sequence_number
+        0,  # kes_period
         _random_bytes(64, seed=21),  # sigma (Ed25519 signature)
     ]
 
@@ -42,37 +40,37 @@ def _make_op_cert() -> list:
 def _make_shelley_header_body(slot: int = 1000, block_number: int = 100) -> list:
     """Shelley-era header body (15 inline fields, two VRF certs)."""
     return [
-        block_number,                    # [0] block_number
-        slot,                            # [1] slot
-        _random_bytes(32, seed=1),       # [2] prev_hash
-        _random_bytes(32, seed=2),       # [3] issuer_vkey
-        _random_bytes(32, seed=3),       # [4] vrf_vkey
-        _make_vrf_cert(),                # [5] nonce_vrf
-        _make_vrf_cert(),                # [6] leader_vrf
-        4096,                            # [7] block_body_size
-        _random_bytes(32, seed=4),       # [8] block_body_hash
-        _random_bytes(32, seed=5),       # [9] op_cert hot_vkey
-        1,                               # [10] op_cert sequence_number
-        0,                               # [11] op_cert kes_period
-        _random_bytes(64, seed=6),       # [12] op_cert sigma
-        2,                               # [13] protocol_version major
-        0,                               # [14] protocol_version minor
+        block_number,  # [0] block_number
+        slot,  # [1] slot
+        _random_bytes(32, seed=1),  # [2] prev_hash
+        _random_bytes(32, seed=2),  # [3] issuer_vkey
+        _random_bytes(32, seed=3),  # [4] vrf_vkey
+        _make_vrf_cert(),  # [5] nonce_vrf
+        _make_vrf_cert(),  # [6] leader_vrf
+        4096,  # [7] block_body_size
+        _random_bytes(32, seed=4),  # [8] block_body_hash
+        _random_bytes(32, seed=5),  # [9] op_cert hot_vkey
+        1,  # [10] op_cert sequence_number
+        0,  # [11] op_cert kes_period
+        _random_bytes(64, seed=6),  # [12] op_cert sigma
+        2,  # [13] protocol_version major
+        0,  # [14] protocol_version minor
     ]
 
 
 def _make_babbage_header_body(slot: int = 5000, block_number: int = 500) -> list:
     """Babbage/Conway header body (10 fields, single vrf_result, nested arrays)."""
     return [
-        block_number,                    # [0] block_number
-        slot,                            # [1] slot
-        _random_bytes(32, seed=1),       # [2] prev_hash
-        _random_bytes(32, seed=2),       # [3] issuer_vkey
-        _random_bytes(32, seed=3),       # [4] vrf_vkey
-        _make_vrf_cert(),                # [5] vrf_result
-        4096,                            # [6] block_body_size
-        _random_bytes(32, seed=4),       # [7] block_body_hash
-        _make_op_cert(),                 # [8] operational_cert [kes_vk, n, c0, sig]
-        [10, 0],                         # [9] protocol_version [major, minor]
+        block_number,  # [0] block_number
+        slot,  # [1] slot
+        _random_bytes(32, seed=1),  # [2] prev_hash
+        _random_bytes(32, seed=2),  # [3] issuer_vkey
+        _random_bytes(32, seed=3),  # [4] vrf_vkey
+        _make_vrf_cert(),  # [5] vrf_result
+        4096,  # [6] block_body_size
+        _random_bytes(32, seed=4),  # [7] block_body_hash
+        _make_op_cert(),  # [8] operational_cert [kes_vk, n, c0, sig]
+        [10, 0],  # [9] protocol_version [major, minor]
     ]
 
 
@@ -106,8 +104,8 @@ def _build_byron_block() -> bytes:
     # Byron header: [[prev_hash, proof, consensus, extra], body_proof]
     header = [
         _random_bytes(32, seed=30),  # prev_hash
-        [                             # consensus data
-            0,                        # slot
+        [  # consensus data
+            0,  # slot
             _random_bytes(32, seed=31),  # issuer pk
             [0, _random_bytes(64, seed=32)],  # dlg_cert placeholder
             _random_bytes(64, seed=33),  # signature
@@ -124,11 +122,11 @@ def _build_byron_block() -> bytes:
 def _build_byron_ebb() -> bytes:
     """Build a minimal Byron EBB (tag 1)."""
     header = [
-        0,                               # protocol magic
-        _random_bytes(32, seed=40),      # prev_hash
-        _random_bytes(32, seed=41),      # body_proof
-        [0, 0],                          # consensus = [epoch, difficulty]
-        b"",                             # extra_data
+        0,  # protocol magic
+        _random_bytes(32, seed=40),  # prev_hash
+        _random_bytes(32, seed=41),  # body_proof
+        [0, 0],  # consensus = [epoch, difficulty]
+        b"",  # extra_data
     ]
     body = []
     block_array = [header, body]
@@ -139,6 +137,7 @@ def _build_byron_ebb() -> bytes:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def byron_block_cbor() -> bytes:

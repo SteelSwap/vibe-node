@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SpecCommit:
     """A commit that modified spec files."""
+
     commit_hash: str
     commit_date: datetime
     files_changed: list[str]
@@ -55,10 +56,12 @@ def discover_spec_commits(
 
     # Get commits that touched files in the spec directory
     cmd = [
-        "git", "log",
+        "git",
+        "log",
         "--format=%H|%aI|%s",
         "--diff-filter=AMRC",  # Added, Modified, Renamed, Copied
-        "--", spec_dir,
+        "--",
+        spec_dir,
     ]
 
     result = subprocess.run(
@@ -71,7 +74,9 @@ def discover_spec_commits(
     if result.returncode != 0:
         logger.warning(
             "git log failed for %s/%s: %s",
-            submodule_path, spec_dir, result.stderr[:200],
+            submodule_path,
+            spec_dir,
+            result.stderr[:200],
         )
         return []
 
@@ -91,22 +96,30 @@ def discover_spec_commits(
 
         # Get the specific files changed in this commit
         files_result = subprocess.run(
-            ["git", "diff-tree", "--no-commit-id", "-r", "--name-only", commit_hash, "--", spec_dir],
+            [
+                "git",
+                "diff-tree",
+                "--no-commit-id",
+                "-r",
+                "--name-only",
+                commit_hash,
+                "--",
+                spec_dir,
+            ],
             cwd=submodule_path,
             capture_output=True,
             text=True,
         )
-        files_changed = [
-            f.strip() for f in files_result.stdout.strip().split("\n")
-            if f.strip()
-        ]
+        files_changed = [f.strip() for f in files_result.stdout.strip().split("\n") if f.strip()]
 
-        commits.append(SpecCommit(
-            commit_hash=commit_hash,
-            commit_date=commit_date,
-            files_changed=files_changed,
-            message=message,
-        ))
+        commits.append(
+            SpecCommit(
+                commit_hash=commit_hash,
+                commit_date=commit_date,
+                files_changed=files_changed,
+                message=message,
+            )
+        )
 
     # Reverse to chronological order (oldest first)
     commits.reverse()
@@ -117,7 +130,9 @@ def discover_spec_commits(
 
     logger.info(
         "Found %d commits touching %s in %s",
-        len(commits), spec_dir, submodule_path,
+        len(commits),
+        spec_dir,
+        submodule_path,
     )
 
     return commits
@@ -142,7 +157,9 @@ def get_file_at_commit(
     if result.returncode != 0:
         logger.debug(
             "File %s not found at commit %s: %s",
-            file_path, commit_hash[:8], result.stderr[:100],
+            file_path,
+            commit_hash[:8],
+            result.stderr[:100],
         )
         return None
 

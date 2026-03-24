@@ -15,8 +15,7 @@ Spec ref:
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -24,16 +23,16 @@ import pytest
 from vibe.cardano.consensus.slot_arithmetic import SlotConfig, slot_to_wall_clock
 from vibe.cardano.node.run import SlotClock
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def slot_config() -> SlotConfig:
     """A slot config with 1-second slots starting at a known time."""
     return SlotConfig(
-        system_start=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+        system_start=datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC),
         slot_length=1.0,
         epoch_length=100,
     )
@@ -47,6 +46,7 @@ def clock(slot_config: SlotConfig) -> SlotClock:
 # ---------------------------------------------------------------------------
 # Test 1: Correct delay calculation for next slot
 # ---------------------------------------------------------------------------
+
 
 class TestDelayCalculation:
     """Verify wait_for_slot computes correct sleep durations."""
@@ -94,9 +94,7 @@ class TestDelayCalculation:
                 assert abs(delay - 0.7) < 0.001, f"Expected ~0.7s delay, got {delay}"
 
     @pytest.mark.asyncio
-    async def test_delay_past_target_returns_immediately(
-        self, slot_config: SlotConfig
-    ) -> None:
+    async def test_delay_past_target_returns_immediately(self, slot_config: SlotConfig) -> None:
         """If target slot is in the past, return immediately without sleeping."""
         clock = SlotClock(slot_config)
         target_slot = 50
@@ -120,6 +118,7 @@ class TestDelayCalculation:
 # Test 2: Recovery after simulated clock jump forward
 # ---------------------------------------------------------------------------
 
+
 class TestClockJumpRecovery:
     """Verify SlotClock handles time jumps gracefully.
 
@@ -130,9 +129,7 @@ class TestClockJumpRecovery:
     """
 
     @pytest.mark.asyncio
-    async def test_clock_jump_forward_skips_slots(
-        self, slot_config: SlotConfig
-    ) -> None:
+    async def test_clock_jump_forward_skips_slots(self, slot_config: SlotConfig) -> None:
         """After a clock jump forward, current_slot reflects the new time."""
         clock = SlotClock(slot_config)
 
@@ -161,13 +158,12 @@ class TestClockJumpRecovery:
 # Test 3: Monotonically increasing slot numbers under stable clock
 # ---------------------------------------------------------------------------
 
+
 class TestSlotMonotonicity:
     """Verify slots increase monotonically when time advances normally."""
 
     @pytest.mark.asyncio
-    async def test_monotonic_slots_over_sequence(
-        self, slot_config: SlotConfig
-    ) -> None:
+    async def test_monotonic_slots_over_sequence(self, slot_config: SlotConfig) -> None:
         """Sequential calls with advancing time yield non-decreasing slots."""
         clock = SlotClock(slot_config)
 
@@ -181,15 +177,13 @@ class TestSlotMonotonicity:
                 mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
                 current = clock.current_slot()
 
-            assert current >= prev_slot, (
-                f"Slot went backwards: {current} < {prev_slot} at offset {i * 0.5}s"
-            )
+            assert (
+                current >= prev_slot
+            ), f"Slot went backwards: {current} < {prev_slot} at offset {i * 0.5}s"
             prev_slot = current
 
     @pytest.mark.asyncio
-    async def test_same_slot_within_slot_boundary(
-        self, slot_config: SlotConfig
-    ) -> None:
+    async def test_same_slot_within_slot_boundary(self, slot_config: SlotConfig) -> None:
         """Multiple calls within the same slot return the same slot number."""
         clock = SlotClock(slot_config)
 
@@ -200,6 +194,4 @@ class TestSlotMonotonicity:
             with patch("vibe.cardano.node.run.datetime") as mock_dt:
                 mock_dt.now.return_value = t
                 mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
-                assert clock.current_slot() == 42, (
-                    f"Expected slot 42 at offset {offset_ms}ms"
-                )
+                assert clock.current_slot() == 42, f"Expected slot 42 at offset {offset_ms}ms"

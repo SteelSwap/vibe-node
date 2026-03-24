@@ -24,9 +24,8 @@ import pytest
 
 from vibe.cardano.storage.chaindb import ChainDB
 from vibe.cardano.storage.immutable import ImmutableDB
-from vibe.cardano.storage.volatile import VolatileDB
 from vibe.cardano.storage.ledger import LedgerDB
-
+from vibe.cardano.storage.volatile import VolatileDB
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -81,8 +80,11 @@ class TestChainSelectionHigherBlockWins:
 
         # Block 1 becomes tip
         await db.add_block(
-            slot=1, block_hash=_block_hash(1), predecessor_hash=genesis,
-            block_number=1, cbor_bytes=_cbor(1),
+            slot=1,
+            block_hash=_block_hash(1),
+            predecessor_hash=genesis,
+            block_number=1,
+            cbor_bytes=_cbor(1),
         )
         tip = await db.get_tip()
         assert tip is not None
@@ -90,8 +92,11 @@ class TestChainSelectionHigherBlockWins:
 
         # Block 2 (higher) takes over
         await db.add_block(
-            slot=2, block_hash=_block_hash(2), predecessor_hash=_block_hash(1),
-            block_number=2, cbor_bytes=_cbor(2),
+            slot=2,
+            block_hash=_block_hash(2),
+            predecessor_hash=_block_hash(1),
+            block_number=2,
+            cbor_bytes=_cbor(2),
         )
         tip = await db.get_tip()
         assert tip is not None
@@ -118,14 +123,20 @@ class TestChainSelectionTieKeepsCurrent:
 
         # Add block A at block_number 1
         await db.add_block(
-            slot=1, block_hash=bh_a, predecessor_hash=genesis,
-            block_number=1, cbor_bytes=_cbor(1),
+            slot=1,
+            block_hash=bh_a,
+            predecessor_hash=genesis,
+            block_number=1,
+            cbor_bytes=_cbor(1),
         )
 
         # Add block B also at block_number 1 (fork)
         await db.add_block(
-            slot=2, block_hash=bh_b, predecessor_hash=genesis,
-            block_number=1, cbor_bytes=_cbor(2),
+            slot=2,
+            block_hash=bh_b,
+            predecessor_hash=genesis,
+            block_number=1,
+            cbor_bytes=_cbor(2),
         )
 
         # Tip should still be block A (first seen, tie does not switch)
@@ -154,8 +165,11 @@ class TestAddBlockBelowImmutableIgnored:
         for i in range(1, 11):
             bh = _block_hash(i)
             await db.add_block(
-                slot=i, block_hash=bh, predecessor_hash=prev,
-                block_number=i, cbor_bytes=_cbor(i),
+                slot=i,
+                block_hash=bh,
+                predecessor_hash=prev,
+                block_number=i,
+                cbor_bytes=_cbor(i),
             )
             prev = bh
 
@@ -167,8 +181,11 @@ class TestAddBlockBelowImmutableIgnored:
         # Try to add a block at block_number 1 — should be silently ignored
         old_tip = await db.get_tip()
         await db.add_block(
-            slot=100, block_hash=_block_hash(999), predecessor_hash=genesis,
-            block_number=1, cbor_bytes=_cbor(999),
+            slot=100,
+            block_hash=_block_hash(999),
+            predecessor_hash=genesis,
+            block_number=1,
+            cbor_bytes=_cbor(999),
         )
 
         # Tip should not have changed
@@ -198,8 +215,11 @@ class TestGetBlockVolatileThenImmutable:
         for i in range(1, 8):
             bh = _block_hash(i)
             await db.add_block(
-                slot=i, block_hash=bh, predecessor_hash=prev,
-                block_number=i, cbor_bytes=_cbor(i),
+                slot=i,
+                block_hash=bh,
+                predecessor_hash=prev,
+                block_number=i,
+                cbor_bytes=_cbor(i),
             )
             prev = bh
 
@@ -240,15 +260,18 @@ class TestTipUpdatesOnBetterChain:
         for i in range(1, 6):
             bh = _block_hash(i)
             await db.add_block(
-                slot=i, block_hash=bh, predecessor_hash=prev,
-                block_number=i, cbor_bytes=_cbor(i),
+                slot=i,
+                block_hash=bh,
+                predecessor_hash=prev,
+                block_number=i,
+                cbor_bytes=_cbor(i),
             )
 
             tip = await db.get_tip()
             assert tip is not None
-            assert tip[0] == i    # slot
-            assert tip[1] == bh   # hash
-            assert tip[2] == i    # block_number
+            assert tip[0] == i  # slot
+            assert tip[1] == bh  # hash
+            assert tip[2] == i  # block_number
 
             prev = bh
 
@@ -262,8 +285,11 @@ class TestTipUpdatesOnBetterChain:
         prev = genesis
         for i in range(1, 4):
             await db.add_block(
-                slot=i, block_hash=_block_hash(i), predecessor_hash=prev,
-                block_number=i, cbor_bytes=_cbor(i),
+                slot=i,
+                block_hash=_block_hash(i),
+                predecessor_hash=prev,
+                block_number=i,
+                cbor_bytes=_cbor(i),
             )
             prev = _block_hash(i)
 
@@ -275,9 +301,11 @@ class TestTipUpdatesOnBetterChain:
         fork_prev = genesis
         for i in range(1, 3):
             await db.add_block(
-                slot=10 + i, block_hash=_block_hash(100 + i),
+                slot=10 + i,
+                block_hash=_block_hash(100 + i),
                 predecessor_hash=fork_prev,
-                block_number=i, cbor_bytes=_cbor(100 + i),
+                block_number=i,
+                cbor_bytes=_cbor(100 + i),
             )
             fork_prev = _block_hash(100 + i)
 

@@ -96,15 +96,12 @@ class TestBlockHashDeterministicProperty:
         h2 = block_hash(data)
 
         # Same input must produce identical output
-        assert h1 == h2, (
-            f"block_hash produced different results for same input: "
-            f"{h1.hex()} != {h2.hex()}"
-        )
+        assert (
+            h1 == h2
+        ), f"block_hash produced different results for same input: {h1.hex()} != {h2.hex()}"
 
         # Output must always be exactly 32 bytes
-        assert len(h1) == 32, (
-            f"block_hash produced {len(h1)} bytes, expected 32"
-        )
+        assert len(h1) == 32, f"block_hash produced {len(h1)} bytes, expected 32"
 
         # Output must be bytes
         assert isinstance(h1, bytes)
@@ -125,9 +122,7 @@ class TestRoundtripHashStability:
         body_size=st.integers(min_value=0, max_value=2**32 - 1),
     )
     @settings(max_examples=100)
-    def test_roundtrip_hash_stability(
-        self, slot: int, block_number: int, body_size: int
-    ):
+    def test_roundtrip_hash_stability(self, slot: int, block_number: int, body_size: int):
         """For any valid header CBOR, block_hash(header) is deterministic
         and stable across re-computation.
 

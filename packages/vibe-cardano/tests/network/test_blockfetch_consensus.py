@@ -23,25 +23,19 @@ Antithesis compatibility:
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
 
 import pytest
 
-from vibe.cardano.network.chainsync import Point, ORIGIN, PointOrOrigin
 from vibe.cardano.network.blockfetch_protocol import (
-    BlockFetchCodec,
-    BlockFetchProtocol,
-    BlockFetchState,
-    BlockFetchClient,
-    BfMsgRequestRange,
-    BfMsgClientDone,
-    BfMsgStartBatch,
-    BfMsgNoBlocks,
-    BfMsgBlock,
     BfMsgBatchDone,
+    BfMsgBlock,
+    BfMsgClientDone,
+    BfMsgRequestRange,
+    BfMsgStartBatch,
+    BlockFetchCodec,
     run_block_fetch,
 )
-
+from vibe.cardano.network.chainsync import Point
 
 # ---------------------------------------------------------------------------
 # Fake channel for block-fetch testing
@@ -125,9 +119,7 @@ async def test_blockfetch_terminate_praos():
     ranges = [(_point(1), _point(1))]
 
     server_task = asyncio.create_task(server())
-    client_task = asyncio.create_task(
-        run_block_fetch(channel, ranges, on_block)
-    )
+    client_task = asyncio.create_task(run_block_fetch(channel, ranges, on_block))
 
     await asyncio.gather(server_task, client_task)
 
@@ -179,9 +171,7 @@ async def test_blockfetch_terminate_genesis():
 
     ranges = [(_point(0), _point(100))]
     server_task = asyncio.create_task(server())
-    client_task = asyncio.create_task(
-        run_block_fetch(channel, ranges, on_block)
-    )
+    client_task = asyncio.create_task(run_block_fetch(channel, ranges, on_block))
 
     await asyncio.gather(server_task, client_task)
     assert len(blocks_received) == 2
@@ -245,9 +235,7 @@ async def test_blockfetch_no_overlap_praos():
         assert isinstance(msg, BfMsgClientDone)
 
     server_task = asyncio.create_task(server())
-    client_task = asyncio.create_task(
-        run_block_fetch(channel, ranges, on_block)
-    )
+    client_task = asyncio.create_task(run_block_fetch(channel, ranges, on_block))
 
     await asyncio.gather(server_task, client_task)
 
@@ -312,9 +300,7 @@ async def test_blockfetch_with_overlap_praos():
         assert isinstance(msg, BfMsgClientDone)
 
     server_task = asyncio.create_task(server())
-    client_task = asyncio.create_task(
-        run_block_fetch(channel, ranges, on_block)
-    )
+    client_task = asyncio.create_task(run_block_fetch(channel, ranges, on_block))
 
     await asyncio.gather(server_task, client_task)
 

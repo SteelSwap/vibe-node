@@ -35,7 +35,6 @@ from vibe.cardano.network.local_txsubmission import (
     encode_submit_tx,
 )
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -74,12 +73,8 @@ class TestMsgSubmitTx:
             msg.era_id = 7  # type: ignore[misc]
 
     def test_equality(self) -> None:
-        assert MsgSubmitTx(era_id=6, tx_bytes=b"\x01") == MsgSubmitTx(
-            era_id=6, tx_bytes=b"\x01"
-        )
-        assert MsgSubmitTx(era_id=6, tx_bytes=b"\x01") != MsgSubmitTx(
-            era_id=5, tx_bytes=b"\x01"
-        )
+        assert MsgSubmitTx(era_id=6, tx_bytes=b"\x01") == MsgSubmitTx(era_id=6, tx_bytes=b"\x01")
+        assert MsgSubmitTx(era_id=6, tx_bytes=b"\x01") != MsgSubmitTx(era_id=5, tx_bytes=b"\x01")
 
 
 class TestMsgAcceptTx:

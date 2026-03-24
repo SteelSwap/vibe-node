@@ -28,12 +28,10 @@ Implements :class:`~vibe.core.storage.AppendStore`.
 
 from __future__ import annotations
 
-import os
 import struct
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO
 
 __all__ = [
     "ImmutableDB",
@@ -120,8 +118,7 @@ class AppendBlockNotNewerThanTipError(Exception):
         self.block_slot = block_slot
         self.tip_slot = tip_slot
         super().__init__(
-            f"Cannot append block at slot {block_slot}: "
-            f"current tip is at slot {tip_slot}"
+            f"Cannot append block at slot {block_slot}: current tip is at slot {tip_slot}"
         )
 
 
@@ -252,9 +249,7 @@ class ImmutableDB:
                     data = f.read(_SEC_ENTRY_SIZE)
                     if len(data) < _SEC_ENTRY_SIZE:
                         break
-                    block_hash, c_num, offset, size, slot = struct.unpack(
-                        _SEC_ENTRY_FMT, data
-                    )
+                    block_hash, c_num, offset, size, slot = struct.unpack(_SEC_ENTRY_FMT, data)
                     entry = _SecondaryEntry(
                         block_hash=block_hash,
                         chunk_number=c_num,
@@ -320,7 +315,11 @@ class ImmutableDB:
             # Already have an entry for this slot — just update it
             # (shouldn't happen with monotonic appends, but be safe)
             offset_bytes = struct.pack(_PRI_ENTRY_FMT, offset)
-            data = data[: relative_slot * _PRI_ENTRY_SIZE] + offset_bytes + data[(relative_slot + 1) * _PRI_ENTRY_SIZE :]
+            data = (
+                data[: relative_slot * _PRI_ENTRY_SIZE]
+                + offset_bytes
+                + data[(relative_slot + 1) * _PRI_ENTRY_SIZE :]
+            )
             path.write_bytes(data)
             return
 
@@ -610,9 +609,7 @@ class ImmutableDB:
             for entry in entries:
                 if entry.slot < start_slot:
                     continue
-                block_data = self._read_block(
-                    entry.chunk_number, entry.offset, entry.size
-                )
+                block_data = self._read_block(entry.chunk_number, entry.offset, entry.size)
                 if block_data is not None:
                     key = struct.pack(">Q", entry.slot) + entry.block_hash
                     yield key, block_data
@@ -650,10 +647,7 @@ class ImmutableDB:
 
         removed = 0
         # Walk through secondary entries and remove those with slot > cutoff
-        hashes_to_remove = [
-            h for h, entry in self._hash_index.items()
-            if entry.slot > slot
-        ]
+        hashes_to_remove = [h for h, entry in self._hash_index.items() if entry.slot > slot]
         removed = len(hashes_to_remove)
 
         for h in hashes_to_remove:
@@ -711,14 +705,16 @@ class ImmutableDB:
             # Rewrite secondary index
             with open(sec_path, "wb") as f:
                 for entry in entries:
-                    f.write(struct.pack(
-                        _SEC_ENTRY_FMT,
-                        entry.block_hash,
-                        entry.chunk_number,
-                        entry.offset,
-                        entry.size,
-                        entry.slot,
-                    ))
+                    f.write(
+                        struct.pack(
+                            _SEC_ENTRY_FMT,
+                            entry.block_hash,
+                            entry.chunk_number,
+                            entry.offset,
+                            entry.size,
+                            entry.slot,
+                        )
+                    )
 
             # Truncate chunk file to end of last surviving block
             last = entries[-1]
@@ -893,9 +889,7 @@ class ImmutableDBIterator:
         entry = self._entries[self._pos]
         self._pos += 1
 
-        block_data = self._db._read_block(
-            entry.chunk_number, entry.offset, entry.size
-        )
+        block_data = self._db._read_block(entry.chunk_number, entry.offset, entry.size)
         if block_data is None:
             block_data = b""
 

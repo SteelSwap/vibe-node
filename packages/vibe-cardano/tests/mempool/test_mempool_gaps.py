@@ -25,26 +25,22 @@ import asyncio
 from typing import Any
 
 import pytest
-from hypothesis import given, settings, HealthCheck
+from hypothesis import HealthCheck, settings
 from hypothesis import strategies as st
 from hypothesis.stateful import (
-    Bundle,
     RuleBasedStateMachine,
-    initialize,
     invariant,
     rule,
 )
 
-from vibe.cardano.mempool.types import MempoolConfig, MempoolSnapshot, TxTicket
 from vibe.cardano.mempool.mempool import (
     Mempool,
     MempoolCapacityError,
-    MempoolDuplicateError,
     MempoolEvent,
     MempoolValidationError,
     _compute_tx_id,
 )
-
+from vibe.cardano.mempool.types import MempoolConfig
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -160,9 +156,7 @@ class MempoolStateMachine(RuleBasedStateMachine):
             return
 
         # Pick a random subset to remove.
-        count = data.draw(
-            st.integers(min_value=1, max_value=min(3, len(self.ref_txs)))
-        )
+        count = data.draw(st.integers(min_value=1, max_value=min(3, len(self.ref_txs))))
         to_remove_indices = data.draw(
             st.lists(
                 st.integers(min_value=0, max_value=len(self.ref_txs) - 1),

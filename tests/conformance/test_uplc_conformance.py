@@ -42,7 +42,6 @@ from typing import NamedTuple
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Test case discovery
 # ---------------------------------------------------------------------------
@@ -51,21 +50,39 @@ import pytest
 # git submodules that may not be initialized in all environments (e.g.
 # worktrees). We search multiple possible locations.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_CONFORMANCE_DIR = _REPO_ROOT / "vendor" / "plutus" / "plutus-conformance" / "test-cases" / "uplc" / "evaluation"
+_CONFORMANCE_DIR = (
+    _REPO_ROOT / "vendor" / "plutus" / "plutus-conformance" / "test-cases" / "uplc" / "evaluation"
+)
 
 # If the worktree's vendor dir is empty, try the main repo
 if not _CONFORMANCE_DIR.exists() or not any(_CONFORMANCE_DIR.iterdir()):
     # Try the main repo root (parent of .claude/worktrees/...)
     _alt_root = Path(os.environ.get("VIBE_NODE_ROOT", ""))
     if _alt_root.exists():
-        _alt = _alt_root / "vendor" / "plutus" / "plutus-conformance" / "test-cases" / "uplc" / "evaluation"
+        _alt = (
+            _alt_root
+            / "vendor"
+            / "plutus"
+            / "plutus-conformance"
+            / "test-cases"
+            / "uplc"
+            / "evaluation"
+        )
         if _alt.exists() and any(_alt.iterdir()):
             _CONFORMANCE_DIR = _alt
 
     # Also try a common worktree parent pattern
     for parent in _REPO_ROOT.parents:
         if parent.name == "vibe-node" and (parent / "vendor" / "plutus").is_dir():
-            _alt = parent / "vendor" / "plutus" / "plutus-conformance" / "test-cases" / "uplc" / "evaluation"
+            _alt = (
+                parent
+                / "vendor"
+                / "plutus"
+                / "plutus-conformance"
+                / "test-cases"
+                / "uplc"
+                / "evaluation"
+            )
             if _alt.exists() and any(_alt.iterdir()):
                 _CONFORMANCE_DIR = _alt
                 break
@@ -107,12 +124,14 @@ def _discover_test_cases(limit: int = 0) -> list[UplcTestCase]:
         name = str(rel.with_suffix("")).replace("/", "::")
 
         budget_file = uplc_file.with_suffix(".uplc.budget.expected")
-        cases.append(UplcTestCase(
-            name=name,
-            uplc_path=uplc_file,
-            expected_path=expected_file,
-            budget_path=budget_file if budget_file.exists() else None,
-        ))
+        cases.append(
+            UplcTestCase(
+                name=name,
+                uplc_path=uplc_file,
+                expected_path=expected_file,
+                budget_path=budget_file if budget_file.exists() else None,
+            )
+        )
 
         if 0 < limit <= len(cases):
             break
@@ -145,27 +164,31 @@ _PARSE_ERROR = "parse error"
 # Haskell ref: PlutusCore/Default/Builtins.hs
 #   BuiltinSemanticsVariant — maps builtins to protocol versions
 # ---------------------------------------------------------------------------
-_V4_VAN_ROSSEM_BUILTINS = frozenset({
-    "expmodinteger",
-    "droplist",
-    "insertcoin",
-    "unionvalue",
-    "scalevalue",
-    "unvaluedata",
-    "listtoarray",
-    "valuedata",
-    "valuecontains",
-    "lookupcoin",
-    "lengthofarray",
-    "indexarray",
-    "bls12_381_g1_multiscalarmul",
-    "bls12_381_g2_multiscalarmul",
-})
+_V4_VAN_ROSSEM_BUILTINS = frozenset(
+    {
+        "expmodinteger",
+        "droplist",
+        "insertcoin",
+        "unionvalue",
+        "scalevalue",
+        "unvaluedata",
+        "listtoarray",
+        "valuedata",
+        "valuecontains",
+        "lookupcoin",
+        "lengthofarray",
+        "indexarray",
+        "bls12_381_g1_multiscalarmul",
+        "bls12_381_g2_multiscalarmul",
+    }
+)
 
 # V4/Van Rossem also introduces the 'value' built-in type
-_V4_VAN_ROSSEM_TYPES = frozenset({
-    "value",
-})
+_V4_VAN_ROSSEM_TYPES = frozenset(
+    {
+        "value",
+    }
+)
 
 
 def _is_v4_skip(error_msg: str) -> str | None:
@@ -277,7 +300,8 @@ class TestUplcConformance:
         # Import here so missing uplc package gives a clear skip, not import error
         try:
             from uplc.ast import Program
-            from uplc.tools import dumps, eval as uplc_eval, parse
+            from uplc.tools import dumps, parse
+            from uplc.tools import eval as uplc_eval
         except ImportError:
             pytest.skip("uplc package not installed")
 
@@ -303,9 +327,7 @@ class TestUplcConformance:
 
         # If we expected a parse error but parsing succeeded, that's a failure
         if expects_parse_error:
-            pytest.fail(
-                f"Expected parse error but program parsed successfully"
-            )
+            pytest.fail("Expected parse error but program parsed successfully")
 
         # --- Evaluate ---
         try:
@@ -319,14 +341,11 @@ class TestUplcConformance:
         if isinstance(result.result, Exception):
             if expects_failure:
                 return  # Expected failure — pass
-            pytest.fail(
-                f"Evaluation produced an error but expected success: {result.result}"
-            )
+            pytest.fail(f"Evaluation produced an error but expected success: {result.result}")
 
         if expects_failure:
             pytest.fail(
-                f"Expected evaluation failure but got a result: "
-                f"{type(result.result).__name__}"
+                f"Expected evaluation failure but got a result: {type(result.result).__name__}"
             )
 
         # --- Compare result against expected ---
@@ -348,9 +367,7 @@ class TestUplcConformance:
             return  # Structurally equivalent — pass
         elif structural_result is False:
             pytest.fail(
-                f"Result mismatch.\n"
-                f"  Expected: {expected_norm}\n"
-                f"  Actual:   {actual_norm}"
+                f"Result mismatch.\n  Expected: {expected_norm}\n  Actual:   {actual_norm}"
             )
         else:
             # Structural comparison failed (likely can't parse expected due to
@@ -392,7 +409,8 @@ class TestUplcBudgetConformance:
     def test_uplc_budget(self, test_case: UplcTestCase) -> None:
         """Evaluate a UPLC program and compare budget against expected."""
         try:
-            from uplc.tools import eval as uplc_eval, parse
+            from uplc.tools import eval as uplc_eval
+            from uplc.tools import parse
         except ImportError:
             pytest.skip("uplc package not installed")
 

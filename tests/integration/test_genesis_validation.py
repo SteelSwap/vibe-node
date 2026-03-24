@@ -58,14 +58,15 @@ def conway_genesis() -> dict:
 # the data part using the bech32 character set (qpzry9x8gf2tvdw0s3jn54khce6mua7l).
 # Common Cardano prefixes: addr1, stake1, addr_test1, stake_test1, pool1, etc.
 BECH32_PATTERN = re.compile(
-    r'\b(?:addr|stake|pool|drep|cc_cold|cc_hot|addr_test|stake_test)'
-    r'1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,}\b'
+    r"\b(?:addr|stake|pool|drep|cc_cold|cc_hot|addr_test|stake_test)"
+    r"1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{6,}\b"
 )
 
 
 # ---------------------------------------------------------------------------
 # Test 1: Shelley genesis required fields
 # ---------------------------------------------------------------------------
+
 
 class TestShelleyGenesis:
     """Verify shelley-genesis.json has all required fields.
@@ -109,16 +110,14 @@ class TestShelleyGenesis:
 
     def test_has_all_required_top_level_fields(self, shelley_genesis: dict) -> None:
         for field_name in self.REQUIRED_FIELDS:
-            assert field_name in shelley_genesis, (
-                f"Missing required field '{field_name}' in shelley-genesis.json"
-            )
+            assert (
+                field_name in shelley_genesis
+            ), f"Missing required field '{field_name}' in shelley-genesis.json"
 
     def test_has_all_required_protocol_params(self, shelley_genesis: dict) -> None:
         pp = shelley_genesis.get("protocolParams", {})
         for field_name in self.REQUIRED_PROTOCOL_PARAMS:
-            assert field_name in pp, (
-                f"Missing required protocolParams field '{field_name}'"
-            )
+            assert field_name in pp, f"Missing required protocolParams field '{field_name}'"
 
     def test_active_slots_coeff_in_range(self, shelley_genesis: dict) -> None:
         coeff = shelley_genesis["activeSlotsCoeff"]
@@ -128,6 +127,7 @@ class TestShelleyGenesis:
 # ---------------------------------------------------------------------------
 # Test 2: Byron genesis required fields
 # ---------------------------------------------------------------------------
+
 
 class TestByronGenesis:
     """Verify byron-genesis.json has all required fields.
@@ -160,28 +160,25 @@ class TestByronGenesis:
 
     def test_has_all_required_top_level_fields(self, byron_genesis: dict) -> None:
         for field_name in self.REQUIRED_FIELDS:
-            assert field_name in byron_genesis, (
-                f"Missing required field '{field_name}' in byron-genesis.json"
-            )
+            assert (
+                field_name in byron_genesis
+            ), f"Missing required field '{field_name}' in byron-genesis.json"
 
     def test_has_block_version_data_fields(self, byron_genesis: dict) -> None:
         bvd = byron_genesis.get("blockVersionData", {})
         for field_name in self.REQUIRED_BLOCK_VERSION_DATA:
-            assert field_name in bvd, (
-                f"Missing required blockVersionData field '{field_name}'"
-            )
+            assert field_name in bvd, f"Missing required blockVersionData field '{field_name}'"
 
     def test_has_protocol_consts_fields(self, byron_genesis: dict) -> None:
         pc = byron_genesis.get("protocolConsts", {})
         for field_name in self.REQUIRED_PROTOCOL_CONSTS:
-            assert field_name in pc, (
-                f"Missing required protocolConsts field '{field_name}'"
-            )
+            assert field_name in pc, f"Missing required protocolConsts field '{field_name}'"
 
 
 # ---------------------------------------------------------------------------
 # Test 3: Alonzo genesis cost model fields
 # ---------------------------------------------------------------------------
+
 
 class TestAlonzoGenesis:
     """Verify alonzo-genesis.json has required cost model fields.
@@ -201,9 +198,9 @@ class TestAlonzoGenesis:
 
     def test_has_all_required_fields(self, alonzo_genesis: dict) -> None:
         for field_name in self.REQUIRED_FIELDS:
-            assert field_name in alonzo_genesis, (
-                f"Missing required field '{field_name}' in alonzo-genesis.json"
-            )
+            assert (
+                field_name in alonzo_genesis
+            ), f"Missing required field '{field_name}' in alonzo-genesis.json"
 
     def test_has_plutus_v1_cost_model(self, alonzo_genesis: dict) -> None:
         cost_models = alonzo_genesis.get("costModels", {})
@@ -228,6 +225,7 @@ class TestAlonzoGenesis:
 # ---------------------------------------------------------------------------
 # Test 4: Conway genesis governance params
 # ---------------------------------------------------------------------------
+
 
 class TestConwayGenesis:
     """Verify conway-genesis.json has governance parameters.
@@ -272,36 +270,31 @@ class TestConwayGenesis:
 
     def test_has_all_required_fields(self, conway_genesis: dict) -> None:
         for field_name in self.REQUIRED_FIELDS:
-            assert field_name in conway_genesis, (
-                f"Missing required field '{field_name}' in conway-genesis.json"
-            )
+            assert (
+                field_name in conway_genesis
+            ), f"Missing required field '{field_name}' in conway-genesis.json"
 
     def test_pool_voting_thresholds(self, conway_genesis: dict) -> None:
         pvt = conway_genesis.get("poolVotingThresholds", {})
         for field_name in self.REQUIRED_POOL_THRESHOLDS:
-            assert field_name in pvt, (
-                f"Missing poolVotingThresholds.{field_name}"
-            )
-            assert 0 <= pvt[field_name] <= 1, (
-                f"poolVotingThresholds.{field_name} must be [0, 1], "
-                f"got {pvt[field_name]}"
-            )
+            assert field_name in pvt, f"Missing poolVotingThresholds.{field_name}"
+            assert (
+                0 <= pvt[field_name] <= 1
+            ), f"poolVotingThresholds.{field_name} must be [0, 1], got {pvt[field_name]}"
 
     def test_drep_voting_thresholds(self, conway_genesis: dict) -> None:
         dvt = conway_genesis.get("dRepVotingThresholds", {})
         for field_name in self.REQUIRED_DREP_THRESHOLDS:
-            assert field_name in dvt, (
-                f"Missing dRepVotingThresholds.{field_name}"
-            )
-            assert 0 <= dvt[field_name] <= 1, (
-                f"dRepVotingThresholds.{field_name} must be [0, 1], "
-                f"got {dvt[field_name]}"
-            )
+            assert field_name in dvt, f"Missing dRepVotingThresholds.{field_name}"
+            assert (
+                0 <= dvt[field_name] <= 1
+            ), f"dRepVotingThresholds.{field_name} must be [0, 1], got {dvt[field_name]}"
 
 
 # ---------------------------------------------------------------------------
 # Test 5: No bech32 addresses in any genesis file
 # ---------------------------------------------------------------------------
+
 
 class TestNoBech32Addresses:
     """Genesis files must use hex-encoded keys/addresses, never bech32.
@@ -324,6 +317,4 @@ class TestNoBech32Addresses:
         filepath = GENESIS_DIR / filename
         content = filepath.read_text()
         matches = BECH32_PATTERN.findall(content)
-        assert len(matches) == 0, (
-            f"Found bech32 address(es) in {filename}: {matches[:5]}"
-        )
+        assert len(matches) == 0, f"Found bech32 address(es) in {filename}: {matches[:5]}"

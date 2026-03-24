@@ -27,15 +27,11 @@ import pytest
 
 from vibe.core.multiplexer.bearer import BearerClosedError
 from vibe.core.multiplexer.mux import (
-    IngressOverflowError,
     MiniProtocolChannel,
     Multiplexer,
     MuxClosedError,
-    MuxError,
-    _CHANNEL_CLOSED,
 )
-from vibe.core.multiplexer.segment import MuxSegment, encode_segment, decode_segment
-
+from vibe.core.multiplexer.segment import MuxSegment, decode_segment, encode_segment
 
 # ---------------------------------------------------------------------------
 # MockBearer — in-memory bearer for testing without TCP
@@ -109,9 +105,7 @@ class MockBearer:
         self.inbound.put_nowait(segment)
 
 
-def make_segment(
-    protocol_id: int, payload: bytes, is_initiator: bool = True
-) -> MuxSegment:
+def make_segment(protocol_id: int, payload: bytes, is_initiator: bool = True) -> MuxSegment:
     """Helper to create a MuxSegment with a zero timestamp."""
     return MuxSegment(
         timestamp=0,
@@ -216,7 +210,7 @@ class TestMultiplexerSingleProtocol:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -236,7 +230,7 @@ class TestMultiplexerSingleProtocol:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -263,7 +257,7 @@ class TestMultiplexerSingleProtocol:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -300,7 +294,7 @@ class TestMultiplexerTwoProtocols:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -333,7 +327,7 @@ class TestMultiplexerTwoProtocols:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -390,7 +384,7 @@ class TestFairScheduling:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -429,7 +423,7 @@ class TestUnknownProtocol:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -467,9 +461,7 @@ class TestBearerDisconnect:
         assert ch_b._closed
 
     @pytest.mark.asyncio
-    async def test_recv_after_disconnect_raises(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_recv_after_disconnect_raises(self, mock_bearer: MockBearer) -> None:
         """recv() on a channel raises MuxClosedError after bearer disconnect."""
         mux = Multiplexer(mock_bearer, is_initiator=True)
         ch = mux.add_protocol(0)
@@ -493,18 +485,14 @@ class TestMultiplexerLifecycle:
     """Test add_protocol validation, close idempotency, etc."""
 
     @pytest.mark.asyncio
-    async def test_add_protocol_duplicate_raises(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_add_protocol_duplicate_raises(self, mock_bearer: MockBearer) -> None:
         mux = Multiplexer(mock_bearer, is_initiator=True)
         mux.add_protocol(0)
         with pytest.raises(ValueError, match="already registered"):
             mux.add_protocol(0)
 
     @pytest.mark.asyncio
-    async def test_add_protocol_invalid_id_raises(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_add_protocol_invalid_id_raises(self, mock_bearer: MockBearer) -> None:
         mux = Multiplexer(mock_bearer, is_initiator=True)
         with pytest.raises(ValueError):
             mux.add_protocol(-1)
@@ -512,9 +500,7 @@ class TestMultiplexerLifecycle:
             mux.add_protocol(0x8000)
 
     @pytest.mark.asyncio
-    async def test_add_protocol_after_close_raises(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_add_protocol_after_close_raises(self, mock_bearer: MockBearer) -> None:
         mux = Multiplexer(mock_bearer, is_initiator=True)
         await mux.close()
         with pytest.raises(MuxClosedError):
@@ -535,9 +521,7 @@ class TestMultiplexerLifecycle:
             await mux.run()
 
     @pytest.mark.asyncio
-    async def test_initiator_flag_on_outbound_segments(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_initiator_flag_on_outbound_segments(self, mock_bearer: MockBearer) -> None:
         """Outbound segments carry the correct is_initiator flag."""
         # Initiator side.
         mux_init = Multiplexer(mock_bearer, is_initiator=True)
@@ -552,7 +536,7 @@ class TestMultiplexerLifecycle:
         await mux_init.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -571,7 +555,7 @@ class TestMultiplexerLifecycle:
         await mux_resp.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -622,7 +606,7 @@ class TestFullDuplex:
         for task in (run_init, run_resp):
             try:
                 await task
-            except (asyncio.CancelledError, MuxClosedError):
+            except asyncio.CancelledError, MuxClosedError:
                 pass
 
 
@@ -642,9 +626,7 @@ class TestIngressQueueBounds:
     @pytest.mark.asyncio
     async def test_demux_ingress_queue_max_size(self) -> None:
         """MiniProtocolChannel with max_ingress_size creates a bounded queue."""
-        ch = MiniProtocolChannel(
-            protocol_id=0, is_initiator=True, max_ingress_size=3
-        )
+        ch = MiniProtocolChannel(protocol_id=0, is_initiator=True, max_ingress_size=3)
         assert ch._inbound.maxsize == 3
 
         # Can put up to max_ingress_size items.
@@ -684,7 +666,7 @@ class TestIngressQueueBounds:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -740,7 +722,7 @@ class TestDirectionHandling:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -772,7 +754,7 @@ class TestDirectionHandling:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -790,9 +772,7 @@ class TestNoHeadOfLineBlocking:
     """
 
     @pytest.mark.asyncio
-    async def test_mux_no_head_of_line_blocking(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_mux_no_head_of_line_blocking(self, mock_bearer: MockBearer) -> None:
         """One protocol with no data doesn't block another from sending."""
         mux = Multiplexer(mock_bearer, is_initiator=True)
         ch_idle = mux.add_protocol(0)  # No data queued — "stalled"
@@ -817,7 +797,7 @@ class TestNoHeadOfLineBlocking:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -873,7 +853,7 @@ class TestUnknownProtocolDocumented:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -890,9 +870,7 @@ class TestPerProtocolBufferIsolation:
     """
 
     @pytest.mark.asyncio
-    async def test_demux_per_protocol_buffer_isolation(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_demux_per_protocol_buffer_isolation(self, mock_bearer: MockBearer) -> None:
         """Filling protocol 0's inbound queue doesn't prevent protocol 1 from receiving."""
         mux = Multiplexer(mock_bearer, is_initiator=True)
         ch_full = mux.add_protocol(0, max_ingress_size=2)
@@ -918,7 +896,7 @@ class TestPerProtocolBufferIsolation:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -936,9 +914,7 @@ class TestReassembly:
     """
 
     @pytest.mark.asyncio
-    async def test_demux_reassembly_preserves_data(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_demux_reassembly_preserves_data(self, mock_bearer: MockBearer) -> None:
         """Multiple segments for the same protocol deliver payloads in order, intact."""
         mux = Multiplexer(mock_bearer, is_initiator=True)
         ch = mux.add_protocol(0)
@@ -963,7 +939,7 @@ class TestReassembly:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -1005,9 +981,11 @@ class TestFairnessBoundedDelay:
 
         # In the first round (3 segments), all 3 protocols should appear.
         first_round = [seg.protocol_id for seg in segments[:n_protocols]]
-        assert set(first_round) == {0, 1, 2}, (
-            f"First round should service all protocols, got {first_round}"
-        )
+        assert set(first_round) == {
+            0,
+            1,
+            2,
+        }, f"First round should service all protocols, got {first_round}"
 
         # Check no consecutive run from protocol 0 exceeds 1 in the first 3 segments.
         max_consecutive = 1
@@ -1029,14 +1007,14 @@ class TestFairnessBoundedDelay:
                 first_n_max = max(first_n_max, current_run)
             else:
                 current_run = 1
-        assert first_n_max == 1, (
-            f"In first round, max consecutive from one protocol should be 1, got {first_n_max}"
-        )
+        assert (
+            first_n_max == 1
+        ), f"In first round, max consecutive from one protocol should be 1, got {first_n_max}"
 
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -1054,9 +1032,7 @@ class TestFairnessPropertyNProtocols:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("n_protocols", [2, 3, 5, 7, 10])
-    async def test_mux_fairness_property_n_protocols(
-        self, n_protocols: int
-    ) -> None:
+    async def test_mux_fairness_property_n_protocols(self, n_protocols: int) -> None:
         """With N protocols each sending 1 message, all N appear in output."""
         bearer = MockBearer()
         mux = Multiplexer(bearer, is_initiator=True)
@@ -1075,14 +1051,14 @@ class TestFairnessPropertyNProtocols:
 
         # All N protocols got scheduled.
         serviced = {seg.protocol_id for seg in segments}
-        assert serviced == set(range(n_protocols)), (
-            f"Expected all {n_protocols} protocols serviced, got {serviced}"
-        )
+        assert serviced == set(
+            range(n_protocols)
+        ), f"Expected all {n_protocols} protocols serviced, got {serviced}"
 
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -1143,9 +1119,7 @@ class TestProtocolCompositeKey:
     """
 
     @pytest.mark.asyncio
-    async def test_mux_mini_protocol_keyed_by_num_and_dir(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_mux_mini_protocol_keyed_by_num_and_dir(self, mock_bearer: MockBearer) -> None:
         """Different protocol_ids get independent channels.
 
         Note: In Haskell, the key is (MiniProtocolNum, MiniProtocolDir),
@@ -1183,7 +1157,7 @@ class TestProtocolCompositeKey:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -1235,7 +1209,7 @@ class TestIOExceptionIsolation:
         await mux_b.close()
         try:
             await run_b
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -1252,9 +1226,7 @@ class TestErrorPathCleanup:
     """
 
     @pytest.mark.asyncio
-    async def test_error_path_closes_multiplexer_and_socket(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_error_path_closes_multiplexer_and_socket(self, mock_bearer: MockBearer) -> None:
         """Bearer disconnect triggers: mux shutdown -> channel close -> bearer close."""
         mux = Multiplexer(mock_bearer, is_initiator=True)
         ch_a = mux.add_protocol(0)
@@ -1310,7 +1282,7 @@ class TestBearerClosePropagatesToChannels:
 
         try:
             await asyncio.wait_for(run_task, timeout=2.0)
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
         # All 5 channels are closed.
@@ -1459,9 +1431,7 @@ class TestInvalidSDU:
         assert not mux.is_running
 
     @pytest.mark.asyncio
-    async def test_invalid_sdu_zero_length_payload(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_invalid_sdu_zero_length_payload(self, mock_bearer: MockBearer) -> None:
         """SDU with payload_length=0 in header.  Empty payload is valid per spec.
 
         Spec reference: Ouroboros network spec, Section 1.1 — payload_length
@@ -1489,7 +1459,7 @@ class TestInvalidSDU:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -1516,9 +1486,7 @@ class TestInvalidSDU:
                 self._closed = True
                 # This is what Bearer.read_segment raises when it reads
                 # the header (payload_len=100) but only gets 50 bytes.
-                raise asyncio.IncompleteReadError(
-                    partial=b"\x00" * 50, expected=100
-                )
+                raise asyncio.IncompleteReadError(partial=b"\x00" * 50, expected=100)
 
             async def write_segment(self, segment: MuxSegment) -> None:
                 raise BearerClosedError("length mismatch bearer closed")
@@ -1568,7 +1536,7 @@ class TestInvalidSDU:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -1686,7 +1654,7 @@ class TestMuxLifecycleAdvanced:
         await mux2.close()
         try:
             await run2
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -1713,7 +1681,7 @@ class TestMuxLifecycleAdvanced:
         await mux.close()
         try:
             await asyncio.wait_for(run_task, timeout=2.0)
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
         assert not mux.is_running
@@ -1751,15 +1719,11 @@ class TestMuxLifecycleAdvanced:
         await ch_resp.send(b"resp-handshake")
 
         # Relay initiator -> responder.
-        seg_from_init = await asyncio.wait_for(
-            bearer_init.outbound.get(), timeout=1.0
-        )
+        seg_from_init = await asyncio.wait_for(bearer_init.outbound.get(), timeout=1.0)
         bearer_resp.inject_segment(seg_from_init)
 
         # Relay responder -> initiator.
-        seg_from_resp = await asyncio.wait_for(
-            bearer_resp.outbound.get(), timeout=1.0
-        )
+        seg_from_resp = await asyncio.wait_for(bearer_resp.outbound.get(), timeout=1.0)
         bearer_init.inject_segment(seg_from_resp)
 
         # Both sides receive the other's handshake.
@@ -1779,7 +1743,7 @@ class TestMuxLifecycleAdvanced:
         for task in (run_init, run_resp):
             try:
                 await task
-            except (asyncio.CancelledError, MuxClosedError):
+            except asyncio.CancelledError, MuxClosedError:
                 pass
 
 
@@ -1824,7 +1788,7 @@ class TestDemuxInvalidProtocolID:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -1855,7 +1819,7 @@ class TestDemuxInvalidProtocolID:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -1887,7 +1851,7 @@ class TestDemuxInvalidProtocolID:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -1909,7 +1873,10 @@ class TestDemuxInvalidPayloadLength:
 
         oversized = b"\x00" * (MAX_PAYLOAD_SIZE + 1)
         seg = MuxSegment(
-            timestamp=0, protocol_id=0, is_initiator=True, payload=oversized,
+            timestamp=0,
+            protocol_id=0,
+            is_initiator=True,
+            payload=oversized,
         )
         with pytest.raises(ValueError, match="payload length"):
             encode_segment(seg)
@@ -1918,6 +1885,7 @@ class TestDemuxInvalidPayloadLength:
         """decode_segment raises ValueError if buffer is shorter than header claims."""
         # Craft a valid header claiming 100 bytes of payload, but provide only 50
         import struct
+
         header = struct.pack("!IHH", 0, 0, 100)  # timestamp=0, proto=0, len=100
         short_buffer = header + b"\x00" * 50
 
@@ -1951,7 +1919,8 @@ class TestDemuxInvalidPayloadLength:
             async def read_segment(self) -> MuxSegment:
                 self._closed = True
                 raise asyncio.IncompleteReadError(
-                    partial=b"\x00" * 10, expected=1000,
+                    partial=b"\x00" * 10,
+                    expected=1000,
                 )
 
             async def write_segment(self, segment: MuxSegment) -> None:
@@ -1988,9 +1957,7 @@ class TestIngressOverflowQMax:
     """
 
     @pytest.mark.asyncio
-    async def test_ingress_overflow_exact_boundary(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_ingress_overflow_exact_boundary(self, mock_bearer: MockBearer) -> None:
         """Channel with max_ingress_size=1 overflows on 2nd segment."""
         mux = Multiplexer(mock_bearer, is_initiator=True)
         ch = mux.add_protocol(0, max_ingress_size=1)
@@ -2022,7 +1989,7 @@ class TestIngressOverflowQMax:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -2055,7 +2022,7 @@ class TestIngressOverflowQMax:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -2076,9 +2043,7 @@ class TestTrailingBytesAfterClose:
     """
 
     @pytest.mark.asyncio
-    async def test_trailing_segments_after_close(
-        self, mock_bearer: MockBearer
-    ) -> None:
+    async def test_trailing_segments_after_close(self, mock_bearer: MockBearer) -> None:
         """Segments injected after close() are not delivered and cause no errors."""
         mux = Multiplexer(mock_bearer, is_initiator=True)
         ch = mux.add_protocol(0)
@@ -2091,7 +2056,7 @@ class TestTrailingBytesAfterClose:
 
         try:
             await asyncio.wait_for(run_task, timeout=2.0)
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
         # Now inject trailing segments — these should be harmless
@@ -2134,7 +2099,7 @@ class TestTrailingBytesAfterClose:
         await mux.close()
         try:
             await asyncio.wait_for(run_task, timeout=2.0)
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
         # Channel is closed — can't send more
@@ -2169,7 +2134,7 @@ class TestTrailingBytesAfterClose:
 
         try:
             await asyncio.wait_for(run_task, timeout=2.0)
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -2220,7 +2185,7 @@ class TestMuxStartStopLifecycle:
         await mux.close()
         try:
             await asyncio.wait_for(run_task, timeout=2.0)
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
         # Stopped state
@@ -2259,7 +2224,7 @@ class TestMuxStartStopLifecycle:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
 
@@ -2287,7 +2252,7 @@ class TestMuxRestartAfterStop:
         await mux.close()
         try:
             await asyncio.wait_for(run_task, timeout=2.0)
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
         # Cannot restart
@@ -2314,7 +2279,7 @@ class TestMuxRestartAfterStop:
         await mux1.close()
         try:
             await run1
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
         assert mux1.is_closed
@@ -2337,7 +2302,7 @@ class TestMuxRestartAfterStop:
         await mux2.close()
         try:
             await run2
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -2421,7 +2386,7 @@ class TestCompatInterface:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -2432,11 +2397,11 @@ class TestCompatInterface:
         with the Channel protocol expected by run_handshake_client.
         """
         from vibe.cardano.network.handshake import (
-            PREPROD_NETWORK_MAGIC,
             N2N_V15,
-            encode_propose_versions,
-            decode_handshake_response,
+            PREPROD_NETWORK_MAGIC,
             build_version_table,
+            decode_handshake_response,
+            encode_propose_versions,
         )
 
         bearer = MockBearer()
@@ -2457,22 +2422,28 @@ class TestCompatInterface:
 
         # Simulate server responding with AcceptVersion
         import cbor2
-        accept_bytes = cbor2.dumps([
-            1, N2N_V15, [PREPROD_NETWORK_MAGIC, False, 0, False],
-        ])
+
+        accept_bytes = cbor2.dumps(
+            [
+                1,
+                N2N_V15,
+                [PREPROD_NETWORK_MAGIC, False, 0, False],
+            ]
+        )
         bearer.inject_segment(make_segment(0, accept_bytes))
 
         # Client receives and decodes
         response_raw = await asyncio.wait_for(ch.recv(), timeout=1.0)
         response = decode_handshake_response(response_raw)
         from vibe.cardano.network.handshake import MsgAcceptVersion
+
         assert isinstance(response, MsgAcceptVersion)
         assert response.version_number == N2N_V15
 
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -2512,7 +2483,7 @@ class TestCompatInterface:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass
 
     @pytest.mark.asyncio
@@ -2535,5 +2506,5 @@ class TestCompatInterface:
         await mux.close()
         try:
             await run_task
-        except (asyncio.CancelledError, MuxClosedError):
+        except asyncio.CancelledError, MuxClosedError:
             pass

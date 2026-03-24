@@ -222,44 +222,32 @@ def decode_message(cbor_bytes: bytes) -> LocalTxSubmissionMessage:
 
     if msg_id == MSG_SUBMIT_TX:
         if len(msg) != 3:
-            raise ValueError(
-                f"MsgSubmitTx: expected 3 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgSubmitTx: expected 3 elements, got {len(msg)}")
         era_id = msg[1]
         if not isinstance(era_id, int) or isinstance(era_id, bool):
-            raise ValueError(
-                f"MsgSubmitTx: era_id must be int, got {type(era_id).__name__}"
-            )
+            raise ValueError(f"MsgSubmitTx: era_id must be int, got {type(era_id).__name__}")
         tx_bytes = msg[2]
         if isinstance(tx_bytes, memoryview):
             tx_bytes = bytes(tx_bytes)
         if not isinstance(tx_bytes, bytes):
-            raise ValueError(
-                f"MsgSubmitTx: tx_bytes must be bytes, got {type(tx_bytes).__name__}"
-            )
+            raise ValueError(f"MsgSubmitTx: tx_bytes must be bytes, got {type(tx_bytes).__name__}")
         return MsgSubmitTx(era_id=era_id, tx_bytes=tx_bytes)
 
     elif msg_id == MSG_ACCEPT_TX:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgAcceptTx: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgAcceptTx: expected 1 element, got {len(msg)}")
         return MsgAcceptTx()
 
     elif msg_id == MSG_REJECT_TX:
         if len(msg) != 2:
-            raise ValueError(
-                f"MsgRejectTx: expected 2 elements, got {len(msg)}"
-            )
+            raise ValueError(f"MsgRejectTx: expected 2 elements, got {len(msg)}")
         # Re-encode the reason value back to CBOR bytes for storage.
         reason = cbor2.dumps(msg[1])
         return MsgRejectTx(reason=reason)
 
     elif msg_id == MSG_DONE:
         if len(msg) != 1:
-            raise ValueError(
-                f"MsgDone: expected 1 element, got {len(msg)}"
-            )
+            raise ValueError(f"MsgDone: expected 1 element, got {len(msg)}")
         return MsgDone()
 
     else:
@@ -289,8 +277,7 @@ def decode_client_message(cbor_bytes: bytes) -> ClientMessage:
     msg = decode_message(cbor_bytes)
     if not isinstance(msg, (MsgSubmitTx, MsgDone)):
         raise ValueError(
-            f"Expected client message (MsgSubmitTx or MsgDone), "
-            f"got: {type(msg).__name__}"
+            f"Expected client message (MsgSubmitTx or MsgDone), got: {type(msg).__name__}"
         )
     return msg
 
@@ -318,7 +305,6 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
     msg = decode_message(cbor_bytes)
     if not isinstance(msg, (MsgAcceptTx, MsgRejectTx)):
         raise ValueError(
-            f"Expected server message (MsgAcceptTx or MsgRejectTx), "
-            f"got: {type(msg).__name__}"
+            f"Expected server message (MsgAcceptTx or MsgRejectTx), got: {type(msg).__name__}"
         )
     return msg

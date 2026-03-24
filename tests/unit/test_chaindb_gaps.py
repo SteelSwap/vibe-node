@@ -23,14 +23,12 @@ from __future__ import annotations
 
 import asyncio
 import struct
-from collections import deque
 from dataclasses import dataclass, field
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, settings
 from hypothesis import strategies as st
 from hypothesis.stateful import (
-    Bundle,
     RuleBasedStateMachine,
     initialize,
     rule,
@@ -40,11 +38,9 @@ from vibe.cardano.storage.chaindb import ChainDB
 from vibe.cardano.storage.immutable import (
     ClosedDBError,
     ImmutableDB,
-    ImmutableDBIterator,
 )
 from vibe.cardano.storage.ledger import LedgerDB
-from vibe.cardano.storage.volatile import BlockInfo, VolatileDB
-
+from vibe.cardano.storage.volatile import VolatileDB
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -211,9 +207,7 @@ class TestIteratorRegression1435:
         assert not it.has_next()
 
     @pytest.mark.asyncio
-    async def test_1435b_iterator_spanning_immutable_volatile_boundary(
-        self, tmp_path
-    ):
+    async def test_1435b_iterator_spanning_immutable_volatile_boundary(self, tmp_path):
         """(b) Iterator that starts in immutable and would need to continue
         into volatile. The ImmutableDB iterator only covers immutable blocks,
         so it should exhaust at the immutable tip without crashing.
@@ -399,9 +393,7 @@ class TestGCScheduleQueueLength:
         # Volatile should hold at most k+1 blocks (the window above immutable tip)
         vol_count = chain_db.volatile_db.block_count
         # Allow some margin: volatile might hold up to k+2 due to GC timing
-        assert vol_count <= k + 2, (
-            f"Volatile block count {vol_count} exceeds bound k+2={k + 2}"
-        )
+        assert vol_count <= k + 2, f"Volatile block count {vol_count} exceeds bound k+2={k + 2}"
 
     @pytest.mark.asyncio
     async def test_gc_runs_on_every_promotion_cycle(self, tmp_path):
@@ -667,6 +659,7 @@ class TestGetIsValid:
 @dataclass
 class ChainUpdate:
     """A chain update notification."""
+
     update_type: str  # "add" or "rollback"
     slot: int
     block_hash: bytes
@@ -706,12 +699,20 @@ class ChainDBWithFollowers:
         return f
 
     async def add_block(
-        self, slot: int, block_hash: bytes, predecessor_hash: bytes,
-        block_number: int, cbor_bytes: bytes,
+        self,
+        slot: int,
+        block_hash: bytes,
+        predecessor_hash: bytes,
+        block_number: int,
+        cbor_bytes: bytes,
     ):
         old_tip = await self.chain_db.get_tip()
         await self.chain_db.add_block(
-            slot, block_hash, predecessor_hash, block_number, cbor_bytes,
+            slot,
+            block_hash,
+            predecessor_hash,
+            block_number,
+            cbor_bytes,
         )
         new_tip = await self.chain_db.get_tip()
 
@@ -736,8 +737,11 @@ class TestFollowerSubscriber:
         for i in range(1, 6):
             bh = make_hash(i)
             await wrapper.add_block(
-                slot=i, block_hash=bh, predecessor_hash=pred,
-                block_number=i, cbor_bytes=make_block_cbor(i, i),
+                slot=i,
+                block_hash=bh,
+                predecessor_hash=pred,
+                block_number=i,
+                cbor_bytes=make_block_cbor(i, i),
             )
             pred = bh
 
@@ -758,8 +762,11 @@ class TestFollowerSubscriber:
         for i in range(1, 4):
             bh = make_hash(i)
             await wrapper.add_block(
-                slot=i, block_hash=bh, predecessor_hash=pred,
-                block_number=i, cbor_bytes=make_block_cbor(i, i),
+                slot=i,
+                block_hash=bh,
+                predecessor_hash=pred,
+                block_number=i,
+                cbor_bytes=make_block_cbor(i, i),
             )
             pred = bh
 
@@ -768,8 +775,10 @@ class TestFollowerSubscriber:
 
         # Add a fork block with lower block_number — should NOT change tip
         await wrapper.add_block(
-            slot=100, block_hash=make_hash(700),
-            predecessor_hash=GENESIS_HASH, block_number=1,
+            slot=100,
+            block_hash=make_hash(700),
+            predecessor_hash=GENESIS_HASH,
+            block_number=1,
             cbor_bytes=make_block_cbor(100, 1),
         )
 
@@ -785,8 +794,10 @@ class TestFollowerSubscriber:
         f2 = wrapper.register_follower()
 
         await wrapper.add_block(
-            slot=1, block_hash=make_hash(1),
-            predecessor_hash=GENESIS_HASH, block_number=1,
+            slot=1,
+            block_hash=make_hash(1),
+            predecessor_hash=GENESIS_HASH,
+            block_number=1,
             cbor_bytes=make_block_cbor(1, 1),
         )
 
@@ -825,8 +836,12 @@ class RefChainDBModel:
     k: int = 5
 
     def add_block(
-        self, slot: int, block_hash: bytes, predecessor_hash: bytes,
-        block_number: int, cbor_bytes: bytes,
+        self,
+        slot: int,
+        block_hash: bytes,
+        predecessor_hash: bytes,
+        block_number: int,
+        cbor_bytes: bytes,
     ) -> None:
         # Ignore blocks at or below immutable tip
         if (
@@ -883,13 +898,10 @@ class TestModelCorrectness:
             model_tip = model.get_tip()
             assert real_tip is not None
             assert model_tip is not None
-            assert real_tip[0] == model_tip[0], (
-                f"Tip slot mismatch at block {i}: "
-                f"real={real_tip[0]}, model={model_tip[0]}"
-            )
-            assert real_tip[1] == model_tip[1], (
-                f"Tip hash mismatch at block {i}"
-            )
+            assert (
+                real_tip[0] == model_tip[0]
+            ), f"Tip slot mismatch at block {i}: real={real_tip[0]}, model={model_tip[0]}"
+            assert real_tip[1] == model_tip[1], f"Tip hash mismatch at block {i}"
 
             # Block lookup should agree
             for j in range(1, i + 1):
@@ -900,9 +912,9 @@ class TestModelCorrectness:
                 # blocks but promoted them to immutable. The block should
                 # still be findable via ChainDB.get_block (volatile then immutable).
                 if model_block is not None:
-                    assert real_block is not None, (
-                        f"Block {j} in model but not in ChainDB at step {i}"
-                    )
+                    assert (
+                        real_block is not None
+                    ), f"Block {j} in model but not in ChainDB at step {i}"
                     assert real_block == model_block
 
             pred = bh
@@ -970,8 +982,10 @@ class ChainDBStateMachine(RuleBasedStateMachine):
     @initialize()
     def init_db(self):
         import tempfile
+
         self._tmp_dir = tempfile.mkdtemp()
         from pathlib import Path
+
         tmp = Path(self._tmp_dir)
         self.k = 3
         self.chain_db = _make_chain_db(tmp, k=self.k)
@@ -996,9 +1010,7 @@ class ChainDBStateMachine(RuleBasedStateMachine):
         bh = make_hash(bn + 10000)  # avoid collisions
         cbor = make_block_cbor(slot, bn)
 
-        self._run(
-            self.chain_db.add_block(slot, bh, self.current_pred, bn, cbor)
-        )
+        self._run(self.chain_db.add_block(slot, bh, self.current_pred, bn, cbor))
         self.model.add_block(slot, bh, self.current_pred, bn, cbor)
 
         self.current_pred = bh
@@ -1017,9 +1029,10 @@ class ChainDBStateMachine(RuleBasedStateMachine):
 
     def teardown(self):
         import shutil
-        if hasattr(self, '_loop'):
+
+        if hasattr(self, "_loop"):
             self._loop.close()
-        if hasattr(self, '_tmp_dir'):
+        if hasattr(self, "_tmp_dir"):
             shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
 

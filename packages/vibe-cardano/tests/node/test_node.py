@@ -12,24 +12,28 @@ Tests cover:
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 import pytest
 
+from vibe.cardano.consensus.slot_arithmetic import SlotConfig
 from vibe.cardano.node.config import NodeConfig, PeerAddress, PoolKeys
-from vibe.cardano.node.run import (
+from vibe.cardano.node.inbound_server import (
     N2C_PROTOCOL_IDS,
     N2N_PROTOCOL_IDS,
+)
+from vibe.cardano.node.inbound_server import (
+    setup_n2c_mux as _setup_n2c_mux,
+)
+from vibe.cardano.node.inbound_server import (
+    setup_n2n_mux as _setup_n2n_mux,
+)
+from vibe.cardano.node.run import (
     PeerManager,
     SlotClock,
-    _setup_n2c_mux,
-    _setup_n2n_mux,
 )
-from vibe.cardano.consensus.slot_arithmetic import SlotConfig
-from vibe.core.multiplexer import Bearer, Multiplexer
-
+from vibe.core.multiplexer import Bearer
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -40,7 +44,7 @@ from vibe.core.multiplexer import Bearer, Multiplexer
 def fast_slot_config() -> SlotConfig:
     """SlotConfig with 10ms slots for fast testing."""
     return SlotConfig(
-        system_start=datetime.now(timezone.utc),
+        system_start=datetime.now(UTC),
         slot_length=0.01,
         epoch_length=100,
     )
@@ -69,7 +73,7 @@ def sample_config(sample_pool_keys: PoolKeys) -> NodeConfig:
         epoch_length=100,
         security_param=10,
         active_slot_coeff=0.05,
-        system_start=datetime.now(timezone.utc),
+        system_start=datetime.now(UTC),
         host="127.0.0.1",
         port=13001,
         socket_path="/tmp/test-node.sock",
@@ -200,15 +204,14 @@ class TestSlotClock:
         assert result == 0
 
     @pytest.mark.asyncio
-    async def test_wait_for_slot_fires_at_boundary(
-        self, fast_slot_config: SlotConfig
-    ) -> None:
+    async def test_wait_for_slot_fires_at_boundary(self, fast_slot_config: SlotConfig) -> None:
         """wait_for_slot with a near-future slot completes quickly."""
         clock = SlotClock(fast_slot_config)
         current = clock.current_slot()
         target = current + 2
 
         import time
+
         start = time.monotonic()
         result = await clock.wait_for_slot(target)
         elapsed = time.monotonic() - start
@@ -335,11 +338,12 @@ class TestForgeLoop:
     def test_forge_loop_skips_relay(self) -> None:
         """Forge loop returns immediately if no pool keys."""
         import threading
+
         from vibe.cardano.node.forge_loop import forge_loop
 
         config = NodeConfig(network_magic=2, pool_keys=None)
         slot_config = SlotConfig(
-            system_start=datetime.now(timezone.utc),
+            system_start=datetime.now(UTC),
             slot_length=0.01,
             epoch_length=100,
         )
@@ -352,9 +356,11 @@ class TestForgeLoop:
     def test_forge_loop_respects_shutdown(self) -> None:
         """Forge loop exits when shutdown_event is set."""
         import threading
-        from vibe.cardano.node.forge_loop import forge_loop
 
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        from vibe.cardano.node.forge_loop import forge_loop
+
         cold_sk_obj = Ed25519PrivateKey.generate()
         cold_sk_bytes = cold_sk_obj.private_bytes_raw()
         cold_vk_bytes = cold_sk_obj.public_key().public_bytes_raw()
@@ -369,7 +375,7 @@ class TestForgeLoop:
             pool_keys=keys,
             slot_length=0.01,
             epoch_length=100,
-            system_start=datetime.now(timezone.utc),
+            system_start=datetime.now(UTC),
         )
         slot_config = SlotConfig(
             system_start=config.system_start,
@@ -393,7 +399,9 @@ class TestForgeLoop:
 class TestGracefulShutdown:
     """Tests for the shutdown mechanism."""
 
-    @pytest.mark.skip(reason="run_node is now sync and registers signal handlers — requires main thread, not testable as unit test")
+    @pytest.mark.skip(
+        reason="run_node is now sync and registers signal handlers — requires main thread, not testable as unit test"
+    )
     def test_run_node_shutdown_via_event(self) -> None:
         """run_node exits cleanly when the shutdown event is triggered.
 

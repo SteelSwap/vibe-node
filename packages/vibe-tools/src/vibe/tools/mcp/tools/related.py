@@ -1,4 +1,5 @@
 """get_related tool — navigate cross-references."""
+
 from __future__ import annotations
 
 from vibe.tools.mcp.app import mcp
@@ -89,9 +90,7 @@ async def get_related(
         if relationship:
             # Accept both the forward name and its inverse label
             canonical = INVERSE_REVERSE.get(relationship, relationship)
-            results = [
-                r for r in results if r["relationship"] in (relationship, canonical)
-            ]
+            results = [r for r in results if r["relationship"] in (relationship, canonical)]
         if target_type:
             results = [r for r in results if r["entity_type"] == target_type]
 
