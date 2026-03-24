@@ -1,32 +1,18 @@
-"""Node main loop -- top-level orchestration for the vibe Cardano node.
+"""Node main loop -- three-thread orchestration for the vibe Cardano node.
 
-Ties together all subsystems: multiplexer, miniprotocols (N2N + N2C),
-storage, mempool, consensus, and block forging into a single ``run_node``
-entry point.
+Three OS threads:
+    Thread 1 (main): Forge loop — slot-by-slot leadership + block forging
+    Thread 2 (daemon): Receive — peer connections, chain-sync/block-fetch clients
+    Thread 3 (daemon): Serve — inbound connections, chain-sync/block-fetch servers
 
-The architecture follows the Haskell node's ``Ouroboros.Consensus.Node.run``:
-
-1. Initialise storage (ChainDB backed by ImmutableDB + VolatileDB + LedgerDB)
-2. Initialise the mempool
-3. Start TCP listener for inbound N2N peers
-4. Start Unix socket listener for N2C local clients
-5. Connect to configured outbound peers
-6. For each connection, run the multiplexer with the appropriate miniprotocol bundle
-7. Run the slot clock loop (block-producing nodes only):
-   - Wait for next slot boundary
-   - Check VRF leader eligibility
-   - If elected: forge block, add to ChainDB, announce to peers
-8. Handle SIGTERM/SIGINT for graceful shutdown
+Shared state (ChainDB, NodeKernel) is protected by RWLock.
+The forge thread wakes on slot boundaries OR block arrival (threading.Event).
 
 Haskell references:
     - Ouroboros.Consensus.Node (run, NodeKernel)
-    - Ouroboros.Consensus.NodeKernel (initNodeKernel)
-    - Ouroboros.Network.Diffusion (run)
-    - Ouroboros.Consensus.BlockchainTime.WallClock.Default (defaultSystemTime)
-
-Spec references:
-    - Ouroboros Praos paper, Section 4 -- protocol execution
-    - Ouroboros network spec, Chapter 2 -- connection management
+    - The Haskell node uses per-concern OS threads with STM coordination.
+    - Our 3-thread model consolidates per-peer threads into two asyncio
+      event loops. See docs/superpowers/specs/2026-03-24-threading-design.md.
 """
 
 from __future__ import annotations
@@ -34,15 +20,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
-import time
-from dataclasses import dataclass, field
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
 from vibe.cardano.consensus.slot_arithmetic import SlotConfig, slot_to_wall_clock, wall_clock_to_slot
+from vibe.core.rwlock import RWLock
 
 from .config import NodeConfig, PeerAddress
-from .forge_loop import forge_loop as _forge_loop
+from .forge_loop import forge_loop
 from .inbound_server import (
     N2N_PROTOCOL_IDS,
     N2C_PROTOCOL_IDS,
@@ -59,23 +45,15 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# SlotClock
+# SlotClock (still used by receive/serve threads for slot queries)
 # ---------------------------------------------------------------------------
 
 
 class SlotClock:
-    """Asyncio-based slot clock that fires at each slot boundary.
+    """Slot clock for wall-clock to slot conversion.
 
-    Uses ``slot_to_wall_clock`` from the consensus slot arithmetic module
-    to compute the wall-clock time of each slot boundary, then sleeps
-    until that time.
-
-    Haskell ref:
-        ``Ouroboros.Consensus.BlockchainTime.WallClock.Default.defaultSystemTime``
-        The Haskell node uses STM's ``threadDelay`` between slot boundaries.
-
-    Args:
-        config: Slot configuration (system_start, slot_length, epoch_length).
+    The forge thread uses its own slot timing via threading.Event.
+    This class is retained for the receive/serve threads' slot queries.
     """
 
     __slots__ = ("_config", "_stopped")
@@ -86,46 +64,25 @@ class SlotClock:
 
     @property
     def slot_config(self) -> SlotConfig:
-        """The underlying slot configuration."""
         return self._config
 
     def current_slot(self) -> int:
-        """Return the current slot based on wall-clock time."""
         now = datetime.now(timezone.utc)
         return wall_clock_to_slot(now, self._config)
 
     async def wait_for_slot(self, target_slot: int) -> int:
-        """Sleep until the start of ``target_slot``.
-
-        If ``target_slot`` is in the past, returns immediately.
-
-        Args:
-            target_slot: The slot to wait for.
-
-        Returns:
-            The target slot number (for convenience in chaining).
-        """
         target_time = slot_to_wall_clock(target_slot, self._config)
         now = datetime.now(timezone.utc)
         delay = (target_time - now).total_seconds()
-
         if delay > 0 and not self._stopped:
             await asyncio.sleep(delay)
-
         return target_slot
 
     async def wait_for_next_slot(self) -> int:
-        """Sleep until the next slot boundary and return its slot number.
-
-        Returns:
-            The slot number of the slot we just entered.
-        """
         current = self.current_slot()
-        next_slot = current + 1
-        return await self.wait_for_slot(next_slot)
+        return await self.wait_for_slot(current + 1)
 
     def stop(self) -> None:
-        """Signal the clock to stop waiting."""
         self._stopped = True
 
 
@@ -140,11 +97,7 @@ async def _snapshot_loop(
     interval_slots: int,
     shutdown_event: asyncio.Event,
 ) -> None:
-    """Periodically snapshot the ledger for crash recovery.
-
-    Takes a snapshot every ``interval_slots`` slots of progress.
-    Failures are logged but do not crash the loop.
-    """
+    """Periodically snapshot the ledger for crash recovery."""
     interval_secs = interval_slots * getattr(
         getattr(slot_clock, "slot_config", None), "slot_length", 1.0
     )
@@ -162,42 +115,156 @@ async def _snapshot_loop(
                 await ledger_db.snapshot()
                 last_slot = current
                 utxo_count = getattr(ledger_db, "utxo_count", 0)
-                logger.info("Ledger snapshot at slot %d (%d UTxOs)", current, utxo_count, extra={"event": "ledger.snapshot", "slot": current, "utxo_count": utxo_count})
+                logger.info("Ledger snapshot at slot %d (%d UTxOs)", current, utxo_count)
             except Exception as exc:
                 logger.warning("Snapshot failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
-# Signal handling
+# Thread 2: RECEIVE — block reception from peers
 # ---------------------------------------------------------------------------
 
 
-def _install_signal_handlers(
-    shutdown_event: asyncio.Event,
-    loop: asyncio.AbstractEventLoop,
+def _run_receive_thread(
+    config: NodeConfig,
+    chain_db: Any,
+    node_kernel: Any,
+    block_received_event: threading.Event,
+    shutdown_event: threading.Event,
+    slot_clock: Any,
+    ledger_db: Any,
 ) -> None:
-    """Install SIGTERM and SIGINT handlers for graceful shutdown.
+    """Thread 2: block reception (peer_manager + outbound connections).
 
-    Haskell ref:
-        ``Ouroboros.Consensus.Node`` uses async exceptions (throwTo)
-        for shutdown.  We use asyncio Events instead -- cleaner in
-        Python's cooperative concurrency model.
-
-    Args:
-        shutdown_event: The event to set on signal receipt.
-        loop: The running event loop.
+    Creates its own asyncio event loop. Runs peer_manager which
+    connects to Haskell peers, runs chain-sync clients, and
+    block-fetch clients. Sets block_received_event when a new
+    block is adopted.
     """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
-    def _signal_handler(sig: signal.Signals) -> None:
-        logger.info("Received %s — shutting down", sig.name, extra={"event": "node.signal", "signal": sig.name})
-        shutdown_event.set()
+    async def _main() -> None:
+        # Asyncio shutdown event for this thread's tasks
+        async_shutdown = asyncio.Event()
 
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        try:
-            loop.add_signal_handler(sig, _signal_handler, sig)
-        except NotImplementedError:
-            # Windows doesn't support add_signal_handler.
-            pass
+        # Watch the threading.Event and bridge to asyncio
+        async def _watch_shutdown():
+            while not shutdown_event.is_set():
+                await asyncio.sleep(0.1)
+            async_shutdown.set()
+
+        asyncio.create_task(_watch_shutdown(), name="shutdown-watcher")
+
+        peer_manager = PeerManager(
+            config,
+            chain_db=chain_db,
+            node_kernel=node_kernel,
+            block_received_event=block_received_event,
+        )
+        for peer_addr in config.peers:
+            peer_manager.add_peer(peer_addr)
+
+        await peer_manager.start()
+
+        # Snapshot loop runs on receive thread (needs slot_clock)
+        snapshot_interval = getattr(config, "snapshot_interval_slots", 2000)
+        asyncio.create_task(
+            _snapshot_loop(ledger_db, slot_clock, snapshot_interval, async_shutdown),
+            name="snapshot-loop",
+        )
+
+        # Wait for shutdown
+        await async_shutdown.wait()
+        await peer_manager.stop()
+
+    try:
+        loop.run_until_complete(_main())
+    except Exception as exc:
+        logger.error("Receive thread error: %s", exc, exc_info=True)
+    finally:
+        loop.close()
+        logger.info("Receive thread stopped")
+
+
+# ---------------------------------------------------------------------------
+# Thread 3: SERVE — block serving to peers
+# ---------------------------------------------------------------------------
+
+
+def _run_serve_thread(
+    config: NodeConfig,
+    chain_db: Any,
+    node_kernel: Any,
+    mempool: Any,
+    shutdown_event: threading.Event,
+) -> None:
+    """Thread 3: block serving (inbound N2N + N2C servers).
+
+    Creates its own asyncio event loop. Runs the TCP listener for
+    inbound peer connections and the Unix socket for local clients.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    async def _main() -> None:
+        async_shutdown = asyncio.Event()
+
+        async def _watch_shutdown():
+            while not shutdown_event.is_set():
+                await asyncio.sleep(0.1)
+            async_shutdown.set()
+
+        asyncio.create_task(_watch_shutdown(), name="shutdown-watcher")
+
+        tasks: list[asyncio.Task[None]] = []
+
+        # N2N TCP server
+        tasks.append(
+            asyncio.create_task(
+                _run_n2n_server(
+                    config.host, config.port, config.network_magic,
+                    node_kernel, mempool, async_shutdown,
+                    chain_db=chain_db,
+                ),
+                name="n2n-server",
+            )
+        )
+
+        # N2C Unix socket server (if configured)
+        if config.socket_path is not None:
+            tasks.append(
+                asyncio.create_task(
+                    _run_n2c_server(
+                        config.socket_path,
+                        config.network_magic,
+                        chain_db,
+                        getattr(chain_db, "ledger_db", None),
+                        mempool,
+                        async_shutdown,
+                    ),
+                    name="n2c-server",
+                )
+            )
+
+        # Wait for shutdown
+        await async_shutdown.wait()
+
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+    try:
+        loop.run_until_complete(_main())
+    except Exception as exc:
+        logger.error("Serve thread error: %s", exc, exc_info=True)
+    finally:
+        loop.close()
+        logger.info("Serve thread stopped")
 
 
 # ---------------------------------------------------------------------------
@@ -206,27 +273,15 @@ def _install_signal_handlers(
 
 
 async def run_node(config: NodeConfig) -> None:
-    """Top-level node entry point -- start everything and run until shutdown.
+    """Top-level node entry point — initialise storage, spawn 3 threads.
 
-    This is the Python equivalent of ``Ouroboros.Consensus.Node.run`` from
-    the Haskell node.  It:
+    Storage initialisation is async (Mithril import, ledger restore).
+    After init, the node runs on 3 OS threads:
+        Thread 1 (main): Forge loop
+        Thread 2 (daemon): Block reception
+        Thread 3 (daemon): Block serving
 
-    1. Initialises storage (ChainDB = ImmutableDB + VolatileDB + LedgerDB)
-    2. Creates the slot clock from genesis parameters
-    3. Initialises the PeerManager with configured peers
-    4. Starts the N2N TCP server for inbound connections
-    5. Starts the N2C Unix socket server (if configured)
-    6. Connects to outbound peers
-    7. Runs the forge loop (if block-producing)
-    8. Waits for shutdown signal (SIGTERM/SIGINT)
-    9. Tears down all connections and servers gracefully
-
-    Haskell ref:
-        ``Ouroboros.Consensus.Node.run``
-        ``Ouroboros.Consensus.NodeKernel.initNodeKernel``
-
-    Args:
-        config: The full node configuration.
+    Haskell ref: Ouroboros.Consensus.Node.run
     """
     import hashlib
 
@@ -234,16 +289,19 @@ async def run_node(config: NodeConfig) -> None:
 
     from .kernel import NodeKernel
 
-    logger.info("Starting vibe-node (magic=%d, %s:%d, producer=%s, %d peers)", config.network_magic, config.host, config.port, config.is_block_producer, len(config.peers), extra={"event": "node.starting", "network_magic": config.network_magic, "host": config.host, "port": config.port, "block_producer": config.is_block_producer, "peer_count": len(config.peers)})
+    logger.info(
+        "Starting vibe-node (magic=%d, %s:%d, producer=%s, %d peers)",
+        config.network_magic, config.host, config.port,
+        config.is_block_producer, len(config.peers),
+    )
 
-    # --- Shutdown event and signal handlers ---
-    shutdown_event = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    _install_signal_handlers(shutdown_event, loop)
-
-    # --- Storage ---
+    # --- Storage (async init for Mithril/snapshots) ---
     db_path = config.db_path
     db_path.mkdir(parents=True, exist_ok=True)
+
+    # Create shared locks
+    chaindb_lock = RWLock()
+    kernel_lock = RWLock()
 
     immutable_db = ImmutableDB(
         base_dir=db_path / "immutable",
@@ -259,27 +317,25 @@ async def run_node(config: NodeConfig) -> None:
         volatile_db=volatile_db,
         ledger_db=ledger_db,
         k=config.security_param,
+        lock=chaindb_lock,
     )
 
-    # --- Mithril snapshot import (if configured and chain is empty) ---
+    # Mithril snapshot import
     if config.mithril_snapshot_path is not None:
         tip = await chain_db.get_tip()
         if tip is None:
-            logger.info("Importing Mithril snapshot from %s", config.mithril_snapshot_path, extra={"event": "mithril.import.start", "path": str(config.mithril_snapshot_path)})
+            logger.info("Importing Mithril snapshot from %s", config.mithril_snapshot_path)
             try:
                 from vibe.cardano.sync import import_mithril_snapshot
                 await import_mithril_snapshot(
                     snapshot_dir=config.mithril_snapshot_path,
                     immutable_db=immutable_db,
                 )
-                logger.info("Mithril snapshot import complete", extra={"event": "mithril.import.done"})
             except Exception as exc:
                 logger.warning("Mithril import failed: %s", exc)
-        else:
-            logger.info("ChainDB has data, skipping Mithril import", extra={"event": "mithril.import.skip"})
 
     tip = await chain_db.get_tip()
-    # Try to restore ledger state from latest snapshot
+    # Ledger restore
     snapshot_dir = db_path / "ledger-snapshots"
     if snapshot_dir.exists():
         snapshots = sorted(snapshot_dir.glob("*.arrow"), reverse=True)
@@ -291,14 +347,14 @@ async def run_node(config: NodeConfig) -> None:
                     metadata={"path": str(snapshots[0])},
                 )
                 await ledger_db.restore(handle)
-                logger.info("Ledger restored from snapshot (%d UTxOs)", ledger_db.utxo_count, extra={"event": "ledger.restored", "utxo_count": ledger_db.utxo_count})
+                logger.info("Ledger restored from snapshot (%d UTxOs)", ledger_db.utxo_count)
             except Exception as exc:
                 logger.warning("Snapshot restore failed: %s", exc)
 
     if tip is not None:
-        logger.info("ChainDB loaded: tip at slot %d (hash=%s)", tip[0], tip[1].hex()[:16], extra={"event": "chaindb.loaded", "slot": tip[0], "hash": tip[1].hex()[:16]})
+        logger.info("ChainDB loaded: tip at slot %d", tip[0])
     else:
-        logger.info("ChainDB loaded: empty (starting from genesis)", extra={"event": "chaindb.loaded", "slot": 0, "empty": True})
+        logger.info("ChainDB loaded: empty (starting from genesis)")
 
     # --- Mempool ---
     from vibe.cardano.mempool import Mempool, MempoolConfig
@@ -310,10 +366,9 @@ async def run_node(config: NodeConfig) -> None:
         validator=tx_validator,
         current_slot=0,
     )
-    logger.info("Mempool initialised (capacity=%d bytes)", mempool.capacity_bytes, extra={"event": "mempool.init", "capacity_bytes": mempool.capacity_bytes})
 
-    # --- NodeKernel: shared state for protocol servers ---
-    node_kernel = NodeKernel(chain_db=chain_db)
+    # --- NodeKernel ---
+    node_kernel = NodeKernel(chain_db=chain_db, lock=kernel_lock)
     nonce_seed = config.genesis_hash or hashlib.blake2b(
         config.network_magic.to_bytes(4, "big"), digest_size=32
     ).digest()
@@ -334,89 +389,61 @@ async def run_node(config: NodeConfig) -> None:
         epoch_length=config.epoch_length,
     )
     slot_clock = SlotClock(slot_config)
+    logger.info("Current slot: %d", slot_clock.current_slot())
 
-    current_slot = slot_clock.current_slot()
-    logger.info("Current slot: %d", current_slot, extra={"event": "node.slot", "slot": current_slot})
+    # --- Threading primitives ---
+    block_received = threading.Event()
+    shutdown = threading.Event()
 
-    # --- Peer manager ---
-    peer_manager = PeerManager(config, chain_db=chain_db, node_kernel=node_kernel)
-    for peer_addr in config.peers:
-        peer_manager.add_peer(peer_addr)
-
-    # --- Collect background tasks ---
-    tasks: list[asyncio.Task[None]] = []
-
-    # N2N TCP server
-    tasks.append(
-        asyncio.create_task(
-            _run_n2n_server(
-                config.host, config.port, config.network_magic,
-                node_kernel, mempool, shutdown_event,
-                chain_db=chain_db,
-            ),
-            name="n2n-server",
-        )
+    # --- Thread 2: RECEIVE ---
+    receive_thread = threading.Thread(
+        target=_run_receive_thread,
+        args=(config, chain_db, node_kernel, block_received, shutdown,
+              slot_clock, ledger_db),
+        daemon=True,
+        name="vibe-receive",
     )
 
-    # N2C Unix socket server (if configured)
-    if config.socket_path is not None:
-        tasks.append(
-            asyncio.create_task(
-                _run_n2c_server(
-                    config.socket_path,
-                    config.network_magic,
-                    chain_db,
-                    ledger_db,
-                    mempool,
-                    shutdown_event,
-                ),
-                name="n2c-server",
-            )
-        )
+    # --- Thread 3: SERVE ---
+    serve_thread = threading.Thread(
+        target=_run_serve_thread,
+        args=(config, chain_db, node_kernel, mempool, shutdown),
+        daemon=True,
+        name="vibe-serve",
+    )
 
-    # Outbound peer connections
-    await peer_manager.start()
+    # Install signal handlers on main thread
+    def _handle_signal(signum, frame):
+        logger.info("Received signal %s — shutting down", signum)
+        shutdown.set()
 
-    # Forge loop (block-producing nodes only)
+    signal.signal(signal.SIGINT, _handle_signal)
+    signal.signal(signal.SIGTERM, _handle_signal)
+
+    # Start daemon threads
+    receive_thread.start()
+    serve_thread.start()
+    logger.info("Node started — 3 threads (forge, receive, serve)")
+
+    # --- Thread 1: FORGE (runs on main thread) ---
     if config.is_block_producer:
-        tasks.append(
-            asyncio.create_task(
-                _forge_loop(config, slot_clock, shutdown_event, chain_db, node_kernel, mempool),
-                name="forge-loop",
-            )
+        forge_loop(
+            config=config,
+            slot_config=slot_config,
+            shutdown_event=shutdown,
+            block_received_event=block_received,
+            chain_db=chain_db,
+            node_kernel=node_kernel,
+            mempool=mempool,
         )
-
-    # Periodic ledger snapshots for crash recovery
-    snapshot_interval = getattr(config, 'snapshot_interval_slots', 2000)
-    tasks.append(
-        asyncio.create_task(
-            _snapshot_loop(ledger_db, slot_clock, snapshot_interval, shutdown_event),
-            name="snapshot-loop",
-        )
-    )
-
-    logger.info("Node started — waiting for shutdown signal", extra={"event": "node.started"})
-
-    # --- Wait for shutdown ---
-    try:
-        await shutdown_event.wait()
-    except asyncio.CancelledError:
-        pass
+    else:
+        # Relay-only: wait for shutdown
+        shutdown.wait()
 
     # --- Graceful shutdown ---
-    logger.info("Shutting down...", extra={"event": "node.shutdown"})
-
-    slot_clock.stop()
-    await peer_manager.stop()
-
-    for task in tasks:
-        if not task.done():
-            task.cancel()
-            try:
-                await task
-            except (asyncio.CancelledError, Exception):
-                pass
-
-    # Close storage
+    logger.info("Shutting down...")
+    shutdown.set()
+    receive_thread.join(timeout=5)
+    serve_thread.join(timeout=5)
     chain_db.close()
-    logger.info("Node stopped", extra={"event": "node.stopped"})
+    logger.info("Node stopped")
