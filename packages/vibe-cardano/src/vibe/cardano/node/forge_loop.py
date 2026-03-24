@@ -225,49 +225,48 @@ def forge_loop(
                 elif slot > 10:
                     continue
 
-        # --- Read nonce + check + forge under kernel write lock ---
+        # --- Atomic forge cycle under shared write lock ---
+        # Single lock for both ChainDB and NodeKernel. Holds through:
+        # nonce read → VRF check → forge → add_block → nonce update.
         # Prevents header processing from changing nonce mid-forge.
-        # ChainDB lock acquired separately for add_block only.
-        if node_kernel is not None:
-            with node_kernel._lock.read():
-                epoch_nonce = node_kernel.epoch_nonce.value
-                if node_kernel.stake_distribution:
-                    pool_stake = node_kernel.stake_distribution.get(pool_id, 0)
-                    total_stake = sum(node_kernel.stake_distribution.values())
-                    relative_stake = pool_stake / total_stake if total_stake > 0 else relative_stake
-
-        proof = check_leadership(
-            slot=slot,
-            vrf_sk=pool_keys.vrf_sk,
-            pool_vrf_vk=pool_keys.vrf_vk,
-            relative_stake=relative_stake,
-            active_slot_coeff=config.active_slot_coeff,
-            epoch_nonce=epoch_nonce,
-        )
-
-        if proof is None:
-            continue
-
+        # Haskell ref: blockProcessed TMVar synchronization.
         try:
-            forged = forge_block(
-                leader_proof=proof,
-                prev_block_number=prev_block_number,
-                prev_header_hash=prev_header_hash,
-                mempool_txs=[],
-                kes_sk=kes_sk,
-                kes_period=_current_kes_period,
-                ocert=ocert,
-                pool_vk=pool_keys.cold_vk,
-                vrf_vk=pool_keys.vrf_vk,
-            )
+            with chain_db._lock.write():  # shared_lock (same as kernel._lock)
+                if node_kernel is not None:
+                    epoch_nonce = node_kernel.epoch_nonce.value
+                    if node_kernel.stake_distribution:
+                        pool_stake = node_kernel.stake_distribution.get(pool_id, 0)
+                        total_stake = sum(node_kernel.stake_distribution.values())
+                        relative_stake = pool_stake / total_stake if total_stake > 0 else relative_stake
 
-            blocks_forged += 1
-            forged_predecessor = prev_header_hash or b"\x00" * 32
+                proof = check_leadership(
+                    slot=slot,
+                    vrf_sk=pool_keys.vrf_sk,
+                    pool_vrf_vk=pool_keys.vrf_vk,
+                    relative_stake=relative_stake,
+                    active_slot_coeff=config.active_slot_coeff,
+                    epoch_nonce=epoch_nonce,
+                )
 
-            # Store forged block — acquire chaindb lock then kernel lock
-            # (same order as Thread 2 to prevent deadlock)
-            if chain_db is not None:
-                with chain_db._lock.write():
+                if proof is None:
+                    continue
+
+                forged = forge_block(
+                    leader_proof=proof,
+                    prev_block_number=prev_block_number,
+                    prev_header_hash=prev_header_hash,
+                    mempool_txs=[],
+                    kes_sk=kes_sk,
+                    kes_period=_current_kes_period,
+                    ocert=ocert,
+                    pool_vk=pool_keys.cold_vk,
+                    vrf_vk=pool_keys.vrf_vk,
+                )
+
+                blocks_forged += 1
+                forged_predecessor = prev_header_hash or b"\x00" * 32
+
+                if chain_db is not None:
                     result = chain_db.add_block_sync(
                         slot=forged.block.slot,
                         block_hash=forged.block.block_hash,
@@ -277,15 +276,10 @@ def forge_loop(
                         header_cbor=[6, cbor2.CBORTag(24, forged.block.header_cbor)],
                         vrf_output=proof.vrf_output,
                     )
-                if not result.adopted:
-                    logger.info(
-                        "Forged block #%d at slot %d orphaned (tip changed)",
-                        forged.block.block_number, forged.block.slot,
-                    )
-                    continue
+                    if not result.adopted:
+                        continue
 
-                if node_kernel is not None:
-                    with node_kernel._lock.write():
+                    if node_kernel is not None:
                         node_kernel.on_block_adopted(
                             forged.block.slot, forged.block.block_hash,
                             forged_predecessor, proof.vrf_output,
