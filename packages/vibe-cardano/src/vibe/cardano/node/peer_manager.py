@@ -98,9 +98,15 @@ class PeerManager:
         chain_db: ChainDB instance for storing received blocks.
     """
 
-    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks", "_known_points")
+    __slots__ = ("_config", "_chain_db", "_node_kernel", "_peers", "_stopped", "_tasks", "_known_points", "_block_received_event")
 
-    def __init__(self, config: NodeConfig, chain_db: Any = None, node_kernel: Any = None) -> None:
+    def __init__(
+        self,
+        config: NodeConfig,
+        chain_db: Any = None,
+        node_kernel: Any = None,
+        block_received_event: Any = None,
+    ) -> None:
         self._config = config
         self._chain_db = chain_db
         self._node_kernel = node_kernel
@@ -108,6 +114,9 @@ class PeerManager:
         self._stopped = False
         self._tasks: list[asyncio.Task[None]] = []
         self._known_points: list[Any] = []
+        # threading.Event — set when a new block is processed,
+        # wakes the forge thread to check leadership immediately.
+        self._block_received_event = block_received_event
 
     @property
     def known_points(self) -> list[Any]:
@@ -594,6 +603,10 @@ class PeerManager:
                             header_cbor=header_cbor_wrapped,
                             vrf_output=hdr_vrf_out,
                         )
+
+                        # Signal forge thread that a new block arrived
+                        if result.adopted and self._block_received_event is not None:
+                            self._block_received_event.set()
 
                         # Praos chain-dependent state update
                         if result.adopted and node_kernel is not None:
