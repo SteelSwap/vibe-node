@@ -256,3 +256,43 @@ All three key claims verified against vendor/ source:
 5. If leader: tick full ledger state, forge block
 
 Our forge loop uses wall-clock for epoch tick (step 3) instead of forecasting from ledger. After WI-3 and WI-5, the nonce will come from header-based accumulation, matching the Haskell approach.
+
+---
+
+## Implementation Review (post WI-1 through WI-5)
+
+### Verification against plan:
+
+| WI | Planned | Implemented | Status | Issues |
+|----|---------|-------------|--------|--------|
+| WI-1 | Lock Thread 2 add_block | run_in_executor with write lock | ✓ | VolatileDB direct write in _on_block not locked (minor) |
+| WI-2 | Lock Thread 3 fragment reads | Snapshot under read lock | ✓ | get_blocks() still unlocked (minor) |
+| WI-3 | Nonce from header | on_block_adopted in _on_roll_forward | ✓ | **Dedup needed for dual-peer** |
+| WI-4 | Tip from header | create_task fire-and-forget | ✓ | Works |
+| WI-5 | Remove forge epoch tick | Reads nonce, no tick | ✓ | Works |
+
+### Remaining Issue: Nonce Rollback on VRF Tiebreak
+
+When chain selection replaces a block at the same height (VRF tiebreak),
+the nonce was already accumulated from the replaced block's header.
+The nonce needs to be rolled back and re-accumulated from the new block.
+
+This is the `on_fork_switch` / `_nonce_checkpoints` mechanism, but it's
+only wired into the _on_block handler (body processing), not the header
+processing path. The header path calls `on_block_adopted` but doesn't
+check if this block replaces a previous one at the same height.
+
+**Fix needed:** When `_process_header_tip` detects a tiebreak
+(`result.rollback_depth > 0`), call `on_fork_switch` to rollback and
+re-accumulate the nonce. Currently, the `result` from `add_block_sync`
+IS available in `_process_header_tip`, but the nonce rollback isn't
+wired there.
+
+### Test Results After WI Changes
+
+| Metric | Before WIs | After WIs |
+|--------|-----------|-----------|
+| VRF errors | 0 (without header-first) | 8 (nonce tiebreak issue) |
+| Slot lag | 6-10 | 3-4 |
+| Acceptance (0.2s) | 7-11% | 16% |
+| Forged blocks | ~10 | ~6-8 |

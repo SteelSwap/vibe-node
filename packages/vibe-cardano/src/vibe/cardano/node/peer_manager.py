@@ -373,8 +373,21 @@ class PeerManager:
                         )
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(None, _locked_add)
-                if result.adopted and self._block_received_event is not None:
-                    self._block_received_event.set()
+                if result.adopted:
+                    if self._block_received_event is not None:
+                        self._block_received_event.set()
+                    # If tiebreak occurred, rollback nonce to intersection
+                    # and re-accumulate. Without this, the nonce from the
+                    # replaced block stays in the accumulator.
+                    if result.rollback_depth > 0 and result.intersection_hash is not None:
+                        if node_kernel is not None:
+                            with node_kernel._lock.write():
+                                new_blocks = _get_new_chain_blocks(
+                                    cdb, result.intersection_hash, blk_hash,
+                                )
+                                node_kernel.on_fork_switch(
+                                    result.intersection_hash, new_blocks,
+                                )
             except Exception as exc:
                 logger.debug("Header tip update error at slot %d: %s", slot, exc)
 
