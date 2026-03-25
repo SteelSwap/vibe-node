@@ -566,8 +566,6 @@ class PeerManager:
                     # list formats, so raw_wire works directly.
 
                     # --- Decode once: extract header + body from pre-decoded block_body ---
-                    # Avoids re-parsing the same CBOR 3 times (was: decode in _on_block,
-                    # then decode_block_header re-parses, then decode_block_body re-parses).
                     era = Era(era_tag)
                     try:
                         hdr = decode_block_header_from_array(block_body, era)
