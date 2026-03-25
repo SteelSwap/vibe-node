@@ -262,16 +262,23 @@ def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
     if era in (Era.BYRON_MAIN, Era.BYRON_EBB):
         raise NotImplementedError(f"Byron block decoding not yet supported (era tag {era.value})")
 
-    if not isinstance(block_array, list) or len(block_array) < 4:
+    # Accept any sequence-like type (list, IndefiniteFrozenList, IndefiniteArray, etc.)
+    # cbor2pure versions use different types for indefinite-length CBOR arrays.
+    def _is_sequence(obj: object) -> bool:
+        return isinstance(obj, (list, tuple)) or (
+            hasattr(obj, "__len__") and hasattr(obj, "__getitem__") and not isinstance(obj, (str, bytes, dict))
+        )
+
+    if not _is_sequence(block_array) or len(block_array) < 4:
         raise ValueError(
             f"Expected block as CBOR array of >= 4 elements, "
             f"got {type(block_array).__name__} with "
-            f"{len(block_array) if isinstance(block_array, list) else 0} elements"
+            f"{len(block_array) if _is_sequence(block_array) else 0} elements"
         )
 
     # block = [header, transaction_bodies, transaction_witness_sets, auxiliary_data]
-    raw_tx_bodies = block_array[1]
-    raw_tx_witnesses = block_array[2]
+    raw_tx_bodies = list(block_array[1]) if _is_sequence(block_array[1]) else block_array[1]
+    raw_tx_witnesses = list(block_array[2]) if _is_sequence(block_array[2]) else block_array[2]
     raw_auxiliary_data = block_array[3]
 
     if not isinstance(raw_tx_bodies, list):
