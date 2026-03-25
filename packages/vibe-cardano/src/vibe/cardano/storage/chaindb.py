@@ -235,10 +235,12 @@ class ChainDB:
 
         # Step 2: Find the anchor (ImmutableDB tip or chain root)
         # Haskell ref: ImmutableDB.getTipAnchor — anchor of the chain fragment
-        immutable_tip = await self.immutable_db.get_tip()
-        if immutable_tip is not None:
-            anchor_hash = immutable_tip[1]  # (slot, hash, block_number)
-            anchor_block_number = immutable_tip[2]
+        immutable_tip_hash = self.immutable_db.get_tip_hash()
+        immutable_tip_slot = self.immutable_db.get_tip_slot()
+        if immutable_tip_hash is not None:
+            anchor_hash = immutable_tip_hash
+            # We don't have block_number from ImmutableDB directly
+            anchor_block_number = -1
         else:
             # No immutable blocks — find the root of the volatile chain.
             # The root's predecessor hash is NOT in the volatile DB.
