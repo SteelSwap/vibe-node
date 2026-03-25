@@ -113,9 +113,6 @@ class PeerManager:
         "_tasks",
         "_known_points",
         "_block_received_event",
-        "_fetch_queue",
-        "_peer_range_queues",
-        "_is_primary_feeder",
     )
 
     def __init__(
@@ -135,14 +132,6 @@ class PeerManager:
         # threading.Event — set when a new block is processed,
         # wakes the forge thread to check leadership immediately.
         self._block_received_event = block_received_event
-
-        # Multi-peer block-fetch coordination.
-        # One chain-sync (primary feeder) fills the shared fetch_queue.
-        # The coordinator round-robins ranges to per-peer range_queues.
-        # Haskell ref: BlockFetchDecision assigns ranges to peers.
-        self._fetch_queue: asyncio.Queue | None = None
-        self._peer_range_queues: dict[str, asyncio.Queue] = {}
-        self._is_primary_feeder: bool = False
 
     @property
     def known_points(self) -> list[Any]:
@@ -174,58 +163,7 @@ class PeerManager:
             self._peers[peer_id] = _PeerConnection(address=address)
 
     async def start(self) -> None:
-        """Start connection tasks and block-fetch coordinator."""
-        from vibe.cardano.network.chainsync import Point
-
-        # Shared fetch queue — primary chain-sync feeder fills this.
-        self._fetch_queue = asyncio.Queue(maxsize=2000)
-
-        # Create per-peer range queues and start coordinator
-        for peer_id in self._peers:
-            self._peer_range_queues[peer_id] = asyncio.Queue()
-
-        # Coordinator: creates ranges from fetch_queue, assigns
-        # contiguous CHUNKS of ranges to each peer in turn.
-        # E.g., with 2 peers and chunk_size=50:
-        #   peer A gets 50 ranges (blocks 0-49), downloads them
-        #   peer B gets 50 ranges (blocks 50-99), downloads them
-        #   peer A gets 50 more (100-149), etc.
-        # This ensures each peer delivers blocks in order (no interleaving).
-        CHUNK_SIZE = 50  # ranges per peer per assignment
-
-        async def _fetch_coordinator() -> None:
-            peer_ids = list(self._peer_range_queues.keys())
-            idx = 0
-            chunk_count = 0
-            current_peer = peer_ids[0] if peer_ids else None
-
-            while not self._stopped:
-                batch: list[Point] = []
-                try:
-                    point = await asyncio.wait_for(self._fetch_queue.get(), timeout=1.0)
-                    batch.append(point)
-                    while len(batch) < 100:
-                        try:
-                            batch.append(self._fetch_queue.get_nowait())
-                        except asyncio.QueueEmpty:
-                            break
-                except TimeoutError:
-                    continue
-                if batch and current_peer:
-                    await self._peer_range_queues[current_peer].put(
-                        (batch[0], batch[-1])
-                    )
-                    chunk_count += 1
-                    # After CHUNK_SIZE ranges, switch to next peer
-                    if chunk_count >= CHUNK_SIZE and len(peer_ids) > 1:
-                        chunk_count = 0
-                        idx += 1
-                        current_peer = peer_ids[idx % len(peer_ids)]
-
-        self._tasks.append(
-            asyncio.create_task(_fetch_coordinator(), name="fetch-coordinator")
-        )
-
+        """Start connection tasks for all registered peers."""
         for peer_id, peer in self._peers.items():
             task = asyncio.create_task(self._peer_loop(peer), name=f"peer-{peer_id}")
             self._tasks.append(task)
@@ -412,10 +350,10 @@ class PeerManager:
             except Exception as exc:
                 logger.warning("Peer %s: %s error: %s", peer.address, name, exc)
 
-        # --- Sync pipeline: chain-sync -> coordinator -> block-fetch ---
-        # Primary peer's chain-sync feeds the shared fetch_queue.
-        # Coordinator round-robins ranges to per-peer block-fetch queues.
-        # Each peer downloads non-overlapping ranges in parallel.
+        # --- Sync pipeline: chain-sync -> block-fetch -> store ---
+        # Chain-sync receives headers, extracts Point(slot, hash),
+        # queues them for block-fetch. Block-fetch downloads full
+        # block bodies and stores them in ChainDB.
 
         import hashlib
 
@@ -423,13 +361,8 @@ class PeerManager:
 
         from vibe.cardano.network.chainsync import Point
 
-        fetch_queue = self._fetch_queue  # Shared queue
-        peer_id = str(peer.address)
-        is_primary = not self._is_primary_feeder
-        if is_primary:
-            self._is_primary_feeder = True
-            logger.info("Peer %s is primary chain-sync feeder", peer.address)
-
+        # Queue of points discovered by chain-sync, consumed by block-fetch.
+        fetch_queue: asyncio.Queue[Point] = asyncio.Queue(maxsize=1000)
         chain_db = self._chain_db
         node_kernel = self._node_kernel
         _headers_received = 0
@@ -476,13 +409,11 @@ class PeerManager:
                     # updated in _on_block AFTER ChainDB confirms adoption.
                     # STM ensures the forge loop sees consistent nonce+tip.
 
-                    # Only primary feeder queues points for block-fetch.
-                    # Other peers' chain-sync keeps the connection alive.
-                    if is_primary:
-                        try:
-                            fetch_queue.put_nowait(point)
-                        except asyncio.QueueFull:
-                            pass
+                    # Queue for block-fetch (still need body for storage)
+                    try:
+                        fetch_queue.put_nowait(point)
+                    except asyncio.QueueFull:
+                        pass
 
                     if _headers_received % 1000 == 1 or _headers_received <= 5:
                         # Compute sync percentage from server tip
@@ -548,19 +479,37 @@ class PeerManager:
             name=f"chainsync-{peer.address}",
         )
 
-        # Block-fetch worker: pulls ranges from this peer's dedicated
-        # range_queue (fed by the coordinator via round-robin).
+        # Block-fetch worker: batches points from the queue into ranges,
+        # fetches full block bodies, and stores them in ChainDB.
         async def _block_fetch_worker() -> None:
             from vibe.cardano.network.blockfetch_protocol import run_block_fetch_continuous
 
             bf_channel = channels[BLOCK_FETCH_N2N_ID]
             _blocks_stored = 0
 
-            # Each peer has its own range_queue, fed by the coordinator
-            range_queue = self._peer_range_queues.get(peer_id)
-            if range_queue is None:
-                logger.warning("Peer %s: no range_queue assigned", peer.address)
-                return
+            # Use a queue for block-fetch ranges. The chain-sync
+            # _on_roll_forward fills fetch_queue with Points; we
+            # convert to (from, to) range tuples for block-fetch.
+            range_queue: asyncio.Queue[tuple] = asyncio.Queue()
+
+            # Background task: drain fetch_queue Points into ranges
+            async def _range_builder() -> None:
+                while not stop_event.is_set():
+                    batch: list[Point] = []
+                    try:
+                        point = await asyncio.wait_for(fetch_queue.get(), timeout=1.0)
+                        batch.append(point)
+                        while len(batch) < 100:
+                            try:
+                                batch.append(fetch_queue.get_nowait())
+                            except asyncio.QueueEmpty:
+                                break
+                    except TimeoutError:
+                        continue
+                    if batch:
+                        await range_queue.put((batch[0], batch[-1]))
+
+            builder_task = asyncio.create_task(_range_builder())
 
             async def _on_block(block_cbor: bytes) -> None:
                 nonlocal _blocks_stored
@@ -837,6 +786,8 @@ class PeerManager:
                 )
             except Exception as exc:
                 logger.warning("Peer %s: block-fetch error: %s", peer.address, exc)
+            finally:
+                builder_task.cancel()
 
         asyncio.create_task(
             _safe_run(_block_fetch_worker(), "block-fetch"),
