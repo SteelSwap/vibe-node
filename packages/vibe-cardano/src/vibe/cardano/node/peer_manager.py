@@ -525,19 +525,24 @@ class PeerManager:
                 try:
                     # --- Parse block from block-fetch wire format ---
                     # Block-fetch delivers CBORTag(24, raw_bytes) or re-encoded
-                    # CBOR. We need to get to the block array [header, ...].
+                    # CBOR. We preserve original bytes to avoid re-encoding
+                    # issues with IndefiniteFrozenList types from cbor2.
+                    #
+                    # Haskell ref: MemoBytes / Annotator pattern — always
+                    # preserve original wire bytes, never re-serialize.
+                    raw_wire = block_cbor
                     decoded = cbor2.loads(block_cbor)
 
                     # Unwrap tag-24 if present
                     if hasattr(decoded, "tag") and decoded.tag == 24:
                         inner = decoded.value
                         if isinstance(inner, bytes):
+                            raw_wire = inner
                             decoded = cbor2.loads(inner)
                         else:
                             decoded = inner
 
                     # Block-fetch format: [era_int, block_body]
-                    # where block_body = [header, tx_bodies, tx_witnesses, aux, invalid_txs]
                     if (
                         isinstance(decoded, list)
                         and len(decoded) >= 2
@@ -551,8 +556,10 @@ class PeerManager:
                     else:
                         raise ValueError(f"Unexpected block format: {type(decoded)}")
 
-                    # Build raw_block for storage (era-tagged CBOR)
-                    raw_block = cbor2.dumps(cbor2.CBORTag(era_tag, block_body))
+                    # Store the original wire bytes — do NOT re-encode.
+                    # Re-encoding changes IndefiniteFrozenList/indefinite-length
+                    # CBOR, producing different bytes and breaking hashes.
+                    raw_block = raw_wire
 
                     # Use the serialization layer to decode header fields
                     # instead of manually extracting from the CBOR array.
