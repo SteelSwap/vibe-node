@@ -96,7 +96,13 @@ def get_gap_qa_agent() -> Agent:
             system_prompt="""You are a QA validator for a Cardano node specification analysis.
 
 You are given a gap entry (spec vs Haskell implementation divergence) along with
-additional context from searching the actual source code repositories.
+context from TWO search phases:
+
+**Phase 1 (keyword search):** git grep for function names and keywords from the gap.
+**Phase 2 (deep dive):** If Phase 1 found nothing, traces call chains from known
+subsystem entry points, reads surrounding code context, and searches for Haskell
+types/constructors mentioned in the gap text. This catches implementations that
+use indirect mechanisms (STM retry, type-level gates, multi-layer indirection).
 
 Your job:
 1. CATEGORIZE the gap:
@@ -108,6 +114,7 @@ Your job:
    - genuine_spec_violation: Haskell actually violates the spec
    - unimplemented_spec_rule: Spec rule has no implementation
    - search_failure: The original pipeline couldn't find the code but it actually exists
+     (IMPORTANT: if Phase 2 deep dive found code that Phase 1 missed, use this category)
 
 2. ASSESS SEVERITY for our Python implementation:
    - critical: Must match Haskell behavior exactly (consensus-affecting)
@@ -117,7 +124,16 @@ Your job:
 
 3. Note what this means for our implementation.
 
-Be rigorous. If source code was found via git grep, read it carefully.
+Be rigorous. Read [CONTEXT] blocks carefully — they show the surrounding code at
+relevant locations. Haskell often implements spec rules via indirect mechanisms:
+- STM `retry` blocking instead of explicit `if` guards
+- Type constructors (e.g., `CurrentSlotUnknown`) that gate behavior
+- Multi-layer architecture where 3+ files collaborate to enforce one rule
+- Emergent behavior from the architecture rather than a single function
+
+When the gap says "no implementing code was found" but the deep dive found
+relevant code, downgrade from critical to the appropriate severity and
+categorize as search_failure.
 """,
         )
     return _gap_qa_agent
@@ -157,7 +173,40 @@ def _git_grep(term: str, repo_path: Path, max_results: int = 5) -> list[str]:
             stdout = result.stdout.decode("utf-8", errors="replace")
             for line in stdout.strip().splitlines()[:max_results]:
                 results.append(line[:500])  # Truncate long lines
-    except subprocess.TimeoutExpired, OSError:
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return results
+
+
+def _read_file_section(file_path: Path, center_line: int, context: int = 30) -> str:
+    """Read a section of a file around a given line number."""
+    try:
+        lines = file_path.read_text(errors="replace").splitlines()
+        start = max(0, center_line - context)
+        end = min(len(lines), center_line + context)
+        numbered = [f"{i + 1:>4} | {lines[i]}" for i in range(start, end)]
+        return "\n".join(numbered)
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def _find_callers(function_name: str, repo_path: Path, max_results: int = 10) -> list[str]:
+    """Find where a function is called from in a repo (call chain tracing)."""
+    results = []
+    try:
+        result = subprocess.run(
+            ["git", "grep", "-n", "--max-count", str(max_results), function_name],
+            cwd=repo_path,
+            capture_output=True,
+            timeout=15,
+        )
+        if result.returncode == 0:
+            stdout = result.stdout.decode("utf-8", errors="replace")
+            for line in stdout.strip().splitlines()[:max_results]:
+                # Skip the definition itself — we want callers
+                if f"= {function_name}" not in line and ":: " not in line:
+                    results.append(line[:500])
+    except (subprocess.TimeoutExpired, OSError):
         pass
     return results
 
@@ -181,6 +230,155 @@ def _search_vendor_repos(search_terms: list[str]) -> dict[str, list[str]]:
             repo_results.extend(matches)
         if repo_results:
             all_results[repo_name] = repo_results[:20]  # Cap per repo
+
+    return all_results
+
+
+# Subsystem -> known entry point functions in Haskell codebase.
+# When keyword search fails, trace call chains from these entry points.
+SUBSYSTEM_ENTRY_POINTS: dict[str, list[str]] = {
+    "block-production": [
+        "forkBlockForging",
+        "knownSlotWatcher",
+        "checkShouldForge",
+        "forgeBlock",
+        "getCurrentSlot",
+        "mkCurrentBlockContext",
+        "forecastFor",
+    ],
+    "consensus": [
+        "tickChainDepState",
+        "reupdateChainDepState",
+        "preferAnchoredCandidate",
+        "compareCandidates",
+        "checkLeaderVal",
+        "praosVrfChecks",
+        "chainSelectionForBlock",
+    ],
+    "ledger": [
+        "applyBlockTransition",
+        "validateTx",
+        "utxoTransition",
+        "delegsTransition",
+        "epochTransition",
+        "applyRUpd",
+    ],
+    "storage": [
+        "addBlockAsync",
+        "chainSelSync",
+        "copyToImmutableDB",
+        "garbageCollect",
+        "instructionSTM",
+        "switchFork",
+    ],
+    "networking": [
+        "chainSyncClient",
+        "blockFetchClient",
+        "txSubmissionClient",
+        "runMiniProtocol",
+        "runMux",
+        "demux",
+    ],
+    "serialization": [
+        "decCBOR",
+        "encCBOR",
+        "hashAnnotated",
+        "MemoBytes",
+        "Annotator",
+    ],
+    "plutus": [
+        "evaluateScriptCounting",
+        "mkTermToEvaluate",
+        "runCekDeBruijn",
+        "processLogsAndErrors",
+        "deserialiseScript",
+    ],
+    "mempool": [
+        "addTx",
+        "removeTxs",
+        "syncWithLedger",
+        "getSnapshotFor",
+    ],
+}
+
+
+def _deep_dive_search(
+    subsystem: str, gap_delta: str, gap_spec_says: str
+) -> dict[str, list[str]]:
+    """Deep-dive search for a gap that keyword search missed.
+
+    Instead of grepping for keywords from the gap description, trace
+    call chains from known entry points for the subsystem. This catches
+    cases where the implementation uses indirect mechanisms (STM retry,
+    type-level gates, multi-layer indirection) that don't contain the
+    spec rule's keywords.
+
+    The approach that discovered the 3-layer forge sync gate:
+    1. Start from known entry points for the subsystem
+    2. Find where those functions are called and what they call
+    3. Read the surrounding code for behavioral patterns
+    4. Look for data types and constructors (not just functions)
+    """
+    project_root = Path(__file__).resolve().parents[6]
+    vendor_dir = project_root / "vendor"
+
+    if not vendor_dir.exists():
+        return {}
+
+    entry_points = SUBSYSTEM_ENTRY_POINTS.get(subsystem, [])
+    if not entry_points:
+        return {}
+
+    all_results: dict[str, list[str]] = {}
+
+    # Also extract potential type/constructor names from the gap text
+    type_terms = []
+    for word in (gap_delta + " " + gap_spec_says).split():
+        cleaned = word.strip(".,;:()[]{}'\"`")
+        # Look for PascalCase (Haskell types/constructors)
+        if len(cleaned) > 3 and cleaned[0].isupper() and any(c.islower() for c in cleaned):
+            type_terms.append(cleaned)
+        # Look for camelCase (Haskell functions)
+        if len(cleaned) > 4 and cleaned[0].islower() and any(c.isupper() for c in cleaned):
+            type_terms.append(cleaned)
+
+    # Deduplicate and limit
+    type_terms = list(set(type_terms))[:10]
+    search_terms = entry_points + type_terms
+
+    for repo_dir in vendor_dir.iterdir():
+        if not repo_dir.is_dir() or not (repo_dir / ".git").exists():
+            continue
+        repo_name = repo_dir.name
+        repo_results = []
+
+        for term in search_terms:
+            # Standard grep
+            matches = _git_grep(term, repo_dir, max_results=3)
+            repo_results.extend(matches)
+
+            # For entry points, also trace callers (one level up)
+            if term in entry_points and matches:
+                callers = _find_callers(term, repo_dir, max_results=5)
+                for caller in callers:
+                    repo_results.append(f"[CALLER] {caller}")
+
+        # Read surrounding code for the most relevant matches
+        for match in repo_results[:3]:
+            if ":" in match and not match.startswith("[CALLER]"):
+                parts = match.split(":", 2)
+                if len(parts) >= 2:
+                    file_path = repo_dir / parts[0]
+                    try:
+                        line_num = int(parts[1])
+                        section = _read_file_section(file_path, line_num, context=15)
+                        if section:
+                            repo_results.append(f"[CONTEXT] {parts[0]}:{parts[1]}\n{section}")
+                    except (ValueError, OSError):
+                        pass
+
+        if repo_results:
+            all_results[repo_name] = repo_results[:30]
 
     return all_results
 
@@ -232,38 +430,53 @@ async def validate_gaps(
         async with semaphore:
             gap_id = row["id"]
             title = row["title"] or "Unknown"
-            delta = row["delta"]
-            spec_says = row["spec_says"]
-            haskell_does = row["haskell_does"]
+            delta = row["delta"] or ""
+            spec_says = row["spec_says"] or ""
+            haskell_does = row["haskell_does"] or ""
 
-            # Search vendor repos for the function/concept mentioned in the gap
+            # --- Phase 1: Keyword search (fast, shallow) ---
             search_terms = []
             if title:
-                # Extract likely function names from the title
                 words = title.split()
                 search_terms.extend([w for w in words if len(w) > 4 and w[0].islower()])
             if "function" in delta.lower() or "missing" in delta.lower():
-                # Try to extract the function name from the delta
                 for word in delta.split():
                     if len(word) > 4 and word[0].islower() and not word.startswith("the"):
                         search_terms.append(word.rstrip(".,;:"))
                         break
 
-            # Deduplicate
             search_terms = list(set(search_terms))[:5]
 
             vendor_results = {}
             if search_terms:
                 vendor_results = _search_vendor_repos(search_terms)
 
+            # --- Phase 2: Deep dive if keyword search found nothing ---
+            # This catches implementations that use indirect mechanisms
+            # (STM retry, type-level gates, multi-layer indirection)
+            # that don't contain the spec rule's keywords.
+            deep_dive_results = {}
+            if not vendor_results or "no implementing" in haskell_does.lower():
+                deep_dive_results = _deep_dive_search(subsystem, delta, spec_says)
+
+            # Build context for the QA agent
             vendor_context = ""
             if vendor_results:
-                vendor_context = "\n\nGIT GREP RESULTS FROM VENDOR REPOS:\n"
+                vendor_context = "\n\nPHASE 1 — KEYWORD SEARCH RESULTS:\n"
                 for repo, matches in vendor_results.items():
                     vendor_context += f"\n--- {repo} ---\n"
                     vendor_context += "\n".join(matches[:10])
-            else:
-                vendor_context = "\n\nNo matches found in vendor repos via git grep."
+
+            if deep_dive_results:
+                vendor_context += "\n\nPHASE 2 — DEEP DIVE (entry point + call chain tracing):\n"
+                for repo, matches in deep_dive_results.items():
+                    vendor_context += f"\n--- {repo} ---\n"
+                    vendor_context += "\n".join(matches[:15])
+            elif not vendor_results:
+                vendor_context = (
+                    "\n\nNo matches found via keyword search OR deep-dive "
+                    "call chain tracing from subsystem entry points."
+                )
 
             prompt = (
                 f"GAP ENTRY:\n"
@@ -271,7 +484,13 @@ async def validate_gaps(
                 f"Spec says: {spec_says[:500]}\n"
                 f"Haskell does: {haskell_does[:500]}\n"
                 f"Delta: {delta[:800]}\n"
-                f"{vendor_context}"
+                f"{vendor_context}\n\n"
+                f"IMPORTANT: If the Phase 1 keyword search found nothing but Phase 2 "
+                f"deep dive found relevant code, this is likely a 'search_failure' — "
+                f"the original pipeline missed it. Read the [CONTEXT] blocks carefully "
+                f"to determine if the code actually implements the spec rule, possibly "
+                f"via indirect mechanisms (STM retry, type constructors, multi-layer "
+                f"indirection, or emergent behavior from architecture)."
             )
 
             try:
