@@ -641,13 +641,15 @@ class ChainDB:
                         for i, e in enumerate(self._chain_fragment)
                     }
 
-                # Update STM TVar (skip during bulk sync for performance)
+                # Update STM TVar. The list+dict copy is O(k) so we always
+                # do it — the fragment is bounded at k entries.
                 self.fragment_tvar._write(
                     (list(self._chain_fragment), dict(self._fragment_index))
                 )
 
             logger.debug(
-                "ChainDB: new tip block %s at slot %d, blockNo %d (rollback=%d, fragment=%d)",
+                "ChainDB: new tip block %s at slot %d, blockNo %d "
+                "(rollback=%d, fragment=%d)",
                 block_hash.hex()[:16],
                 slot,
                 block_number,
@@ -655,8 +657,6 @@ class ChainDB:
                 len(self._chain_fragment),
             )
 
-            # Set tip_changed — stays set until consumers clear it.
-            # This ensures no waiter misses the notification.
             self._tip_generation += 1
             self.tip_changed.set()
 
