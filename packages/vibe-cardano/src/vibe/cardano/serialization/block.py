@@ -325,18 +325,32 @@ def _decode_header_body_babbage(items: list, era: Era, header_cbor: bytes) -> Bl
 def _decode_tagged_block(cbor_bytes: bytes) -> tuple[Era, object]:
     """Decode a tagged block, returning (era, block_payload).
 
+    Handles two formats:
+    1. CBORTag(era, block_body) — our internal storage format
+    2. [era_int, block_body] — HFC wire format from block-fetch
+
     Uses raw_tags=True so CBOR tags 0-7 are returned as CBORTag objects
     instead of being interpreted as semantic types (datetime, bignum, etc.).
     """
     decoded = cbor2.loads(cbor_bytes, raw_tags=True)
-    if not isinstance(decoded, cbor2.CBORTag):
-        raise ValueError(f"Expected CBOR tag, got {type(decoded).__name__}")
-    try:
-        era = Era(decoded.tag)
-    except ValueError:
-        raise ValueError(f"Unknown era tag: {decoded.tag}") from None
 
-    return era, decoded.value
+    # Format 1: CBORTag(era, value) — our tagged storage format
+    if isinstance(decoded, cbor2.CBORTag):
+        try:
+            era = Era(decoded.tag)
+        except ValueError:
+            raise ValueError(f"Unknown era tag: {decoded.tag}") from None
+        return era, decoded.value
+
+    # Format 2: [era_int, block_body] — HFC wire format from block-fetch
+    if isinstance(decoded, list) and len(decoded) >= 2 and isinstance(decoded[0], int):
+        try:
+            era = Era(decoded[0])
+        except ValueError:
+            raise ValueError(f"Unknown era tag: {decoded[0]}") from None
+        return era, decoded[1]
+
+    raise ValueError(f"Expected CBOR tag or [era, body] list, got {type(decoded).__name__}")
 
 
 def decode_block_header(cbor_bytes: bytes) -> BlockHeader:

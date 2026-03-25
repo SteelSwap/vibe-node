@@ -557,9 +557,13 @@ class PeerManager:
                         raise ValueError(f"Unexpected block format: {type(decoded)}")
 
                     # Store the original wire bytes — do NOT re-encode.
-                    # Re-encoding changes IndefiniteFrozenList/indefinite-length
-                    # CBOR, producing different bytes and breaking hashes.
+                    # Re-encoding fails on IndefiniteFrozenList types and
+                    # changes CBOR encoding, breaking hash computation.
+                    # Haskell ref: MemoBytes/Annotator — never re-serialize.
                     raw_block = raw_wire
+
+                    # decode_block_header now handles both CBORTag and [era, body]
+                    # list formats, so raw_wire works directly.
 
                     # Use the serialization layer to decode header fields
                     # instead of manually extracting from the CBOR array.
@@ -756,6 +760,10 @@ class PeerManager:
                         exc,
                         exc_info=True,
                     )
+                    # Halt sync on first error so we can debug and fix.
+                    # The node will restart and resume from the last good
+                    # block via initial_chain_selection.
+                    raise
 
             try:
                 await run_block_fetch_continuous(
