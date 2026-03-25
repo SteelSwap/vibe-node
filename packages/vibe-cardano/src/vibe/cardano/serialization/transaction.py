@@ -92,17 +92,25 @@ def _normalize_cbor_types(obj: object) -> object:
     IndefiniteFrozenList/IndefiniteArray types that can't be re-serialized.
     This converts them to regular list/dict so cbor2.dumps() works.
 
+    Uses duck typing (hasattr + try/iter) rather than isinstance checks
+    because the cbor2pure internal types vary across versions.
+
     NOTE: This is a fallback — prefer using original bytes over
     re-serialization wherever possible.
     """
     if isinstance(obj, dict):
         return {_normalize_cbor_types(k): _normalize_cbor_types(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
-        # Covers IndefiniteFrozenList, IndefiniteArray, frozenlist, etc.
         return [_normalize_cbor_types(item) for item in obj]
     if hasattr(obj, "tag") and hasattr(obj, "value"):
-        # CBORTag — preserve tag number, normalize value
         return _cbor2.CBORTag(obj.tag, _normalize_cbor_types(obj.value))
+    # Catch-all for any iterable cbor2 type (IndefiniteFrozenList, frozenlist, etc.)
+    # that isn't list/tuple/dict/str/bytes but is iterable
+    if not isinstance(obj, (str, bytes, int, float, bool, type(None))):
+        try:
+            return [_normalize_cbor_types(item) for item in obj]
+        except TypeError:
+            pass  # Not iterable
     return obj
 
 
