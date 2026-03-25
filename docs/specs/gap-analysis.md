@@ -6,6 +6,10 @@ Cardano has formal specifications — mathematical descriptions of how the syste
 
 This section documents every divergence we discover, published like errata in a scientific publication. Where the spec says one thing and the Haskell node does another, we record it: what, where, why it matters, and how it affects our implementation.
 
+## Per-Subsystem Gap Documents
+
+The full gap analysis is split by subsystem — see [gaps/index.md](gaps/index.md) for the complete list of 376 critical gaps with per-gap status tracking.
+
 ## Data Sources
 
 - **Knowledge base**: 1,493 spec-vs-Haskell gaps in the `gap_analysis` PostgreSQL table
