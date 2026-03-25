@@ -1,0 +1,11 @@
+# Pool operator keys — NEVER commit to git
+*.skey
+*.vkey
+*.cert
+*.counter
+*.addr
+*.json
+*.raw
+*.signed
+*.cbor
+*.hex
