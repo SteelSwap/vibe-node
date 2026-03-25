@@ -214,35 +214,58 @@ class ProtocolRunner(Generic[St]):
             )
 
         # Read bytes from the channel, prepending any buffered data.
+        # Large messages (e.g., blocks with transactions) may span multiple
+        # SDU segments (max 12,288 bytes each). We accumulate segments
+        # until we have a complete CBOR message.
+        #
+        # Haskell ref: Network.Mux.Ingress accumulates bytes per-channel;
+        # the codec reads from the buffer as a byte stream.
         if self._recv_buf:
             data = self._recv_buf
             self._recv_buf = b""
         else:
             data = await self._channel.recv()
 
-        # Decode the first CBOR message from the data. If the segment
-        # contains multiple CBOR items (common in block-fetch where
-        # StartBatch + Block arrive in one TCP segment), we decode the
-        # first and buffer the rest for the next recv_message call.
         import cbor2pure as _cbor2
 
-        try:
-            # Decode the first CBOR item and find its byte boundary.
-            # A mux segment may contain multiple CBOR messages (e.g.,
-            # block-fetch StartBatch + Block + BatchDone in one segment).
-            # We decode only the first, buffer the rest.
-            decoder = _cbor2.CBORDecoder(io.BytesIO(data))
-            decoder.decode()  # consume first item
-            consumed = decoder.fp.tell()
-            remainder = data[consumed:]
-            if remainder:
-                self._recv_buf = remainder
-            single_cbor = data[:consumed]
-            message = self._codec.decode(single_cbor)
-        except CodecError:
-            raise
-        except Exception as exc:
-            raise CodecError(f"Failed to decode message at state {self._state!r}: {exc}") from exc
+        # Try to decode. If the CBOR is incomplete (message spans multiple
+        # SDU segments), read more segments and retry.
+        max_reassembly_attempts = 50  # ~600KB at 12KB/segment
+        for _attempt in range(max_reassembly_attempts):
+            try:
+                decoder = _cbor2.CBORDecoder(io.BytesIO(data))
+                decoder.decode()  # consume first CBOR item
+                consumed = decoder.fp.tell()
+                remainder = data[consumed:]
+                if remainder:
+                    self._recv_buf = remainder
+                single_cbor = data[:consumed]
+                message = self._codec.decode(single_cbor)
+                break
+            except CodecError:
+                raise
+            except Exception as exc:
+                # Check if this looks like incomplete data (premature end)
+                err_str = str(exc).lower()
+                if "end of" in err_str or "truncated" in err_str or "premature" in err_str or "incomplete" in err_str:
+                    # Read another segment and concatenate
+                    try:
+                        more = await self._channel.recv()
+                        data = data + more
+                    except Exception:
+                        raise CodecError(
+                            f"Failed to decode message at state {self._state!r}: "
+                            f"{exc} (after {len(data)} bytes across {_attempt + 1} segments)"
+                        ) from exc
+                else:
+                    raise CodecError(
+                        f"Failed to decode message at state {self._state!r}: {exc}"
+                    ) from exc
+        else:
+            raise CodecError(
+                f"Failed to reassemble message at state {self._state!r} "
+                f"after {max_reassembly_attempts} segments ({len(data)} bytes)"
+            )
 
         # Validate the decoded message against current state.
         if message.from_state != self._state:
