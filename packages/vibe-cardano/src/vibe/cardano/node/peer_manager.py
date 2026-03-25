@@ -499,11 +499,10 @@ class PeerManager:
                     try:
                         point = await asyncio.wait_for(fetch_queue.get(), timeout=1.0)
                         batch.append(point)
-                        # Yield to event loop so chain-sync pipelining can
-                        # fill the queue with more points before we drain it.
-                        # Without this, get_nowait() always finds 0-1 items
-                        # because the event loop hasn't run the receiver yet.
-                        await asyncio.sleep(0)
+                        # Wait briefly for pipelined chain-sync to fill the
+                        # queue. At 400 headers/sec, 50ms gives ~20 points
+                        # per batch, reducing block-fetch round-trips 20x.
+                        await asyncio.sleep(0.05)
                         while len(batch) < 100:
                             try:
                                 batch.append(fetch_queue.get_nowait())
