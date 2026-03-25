@@ -469,7 +469,7 @@ class PeerManager:
             _safe_run(
                 run_chain_sync(
                     channels[CHAIN_SYNC_N2N_ID],
-                    known_points=[],  # Start from Origin
+                    known_points=self._known_points,  # Resume from ChainDB tip
                     on_roll_forward=_on_roll_forward,
                     on_roll_backward=_on_roll_backward,
                     stop_event=stop_event,

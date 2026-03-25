@@ -166,6 +166,46 @@ def _run_receive_thread(
             node_kernel=node_kernel,
             block_received_event=block_received_event,
         )
+
+        # Build intersection points from loaded chain fragment.
+        # Haskell ref: chainSyncClient → findIntersection → mkOffsets → AF.selectPoints
+        # Uses Fibonacci-spaced offsets: [0, 1, 2, 3, 5, 8, 13, 21, ... min(k, len)]
+        from vibe.cardano.network.chainsync import Point
+
+        fragment, _frag_idx = chain_db.fragment_tvar.value
+        if fragment:
+            k = config.security_param
+            max_offset = len(fragment)
+
+            # Fibonacci-spaced offsets from tip (offset 0 = tip)
+            def _fib_offsets(k_val: int, max_off: int) -> list[int]:
+                limit = min(k_val, max_off)
+                offsets = [0]
+                a, b = 1, 2
+                while a < limit:
+                    offsets.append(a)
+                    a, b = b, a + b
+                if limit not in offsets:
+                    offsets.append(limit)
+                return offsets
+
+            offsets = _fib_offsets(k, max_offset)
+            points = []
+            for off in offsets:
+                idx = max_offset - 1 - off
+                if 0 <= idx < len(fragment):
+                    entry = fragment[idx]
+                    points.append(Point(slot=entry.slot, hash=entry.block_hash))
+
+            if points:
+                peer_manager.set_known_points(points)
+                logger.info(
+                    "Resuming chain-sync from %d known points (tip: slot %d, block #%d)",
+                    len(points),
+                    fragment[-1].slot,
+                    fragment[-1].block_number,
+                )
+
         for peer_addr in config.peers:
             peer_manager.add_peer(peer_addr)
 
