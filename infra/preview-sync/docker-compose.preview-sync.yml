@@ -45,6 +45,7 @@ services:
       VIBE_GENESIS_DIR: "/genesis"
       VIBE_ERROR_LOG: "/results/errors.log"
       VIBE_PERMISSIVE_VALIDATION: "true"
+      VIBE_STRICT_SYNC: "true"
     volumes:
       - vibe-preview-data:/data
       - preview-genesis:/genesis:ro

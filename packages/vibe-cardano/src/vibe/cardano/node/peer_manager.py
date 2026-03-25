@@ -760,10 +760,17 @@ class PeerManager:
                         exc,
                         exc_info=True,
                     )
-                    # Halt sync on first error so we can debug and fix.
-                    # The node will restart and resume from the last good
-                    # block via initial_chain_selection.
-                    raise
+                    # In strict mode, halt on first error so we can debug.
+                    # The node restarts and resumes from the last good block
+                    # via initial_chain_selection.
+                    import os
+
+                    if os.environ.get("VIBE_STRICT_SYNC", "").lower() in (
+                        "1",
+                        "true",
+                        "yes",
+                    ):
+                        raise
 
             try:
                 await run_block_fetch_continuous(
