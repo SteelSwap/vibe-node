@@ -184,11 +184,21 @@ class PeerManager:
         for peer_id in self._peers:
             self._peer_range_queues[peer_id] = asyncio.Queue()
 
-        # Coordinator: creates ranges from fetch_queue, round-robins
-        # to per-peer range_queues for parallel non-overlapping downloads.
+        # Coordinator: creates ranges from fetch_queue, assigns
+        # contiguous CHUNKS of ranges to each peer in turn.
+        # E.g., with 2 peers and chunk_size=50:
+        #   peer A gets 50 ranges (blocks 0-49), downloads them
+        #   peer B gets 50 ranges (blocks 50-99), downloads them
+        #   peer A gets 50 more (100-149), etc.
+        # This ensures each peer delivers blocks in order (no interleaving).
+        CHUNK_SIZE = 50  # ranges per peer per assignment
+
         async def _fetch_coordinator() -> None:
             peer_ids = list(self._peer_range_queues.keys())
             idx = 0
+            chunk_count = 0
+            current_peer = peer_ids[0] if peer_ids else None
+
             while not self._stopped:
                 batch: list[Point] = []
                 try:
@@ -201,14 +211,16 @@ class PeerManager:
                             break
                 except TimeoutError:
                     continue
-                if batch:
-                    # Round-robin to next peer's range_queue
-                    if peer_ids:
-                        target = peer_ids[idx % len(peer_ids)]
+                if batch and current_peer:
+                    await self._peer_range_queues[current_peer].put(
+                        (batch[0], batch[-1])
+                    )
+                    chunk_count += 1
+                    # After CHUNK_SIZE ranges, switch to next peer
+                    if chunk_count >= CHUNK_SIZE and len(peer_ids) > 1:
+                        chunk_count = 0
                         idx += 1
-                        await self._peer_range_queues[target].put(
-                            (batch[0], batch[-1])
-                        )
+                        current_peer = peer_ids[idx % len(peer_ids)]
 
         self._tasks.append(
             asyncio.create_task(_fetch_coordinator(), name="fetch-coordinator")
