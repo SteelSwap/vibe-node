@@ -499,7 +499,7 @@ class PeerManager:
                     try:
                         point = await asyncio.wait_for(fetch_queue.get(), timeout=1.0)
                         batch.append(point)
-                        while len(batch) < 100:
+                        while len(batch) < 1000:
                             try:
                                 batch.append(fetch_queue.get_nowait())
                             except asyncio.QueueEmpty:
@@ -516,10 +516,10 @@ class PeerManager:
                 from vibe.cardano.consensus.hfc import validate_block
                 from vibe.cardano.serialization.block import (
                     Era,
-                    decode_block_header,
+                    decode_block_header_from_array,
                 )
                 from vibe.cardano.serialization.transaction import (
-                    decode_block_body,
+                    decode_block_body_from_array,
                 )
 
                 try:
@@ -565,11 +565,12 @@ class PeerManager:
                     # decode_block_header now handles both CBORTag and [era, body]
                     # list formats, so raw_wire works directly.
 
-                    # Use the serialization layer to decode header fields
-                    # instead of manually extracting from the CBOR array.
+                    # --- Decode once: extract header + body from pre-decoded block_body ---
+                    # Avoids re-parsing the same CBOR 3 times (was: decode in _on_block,
+                    # then decode_block_header re-parses, then decode_block_body re-parses).
                     era = Era(era_tag)
                     try:
-                        hdr = decode_block_header(raw_block)
+                        hdr = decode_block_header_from_array(block_body, era)
                         slot = hdr.slot
                         block_number = hdr.block_number
                         prev_hash = hdr.prev_hash or b"\x00" * 32
@@ -582,11 +583,15 @@ class PeerManager:
                         block_number = hdr_body_arr[0]
                         slot = hdr_body_arr[1]
                         prev_hash = hdr_body_arr[2] or b"\x00" * 32
-                        hdr_cbor = cbor2.dumps(hdr_arr)
+                        from vibe.cardano.serialization.transaction import (
+                            _normalize_cbor_types,
+                        )
+
+                        hdr_cbor = cbor2.dumps(_normalize_cbor_types(hdr_arr))
                         block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
 
-                    # --- Validate block transactions ---
-                    body = decode_block_body(raw_block)
+                    # --- Decode body from pre-decoded array (no re-parse) ---
+                    body = decode_block_body_from_array(block_body, era)
                     if body.transactions:
                         errors = validate_block(
                             era=era,

@@ -433,7 +433,7 @@ class TestPersistence:
     """Test on-disk block file storage and recovery."""
 
     async def test_add_block_creates_file(self, tmp_path: Path) -> None:
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(1)
         await db.add_block(h, 1, _genesis_hash(), 1, _cbor(1))
         filepath = tmp_path / f"{h.hex()}.block"
@@ -441,7 +441,7 @@ class TestPersistence:
         assert filepath.read_bytes() == _cbor(1)
 
     async def test_remove_block_deletes_file(self, tmp_path: Path) -> None:
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(1)
         await db.add_block(h, 1, _genesis_hash(), 1, _cbor(1))
         await db.remove_block(h)
@@ -449,7 +449,7 @@ class TestPersistence:
         assert not filepath.exists()
 
     async def test_gc_deletes_files(self, tmp_path: Path) -> None:
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         await _add_chain(db, 1, 5)
         await db.gc(immutable_tip_slot=3)
         # Blocks 1-3 files should be gone
@@ -462,11 +462,11 @@ class TestPersistence:
     async def test_load_from_disk_recovers_state(self, tmp_path: Path) -> None:
         """Startup recovery: scan directory to rebuild in-memory indices."""
         # Phase 1: populate and close
-        db1 = VolatileDB(db_dir=tmp_path)
+        db1 = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         await _add_chain(db1, 10, 3)
 
         # Phase 2: new instance, load from disk
-        db2 = VolatileDB(db_dir=tmp_path)
+        db2 = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         def parse_header(cbor_bytes: bytes) -> BlockInfo:
             """Reverse-engineer the test block number from fake CBOR."""
@@ -489,13 +489,13 @@ class TestPersistence:
 
     async def test_load_from_disk_skips_corrupt_files(self, tmp_path: Path) -> None:
         """Corrupt block files are skipped during recovery."""
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
 
         # Write a corrupt file
         (tmp_path / "deadbeef.block").write_bytes(b"not valid")
 
-        db2 = VolatileDB(db_dir=tmp_path)
+        db2 = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         def parse_header(cbor_bytes: bytes) -> BlockInfo:
             text = cbor_bytes.decode()
@@ -520,7 +520,7 @@ class TestPersistence:
 
     async def test_put_creates_file(self, tmp_path: Path) -> None:
         """KeyValueStore.put also persists to disk."""
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(42)
         await db.put(h, b"raw-data")
         filepath = tmp_path / f"{h.hex()}.block"
@@ -530,7 +530,7 @@ class TestPersistence:
     async def test_db_dir_created_if_missing(self, tmp_path: Path) -> None:
         """VolatileDB creates the db_dir if it doesn't exist."""
         new_dir = tmp_path / "volatile" / "blocks"
-        db = VolatileDB(db_dir=new_dir)
+        db = VolatileDB(db_dir=new_dir, write_batch_size=1)
         assert new_dir.exists()
         await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
         assert (new_dir / f"{_hash(1).hex()}.block").exists()

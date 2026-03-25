@@ -76,7 +76,9 @@ class VolatileDB:
             exist.  Pass ``None`` for a pure in-memory store (no persistence).
     """
 
-    def __init__(self, db_dir: Path | None = None) -> None:
+    def __init__(
+        self, db_dir: Path | None = None, write_batch_size: int = 50,
+    ) -> None:
         # Core index: block_hash -> CBOR block bytes
         self._blocks: dict[bytes, bytes] = {}
 
@@ -94,6 +96,11 @@ class VolatileDB:
         if db_dir is not None:
             db_dir.mkdir(parents=True, exist_ok=True)
 
+        # Buffered disk writes — accumulate blocks and flush every N inserts.
+        # Reduces I/O overhead during bulk sync (was: 1 write per block).
+        self._write_batch_size = write_batch_size
+        self._write_buffer: list[tuple[bytes, bytes]] = []  # (hash, cbor)
+
         # Closed flag
         self._closed: bool = False
 
@@ -107,12 +114,21 @@ class VolatileDB:
             raise ClosedVolatileDBError("VolatileDB has been closed")
 
     def close(self) -> None:
-        """Close the VolatileDB, preventing further operations.
+        """Close the VolatileDB, flushing buffered writes first.
 
         Haskell reference:
             Ouroboros.Consensus.Storage.VolatileDB.API.closeDB
         """
+        self._flush_writes()
         self._closed = True
+
+    def _flush_writes(self) -> None:
+        """Flush buffered block writes to disk."""
+        if not self._write_buffer or self._db_dir is None:
+            return
+        for block_hash, cbor_bytes in self._write_buffer:
+            self._write_file(block_hash, cbor_bytes)
+        self._write_buffer.clear()
 
     @property
     def is_closed(self) -> bool:
@@ -223,9 +239,11 @@ class VolatileDB:
         if slot > self._max_slot:
             self._max_slot = slot
 
-        # Persist to disk
+        # Buffer disk writes — flush every N blocks for I/O efficiency
         if self._db_dir is not None:
-            self._write_file(block_hash, cbor_bytes)
+            self._write_buffer.append((block_hash, cbor_bytes))
+            if len(self._write_buffer) >= self._write_batch_size:
+                self._flush_writes()
 
         logger.debug(
             "VolatileDB: added block %s at slot %d (predecessor: %s)",

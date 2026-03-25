@@ -95,7 +95,7 @@ class TestDiskErrorDuringPutBlock:
         (since VolatileDB updates memory first, then persists).
         But on recovery, only persisted blocks survive.
         """
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(1)
 
         # Add one block successfully
@@ -137,7 +137,7 @@ class TestDiskErrorDuringGarbageCollect:
 
     async def test_gc_partial_failure_no_data_loss(self, tmp_path: Path) -> None:
         """Simulate a partial failure during GC file deletion."""
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         # Add 5 blocks
         pred = _genesis_hash()
@@ -174,7 +174,7 @@ class TestDiskErrorDuringClose:
 
     async def test_close_does_not_corrupt_disk_state(self, tmp_path: Path) -> None:
         """After close, on-disk block files remain intact."""
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(1)
         await db.add_block(h, 1, _genesis_hash(), 1, _cbor(1))
 
@@ -185,7 +185,7 @@ class TestDiskErrorDuringClose:
         assert (tmp_path / f"{h.hex()}.block").exists()
 
         # New instance can read the file
-        db2 = VolatileDB(db_dir=tmp_path)
+        db2 = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         def parse_header(cbor_bytes: bytes) -> BlockInfo:
             n = int(cbor_bytes.decode().split("-")[-1])
@@ -240,7 +240,7 @@ class TestDuplicateBlockDifferentOrigin:
 
     async def test_duplicate_block_on_disk_is_idempotent(self, tmp_path: Path) -> None:
         """Re-adding a block to a persistent DB overwrites the file."""
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(1)
         pred = _genesis_hash()
 
@@ -269,7 +269,7 @@ class TestConcurrentWriterSimulation:
         """One writer adds blocks, another fails mid-add. Recovery
         should yield the successfully written blocks.
         """
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         # Writer 1: successfully adds blocks 1-3
         pred = _genesis_hash()
@@ -287,7 +287,7 @@ class TestConcurrentWriterSimulation:
         block4_path.write_bytes(_cbor(4))
 
         # "Crash" — create a new instance and recover
-        db2 = VolatileDB(db_dir=tmp_path)
+        db2 = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         def parse_header(cbor_bytes: bytes) -> BlockInfo:
             n = int(cbor_bytes.decode().split("-")[-1])

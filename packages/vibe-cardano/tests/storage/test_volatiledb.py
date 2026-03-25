@@ -65,6 +65,8 @@ async def test_volatiledb_max_blocks_per_file(tmp_path: Path) -> None:
         )
         prev_hash = bh
 
+    # Flush buffered writes before checking disk state.
+    db._flush_writes()
     # Count .block files on disk.
     block_files = list(db_dir.glob("*.block"))
     assert len(block_files) == num_blocks, (

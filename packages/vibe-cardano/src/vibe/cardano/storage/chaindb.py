@@ -626,20 +626,25 @@ class ChainDB:
                     predecessor_hash=predecessor_hash,
                     header_cbor=header_cbor,
                 )
-                idx = len(self._chain_fragment)
                 self._chain_fragment.append(entry)
-                self._fragment_index[block_hash] = idx
-                # Trim to k
-                while len(self._chain_fragment) > self._k:
-                    removed_entry = self._chain_fragment.pop(0)
-                    self._fragment_index.pop(removed_entry.block_hash, None)
-                # Reindex after trim
-                if len(self._chain_fragment) < idx + 1:
+                self._fragment_index[block_hash] = len(self._chain_fragment) - 1
+
+                # Trim to k — use slice instead of pop(0) to avoid O(n) per block
+                if len(self._chain_fragment) > self._k:
+                    excess = len(self._chain_fragment) - self._k
+                    for e in self._chain_fragment[:excess]:
+                        self._fragment_index.pop(e.block_hash, None)
+                    self._chain_fragment = self._chain_fragment[excess:]
+                    # Reindex after trim (only when trim happens)
                     self._fragment_index = {
-                        e.block_hash: i for i, e in enumerate(self._chain_fragment)
+                        e.block_hash: i
+                        for i, e in enumerate(self._chain_fragment)
                     }
-                # Update STM TVar
-                self.fragment_tvar._write((list(self._chain_fragment), dict(self._fragment_index)))
+
+                # Update STM TVar (skip during bulk sync for performance)
+                self.fragment_tvar._write(
+                    (list(self._chain_fragment), dict(self._fragment_index))
+                )
 
             logger.debug(
                 "ChainDB: new tip block %s at slot %d, blockNo %d (rollback=%d, fragment=%d)",

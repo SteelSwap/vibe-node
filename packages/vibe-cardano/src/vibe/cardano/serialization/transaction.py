@@ -219,6 +219,94 @@ def _try_decode_auxiliary_data(raw: object) -> AuxiliaryData | object | None:
         return raw
 
 
+def decode_block_body_from_array(
+    block_array: list | object, era: Era,
+) -> DecodedBlockBody:
+    """Decode block body from an already-decoded block array.
+
+    Avoids re-parsing the block CBOR. The caller provides the pre-decoded
+    block_array and era from their initial parse.
+
+    Args:
+        block_array: [header, tx_bodies, witnesses, aux_data]
+        era: Block era.
+
+    Returns:
+        DecodedBlockBody with all transactions parsed.
+    """
+    if era in (Era.BYRON_MAIN, Era.BYRON_EBB):
+        raise NotImplementedError(f"Byron block decoding not supported (era {era.value})")
+
+    def _is_seq(obj: object) -> bool:
+        return isinstance(obj, (list, tuple)) or (
+            hasattr(obj, "__len__")
+            and hasattr(obj, "__getitem__")
+            and not isinstance(obj, (str, bytes, dict))
+        )
+
+    if not _is_seq(block_array) or len(block_array) < 4:
+        raise ValueError(f"Expected block array >= 4 elements, got {type(block_array).__name__}")
+
+    raw_tx_bodies = list(block_array[1]) if _is_seq(block_array[1]) else block_array[1]
+    raw_tx_witnesses = list(block_array[2]) if _is_seq(block_array[2]) else block_array[2]
+    raw_auxiliary_data = block_array[3]
+
+    if not isinstance(raw_tx_bodies, list):
+        raise ValueError(f"Expected tx_bodies as array, got {type(raw_tx_bodies).__name__}")
+    if not isinstance(raw_tx_witnesses, list):
+        raise ValueError(f"Expected tx_witnesses as array, got {type(raw_tx_witnesses).__name__}")
+    if len(raw_tx_bodies) != len(raw_tx_witnesses):
+        raise ValueError(
+            f"Body count ({len(raw_tx_bodies)}) != witness count ({len(raw_tx_witnesses)})"
+        )
+
+    aux_map: dict = {}
+    if isinstance(raw_auxiliary_data, dict):
+        aux_map = raw_auxiliary_data
+
+    transactions: list[DecodedTransaction] = []
+    for i, (body_raw, witness_raw) in enumerate(zip(raw_tx_bodies, raw_tx_witnesses)):
+        if not isinstance(body_raw, dict):
+            # Try normalizing
+            if hasattr(body_raw, "items"):
+                body_raw = dict(body_raw)
+            else:
+                raise ValueError(f"Tx body at index {i} is {type(body_raw).__name__}, expected map")
+
+        # Hash from normalized CBOR (fallback — ideally use original bytes)
+        tx_hash = _tx_hash(body_raw)
+
+        body = _try_decode_tx_body(body_raw)
+        witness_set = _try_decode_witness_set(witness_raw if isinstance(witness_raw, dict) else {})
+
+        aux_raw = aux_map.get(i)
+        auxiliary_data = _try_decode_auxiliary_data(aux_raw)
+
+        valid = True
+        if len(block_array) > 4:
+            invalid_indices = block_array[4]
+            if _is_seq(invalid_indices) and i in invalid_indices:
+                valid = False
+
+        transactions.append(
+            DecodedTransaction(
+                index=i,
+                body=body,
+                witness_set=witness_set,
+                auxiliary_data=auxiliary_data,
+                valid=valid,
+                body_raw=body_raw,
+                tx_hash=tx_hash,
+            )
+        )
+
+    return DecodedBlockBody(
+        transactions=transactions,
+        era=era,
+        tx_count=len(transactions),
+    )
+
+
 def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
     """Decode the body of a CBOR-encoded Cardano block.
 
