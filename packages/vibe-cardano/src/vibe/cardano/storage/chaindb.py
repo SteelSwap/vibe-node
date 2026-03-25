@@ -263,25 +263,46 @@ class ChainDB:
 
         # Step 3: Walk successor chains from anchor to find all maximal candidates
         # Haskell ref: Paths.maximalCandidates — DFS through successor map
-        def _walk_chains(
-            start_hash: bytes,
-        ) -> list[list[BlockInfo]]:
-            """DFS from start_hash through successor map to find all maximal chains."""
-            successors = self.volatile_db._successors.get(start_hash, [])
-            if not successors:
-                return [[]]  # Empty chain (leaf)
+        def _walk_longest_chain(start_hash: bytes) -> list[BlockInfo]:
+            """Iterative walk from start_hash to find the longest chain.
 
-            chains: list[list[BlockInfo]] = []
-            for succ_hash in successors:
-                info = self.volatile_db._block_info.get(succ_hash)
-                if info is None:
-                    continue
-                sub_chains = _walk_chains(succ_hash)
-                for sub in sub_chains:
-                    chains.append([info] + sub)
-            return chains if chains else [[]]
+            Uses iterative traversal instead of recursive DFS to avoid
+            stack overflow on long chains (k can be 2160+ on mainnet).
+            At each fork, picks the successor with the highest block number.
 
-        candidates = _walk_chains(anchor_hash)
+            Haskell ref: Paths.maximalCandidates — but simplified to
+            pick the best successor at each step (greedy) rather than
+            enumerating all candidates.
+            """
+            chain: list[BlockInfo] = []
+            current = start_hash
+            while True:
+                successors = self.volatile_db._successors.get(current, [])
+                if not successors:
+                    break
+                # Pick the best successor (highest block number, then slot)
+                best_succ = None
+                best_info = None
+                for succ_hash in successors:
+                    info = self.volatile_db._block_info.get(succ_hash)
+                    if info is None:
+                        continue
+                    if best_info is None or (
+                        info.block_number > best_info.block_number
+                        or (
+                            info.block_number == best_info.block_number
+                            and info.slot > best_info.slot
+                        )
+                    ):
+                        best_succ = succ_hash
+                        best_info = info
+                if best_info is None:
+                    break
+                chain.append(best_info)
+                current = best_succ
+            return chain
+
+        candidates = [_walk_longest_chain(anchor_hash)]
         # Filter out empty candidates
         candidates = [c for c in candidates if c]
 
