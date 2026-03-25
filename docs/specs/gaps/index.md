@@ -4,6 +4,30 @@
 
 **Severity:** critical = must match Haskell behavior exactly (consensus-affecting)
 
+## Known Limitation: "No Implementing Code Found" False Negatives
+
+**100 of 376 critical gaps** (27%) have `haskell_does` = "No implementing Haskell code was found." The Phase 1 pipeline used git-grep on vendor submodules to find implementations but missed code that:
+
+- Lives in a different module than expected (e.g., forge sync gate is in `BlockchainTime` and `NodeKernel`, not where the spec rule would suggest)
+- Uses indirect mechanisms (e.g., STM `retry` blocking rather than an explicit `if syncing then skip`)
+- Is spread across multiple layers (e.g., the sync gate has 3 independent layers in 3 different files)
+
+**Example:** The "block production must be disabled while syncing" gap was marked "no implementing code found" — but deep investigation revealed 3 layers: `CurrentSlotUnknown` (hard block via safe zone / `3k/f` horizon), `OutsideForecastRange` (ledger view unavailable), and GSM state machine (peer selection gating). All exist in the Haskell codebase.
+
+**Impact:** For these 100 gaps, the `implications` field says "implement from spec since no Haskell reference" — but the Haskell reference likely exists. Each should be re-verified against the vendor code before implementing.
+
+| Subsystem | "No code found" gaps |
+|-----------|---------------------|
+| Ledger | 30 |
+| Networking | 17 |
+| Consensus | 15 |
+| Plutus | 14 |
+| Block Production | 11 |
+| Storage | 8 |
+| Serialization | 4 |
+| Mempool | 1 |
+| **Total** | **100** |
+
 ## Summary
 
 | Subsystem | Critical Gaps | File |

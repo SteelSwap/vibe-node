@@ -13,13 +13,19 @@ Each gap must be matched to Haskell behavior exactly.
 
 **Spec says:** Block production MUST be disabled while the node is not up to date (syncing/catching up to chain tip). It should only be enabled once the node considers itself caught up.
 
-**Haskell does:** No implementing code was found in the provided codebase for this rule.
+**Haskell does:** Three independent layers prevent forging while syncing:
 
-**Delta:** The rule about disabling block production while syncing has no identified implementing code. This logic is likely implemented in the consensus layer's forge loop (e.g., in Ouroboros.Consensus.Node or similar modules) via a 'CurrentSlot' or 'SyncState' check, but the specific code was not provided for analysis.
+**Layer 1 — `CurrentSlotUnknown` (Hard Block):** The forge loop runs via `knownSlotWatcher` (NodeKernel.hs:548) which reads `getCurrentSlot` from a TVar. If the ledger tip is beyond the **safe zone** (`3k/f` slots = ~36 hours on mainnet), `wallclockToSlot` throws `PastHorizonException` → `CurrentSlotUnknown` → the STM transaction `retry`s and the forge loop cannot fire. Backoff: 60 seconds. Files: `BlockchainTime/API.hs`, `BlockchainTime/WallClock/HardFork.hs:166`.
 
-**Implications:** For the Python implementation, we must implement a sync-state gate that prevents the block forging pathway from executing when the node is not caught up. The exact definition of 'caught up' (e.g., how many slots behind is acceptable) needs to be determined from the Haskell consensus implementation (likely related to the 'MaxClockSkew' or a similar threshold). Without seeing the Haskell code, we risk implementing the wrong threshold or check mechanism.
+**Layer 2 — `OutsideForecastRange` (Soft Block):** Even if the slot IS known, `forecastFor` (NodeKernel.hs:608-625) gets a `LedgerView` for the current slot. If `currentSlot` exceeds `stabilityWindow` slots ahead of the ledger tip → `OutsideForecastRange` → `exitEarly`. Comment: "we probably don't /want/ to produce a block; we are most likely missing blocks."
 
-**Our status:** TODO
+**Layer 3 — GSM (Indirect):** The Genesis State Machine (GSM.hs) does NOT directly gate forging but controls peer selection. States: PreSyncing → Syncing → CaughtUp. CaughtUp when all ChainSync peers idle AND no better candidate. `maxCaughtUpAge` = 20 minutes (Node.hs:1101).
+
+**Delta:** The Phase 1 pipeline reported "no implementing code found" — this was a false negative. The code exists across 3 layers in 3 different files. The safe zone threshold (`3k/f`) is the primary gate, not a simple slot-distance check.
+
+**Implications:** Our forge loop uses `if slot - tip_val.slot > 10: return None` — a hardcoded 10-slot threshold that doesn't match any Haskell mechanism. We need: (1) safe zone / horizon concept for `CurrentSlotUnknown`, (2) `forecastFor` range check, (3) the 10-slot threshold should be replaced with a proper stability-window-based check.
+
+**Our status:** PARTIAL — we have a sync gate (10-slot threshold) but it doesn't match Haskell's 3-layer architecture
 
 **Discovered during:** Phase 1 pipeline + M6.10 audit
 
@@ -121,13 +127,24 @@ Each gap must be matched to Haskell behavior exactly.
 
 **Spec says:** Block production MUST be disabled while the node is not up to date (i.e., not fully synchronized with the network). Two rationales: (1) produced blocks would be discarded immediately as the node prefers the existing honest chain, and (2) such blocks may help an adversary.
 
-**Haskell does:** No implementing code was found for this rule. The Haskell implementation likely enforces this in the block forging/leadership check pipeline (e.g., in Ouroboros.Consensus.NodeKernel or similar), but the specific code was not provided for analysis.
+**Haskell does:** See gap #1 (00388d12) above — 3-layer forge gate: `CurrentSlotUnknown` (safe zone `3k/f`), `OutsideForecastRange` (ledger view), GSM state machine (peer selection). Duplicate of gap #1 with different spec phrasing.
 
-**Delta:** Cannot confirm implementation exists. The rule is a critical security/liveness property that must be enforced, but no code was located to verify compliance.
+**Delta:** Phase 1 pipeline false negative — code exists. See gap #1 for full analysis.
 
-**Implications:** The Python implementation must include an explicit check that block production (leadership checks, block forging) is gated on a 'node is caught up' / 'synchronized' predicate. Without this, the node could waste resources producing blocks that will be discarded and could inadvertently aid adversaries.
+**Implications:** See gap #1. Our 10-slot hardcoded threshold doesn't match any Haskell mechanism.
 
-**Our status:** TODO
+**Our code (`forge_loop.py:224`):**
+```python
+if slot - tip_val.slot > 10:
+    return None  # Still syncing
+```
+
+**Haskell equivalent (`NodeKernel.hs:548-625`):**
+- Layer 1: `knownSlotWatcher` + `getCurrentSlot'` — STM retry if `CurrentSlotUnknown`
+- Layer 2: `forecastFor` — exitEarly if `OutsideForecastRange`
+- Layer 3: `mkCurrentBlockContext` — exitEarly if tip in future or slot is immutable
+
+**Our status:** PARTIAL — 10-slot threshold exists but doesn't match Haskell's safe-zone/forecast architecture
 
 **Discovered during:** Phase 1 pipeline + M6.10 audit
 
