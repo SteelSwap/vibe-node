@@ -449,6 +449,42 @@ class BlockFetchClient:
             else:
                 raise ProtocolError(f"Unexpected message during streaming: {type(msg).__name__}")
 
+    async def request_range_streaming(
+        self,
+        point_from: PointOrOrigin,
+        point_to: PointOrOrigin,
+        on_block: OnBlockReceived,
+    ) -> bool:
+        """Request a range and stream blocks via callback as they arrive.
+
+        Instead of collecting all blocks into a list, each block is
+        dispatched to the callback immediately upon receipt. This avoids
+        buffering an entire batch in memory and lets downstream processing
+        (decode, validate, store) overlap with network I/O.
+
+        Haskell ref: blockFetchClient in BlockFetch.Client streams blocks
+        through a ChainDB.AddBlockPromise rather than collecting them.
+
+        Returns True if blocks were received, False if server sent NoBlocks.
+        """
+        await self._runner.send_message(BfMsgRequestRange(point_from, point_to))
+        response = await self._runner.recv_message()
+
+        if isinstance(response, BfMsgNoBlocks):
+            return False
+
+        if not isinstance(response, BfMsgStartBatch):
+            raise ProtocolError(f"Unexpected response to RequestRange: {type(response).__name__}")
+
+        while True:
+            msg = await self._runner.recv_message()
+            if isinstance(msg, BfMsgBlock):
+                await on_block(msg.block_cbor)
+            elif isinstance(msg, BfMsgBatchDone):
+                return True
+            else:
+                raise ProtocolError(f"Unexpected message during streaming: {type(msg).__name__}")
+
     async def done(self) -> None:
         """Send ClientDone to terminate the protocol.
 
@@ -512,8 +548,10 @@ async def run_block_fetch(
             logger.debug("Block-fetch stop requested, sending ClientDone")
             break
 
-        blocks = await client.request_range(point_from, point_to)
-        if blocks is None:
+        got_blocks = await client.request_range_streaming(
+            point_from, point_to, on_block_received
+        )
+        if not got_blocks:
             logger.debug(
                 "Block-fetch: no blocks for range %s -> %s",
                 point_from,
@@ -521,9 +559,6 @@ async def run_block_fetch(
             )
             if on_no_blocks is not None:
                 await on_no_blocks(point_from, point_to)
-        else:
-            for block_cbor in blocks:
-                await on_block_received(block_cbor)
 
     await client.done()
 
@@ -574,21 +609,20 @@ async def run_block_fetch_continuous(
                 break
 
             try:
-                point_from, point_to = await asyncio.wait_for(range_queue.get(), timeout=1.0)
+                point_from, point_to = await asyncio.wait_for(range_queue.get(), timeout=0.1)
             except TimeoutError:
                 continue
 
-            blocks = await client.request_range(point_from, point_to)
-            if blocks is None:
+            got_blocks = await client.request_range_streaming(
+                point_from, point_to, on_block_received
+            )
+            if not got_blocks:
                 if on_no_blocks is not None:
                     await on_no_blocks(point_from, point_to)
-            else:
-                for block_cbor in blocks:
-                    await on_block_received(block_cbor)
     finally:
         try:
             await client.done()
-        except ProtocolError, Exception:
+        except (ProtocolError, Exception):
             pass  # Channel may already be closed on shutdown
 
 

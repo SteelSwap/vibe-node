@@ -409,11 +409,9 @@ class PeerManager:
                     # updated in _on_block AFTER ChainDB confirms adoption.
                     # STM ensures the forge loop sees consistent nonce+tip.
 
-                    # Queue for block-fetch (still need body for storage)
-                    try:
-                        fetch_queue.put_nowait(point)
-                    except asyncio.QueueFull:
-                        pass
+                    # Queue for block-fetch — backpressure throttles
+                    # chain-sync to match block-fetch consumption rate.
+                    await fetch_queue.put(point)
 
                     if _headers_received % 1000 == 1 or _headers_received <= 5:
                         # Compute sync percentage from server tip
@@ -492,17 +490,16 @@ class PeerManager:
             # convert to (from, to) range tuples for block-fetch.
             range_queue: asyncio.Queue[tuple] = asyncio.Queue()
 
-            # Background task: drain fetch_queue Points into ranges
+            # Background task: drain fetch_queue Points into ranges.
+            # Adaptive batching: drain immediately when queue has items,
+            # only wait briefly when batch is small (let pipeline fill).
             async def _range_builder() -> None:
                 while not stop_event.is_set():
                     batch: list[Point] = []
                     try:
-                        point = await asyncio.wait_for(fetch_queue.get(), timeout=1.0)
+                        point = await asyncio.wait_for(fetch_queue.get(), timeout=0.1)
                         batch.append(point)
-                        # Wait briefly for pipelined chain-sync to fill the
-                        # queue. At 400 headers/sec, 50ms gives ~20 points
-                        # per batch, reducing block-fetch round-trips 20x.
-                        await asyncio.sleep(0.05)
+                        # Drain whatever is immediately available
                         while len(batch) < 100:
                             try:
                                 batch.append(fetch_queue.get_nowait())
