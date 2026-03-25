@@ -165,6 +165,204 @@ class ChainDB:
         self._next_follower_id: int = 0
 
     # ------------------------------------------------------------------
+    # Initial chain selection (startup)
+    # ------------------------------------------------------------------
+
+    async def initial_chain_selection(self) -> int:
+        """Reconstruct the selected chain from on-disk storage.
+
+        Called during startup to recover state from a previous run.
+        Walks the VolatileDB successor map from the ImmutableDB tip
+        anchor to find the best chain, then builds the chain fragment.
+
+        Haskell ref:
+            ChainSel.initialChainSelection — reads ImmutableDB tip,
+            constructs maximal candidates from VolatileDB, runs chain
+            selection, stores result in cdbChain TVar.
+
+        Returns:
+            Number of blocks in the reconstructed chain fragment.
+        """
+        # Step 1: Load volatile blocks from disk
+        from vibe.cardano.serialization.block import decode_block_header
+
+        def _parse_header(cbor_bytes: bytes) -> BlockInfo:
+            """Extract BlockInfo from raw block CBOR."""
+            try:
+                hdr = decode_block_header(cbor_bytes)
+                return BlockInfo(
+                    block_hash=hdr.hash,
+                    slot=hdr.slot,
+                    predecessor_hash=hdr.prev_hash or b"\x00" * 32,
+                    block_number=hdr.block_number,
+                )
+            except NotImplementedError:
+                # Byron blocks — fall back to inline extraction
+                import hashlib
+
+                import cbor2pure as cbor2
+
+                decoded = cbor2.loads(cbor_bytes)
+                if hasattr(decoded, "tag"):
+                    block_body = decoded.value
+                elif isinstance(decoded, list) and len(decoded) >= 2:
+                    block_body = decoded[1] if isinstance(decoded[0], int) else decoded
+                else:
+                    block_body = decoded
+                hdr_arr = block_body[0]
+                hdr_body = hdr_arr[0] if isinstance(hdr_arr, list) else hdr_arr
+                block_number = hdr_body[0] if isinstance(hdr_body, list) else 0
+                slot = hdr_body[1] if isinstance(hdr_body, list) else 0
+                prev_hash = hdr_body[2] if isinstance(hdr_body, list) else b"\x00" * 32
+                if not isinstance(prev_hash, bytes):
+                    prev_hash = b"\x00" * 32
+                hdr_cbor = cbor2.dumps(hdr_arr)
+                block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
+                return BlockInfo(
+                    block_hash=block_hash,
+                    slot=slot,
+                    predecessor_hash=prev_hash,
+                    block_number=block_number,
+                )
+
+        loaded = 0
+        if self.volatile_db._db_dir is not None:
+            loaded = await self.volatile_db.load_from_disk(_parse_header)
+
+        if loaded == 0:
+            logger.info("ChainDB: no volatile blocks to restore")
+            return 0
+
+        # Step 2: Find the anchor (ImmutableDB tip or genesis)
+        immutable_tip = await self.immutable_db.get_tip()
+        if immutable_tip is not None:
+            anchor_hash = immutable_tip[1]  # (slot, hash, block_number)
+            anchor_block_number = immutable_tip[2]
+        else:
+            # No immutable blocks — anchor is genesis (all zeros)
+            anchor_hash = b"\x00" * 32
+            anchor_block_number = -1
+
+        # Step 3: Walk successor chains from anchor to find all maximal candidates
+        # Haskell ref: Paths.maximalCandidates — DFS through successor map
+        def _walk_chains(
+            start_hash: bytes,
+        ) -> list[list[BlockInfo]]:
+            """DFS from start_hash through successor map to find all maximal chains."""
+            successors = self.volatile_db._successors.get(start_hash, [])
+            if not successors:
+                return [[]]  # Empty chain (leaf)
+
+            chains: list[list[BlockInfo]] = []
+            for succ_hash in successors:
+                info = self.volatile_db._block_info.get(succ_hash)
+                if info is None:
+                    continue
+                sub_chains = _walk_chains(succ_hash)
+                for sub in sub_chains:
+                    chains.append([info] + sub)
+            return chains if chains else [[]]
+
+        candidates = _walk_chains(anchor_hash)
+        # Filter out empty candidates
+        candidates = [c for c in candidates if c]
+
+        if not candidates:
+            logger.info(
+                "ChainDB: volatile blocks loaded but no chain extends from anchor"
+            )
+            return 0
+
+        # Step 4: Select the best candidate
+        # Haskell ref: preferAnchoredCandidate — highest block number, VRF tiebreak
+        best = max(
+            candidates,
+            key=lambda chain: (
+                chain[-1].block_number,
+                chain[-1].slot,
+            ),
+        )
+
+        # Step 5: Build chain fragment (last k blocks, oldest-first)
+        if len(best) > self._k:
+            best = best[-self._k :]
+
+        fragment: list[FragmentEntry] = []
+        for info in best:
+            # Get header CBOR for serving via chain-sync
+            block_cbor = self.volatile_db._blocks.get(info.block_hash)
+            header_cbor_data: list | None = None
+            if block_cbor:
+                try:
+                    import cbor2pure as cbor2
+
+                    decoded = cbor2.loads(block_cbor)
+                    if hasattr(decoded, "tag"):
+                        era_tag = decoded.tag
+                        block_body = decoded.value
+                    elif isinstance(decoded, list) and isinstance(decoded[0], int):
+                        era_tag = decoded[0]
+                        block_body = decoded[1]
+                    else:
+                        era_tag = 0
+                        block_body = decoded
+                    hdr_arr = block_body[0] if isinstance(block_body, list) else block_body
+                    hdr_cbor = cbor2.dumps(hdr_arr)
+                    header_cbor_data = [
+                        max(0, era_tag - 1) if era_tag >= 2 else 0,
+                        cbor2.CBORTag(24, hdr_cbor),
+                    ]
+                except Exception:
+                    pass
+
+            fragment.append(
+                FragmentEntry(
+                    slot=info.slot,
+                    block_hash=info.block_hash,
+                    block_number=info.block_number,
+                    header_cbor=header_cbor_data,
+                    vrf_output=None,  # Not available from BlockInfo
+                )
+            )
+
+        # Step 6: Store the chain fragment and update tip
+        self._chain_fragment = fragment
+        self._fragment_index = {e.block_hash: i for i, e in enumerate(fragment)}
+
+        tip_entry = fragment[-1]
+        self._tip = _ChainTip(
+            slot=tip_entry.slot,
+            block_hash=tip_entry.block_hash,
+            block_number=tip_entry.block_number,
+        )
+        self._immutable_tip_block_number = anchor_block_number
+
+        # Update STM TVars
+        self.tip_tvar._write(self._tip)
+        self.fragment_tvar._write(
+            (list(self._chain_fragment), dict(self._fragment_index))
+        )
+        self.tip_changed.set()
+
+        logger.info(
+            "ChainDB: initial chain selection — %d blocks, tip at slot %d block #%d "
+            "(from %d volatile blocks, anchor block #%d)",
+            len(fragment),
+            tip_entry.slot,
+            tip_entry.block_number,
+            loaded,
+            anchor_block_number if anchor_block_number >= 0 else 0,
+            extra={
+                "event": "chaindb.initial_selection",
+                "fragment_length": len(fragment),
+                "tip_slot": tip_entry.slot,
+                "tip_block": tip_entry.block_number,
+                "volatile_loaded": loaded,
+            },
+        )
+        return len(fragment)
+
+    # ------------------------------------------------------------------
     # Properties
     # ------------------------------------------------------------------
 

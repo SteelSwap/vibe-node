@@ -365,7 +365,11 @@ async def _async_init(config: NodeConfig) -> dict:
         lock=chaindb_lock,
     )
 
-    # Mithril snapshot import
+    # --- Initial chain selection (recover from previous run) ---
+    # Haskell ref: openDB → initialChainSelection
+    restored = await chain_db.initial_chain_selection()
+
+    # Mithril snapshot import (only if DB is empty after chain selection)
     if config.mithril_snapshot_path is not None:
         tip = await chain_db.get_tip()
         if tip is None:
