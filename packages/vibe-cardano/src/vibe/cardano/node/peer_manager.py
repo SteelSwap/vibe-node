@@ -198,6 +198,12 @@ class PeerManager:
                         self._fetch_queue.get(), timeout=1.0
                     )
                     batch.append(point)
+                    # Wait briefly for more points to accumulate.
+                    # Chain-sync produces ~30 headers/sec; 100ms delay
+                    # lets ~3 points accumulate per batch during bulk sync.
+                    # Without this, every range has 1 block (35ms round-trip
+                    # overhead per block instead of amortized across 100).
+                    await asyncio.sleep(0.1)
                     while len(batch) < 100:
                         try:
                             batch.append(self._fetch_queue.get_nowait())
