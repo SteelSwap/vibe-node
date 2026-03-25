@@ -1,0 +1,62 @@
+2026-03-25 01:55:29,850 asyncio ERROR Task was destroyed but it is pending!
+task: <Task pending name='snapshot-loop' coro=<_snapshot_loop() running at /app/packages/vibe-cardano/src/vibe/cardano/node/run.py:109> wait_for=<Future pending cb=[Task.task_wakeup()]>>
+  /usr/local/lib/python3.14/asyncio/base_events.py:1875
+
+2026-03-25 01:55:37,557 vibe.cardano.node.peer_manager ERROR Peer preview-node.play.dev.cardano.org:3001: block process error: 'dict' object has no attribute 'max_tx_size'
+  /app/packages/vibe-cardano/src/vibe/cardano/node/peer_manager.py:746
+Traceback (most recent call last):
+  File "/app/packages/vibe-cardano/src/vibe/cardano/node/peer_manager.py", line 580, in _on_block
+    errors = validate_block(
+        era=era,
+    ...<3 lines>...
+        current_slot=slot,
+    )
+  File "/app/packages/vibe-cardano/src/vibe/cardano/consensus/hfc.py", line 620, in validate_block
+    tx_errors = validate_babbage_tx(
+        tx.body,
+    ...<4 lines>...
+        0,  # tx size — DecodedTransaction doesn't track serialized size
+    )
+  File "/app/packages/vibe-cardano/src/vibe/cardano/ledger/babbage.py", line 711, in validate_babbage_tx
+    validate_babbage_utxo(
+    ~~~~~~~~~~~~~~~~~~~~~^
+        tx_body=tx_body,
+        ^^^^^^^^^^^^^^^^
+    ...<11 lines>...
+        output_extensions=output_extensions,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/packages/vibe-cardano/src/vibe/cardano/ledger/babbage.py", line 498, in validate_babbage_utxo
+    if tx_size > params.max_tx_size:
+                 ^^^^^^^^^^^^^^^^^^
+AttributeError: 'dict' object has no attribute 'max_tx_size'
+2026-03-25 01:55:39,251 vibe.cardano.node.peer_manager ERROR Peer preview-node.play.dev.cardano.org:3001: block process error: 'dict' object has no attribute 'max_tx_size'
+  /app/packages/vibe-cardano/src/vibe/cardano/node/peer_manager.py:746
+Traceback (most recent call last):
+  File "/app/packages/vibe-cardano/src/vibe/cardano/node/peer_manager.py", line 580, in _on_block
+    errors = validate_block(
+        era=era,
+    ...<3 lines>...
+        current_slot=slot,
+    )
+  File "/app/packages/vibe-cardano/src/vibe/cardano/consensus/hfc.py", line 620, in validate_block
+    tx_errors = validate_babbage_tx(
+        tx.body,
+    ...<4 lines>...
+        0,  # tx size — DecodedTransaction doesn't track serialized size
+    )
+  File "/app/packages/vibe-cardano/src/vibe/cardano/ledger/babbage.py", line 711, in validate_babbage_tx
+    validate_babbage_utxo(
+    ~~~~~~~~~~~~~~~~~~~~~^
+        tx_body=tx_body,
+        ^^^^^^^^^^^^^^^^
+    ...<11 lines>...
+        output_extensions=output_extensions,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/packages/vibe-cardano/src/vibe/cardano/ledger/babbage.py", line 498, in validate_babbage_utxo
+    if tx_size > params.max_tx_size:
+                 ^^^^^^^^^^^^^^^^^^
+AttributeError: 'dict' object has no attribute 'max_tx_size'

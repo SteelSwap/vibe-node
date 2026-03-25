@@ -6,11 +6,33 @@
 # Usage:
 #   docker compose -f docker-compose.preview-sync.yml build
 #   docker compose -f docker-compose.preview-sync.yml up -d
-#   docker compose -f docker-compose.preview-sync.yml logs -f metrics-capture
+#   docker compose -f docker-compose.preview-sync.yml logs -f vibe-node
 #
-# Results are written to the ./results/ bind mount as JSON.
+# Results and error logs are written to the ./results/ bind mount.
 
 services:
+  # ─── Genesis Config Fetch ───────────────────────────────────────
+  # Downloads Preview genesis files from IOG's config server.
+  genesis-init:
+    image: alpine:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -f /genesis/shelley-genesis.json ]; then
+          echo "=== Genesis config already present ==="
+          exit 0
+        fi
+        apk add --no-cache wget
+        BASE_URL="https://book.play.dev.cardano.org/environments/preview"
+        for FILE in config.json byron-genesis.json shelley-genesis.json alonzo-genesis.json conway-genesis.json; do
+          echo "Downloading $$FILE..."
+          wget -q -O "/genesis/$$FILE" "$$BASE_URL/$$FILE"
+        done
+        echo "=== Preview genesis config ready ==="
+        ls -la /genesis/
+    volumes:
+      - preview-genesis:/genesis
+
   # ─── Vibe Node (Preview Sync) ─────────────────────────────────────
   vibe-node:
     build:
@@ -20,12 +42,18 @@ services:
       VIBE_NETWORK_MAGIC: "2"
       VIBE_PEERS: "preview-node.play.dev.cardano.org:3001"
       VIBE_DATA_DIR: "/data"
+      VIBE_GENESIS_DIR: "/genesis"
       VIBE_ERROR_LOG: "/results/errors.log"
+      VIBE_PERMISSIVE_VALIDATION: "true"
     volumes:
       - vibe-preview-data:/data
+      - preview-genesis:/genesis:ro
       - ./results:/results
     ports:
       - "${VIBE_NODE_PORT:-30010}:3001"
+    depends_on:
+      genesis-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "python -c 'print(\"ok\")'"]
       interval: 10s
@@ -42,15 +70,10 @@ services:
       dockerfile: infra/preview-sync/Dockerfile.preview-sync
     entrypoint: ["uv", "run", "python", "/app/scripts/capture-metrics.py"]
     environment:
-      # Target process name to monitor (matches vibe.cardano.node)
       METRICS_TARGET: "vibe.cardano.node"
-      # How often to sample (seconds)
       METRICS_INTERVAL: "${METRICS_INTERVAL:-30}"
-      # Output file path
       METRICS_OUTPUT: "/results/vibe-node-metrics.json"
-      # Node type label
       METRICS_NODE_TYPE: "vibe-node"
-      # Connect to vibe-node to query chain tip
       METRICS_NODE_HOST: "vibe-node"
       METRICS_NODE_PORT: "3001"
       METRICS_NETWORK_MAGIC: "2"
@@ -64,3 +87,4 @@ services:
 
 volumes:
   vibe-preview-data:
+  preview-genesis:

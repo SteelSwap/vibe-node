@@ -522,9 +522,10 @@ def validate_block(
     Raises:
         EraValidationError: If the era is unrecognized.
     """
-    # Skip validation entirely when protocol params are unavailable
-    # (e.g., syncing from a public relay without genesis config)
-    if protocol_params is None:
+    # Skip validation when protocol params are unavailable or raw dict
+    # (e.g., syncing from a public relay with genesis JSON params that
+    # haven't been parsed into typed protocol parameter objects)
+    if protocol_params is None or isinstance(protocol_params, dict):
         return []
 
     # Import era-specific validators lazily to avoid circular imports
