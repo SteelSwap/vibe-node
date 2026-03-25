@@ -380,8 +380,8 @@ class ChainDB:
                     slot=info.slot,
                     block_hash=info.block_hash,
                     block_number=info.block_number,
+                    predecessor_hash=info.predecessor_hash,
                     header_cbor=header_cbor_data,
-                    vrf_output=None,  # Not available from BlockInfo
                 )
             )
 
