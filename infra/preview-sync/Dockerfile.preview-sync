@@ -78,7 +78,7 @@ RUN uv run python -c "from vibe.cardano.crypto.vrf import HAS_VRF_NATIVE; assert
 
 # Preview network config
 ENV VIBE_NETWORK_MAGIC=2
-ENV VIBE_PEERS="relays-new.cardano-testnet.iohkdev.io:3001"
+ENV VIBE_PEERS="preview-node.play.dev.cardano.org:3001"
 ENV VIBE_DATA_DIR="/data"
 
 # Auto-detect libsecp256k1 and start the node

@@ -18,7 +18,7 @@ services:
       dockerfile: infra/preview-sync/Dockerfile.preview-sync
     environment:
       VIBE_NETWORK_MAGIC: "2"
-      VIBE_PEERS: "relays-new.cardano-testnet.iohkdev.io:3001"
+      VIBE_PEERS: "preview-node.play.dev.cardano.org:3001"
       VIBE_DATA_DIR: "/data"
     volumes:
       - vibe-preview-data:/data
@@ -30,8 +30,6 @@ services:
       timeout: 5s
       retries: 30
       start_period: 10s
-    networks:
-      - preview-sync
     restart: unless-stopped
 
   # ─── Metrics Capture Sidecar ──────────────────────────────────────
@@ -60,13 +58,7 @@ services:
     depends_on:
       vibe-node:
         condition: service_started
-    networks:
-      - preview-sync
     restart: unless-stopped
-
-networks:
-  preview-sync:
-    driver: bridge
 
 volumes:
   vibe-preview-data:
