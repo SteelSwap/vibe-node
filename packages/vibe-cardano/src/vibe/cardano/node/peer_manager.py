@@ -116,6 +116,7 @@ class PeerManager:
         "_fetch_queue",
         "_range_queue",
         "_seen_points",
+        "_primary_chainsync_peer",
     )
 
     def __init__(
@@ -144,6 +145,7 @@ class PeerManager:
         self._fetch_queue: asyncio.Queue | None = None  # Created in start()
         self._range_queue: asyncio.Queue | None = None  # Created in start()
         self._seen_points: set[bytes] = set()  # Dedup: block hashes already queued
+        self._primary_chainsync_peer: str | None = None  # First connected peer feeds the queue
 
     @property
     def known_points(self) -> list[Any]:
@@ -451,12 +453,14 @@ class PeerManager:
                     # updated in _on_block AFTER ChainDB confirms adoption.
                     # STM ensures the forge loop sees consistent nonce+tip.
 
-                    # Queue for block-fetch (dedup across peers)
-                    if blk_hash not in self._seen_points:
-                        self._seen_points.add(blk_hash)
-                        # GC seen set periodically to avoid unbounded growth
-                        if len(self._seen_points) > 10000:
-                            self._seen_points.clear()
+                    # Only the primary chain-sync peer feeds the fetch queue.
+                    # Other peers' chain-sync keeps the connection alive but
+                    # doesn't queue points (avoids interleaving that fragments
+                    # block-fetch ranges). The first peer to connect becomes primary.
+                    peer_id = str(peer.address)
+                    if self._primary_chainsync_peer is None:
+                        self._primary_chainsync_peer = peer_id
+                    if peer_id == self._primary_chainsync_peer:
                         try:
                             fetch_queue.put_nowait(point)
                         except asyncio.QueueFull:
