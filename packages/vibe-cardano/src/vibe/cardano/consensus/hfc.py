@@ -522,6 +522,11 @@ def validate_block(
     Raises:
         EraValidationError: If the era is unrecognized.
     """
+    # Skip validation entirely when protocol params are unavailable
+    # (e.g., syncing from a public relay without genesis config)
+    if protocol_params is None:
+        return []
+
     # Import era-specific validators lazily to avoid circular imports
     if era == Era.BYRON:
         from vibe.cardano.ledger.byron_rules import validate_byron_tx
