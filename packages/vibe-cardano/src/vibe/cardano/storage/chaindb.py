@@ -245,8 +245,11 @@ class ChainDB:
             # This is the "anchor" that the chain hangs from.
             roots: list[bytes] = []
             for bh, info in self.volatile_db._block_info.items():
-                if info.predecessor_hash not in self.volatile_db._block_info:
-                    roots.append(info.predecessor_hash)
+                pred = info.predecessor_hash
+                if not isinstance(pred, bytes):
+                    continue  # Skip non-bytes predecessor (corrupt/Byron)
+                if pred not in self.volatile_db._block_info:
+                    roots.append(pred)
             # Deduplicate — all chain roots should share the same predecessor
             root_set = set(roots)
             if len(root_set) == 1:
@@ -303,10 +306,11 @@ class ChainDB:
             return chain
 
         chain = _walk_longest_chain(anchor_hash)
+        anchor_repr = anchor_hash.hex()[:16] if isinstance(anchor_hash, bytes) else repr(anchor_hash)
         logger.info(
             "ChainDB: chain walk from anchor %s found %d blocks "
-            "(successors at anchor: %s)",
-            anchor_hash.hex()[:16],
+            "(successors at anchor: %d)",
+            anchor_repr,
             len(chain),
             len(self.volatile_db._successors.get(anchor_hash, [])),
         )
