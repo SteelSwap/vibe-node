@@ -499,7 +499,7 @@ class PeerManager:
                     try:
                         point = await asyncio.wait_for(fetch_queue.get(), timeout=1.0)
                         batch.append(point)
-                        while len(batch) < 1000:
+                        while len(batch) < 100:
                             try:
                                 batch.append(fetch_queue.get_nowait())
                             except asyncio.QueueEmpty:

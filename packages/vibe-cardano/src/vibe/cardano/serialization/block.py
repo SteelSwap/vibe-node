@@ -455,10 +455,14 @@ def decode_block_header_from_array(
     if header_cbor_override is not None:
         header_cbor = header_cbor_override
     else:
-        # Fallback: re-encode (may change encoding for indefinite types)
-        from vibe.cardano.serialization.transaction import _normalize_cbor_types
+        # Re-encode header for hash computation.
+        # Try direct encode first (fast path), normalize only on failure.
+        try:
+            header_cbor = cbor2.dumps(header_array)
+        except Exception:
+            from vibe.cardano.serialization.transaction import _normalize_cbor_types
 
-        header_cbor = cbor2.dumps(_normalize_cbor_types(header_array))
+            header_cbor = cbor2.dumps(_normalize_cbor_types(header_array))
 
     header_body = header_array[0]
     if not hasattr(header_body, "__getitem__"):
