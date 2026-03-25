@@ -24,10 +24,9 @@ def _read_key_bytes(path: str) -> bytes:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
+    from vibe.cardano.node.logging_config import configure_logging
+
+    configure_logging(level=logging.INFO)
     logger = logging.getLogger("vibe.cardano.node")
 
     host = os.environ.get("VIBE_HOST", "0.0.0.0")

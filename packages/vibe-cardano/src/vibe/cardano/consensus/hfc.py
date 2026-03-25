@@ -543,12 +543,12 @@ def validate_block(
         if isinstance(block, list):
             for i, tx in enumerate(block):
                 tx_errors = validate_shelley_tx(
-                    tx.transaction_body,
-                    tx.transaction_witness_set,
+                    tx.body,
+                    tx.witness_set,
                     ledger_state,
                     protocol_params,
                     current_slot,
-                    len(tx.to_cbor()),
+                    0,  # tx size — DecodedTransaction doesn't track serialized size
                 )
                 for err in tx_errors:
                     errors.append(f"Tx[{i}]: {err}")
@@ -561,11 +561,11 @@ def validate_block(
         if isinstance(block, list):
             for i, tx in enumerate(block):
                 tx_errors = validate_allegra_utxo(
-                    tx.transaction_body,
+                    tx.body,
                     ledger_state,
                     protocol_params,
                     current_slot,
-                    len(tx.to_cbor()),
+                    0,  # tx size — DecodedTransaction doesn't track serialized size
                 )
                 for err in tx_errors:
                     errors.append(f"Tx[{i}]: {err}")
@@ -578,8 +578,8 @@ def validate_block(
         if isinstance(block, list):
             for i, tx in enumerate(block):
                 tx_errors = validate_mary_tx(
-                    tx.transaction_body,
-                    tx.transaction_witness_set,
+                    tx.body,
+                    tx.witness_set,
                     ledger_state,
                     protocol_params,
                     current_slot,
@@ -595,12 +595,12 @@ def validate_block(
         if isinstance(block, list):
             for i, tx in enumerate(block):
                 tx_errors = validate_alonzo_tx(
-                    tx.transaction_body,
-                    tx.transaction_witness_set,
+                    tx.body,
+                    tx.witness_set,
                     ledger_state,
                     protocol_params,
                     current_slot,
-                    len(tx.to_cbor()),
+                    0,  # tx size — DecodedTransaction doesn't track serialized size
                 )
                 for err in tx_errors:
                     errors.append(f"Tx[{i}]: {err}")
@@ -613,12 +613,12 @@ def validate_block(
         if isinstance(block, list):
             for i, tx in enumerate(block):
                 tx_errors = validate_babbage_tx(
-                    tx.transaction_body,
-                    tx.transaction_witness_set,
+                    tx.body,
+                    tx.witness_set,
                     ledger_state,
                     protocol_params,
                     current_slot,
-                    len(tx.to_cbor()),
+                    0,  # tx size — DecodedTransaction doesn't track serialized size
                 )
                 for err in tx_errors:
                     errors.append(f"Tx[{i}]: {err}")
@@ -634,12 +634,12 @@ def validate_block(
         if isinstance(block, list):
             for i, tx in enumerate(block):
                 tx_errors = validate_babbage_tx(
-                    tx.transaction_body,
-                    tx.transaction_witness_set,
+                    tx.body,
+                    tx.witness_set,
                     ledger_state,
                     protocol_params,
                     current_slot,
-                    len(tx.to_cbor()),
+                    0,  # tx size — DecodedTransaction doesn't track serialized size
                 )
                 for err in tx_errors:
                     errors.append(f"Tx[{i}]: {err}")

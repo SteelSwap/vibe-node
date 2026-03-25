@@ -76,6 +76,7 @@ def configure_logging(
     *,
     level: int = logging.INFO,
     fmt: str | None = None,
+    error_log_path: str | None = None,
 ) -> None:
     """Configure the root logger for vibe-node.
 
@@ -86,6 +87,10 @@ def configure_logging(
     fmt:
         Override format. If ``None``, reads ``VIBE_LOG_FORMAT`` env var.
         ``"json"`` → :class:`JsonFormatter`, anything else → text format.
+    error_log_path:
+        If set, write ERROR+ messages to this file. If ``None``, reads
+        ``VIBE_ERROR_LOG`` env var. Enables post-run debugging without
+        wading through INFO noise.
     """
     log_format = fmt or os.environ.get("VIBE_LOG_FORMAT", "text")
 
@@ -101,3 +106,16 @@ def configure_logging(
     # Remove existing handlers to avoid duplicates
     root.handlers.clear()
     root.addHandler(handler)
+
+    # Optional error-only file handler for debugging
+    error_path = error_log_path or os.environ.get("VIBE_ERROR_LOG")
+    if error_path:
+        error_handler = logging.FileHandler(error_path, mode="a")
+        error_handler.setLevel(logging.ERROR)
+        error_handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(name)s %(levelname)s %(message)s\n"
+                "  %(pathname)s:%(lineno)d\n"
+            )
+        )
+        root.addHandler(error_handler)

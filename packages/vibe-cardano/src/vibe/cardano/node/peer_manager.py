@@ -392,7 +392,7 @@ class PeerManager:
                         hdr = decode_block_header_raw(header_bytes, era)
                         slot = hdr.slot
                         blk_hash = hdr.hash
-                    except NotImplementedError, ValueError:
+                    except (NotImplementedError, ValueError):
                         # Byron or unrecognised era -- fall back to inline
                         inner = cbor2.loads(header_bytes)
                         hdr_body = inner[0]
@@ -415,11 +415,19 @@ class PeerManager:
                     except asyncio.QueueFull:
                         pass
 
-                    if _headers_received % 100 == 1 or _headers_received <= 5:
+                    if _headers_received % 1000 == 1 or _headers_received <= 5:
+                        # Compute sync percentage from server tip
+                        tip_block = getattr(tip, "block_number", 0) or 0
+                        sync_pct = (
+                            (_headers_received / tip_block * 100)
+                            if tip_block > 0
+                            else 0.0
+                        )
                         logger.info(
-                            "Chain-sync header #%d at slot %d from %s",
+                            "Chain-sync header #%d at slot %d (%.2f%% synced) from %s",
                             _headers_received,
                             slot,
+                            sync_pct,
                             peer.address,
                             extra={
                                 "event": "chainsync.header",
@@ -427,6 +435,8 @@ class PeerManager:
                                 "header_num": _headers_received,
                                 "slot": slot,
                                 "hash": blk_hash.hex()[:16],
+                                "sync_pct": round(sync_pct, 2),
+                                "tip_block": tip_block,
                             },
                         )
                 else:

@@ -20,8 +20,10 @@ services:
       VIBE_NETWORK_MAGIC: "2"
       VIBE_PEERS: "preview-node.play.dev.cardano.org:3001"
       VIBE_DATA_DIR: "/data"
+      VIBE_ERROR_LOG: "/results/errors.log"
     volumes:
       - vibe-preview-data:/data
+      - ./results:/results
     ports:
       - "${VIBE_NODE_PORT:-30010}:3001"
     healthcheck:
