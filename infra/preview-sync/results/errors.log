@@ -72,3 +72,7 @@ task: <Task pending name='snapshot-loop' coro=<_snapshot_loop() running at /app/
 task: <Task pending name='snapshot-loop' coro=<_snapshot_loop() done, defined at /app/packages/vibe-cardano/src/vibe/cardano/node/run.py:96> wait_for=<Future pending cb=[Task.task_wakeup()]>>
   /usr/local/lib/python3.14/asyncio/base_events.py:1875
 
+2026-03-25 02:50:31,427 asyncio ERROR Task was destroyed but it is pending!
+task: <Task pending name='snapshot-loop' coro=<_snapshot_loop() done, defined at /app/packages/vibe-cardano/src/vibe/cardano/node/run.py:96> wait_for=<Future pending cb=[Task.task_wakeup()]>>
+  /usr/local/lib/python3.14/asyncio/base_events.py:1875
+

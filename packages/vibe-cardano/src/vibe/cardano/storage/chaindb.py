@@ -233,14 +233,32 @@ class ChainDB:
             logger.info("ChainDB: no volatile blocks to restore")
             return 0
 
-        # Step 2: Find the anchor (ImmutableDB tip or genesis)
+        # Step 2: Find the anchor (ImmutableDB tip or chain root)
+        # Haskell ref: ImmutableDB.getTipAnchor — anchor of the chain fragment
         immutable_tip = await self.immutable_db.get_tip()
         if immutable_tip is not None:
             anchor_hash = immutable_tip[1]  # (slot, hash, block_number)
             anchor_block_number = immutable_tip[2]
         else:
-            # No immutable blocks — anchor is genesis (all zeros)
-            anchor_hash = b"\x00" * 32
+            # No immutable blocks — find the root of the volatile chain.
+            # The root's predecessor hash is NOT in the volatile DB.
+            # This is the "anchor" that the chain hangs from.
+            roots: list[bytes] = []
+            for bh, info in self.volatile_db._block_info.items():
+                if info.predecessor_hash not in self.volatile_db._block_info:
+                    roots.append(info.predecessor_hash)
+            # Deduplicate — all chain roots should share the same predecessor
+            root_set = set(roots)
+            if len(root_set) == 1:
+                anchor_hash = root_set.pop()
+            elif root_set:
+                # Multiple roots — pick the one with the most successors
+                anchor_hash = max(
+                    root_set,
+                    key=lambda h: len(self.volatile_db._successors.get(h, [])),
+                )
+            else:
+                anchor_hash = b"\x00" * 32
             anchor_block_number = -1
 
         # Step 3: Walk successor chains from anchor to find all maximal candidates
