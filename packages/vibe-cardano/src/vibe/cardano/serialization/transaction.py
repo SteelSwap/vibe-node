@@ -196,17 +196,24 @@ def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
         ValueError: For malformed CBOR or unexpected structure.
     """
     decoded = _cbor2.loads(cbor_bytes, raw_tags=True)
-    if not isinstance(decoded, _cbor2.CBORTag):
-        raise ValueError(f"Expected CBOR tag, got {type(decoded).__name__}")
+
+    # Handle both CBORTag(era, body) and [era_int, body] list format
+    if isinstance(decoded, _cbor2.CBORTag):
+        era_val = decoded.tag
+        block_array = decoded.value
+    elif isinstance(decoded, list) and len(decoded) >= 2 and isinstance(decoded[0], int):
+        era_val = decoded[0]
+        block_array = decoded[1]
+    else:
+        raise ValueError(f"Expected CBOR tag or [era, body] list, got {type(decoded).__name__}")
+
     try:
-        era = Era(decoded.tag)
+        era = Era(era_val)
     except ValueError:
-        raise ValueError(f"Unknown era tag: {decoded.tag}") from None
+        raise ValueError(f"Unknown era tag: {era_val}") from None
 
     if era in (Era.BYRON_MAIN, Era.BYRON_EBB):
         raise NotImplementedError(f"Byron block decoding not yet supported (era tag {era.value})")
-
-    block_array = decoded.value
 
     if not isinstance(block_array, list) or len(block_array) < 4:
         raise ValueError(
