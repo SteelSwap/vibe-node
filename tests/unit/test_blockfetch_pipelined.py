@@ -92,3 +92,72 @@ class TestPipelinedSender:
         # Verify: processor received the block
         assert len(blocks_received) == 1
         assert blocks_received[0] == SAMPLE_BLOCK
+
+
+class TestPipelining:
+    """Verify that multiple range requests are in flight simultaneously."""
+
+    @pytest.mark.asyncio
+    async def test_multiple_ranges_in_flight(self):
+        """Sender sends up to max_in_flight ranges without waiting for BatchDone."""
+
+        class TrackingChannel(FakeChannel):
+            """FakeChannel that signals when N sends have occurred."""
+
+            def __init__(self, notify_at: int) -> None:
+                super().__init__()
+                self._notify_at = notify_at
+                self.send_reached = asyncio.Event()
+
+            async def send(self, data: bytes) -> None:
+                self.sent.append(data)
+                if len(self.sent) >= self._notify_at:
+                    self.send_reached.set()
+
+        max_in_flight = 2
+        channel = TrackingChannel(notify_at=max_in_flight)
+        range_queue: asyncio.Queue = asyncio.Queue()
+
+        # Queue 5 ranges
+        for i in range(5):
+            point = Point(slot=i * 100, hash=b"\x00" * 31 + bytes([i]))
+            range_queue.put_nowait((point, point))
+
+        stop = asyncio.Event()
+        blocks: list[bytes] = []
+
+        async def on_block(b: bytes) -> None:
+            blocks.append(b)
+
+        async def delayed_responses():
+            # Wait until sender has sent max_in_flight requests
+            await channel.send_reached.wait()
+            sent_before_response = len(channel.sent)
+
+            # Now feed responses for all 5 ranges
+            for _ in range(5):
+                channel.inject(encode_start_batch())
+                channel.inject(encode_block(SAMPLE_BLOCK))
+                channel.inject(encode_batch_done())
+
+            await asyncio.sleep(0.5)
+            stop.set()
+            return sent_before_response
+
+        from vibe.cardano.network.blockfetch_protocol import run_block_fetch_pipelined
+
+        response_task = asyncio.create_task(delayed_responses())
+        await run_block_fetch_pipelined(
+            channel,
+            range_queue=range_queue,
+            on_block_received=on_block,
+            stop_event=stop,
+            max_in_flight=max_in_flight,
+        )
+        sent_before_response = await response_task
+
+        # Sender should have sent exactly max_in_flight before blocking
+        assert sent_before_response == max_in_flight
+
+        # All 5 blocks should have been processed
+        assert len(blocks) == 5
