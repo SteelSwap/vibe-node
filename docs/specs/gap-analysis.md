@@ -17,17 +17,16 @@ This section documents every divergence we discover, published like errata in a 
 | Subsystem | Critical Gaps | MISSING | PARTIAL | ADDRESSED | WRONG | N/A |
 |-----------|-------------|---------|---------|-----------|-------|-----|
 | Ledger+Mempool | 114 | 68 | 34 | 6 | 0 | 6 |
-| Consensus* | 73 | ~40 | ~15 | ~10 | 0 | ~8 |
+| Consensus | 73 | 48 | 8 | 1 | 0 | 16 |
 | Networking | 73 | 14 | 5 | 2 | 0 | 52† |
 | Plutus | 34 | 17 | 8 | 9 | 0 | 0 |
 | Storage | 28 | 17 | 7 | 0 | 1 | 3 |
 | Serialization | 26 | 18 | 5 | 3 | 0 | 0 |
-| **Total** | **348** | **~174** | **~74** | **~30** | **1** | **~69** |
+| **Total** | **348** | **182** | **67** | **21** | **1** | **77** |
 
-*Consensus estimates pending full agent completion
 †52 networking N/A = gaps miscategorized in DB (actually ledger/governance gaps)
 
-**Of 348 critical gaps checked: ~50% MISSING, ~21% PARTIAL, ~9% ADDRESSED, 1 WRONG**
+**Of 348 critical gaps: 182 MISSING (52%), 67 PARTIAL (19%), 21 ADDRESSED (6%), 1 WRONG, 77 N/A (22%)**
 
 ---
 
