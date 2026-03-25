@@ -596,7 +596,11 @@ class PeerManager:
                     # witness decode) for empty blocks.
                     tx_bodies_raw = block_body[1] if len(block_body) > 1 else []
                     has_txs = hasattr(tx_bodies_raw, "__len__") and len(tx_bodies_raw) > 0
-                    body = decode_block_body_from_array(block_body, era) if has_txs else None
+                    body = (
+                        decode_block_body_from_array(block_body, era, skip_pycardano=True)
+                        if has_txs
+                        else None
+                    )
                     if body and body.transactions:
                         errors = validate_block(
                             era=era,

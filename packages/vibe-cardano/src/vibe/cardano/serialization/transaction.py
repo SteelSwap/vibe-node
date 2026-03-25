@@ -220,7 +220,7 @@ def _try_decode_auxiliary_data(raw: object) -> AuxiliaryData | object | None:
 
 
 def decode_block_body_from_array(
-    block_array: list | object, era: Era,
+    block_array: list | object, era: Era, *, skip_pycardano: bool = False,
 ) -> DecodedBlockBody:
     """Decode block body from an already-decoded block array.
 
@@ -276,11 +276,17 @@ def decode_block_body_from_array(
         # Hash from normalized CBOR (fallback — ideally use original bytes)
         tx_hash = _tx_hash(body_raw)
 
-        body = _try_decode_tx_body(body_raw)
-        witness_set = _try_decode_witness_set(witness_raw if isinstance(witness_raw, dict) else {})
+        # During bulk sync, skip pycardano parsing (it fails often and
+        # the objects aren't needed for storage/chain selection).
+        if skip_pycardano:
+            body = body_raw
+            witness_set = witness_raw if isinstance(witness_raw, dict) else {}
+        else:
+            body = _try_decode_tx_body(body_raw)
+            witness_set = _try_decode_witness_set(witness_raw if isinstance(witness_raw, dict) else {})
 
         aux_raw = aux_map.get(i)
-        auxiliary_data = _try_decode_auxiliary_data(aux_raw)
+        auxiliary_data = aux_raw if skip_pycardano else _try_decode_auxiliary_data(aux_raw)
 
         valid = True
         if len(block_array) > 4:
