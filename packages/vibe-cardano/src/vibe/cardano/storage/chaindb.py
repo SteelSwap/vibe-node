@@ -244,12 +244,21 @@ class ChainDB:
             # The root's predecessor hash is NOT in the volatile DB.
             # This is the "anchor" that the chain hangs from.
             roots: list[bytes] = []
+            non_bytes_preds = 0
             for bh, info in self.volatile_db._block_info.items():
                 pred = info.predecessor_hash
                 if not isinstance(pred, bytes):
+                    non_bytes_preds += 1
                     continue  # Skip non-bytes predecessor (corrupt/Byron)
                 if pred not in self.volatile_db._block_info:
                     roots.append(pred)
+            logger.info(
+                "ChainDB: root scan — %d roots found, %d non-bytes predecessors skipped, "
+                "%d total blocks",
+                len(roots),
+                non_bytes_preds,
+                len(self.volatile_db._block_info),
+            )
             # Deduplicate — all chain roots should share the same predecessor
             root_set = set(roots)
             if len(root_set) == 1:
