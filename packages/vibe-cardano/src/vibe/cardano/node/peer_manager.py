@@ -187,7 +187,10 @@ class PeerManager:
         self._range_queue = asyncio.Queue()
 
         # Shared range builder: drains fetch_queue into range_queue
+        _ranges_built = 0
+
         async def _shared_range_builder() -> None:
+            nonlocal _ranges_built
             while not self._stopped:
                 batch: list[Point] = []
                 try:
@@ -203,7 +206,17 @@ class PeerManager:
                 except TimeoutError:
                     continue
                 if batch:
+                    _ranges_built += 1
                     await self._range_queue.put((batch[0], batch[-1]))
+                    if _ranges_built % 10 == 1 or _ranges_built <= 3:
+                        logger.info(
+                            "range-builder: range #%d with %d points "
+                            "(queue depth: fetch=%d range=%d)",
+                            _ranges_built,
+                            len(batch),
+                            self._fetch_queue.qsize(),
+                            self._range_queue.qsize(),
+                        )
 
         self._tasks.append(
             asyncio.create_task(_shared_range_builder(), name="range-builder")

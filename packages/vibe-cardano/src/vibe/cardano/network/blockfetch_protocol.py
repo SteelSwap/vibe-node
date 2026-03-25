@@ -568,23 +568,49 @@ async def run_block_fetch_continuous(
     )
     client = BlockFetchClient(runner)
 
+    import time as _time
+
+    _peer_label = getattr(channel, "protocol_id", "?")
+    _ranges_fetched = 0
+
     try:
         while True:
             if stop_event is not None and stop_event.is_set():
                 break
 
+            t0 = _time.monotonic()
             try:
                 point_from, point_to = await asyncio.wait_for(range_queue.get(), timeout=1.0)
             except TimeoutError:
                 continue
+            t_queue = _time.monotonic() - t0
 
+            t1 = _time.monotonic()
             blocks = await client.request_range(point_from, point_to)
+            t_download = _time.monotonic() - t1
+
+            t2 = _time.monotonic()
             if blocks is None:
                 if on_no_blocks is not None:
                     await on_no_blocks(point_from, point_to)
             else:
                 for block_cbor in blocks:
                     await on_block_received(block_cbor)
+            t_process = _time.monotonic() - t2
+
+            _ranges_fetched += 1
+            n_blocks = len(blocks) if blocks else 0
+            if _ranges_fetched % 10 == 1 or _ranges_fetched <= 3:
+                logger.info(
+                    "block-fetch range #%d: queue_wait=%.3fs download=%.3fs "
+                    "process=%.3fs blocks=%d (from slot %s)",
+                    _ranges_fetched,
+                    t_queue,
+                    t_download,
+                    t_process,
+                    n_blocks,
+                    getattr(point_from, "slot", "?"),
+                )
     finally:
         try:
             await client.done()
