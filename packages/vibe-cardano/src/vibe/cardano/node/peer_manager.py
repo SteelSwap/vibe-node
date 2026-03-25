@@ -480,7 +480,7 @@ class PeerManager:
         # Block-fetch worker: batches points from the queue into ranges,
         # fetches full block bodies, and stores them in ChainDB.
         async def _block_fetch_worker() -> None:
-            from vibe.cardano.network.blockfetch_protocol import run_block_fetch_continuous
+            from vibe.cardano.network.blockfetch_protocol import run_block_fetch_pipelined
 
             bf_channel = channels[BLOCK_FETCH_N2N_ID]
             _blocks_stored = 0
@@ -786,11 +786,13 @@ class PeerManager:
                         raise
 
             try:
-                await run_block_fetch_continuous(
+                await run_block_fetch_pipelined(
                     bf_channel,
                     range_queue=range_queue,
                     on_block_received=_on_block,
                     stop_event=stop_event,
+                    max_in_flight=3,
+                    block_queue_size=200,
                 )
             except Exception as exc:
                 logger.warning("Peer %s: block-fetch error: %s", peer.address, exc)
