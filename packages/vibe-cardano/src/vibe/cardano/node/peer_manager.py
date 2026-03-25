@@ -488,7 +488,7 @@ class PeerManager:
 
             range_queue: asyncio.Queue[tuple] = asyncio.Queue()
 
-            # Background task: drain fetch_queue Points into ranges
+            # Background task: drain fetch_queue Points into ranges.
             async def _range_builder() -> None:
                 while not stop_event.is_set():
                     batch: list[Point] = []
