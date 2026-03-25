@@ -302,9 +302,15 @@ class ChainDB:
                 current = best_succ
             return chain
 
-        candidates = [_walk_longest_chain(anchor_hash)]
-        # Filter out empty candidates
-        candidates = [c for c in candidates if c]
+        chain = _walk_longest_chain(anchor_hash)
+        logger.info(
+            "ChainDB: chain walk from anchor %s found %d blocks "
+            "(successors at anchor: %s)",
+            anchor_hash.hex()[:16],
+            len(chain),
+            len(self.volatile_db._successors.get(anchor_hash, [])),
+        )
+        candidates = [chain] if chain else []
 
         if not candidates:
             logger.info(
