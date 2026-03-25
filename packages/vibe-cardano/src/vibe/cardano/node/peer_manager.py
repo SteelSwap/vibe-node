@@ -590,9 +590,14 @@ class PeerManager:
                         hdr_cbor = cbor2.dumps(_normalize_cbor_types(hdr_arr))
                         block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
 
-                    # --- Decode body from pre-decoded array (no re-parse) ---
-                    body = decode_block_body_from_array(block_body, era)
-                    if body.transactions:
+                    # --- Decode body only if block has transactions ---
+                    # Most blocks during bulk sync have 0 txs. Skip the
+                    # entire body decode path (pycardano parse, tx hash,
+                    # witness decode) for empty blocks.
+                    tx_bodies_raw = block_body[1] if len(block_body) > 1 else []
+                    has_txs = hasattr(tx_bodies_raw, "__len__") and len(tx_bodies_raw) > 0
+                    body = decode_block_body_from_array(block_body, era) if has_txs else None
+                    if body and body.transactions:
                         errors = validate_block(
                             era=era,
                             block=body.transactions,
@@ -623,7 +628,7 @@ class PeerManager:
                                 return  # Don't store invalid blocks
 
                     # --- Apply ledger state (UTxO mutations) ---
-                    if chain_db is not None and chain_db.ledger_db is not None:
+                    if body and chain_db is not None and chain_db.ledger_db is not None:
                         consumed: list[bytes] = []
                         created: list[tuple[bytes, dict]] = []
                         for tx in body.transactions:
