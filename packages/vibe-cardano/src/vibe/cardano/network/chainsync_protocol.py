@@ -641,32 +641,101 @@ async def run_chain_sync(
         },
     )
 
-    # Step 2: Sync loop
-    while True:
-        # Check stop condition
-        if stop_event is not None and stop_event.is_set():
-            logger.debug("Chain-sync stop requested, sending Done")
-            await client.done()
-            return
+    # Step 2: Pipelined sync loop
+    # Send multiple MsgRequestNext without waiting for responses.
+    # Use two concurrent tasks: sender fills the pipeline, receiver
+    # processes responses. Both use the raw channel to bypass the
+    # ProtocolRunner's strict send-recv agency enforcement.
+    #
+    # Haskell ref: chainSyncClient uses pipelining with configurable depth.
+    PIPELINE_DEPTH = 50
+    request_next_cbor = codec.encode(CsMsgRequestNext())
+    in_flight = 0
+    _recv_buf = b""
 
-        response = await client.request_next()
+    async def _pipeline_sender():
+        """Send MsgRequestNext up to pipeline depth."""
+        nonlocal in_flight
+        while True:
+            if stop_event is not None and stop_event.is_set():
+                return
+            if in_flight < PIPELINE_DEPTH:
+                await channel.send(request_next_cbor)
+                in_flight += 1
+            else:
+                await asyncio.sleep(0.001)  # yield, wait for responses
 
-        if isinstance(response, CsMsgRollForward):
-            await on_roll_forward(response.header, response.tip)
+    async def _pipeline_receiver():
+        """Receive and dispatch responses."""
+        nonlocal in_flight, _recv_buf
+        import io as _io
 
-        elif isinstance(response, CsMsgRollBackward):
-            await on_roll_backward(response.point, response.tip)
+        import cbor2pure as _cbor2
 
-        elif isinstance(response, CsMsgAwaitReply):
-            logger.debug("Chain-sync: at tip, awaiting new block")
-            # Server said "nothing new" — wait for actual data.
-            # In StNext(MustReply) now, server MUST send roll fwd/bwd.
-            response = await client.recv_after_await()
+        while True:
+            if stop_event is not None and stop_event.is_set():
+                return
+
+            # Read from channel
+            if _recv_buf:
+                data = _recv_buf
+                _recv_buf = b""
+            else:
+                data = await channel.recv()
+
+            # Decode first CBOR message
+            try:
+                dec = _cbor2.CBORDecoder(_io.BytesIO(data))
+                dec.decode()
+                consumed = dec.fp.tell()
+                if consumed < len(data):
+                    _recv_buf = data[consumed:]
+                msg_bytes = data[:consumed]
+                response = codec.decode(msg_bytes)
+            except Exception:
+                # Incomplete data — read more
+                more = await channel.recv()
+                _recv_buf = data + more
+                continue
+
+            in_flight -= 1
 
             if isinstance(response, CsMsgRollForward):
                 await on_roll_forward(response.header, response.tip)
             elif isinstance(response, CsMsgRollBackward):
                 await on_roll_backward(response.point, response.tip)
+            elif isinstance(response, CsMsgAwaitReply):
+                # Server is at tip — wait for real response
+                if _recv_buf:
+                    data2 = _recv_buf
+                    _recv_buf = b""
+                else:
+                    data2 = await channel.recv()
+                try:
+                    dec2 = _cbor2.CBORDecoder(_io.BytesIO(data2))
+                    dec2.decode()
+                    consumed2 = dec2.fp.tell()
+                    if consumed2 < len(data2):
+                        _recv_buf = data2[consumed2:]
+                    response2 = codec.decode(data2[:consumed2])
+                except Exception:
+                    _recv_buf = data2
+                    continue
+                if isinstance(response2, CsMsgRollForward):
+                    await on_roll_forward(response2.header, response2.tip)
+                elif isinstance(response2, CsMsgRollBackward):
+                    await on_roll_backward(response2.point, response2.tip)
+
+    # Run sender and receiver concurrently
+    sender_task = asyncio.create_task(_pipeline_sender())
+    try:
+        await _pipeline_receiver()
+    finally:
+        sender_task.cancel()
+        try:
+            await sender_task
+        except asyncio.CancelledError:
+            pass
 
 
 # ---------------------------------------------------------------------------
