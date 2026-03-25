@@ -1,7 +1,7 @@
-:::: frame
+<!-- frame -->
 ### The Genesis Rule
 
-::: alertblock
+<!-- alertblock -->
 Genesis chain selection rule A candidate chain is preferred over our current chain if
 
 - The intersection between the candidate chain and our chain is **no more than $k$** blocks back, and the candidate chain is strictly **longer** than our chain.
@@ -9,10 +9,10 @@ Genesis chain selection rule A candidate chain is preferred over our current cha
 - If the intersection *is* **more than $k$** blocks back, and the candidate chain is **denser** (contains more blocks) than our chain in a region of $s$ slots starting at the intersection.
 
 
-:::: frame
+<!-- frame -->
 ### The Genesis Rule
 
-::: alertblock
+<!-- alertblock -->
 Alternative genesis rule A candidate chain is preferred over our current chain if
 
 - The intersection between the candidate chain and our chain is **at least $s$ slots** back, and the candidate chain is denser in a window of $s$ slots at the intersection, or
@@ -20,13 +20,13 @@ Alternative genesis rule A candidate chain is preferred over our current chain i
 - The intersection between the candidate chain and our chain is **no more than $k$ blocks** back, and the candidate chain is strictly **longer** than our chain.
 
 
-::::::::: frame
+<!-- frame -->
 ### Fundamental Assumptions within the Consensus Layer
 
-:::: onlyenv
+<!-- onlyenv -->
 \<1\>
 
-::: alertblock
+<!-- alertblock -->
 Invariant We never roll back more than $k$ blocks.
 
 This invariant is used to
@@ -39,10 +39,10 @@ This invariant is used to
 
 - ...
 
-:::: onlyenv
+<!-- onlyenv -->
 \<2\>
 
-::: alertblock
+<!-- alertblock -->
 Invariant We never switch to a shorter chain.
 
 Without this invariant, the previous invariant (never roll back more than $k$ blocks) is not very useful.
@@ -55,10 +55,10 @@ Without this invariant, the previous invariant (never roll back more than $k$ bl
 
 - ...
 
-:::: onlyenv
+<!-- onlyenv -->
 \<3\>
 
-::: alertblock
+<!-- alertblock -->
 Invariant The strict extension of a chain is always preferred over that chain.
 
 - Used to make some local chain selection decisions.
@@ -66,19 +66,19 @@ Invariant The strict extension of a chain is always preferred over that chain.
 - (I *think* this one is compatible with Genesis.)
 
 
-:::: frame
+<!-- frame -->
 Towards an Alternative
 
-::: center
+<!-- center -->
 
 
-::::: frame
+<!-- frame -->
 ### Towards an Alternative
 
-:::: onlyenv
+<!-- onlyenv -->
 \<1\>
 
-::: alertblock
+<!-- alertblock -->
 Key Idea: Delay the decision Rather than adopting chain $A$ as soon as we see it, and later switch to chain $B$ (possibly incurring a large rollback), *wait*: don't adopt *either* $A$ *or* $B$ until we know which one we want.
 
 Assumptions:
@@ -89,45 +89,45 @@ Assumptions:
   (We will come back to this.)\
 
 
-:::: frame
+<!-- frame -->
 ### Choosing between forks: at genesis
 
 ### Choosing between forks: general case
 
-::: center
+<!-- center -->
 
 
-:::: frame
+<!-- frame -->
 ### Common prefix: at genesis
 
 ### Common prefix: general case
 
-::: center
+<!-- center -->
 
 
-::::: frame
+<!-- frame -->
 ### Insufficient peers
 
-::: center
+<!-- center -->
 
-::: center
+<!-- center -->
 
 
-::::: frame
+<!-- frame -->
 ### Insufficient blocks
 
-::: center
+<!-- center -->
 
-::: center
+<!-- center -->
 
 
-:::: frame
+<!-- frame -->
 ### Threshold for sufficient blocks
 
-::: center
+<!-- center -->
 
 
-:::: frame
+<!-- frame -->
 ### Detecting when to delay
 
 - **[Cannot]{.alert} apply density rule when we are closer than $s$ slots from the wallclock slot.**\
@@ -142,15 +142,15 @@ Assumptions:
 - Paper suggests $s = \frac{1}{4} (k/f)$ = 10,800 slots.\
   (I.e. $s \times f = \frac{1}{4}k = 540$ blocks on average.)
 
-::: alertblock
+<!-- alertblock -->
 **Delay if more than $s$ slots from the wallclock.**\
 (If wallclock slot unknown, must be more than $(3k/f) > s$ slots.)
 
 
-:::: frame
+<!-- frame -->
 ### Generalising delay mode
 
-::: center
+<!-- center -->
 
 - **Cannot reliably detect** whether we have more than $k$ blocks\
   (node reports tip but we cannot verify)
@@ -158,32 +158,32 @@ Assumptions:
 - **Can still apply genesis condition**, independent of \# blocks\
   (justified by alternative genesis rule)
 
-:::: frame
+<!-- frame -->
 ### Header/Body split: choosing between forks
 
-::: center
+<!-- center -->
 
 - What if we find an invalid block on $A$ after discarding $C$, $D$?
 
 - Header validation justifies deciding before block validation.
 
-  ::: minipage
+<!-- minipage -->
   Christian: "Intuitively, right after the forking point, the lottery to elect slot leaders is still the same on both chains, and there, no adversarial chain can be denser."
   :::
 
 - Header validation (as separate from block validation) critical.\
   (So far was "merely" required to guard against DoS attacks.)
 
-:::: frame
+<!-- frame -->
 ### Header/Body split: common prefix
 
-::: center
+<!-- center -->
 
 - Blocks from common prefix will be validated by chain database before adoption.
 
 - If found to be invalid, something went horribly wrong and we are eclipsed by an attacker after all. Disconnect from all peers and start over.
 
-::: frame
+<!-- frame -->
 ### Open questions
 
 - Assumption is that when we see $n$ peers, that gives us a representative sample of all chains in the network. Does that mean that after we discard some peers (not dense enough), we do not have have to look for more peers (apart from for performance reasons, perhaps)?
@@ -196,9 +196,9 @@ Assumptions:
 
 - Anything else..?
 
-:::: frame
+<!-- frame -->
 ### Flip-flopping
 
-::: center
+<!-- center -->
 
 $A$ is preferred over $B$, and $B$ is preferred over $A$!

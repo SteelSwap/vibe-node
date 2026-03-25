@@ -24,7 +24,7 @@ Our code does not use the negotiated [`NodeToClientVersion`][n2c] directly, but 
  - A [`ShelleyNodeToClientVersion`][shelley-n2c] is what is associated with every query in [`querySupportedVersion`][query-supported-version].
  - A [`CardanoNodeToClientVersion`][cardano-n2c] specifies the [`ShelleyNodeToClientVersion`][shelley-n2c] for each era, or indicates that a specific [era][feature-table] is not supported. As an example, consider
    ```haskell
-   pattern CardanoNodeToClientVersion10 :: BlockNodeToClientVersion (CardanoBlock c)
+   pattern CardanoNodeToClientVersion10<!-- BlockNodeToClientVersion -->
    pattern CardanoNodeToClientVersion10 =
        HardForkNodeToClientEnabled
          HardForkSpecificNodeToClientVersion2

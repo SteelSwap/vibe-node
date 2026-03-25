@@ -28,7 +28,7 @@ The two main transition systems in this section are:
 
 - The transition named $\mathsf{RUPD}$, which is defined in Section \[sec:reward-update-trans\], covers the reward calculation that happens between (E) and (F).
 
-::: note
+<!-- note -->
 Between time D and E we are concerned with chain growth and stability. Therefore this duration can be stated as 2k blocks (to state it in slots requires details about the particular version of the Ouroboros protocol). The duration between F and G is also 2k blocks. Between E and F a single honest block is enough to ensure a random nonce.
 
 ## Helper Functions and Accounting Fields
@@ -843,7 +843,7 @@ This section defines the calculation of a reward update. A reward update is the 
 Figure 16 captures the potential movement of funds in the entire system, taking every transition system in this document into account. Value is moved between accounting pots, but the total amount of value in the system remains constant. In particular, the red subgraph represents the inputs and outputs to the "reward pot", a temporary variable used during the reward update calculation in Figure 18. The blue arrows represent the movement of funds that pass through the "reward pot".
 
 
-::: center
+<!-- center -->
 
 **Preservation of Value**
 

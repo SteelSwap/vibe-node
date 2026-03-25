@@ -23,7 +23,7 @@ Candidate fragment
 ### Precondition
 Since neither of these circumstances can be avoided, we must therefore impose a precondition for chain selection between chain fragments to be definable:
 
-::: definition
+<!-- definition -->
 The two fragments must either both be non-empty, or they must intersect.
 
 In this chapter, we establish this precondition in two different ways:
@@ -64,11 +64,11 @@ Note that this relies critically on the "prefer extension" rule (\[prefer-extens
 ## Preliminaries
 Recall from \[storage:components\]{reference-type="ref+label" reference="storage:components"} that the immutable database stores a linear chain, terminating in the *tip* $I$ of the immutable database. The volatile database stores a (possibly fragmented) tree of extensions to that chain:
 
-::: center
+<!-- center -->
 
 The node's *current chain* is stored in memory as a chain fragment through the volatile database, anchored at $I$. When we start up the node, the chain database must find the best possible path through the volatile database and adopt that as our current fragment; every time a new block is added to the volatile database, we have to recompute the new best possible path. In other words, we maintain the following invariant:
 
-::: definition
+<!-- definition -->
 []{#current-chain-invariant label="current-chain-invariant"} The current chain is the best possible path through the volatile DB.
 
 "Best" of course is according to the chain selection rule defined by the consensus protocol (\[consensus:class:chainsel\]{reference-type="ref+label" reference="consensus:class:chainsel"}). In this section we describe how the chain database establishes and preserves this invariant.
@@ -77,7 +77,7 @@ The node's *current chain* is stored in memory as a chain fragment through the v
 
 So far we have been relatively informal in our description of chain selection, but in order to precisely describe the algorithm and state some of its properties, we have to introduce some notation.
 
-::: definition
+<!-- definition -->
 We will model chain selection as a transitive binary relation ($\mathrel{\sqsubset}$) between valid chains (it is undefined for invalid chains), and let $C \mathrel{\sqsubseteq}C'$ if and only if $C \mathrel{\sqsubset}C'$ or $C = C'$. It follows that ($\mathrel{\sqsubseteq}$) is a partial order (reflexive, antisymmetric, and transitive).
 
 For example, the simple "prefer longest chain" chain selection rule could be given as $$\begin{equation*}
@@ -92,19 +92,19 @@ In general of course the exact rule depends on the choice of consensus protocol.
 
 We will not be comparing whole chains, but rather chain fragments (we will leave the anchor of fragments implicit):
 
-::: definition
+<!-- definition -->
 We lift $\mathrel{\sqsubset}$ to chain fragments in the manner described in 1.1{reference-type="ref+label" reference="chainsel:fragments"}; this means that $\mathrel{\sqsubset}$ is undefined for two fragments if they do not intersect (1.1.2{reference-type="ref+label" reference="chainsel:fragments:precondition"}).
 
 We also lift $\mathrel{\sqsubseteq}$ to *sets* of fragments, intuitively indicating that a particular fragment is the "best choice" out of a set $\mathcal{S}$ of candidate fragments:
 
-::: definition
+<!-- definition -->
 $$\begin{equation*}
 \mathcal{S} \mathrel{\sqsubseteq}F  \qquad\mathrm{iff\qquad}\nexists F' \in \mathcal{S} .\;F \mathrel{\sqsubset}F'
 \end{equation*}$$ (in other words, if additionally $F \in \mathcal{S}$, then $F$ is a maximal element of $C$). This inherits all the preconditions of $\mathrel{\sqsubseteq}$ on chains and fragments.
 
 Finally, we will introduce some notation for *computing* candidate fragments:[^2]
 
-::: definition
+<!-- definition -->
 Given some set of blocks $V$, and some anchor $A$ (with $A$ either a block or the genesis point), $$\mathsf{candidates_A(V)}$$ is the set of chain fragments anchored at $A$ using blocks picked from $V$.
 
 By construction all fragments in $\mathsf{candidates_A(V)}$ have the same anchor, and hence all intersect (at $A$); this will be important for the use of the $\mathrel{\sqsubseteq}$ operator.
@@ -115,7 +115,7 @@ In the following we will use ($F \mathrel{\triangleright}B$) to denote appending
 F \mathrel{\triangleright}\mathcal{B} = \{ F \mathrel{\triangleright}B \mid B \in \mathcal{B} \}
 \end{equation*}$$
 
-::: lemma
+<!-- lemma -->
 []{#candidates:properties label="candidates:properties"} The set of candidates computed by $\mathsf{candidates_A(V)}$ has the following properties.
 
 1.  []{#candidates:prefixclosed label="candidates:prefixclosed"} It is prefix closed: $$\begin{equation*}
@@ -137,7 +137,7 @@ F \mathrel{\triangleright}\mathcal{B} = \{ F \mathrel{\triangleright}B \mid B \i
 
 The next lemma says that if we have previously found some optimal candidate $F$, and subsequently learn of a new block $B$ (where $B$ is a direct or indirect extension of $F$), it suffices to find a locally optimal candidate *amongst the candidates that involve $B$*; this new candidate will also be a globally optimal candidate.
 
-::: lemma
+<!-- lemma -->
 []{#focusonnewblock label="focusonnewblock"} Suppose we have $F, F_\mathit{new}$ such that
 
 1.  []{#focusonnewblock:previouslyoptimal label="focusonnewblock:previouslyoptimal"} $\mathsf{candidates_A(V)} \mathrel{\sqsubseteq}F$
@@ -240,7 +240,7 @@ It is constructive to consider what happens if *our* clock is off, in particular
 
 In this chapter we have modelled chain selection as a partial order $(\mathrel{\sqsubseteq})$. This suffices for the formal treatment, and in theory also suffices for the implementation. However, at various points during the chain selection process we need to *sort* candidates in order of preference. We can of course sort values based on a preorder only (topological sorting), but we can do slightly better. Recall from \[consensus:class:chainsel\]{reference-type="ref+label" reference="consensus:class:chainsel"} that we require that the `SelectView` on headers must be a total order. We can therefore define
 
-::: definition
+<!-- definition -->
 Let $C \precsimC'$ if the select view at the tip of $C$ is less than or equal to the select view at the tip of $C'$.
 
 ($\precsim$) forms a total preorder (though not a partial order); if $C

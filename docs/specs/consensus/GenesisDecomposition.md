@@ -106,7 +106,7 @@ in 2021 March using chapter 21 of the Consensus Report.
 
   * making Network Layer sensitivity to alertness
 
-     * We anticipate adding an `:: STM IsAlert` field to the
+     * We anticipate adding an `<!-- STM -->
        `BlockFetchConsensusInterface` record.
 
   * clock skew in relation to DoS attacks (Section 21.5.3)

@@ -64,7 +64,7 @@ Lastly, there are two functions, $\fun{epoch}$ and $\fun{firstSlot}$ for convert
       \end{array}
 \end{equation*}$$ *Accessor Functions*
 
-::: center
+<!-- center -->
 , , , , , , , , , , , , , , , ,
 
 *Abstract Functions* $$\begin{equation*}

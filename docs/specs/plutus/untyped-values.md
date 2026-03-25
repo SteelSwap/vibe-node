@@ -3,7 +3,7 @@ The semantics of built-in functions in Plutus Core are obtained by instantiating
 
 We define syntactic classes $V$ of Plutus Core values and $A$ of partial builtin applications simultaneously:
 
-::: minipage
+<!-- minipage -->
 $$\begin{array}{lrcl}
         \textrm{Value}  & V   & ::= & \con{\tn}{c} \\
                         &     &     & \delay{M} \\
@@ -14,7 +14,7 @@ $$\begin{array}{lrcl}
 
 Here $A$ is the class of well-formed partial applications, and to define this we first define a class of possibly ill-formed iterated applications $\pba$ for each built-in function $b \in \Fun$:
 
-::: minipage
+<!-- minipage -->
 $$\begin{array}{lrl}
   \pba & ::= & \builtin{b}\\
        &     & \appU{\pba}{V}\\

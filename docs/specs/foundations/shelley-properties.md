@@ -94,12 +94,12 @@ $$\begin{equation}
 
 **Chain-Head rules**
 
-::: property
+<!-- property -->
 []{#prop:header-only-validation label="prop:header-only-validation"} For all environments $e$, states $s$ with slot number $t$[^1], and chain extensions $E$ with corresponding headers $H$ such that: $$0 \leq t_E - t  \leq \StabilityWindow$$ we have: $$e \vdash s \xlongrightarrow[\textsc{\hyperref[fig:rules:chain]{chain}}]{E}\negthickspace^{*} s'
   \implies
   e \vdash s \xlongrightarrow[\textsc{\hyperref[fig:rules:chainhead]{chainhead}}]{H}\negthickspace^{*} s''$$ where $t_E$ is the maximum slot number appearing in the blocks contained in $E$, and $H$ is obtained from $E$ by applying $\fun{bheader}$ to each block in $E$.
 
-::: property
+<!-- property -->
 []{#prop:body-only-validation label="prop:body-only-validation"} For all environments $e$, states $s$ with slot number $t$, and chain extensions $E = [b_0, \ldots, b_n]$ with corresponding headers $H$ such that: $$0 \leq t_E - t  \leq \StabilityWindow$$ we have that for all $i \in [1, n]$: $$e \vdash s \xlongrightarrow[\textsc{\hyperref[fig:rules:chainhead]{chainhead}}]{H}\negthickspace^{*} s_{h}
   \wedge
   e \vdash s \xlongrightarrow[\textsc{\hyperref[fig:rules:chain]{chain}}]{[b_0 \ldots b_{i-1}]}\negthickspace^{*} s_{i-1}
@@ -108,7 +108,7 @@ $$\begin{equation}
 
 Property \[prop:body-only-validation\] states that if we validate a sequence of headers, we can validate their bodies independently and be sure that the blocks will pass the chain validation rule. To see this, given an environment $e$ and initial state $s$, assume that a sequence of headers $H = [h_0, \ldots, h_n]$ corresponding to blocks in $E = [b_0, \ldots, b_n]$ is valid according to the $\mathsf{chainhead}$ transition system: $$e \vdash s \xlongrightarrow[\textsc{\hyperref[fig:rules:chainhead]{chainhead}}]{H}\negthickspace^{*} s'$$ Assume the bodies of $E$ are valid according to the $\mathsf{bbody}$ rules, but $E$ is not valid according to the $\mathsf{chain}$ rule. Assume that there is a $b_j \in E$ such that it is **the first block** such that does not pass the $\mathsf{chain}$ validation. Then: $$e \vdash s \xlongrightarrow[\textsc{\hyperref[fig:rules:chain]{chain}}]{[b_0, \ldots b_{j-1}]}\negthickspace^{*} s_j$$ But by Property \[prop:body-only-validation\] we know that $$e_j \vdash s_j \trans{\hyperref[fig:rules:chainhead]{chainhead}}{h_j} s_{j+1}$$ which means that block $b_j$ has valid headers, and this in turn means that the validation of $b_j$ according to the chain rules must have failed because it contained an invalid block body. But this contradicts our assumption that the block bodies were valid.
 
-::: property
+<!-- property -->
 []{#prop:roll-back-funk label="prop:roll-back-funk"} There exists a function $\fun{f}$ such that for all chains $$C = C_0 ; b; C_1$$ we have that if for all alternative chains $C'_1$, $\size{C'_1} \leq \frac{\StabilityWindow}{2}$, with corresponding headers $H'_1$ $$e \vdash s_0 \xlongrightarrow[\textsc{\hyperref[fig:rules:chain]{chain}}]{C_0;b}\negthickspace^{*} s_1 \xlongrightarrow[\textsc{\hyperref[fig:rules:chain]{chain}}]{C_1}\negthickspace^{*} s_2
   \wedge
   e \vdash s_1 \xlongrightarrow[\textsc{\hyperref[fig:rules:chain]{chain}}]{C_1'}\negthickspace^{*} s'_1
@@ -141,7 +141,7 @@ $$\begin{align*}
 
 In Figure 2 marks the transaction identifier of the initial coin distribution, where represents the initial UTxO. It should be noted that no corresponding inputs exists, i.e., the transaction inputs are the empty set for the initial transaction. The function extracts the UTxO from a UTxO state.
 
-::: definition
+<!-- definition -->
 $$\begin{multline*}
     \forall l_{0},\ldots,l_{n} \in \LState, lenv_{0},\ldots,lenv_{n} \in \LEnv,
     l_{0} = \left(
@@ -165,7 +165,7 @@ Definition \[def:valid-ledger-state\] defines a valid ledger state reachable fr
 ## Ledger Properties
 The following properties state the desired features of updating a valid ledger state.
 
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \LState: \applyFun{validLedgerstate}{l},
     l=(u,\wcard,\wcard,\wcard), l' = (u',\wcard,\wcard,\wcard)\\
@@ -176,7 +176,7 @@ $$\begin{multline*}
 
 Property \[prop:ledger-properties-1\] states that for each valid ledger $l$, if a transaction $tx$ is added to the ledger via the state transition rule UTXOW to the new ledger state $l'$, the balance of the UTxOs in $l$ equals the balance of the UTxOs in $l'$ in the sense that the amount of created value in $l'$ equals the amount of destroyed value in $l$. This means that the total amount of value is left unchanged by a transaction.
 
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \ledgerState: \applyFun{validLedgerstate}{l},
     l=(u,\wcard,\wcard,\wcard), l' = (u',\wcard,\wcard,\wcard)\\
@@ -189,7 +189,7 @@ $$\begin{multline*}
 
 Property \[prop:ledger-properties-2\] states a slightly more detailed relation of the balances change. For ledgers $l, l'$ and a transaction $tx$ as above, the balance of the UTxOs of $l$ restricted to those whose domain is in the set of transaction inputs of $tx$ equals the balance of the transaction outputs of $tx$ minus the transaction fees and the change in the deposit $depositChange$ (cf. Fig. \[fig:rules:utxo-shelley\]).
 
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \ledgerState: \applyFun{validLedgerstate}{l},
     l=(u,\wcard,\wcard,\wcard), l' = (u',\wcard,\wcard,\wcard)\\
@@ -200,7 +200,7 @@ $$\begin{multline*}
 
 Property \[prop:ledger-properties-3\] states that for all ledger states $l, l'$ and transaction $tx$ as above, all output UTxOs of $tx$ are in the UTxO set of $l'$, i.e., they are now available as unspent transaction output.
 
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \ledgerState: \applyFun{validLedgerstate}{l},
     l=(u,\wcard,\wcard,\wcard), l' = (u',\wcard,\wcard,\wcard)\\
@@ -211,7 +211,7 @@ $$\begin{multline*}
 
 Property \[prop:ledger-properties-4\] states that for all ledger states $l, l'$ and transaction $tx$ as above, all transaction inputs $in$ of $tx$ are not in the domain of the UTxO of $l'$, i.e., these are no longer available to spend.
 
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \ledgerState: \applyFun{validLedgerstate}{l},
     l=(u,\wcard,\wcard,\wcard), l' = (u',\wcard,\wcard,\wcard)\\
@@ -223,7 +223,7 @@ $$\begin{multline*}
 
 Property \[prop:ledger-properties-5\] states that for ledger states $l, l'$ and a transaction $tx$ as above, the UTxOs of $l'$ contain all newly created UTxOs and the referred transaction id of each new UTxO is not used in the UTxO set of $l$.
 
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall l_{0},\ldots,l_{n} \in \ledgerState, l_{0} =
     \left(
@@ -276,7 +276,7 @@ $$\begin{align*}
 
 **Definitions and Functions for Stake Delegation in Ledger States**
 
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \ledgerState: \applyFun{validLedgerstate}{l},
     l = (\wcard, ((d, \wcard), \wcard)), l' = (\wcard, ((d',\wcard), \wcard)), dEnv\in\DEnv \\
@@ -289,7 +289,7 @@ $$\begin{multline*}
 
 Property \[prop:ledger-properties-6\] states that for each valid ledger state $l$, if a delegation transaction of type $\DCertRegKey$ is executed, then in the resulting ledger state $l'$, the set of staking credential of $l'$ includes the credential $hk$ associated with the key registration certificate and the associated reward is set to 0 in $l'$.
 
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \ledgerState: \applyFun{validLedgerstate}{l},
     l = (\wcard, (d, \wcard)), l' = (\wcard, (d', \wcard)), dEnv\in\DEnv \\
@@ -304,7 +304,7 @@ $$\begin{multline*}
 
 Property \[prop:ledger-properties-7\] states that for $l, l'$ as above but with a delegation transition of type $\DCertDeRegKey$, the staking credential $hk$ associated with the deregistration certificate is not in the set of staking credentials of $l'$ and is not in the domain of either the rewards or the delegation map of $l'$.
 
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \ledgerState: \applyFun{validLedgerstate}{l},
     l = (\wcard, (d,\wcard)), l' = (\wcard, (d',\wcard)), dEnv\in\DEnv \\
@@ -316,7 +316,7 @@ $$\begin{multline*}
 
 Property \[prop:ledger-properties-8\] states that for $l, l'$ as above but with a delegation transition of type $\DCertDeleg$, the staking credential $hk$ associated with the deregistration certificate is in the set of staking credentials of $l$ and delegates to the staking pool associated with the delegation certificate in $l'$.
 
-::: property
+<!-- property -->
 []{#prop:genkeys-delegated label="prop:genkeys-delegated"} $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \LState: \applyFun{validLedgerstate}{l},\\
     \implies \forall \Gamma \in \seqof{\Tx}, env \in (\Slot \times \PParams), \\
@@ -326,7 +326,7 @@ Property \[prop:ledger-properties-8\] states that for $l, l'$ as above but with
 Property \[prop:genkeys-delegated\] states that all seven of the genesis keys are constantly all delegated after applying a list of transactions to a valid ledger state.
 
 ## Ledger State Properties for Staking Pool Transitions
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \ledgerState: \applyFun{validLedgerstate}{l},
     l = (\wcard, (\wcard, p)), l' = (\wcard, (\wcard, p')), pEnv\in\PEnv \\
@@ -338,7 +338,7 @@ $$\begin{multline*}
 
 Property \[prop:ledger-properties-9\] states that for $l, l'$ as above but with a delegation transition of type $\DCertRegPool$, the key $hk$ is associated with the author of the pool registration certificate in $\var{stpools}$ of $l'$ and that $hk$ is not in the set of retiring stake pools in $l'$.
 
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \ledgerState, \var{cepoch} \in \Epoch:
     \applyFun{validLedgerstate}{l},
@@ -354,7 +354,7 @@ $$\begin{multline*}
 
 Property \[prop:ledger-properties-10\] states that for $l, l'$ as above but with a delegation transition of type $\DCertRetirePool$, the key $hk$ is associated with the author of the pool registration certificate in $\var{stpools}$ of $l'$ and that $hk$ is in the map of retiring staking pools of $l'$ with retirement epoch $e$, as well as that $hk$ is in the map of stake pools in $l$ and $l'$.
 
-::: property
+<!-- property -->
 $$\begin{multline*}
     \forall \var{l}, \var{l'} \in \ledgerState, \var{e} \in \Epoch:
     \applyFun{validLedgerstate}{l},\\
@@ -372,7 +372,7 @@ Property \[prop:ledger-properties-11\] states that for $l, l'$ as above but wit
 ## Properties of Numerical Calculations
 The numerical calculations for refunds and rewards in (see Section \[sec:epoch\]) are also required to have certain properties. In particular we need to make sure that the functions that use non-integral arithmetic have properties which guarantee consistency of the system. Here, we state those properties and formulate them in a way that makes them usable in properties-based testing for validation in the executable spec.
 
-::: property
+<!-- property -->
 []{#prop:minimal-refund label="prop:minimal-refund"}
 
 The function $\fun{refund}$ takes a value, a minimal percentage, a decay parameter and a duration. It must guarantee that the refunded amount is within the minimal refund (off-by-one for rounding / floor) and the original value.
@@ -384,7 +384,7 @@ $$\begin{multline*}
       (1-d_{min})\cdot e^{-\lambda\cdot\delta})} \leq d_{val}
 \end{multline*}$$
 
-::: property
+<!-- property -->
 []{#prop:maximal-pool-reward label="prop:maximal-pool-reward"}
 
 The maximal pool reward is the expected maximal reward paid to a stake pool. The sum of all these rewards cannot exceed the total available reward, let $Pool$ be the set of active stake pools:
@@ -396,7 +396,7 @@ $$\begin{equation*}
       \right)}\leq R
 \end{equation*}$$
 
-::: property
+<!-- property -->
 []{#prop:actual-reward label="prop:actual-reward"}
 
 The actual reward for a stake pool in an epoch is calculated by the function $\fun{poolReward}$. The actual reward per stake pool is non-negative and bounded by the maximal reward for the stake pool, with $\overline{p}$ being the relation $\frac{n}{\max(1, \overline{N})}$ of the number of produced blocks $n$ of one pool to the total number $\overline{N}$ of produced blocks in an epoch and $maxP$ being the maximal reward for the stake pool. This gives us:
@@ -407,7 +407,7 @@ $$\begin{equation*}
 
 The two functions $\fun{r_{operator}}$ and $\fun{r_{member}}$ are closely related as they both split the reward between the pool leader and the members.
 
-::: property
+<!-- property -->
 []{#prop:reward-splitting label="prop:reward-splitting"}
 
 The reward splitting is done via $\fun{r_{operator}}$ and $\fun{r_{member}}$, i.e., a split between the pool leader and the pool members using the pool cost $c$ and the pool margin $m$. Therefore the property relates the total reward $\hat{f}$ to the split rewards in the following way:

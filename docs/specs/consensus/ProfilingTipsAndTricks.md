@@ -36,8 +36,8 @@ running.
 Imagine the following code in Haskell:
 
 ```haskell
-foreign import ccall unsafe "foo" foo :: IO ()
-foreign import ccall safe   "bar" foo :: IO ()
+foreign import ccall unsafe "foo" foo<!-- IO -->
+foreign import ccall safe   "bar" foo<!-- IO -->
 
 baz = do
   foo
@@ -64,9 +64,9 @@ And to C-- (`-ddump-cmm`) as:
 ...
            call "ccall" arg hints:  []  result hints:  [] foo();
 ...
-           (_u3jD::I64) = call "ccall" arg hints:  [PtrHint,]  result hints:  [PtrHint] suspendThread(BaseReg, 0);
+           (_u3jD<!-- I -->
            call "ccall" arg hints:  []  result hints:  [] bar();
-           (_u3jE::I64) = call "ccall" arg hints:  [PtrHint]  result hints:  [PtrHint] resumeThread(_u3jD::I64);
+           (_u3jE<!-- I -->
 ...
 ```
 

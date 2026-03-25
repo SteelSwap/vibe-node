@@ -1000,7 +1000,7 @@ Furthermore, the basis of a pub/sub system is that subscribing to a channel impl
 +--------------------------------------+----------------------------------------------------------+-----------------------------------------------+---------------------------------------------------------------------+
 |                                      | **Dandelion**                                            | **Kademlia**                                  | **PolderCast**                                                      |
 +:=====================================+:=========================================================+:==============================================+:====================================================================+
-| ::: minipage                         | ::: minipage                                             | ::: minipage                                  | ::: minipage                                                        |
+|<!-- minipage -->
 | **Advantages**                       | Reduces the ability to deduce the source of transactions | Resistance to eclipse (irrelevant in Cardano) | Automatic creation of topic rings; supports many different channels |
 | :::                                  | :::                                                      |                                               | :::                                                                 |
 |                                      |                                                          | Peer discovery                                |                                                                     |
@@ -1756,7 +1756,7 @@ Note that the outliers in round trip time are (most likely) relating to those pa
 
 Table \[tab:per-hop-budgets\] below shows how the overall data diffusion time budget translates into a per-hop budget as a function of the depth of the spanning tree.
 
-::: tabular
+<!-- tabular -->
 \@c\|\...@ & & & & & & & & 10.0s & 7.5s & 5.0s & 6.6s & 5.0s & 3.3s & 5.0s & 3.75s & 2.5s & 4.0s & 3.0s & 2.0s
 
 These budgets should be compared with the time-to-complete for delivering a block in [11.2.1](#time-to-transmit-a-block-of-given-size-across-given-latencies){reference-type="ref+label" reference="time-to-transmit-a-block-of-given-size-across-given-latencies"}.

@@ -115,16 +115,59 @@ nav:
       - "Phase 2 — Serialization & Networking": development/devlog/phase2.md
       - "Phase 1 — Research & Analysis": development/devlog/phase1.md
       - "Phase 0 — Development Architecture": development/devlog/phase0.md
-  - Reference:
+  - Tool Reference:
     - Overview: reference/index.md
     - Testing Guide: reference/testing.md
     - CLI Reference: reference/cli-reference.md
+    - Code Style: reference/code-style.md
     - Database Schema: reference/schema.md
     - Development Workflow: reference/workflow.md
     - Pipelines:
       - Spec Ingestion: reference/pipelines/spec-ingestion.md
       - Code Indexing: reference/pipelines/code-indexing.md
       - GitHub Ingestion: reference/pipelines/github-ingestion.md
+  - Node Reference:
+    - Overview: node-reference/index.md
+    - vibe-cardano:
+      - Overview: node-reference/cardano/index.md
+      - Consensus: node-reference/cardano/consensus/index.md
+      - Crypto: node-reference/cardano/crypto/index.md
+      - Forge: node-reference/cardano/forge/index.md
+      - Ledger: node-reference/cardano/ledger/index.md
+      - Mempool: node-reference/cardano/mempool/index.md
+      - Network: node-reference/cardano/network/index.md
+      - Node: node-reference/cardano/node/index.md
+      - Plutus: node-reference/cardano/plutus/index.md
+      - Serialization: node-reference/cardano/serialization/index.md
+      - Storage: node-reference/cardano/storage/index.md
+      - Sync: node-reference/cardano/sync/index.md
+    - vibe-core:
+      - Overview: node-reference/core/index.md
+      - Multiplexer: node-reference/core/multiplexer.md
+      - Protocols: node-reference/core/protocols.md
+      - Storage: node-reference/core/storage.md
+      - STM: node-reference/core/stm.md
+      - RWLock: node-reference/core/rwlock.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      enabled: !ENV [ENABLE_MKDOCSTRINGS, true]
+      default_handler: python
+      handlers:
+        python:
+          paths:
+            - packages/vibe-cardano/src
+            - packages/vibe-core/src
+            - src
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            merge_init_into_class: true
+            show_if_no_docstring: false
 
 markdown_extensions:
   - admonition

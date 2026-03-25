@@ -33,10 +33,10 @@ In addition to iterators, the Chain DB also supports *followers*. Unlike an iter
 The API of a follower is as follows:
 
     data Follower m blk a = Follower {
-          followerInstruction         :: m (Maybe (ChainUpdate blk a))
-        , followerInstructionBlocking :: m (ChainUpdate blk a)
+          followerInstruction<!-- m -->
+        , followerInstructionBlocking<!-- m -->
         , followerForward             :: [Point blk] -> m (Maybe (Point blk))
-        , followerClose               :: m ()
+        , followerClose<!-- m -->
         }
 
 The `a` parameter is the same `a` as the one in `BlockComponent` (see \[immutable:api:block-component\]{reference-type="ref+label" reference="immutable:api:block-component"}), as a follower for any block component `a` can be opened.
@@ -69,7 +69,7 @@ Discuss the problem of the effective queue size (#2721).
 ## Marking invalid blocks
 The chain database keeps a set of hashes of known-to-be-invalid blocks. This information is used by the chain sync client (\[chainsyncclient\]{reference-type="ref+label" reference="chainsyncclient"}) to terminate connections to nodes with a chain that contains an invalid block.
 
-::: lemma
+<!-- lemma -->
 []{#chaindb:dont-mark-invalid-successors label="chaindb:dont-mark-invalid-successors"} When the chain database discovers an invalid block $X$, it is sufficient to mark only $X$; there is no need to additionally mark any successors of $X$.
 
 
@@ -94,7 +94,7 @@ One use case of the current fragment merits a closer examination. When the chain
 ## Garbage collection
 Blocks on chains that are never selected, or indeed blocks whose predecessor we never learn, will eventually be garbage collected when their slot number number is more than $k$ away from the tip of the selected chain.[^2]
 
-::: bug
+<!-- bug -->
 The chain DB (more specifically, the volatile DB) can still grow without bound if we allow upstream nodes to rapidly switch between forks; this should be addressed at the network layer (for instance, by introducing rate limiting for rollback in the chain sync client, \[chainsyncclient\]{reference-type="ref+label" reference="chainsyncclient"}).
 
 Although this is GC of the volatile DB, I feel it belongs here more than in the volatile DB chapter because here we know *when* we could GC. But perhaps it should be split into two: a section on how GC is implemented in the volatile DB chapter, and then a section here how it's used in the chain DB. References from elsewhere in the report to GC should probably refer here, though, not to the vol DB chapter.

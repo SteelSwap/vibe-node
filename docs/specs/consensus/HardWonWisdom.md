@@ -15,7 +15,7 @@ However, most of the the ledger code that interacts with the given `EpochInfo` a
 ```haskell
 data Globals = Globals { epochInfo :: !(EpochInfo (Either Text)), ... }  
 
-epochInfoPure :: Globals -> EpochInfo Identity
+epochInfoPure<!-- Globals -->
 epochInfoPure = hoistEpochInfo (either (throw . EpochErr) pure) . epochInfo
 ```
 
@@ -24,10 +24,10 @@ One example we've been looking at recently is the invocation of the `TICKF` rule
 
 ```haskell
 data Forecast a = Forecast {
-      forecastAt  :: WithOrigin SlotNo
+      forecastAt<!-- WithOrigin -->
 
       -- Precondition: @At s >= forecastAt@
-    , forecastFor :: SlotNo -> Except OutsideForecastRange (Ticked a)
+    , forecastFor<!-- SlotNo -->
     }
 
 class ... => LedgerSupportsProtocol blk where
@@ -56,14 +56,14 @@ instance ... => LedgerSupportsProtocol (ShelleyBlock (TPraos crypto) era) where
       swindow = SL.stabilityWindow globals
       at      = ledgerTipSlot ledgerState
 
-      futureLedgerView :: SlotNo -> Ticked (SL.LedgerView (EraCrypto era))
+      futureLedgerView<!-- SlotNo -->
       futureLedgerView =
         either
           (\e -> error ("futureLedgerView failed: " <> show e))
           TPraos.TickedPraosLedgerView
           . SL.futureLedgerView globals shelleyLedgerState
 
-      maxFor :: SlotNo   -- Exclusive upper bound
+      maxFor<!-- SlotNo -->
       maxFor = addSlots swindow $ succWithOrigin at
 ```
 

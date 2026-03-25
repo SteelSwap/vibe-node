@@ -54,7 +54,7 @@ $$\begin{equation}
 
 We have also defined a function that transforms the Shelley ledger state into the Goguen one, see Figure 3. Note that here we refer to Shelley-era protocol parameter type as $\ShelleyPParams$, and the Goguen type as $\PParams$. We use the notation $\var{chainstate}_{x}$ to represent variable $x$ in the chain state. We do not specify the variables that remain unchanged during the transition.
 
-::: note
+<!-- note -->
 **What creation slots should Shelley era UTxOs have?** It is not yet clear whether we will follow the approach of making the creation slot of every Shelley-era UTxO entry the first slot of Goguen. It is possible to look through all the blocks and add the correct one, but not clear if necessary. The other option is to allow both types out outputs, some without the creation slot.
 
 *Types and Constants* $$\begin{align*}

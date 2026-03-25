@@ -151,7 +151,7 @@ In Figure 3 we give the helper functions needed to retrieve all the data relevan
 
 - $\fun{indexof}$ finds the index of a given certificate, value, input, or withdrawal in the list, finite map, or set of things of the corresponding type. This function assumes there is some ordering on each of these structures. This function is abstract because it assumes there is some ordering rather than giving it explicitly. The specific ordering of a set or a finite map could be implementation-dependent. A list ordering should be unambiguous.
 
-  ::: note
+<!-- note -->
   $\fun{indexof}$ should only be called on arguments of the correct type? or it cannot be applied at all to a predicate of the wrong type, so there is no way the predicate in the subset definition should not be satisfied in case of wrong type. Does this work?
   :::
 

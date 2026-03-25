@@ -9,7 +9,7 @@ Finally, it helps with performance exception detection and mitigation by creatin
 Multiplexing is used to run several mini-protocols in parallel over a bidirectional bearer (for example, a TCP connection). Figure 1.1 illustrates multiplexing of three mini-protocols over a single duplex bearer. The multiplexer guarantees a fixed pairing of mini-protocol instances, each mini-protocol only communicates with its counter part on the remote end.
 
 
-::: center
+<!-- center -->
 
 **Data flow through the multiplexer and demultiplexer**
 
@@ -18,7 +18,7 @@ The multiplexer is agnostic to the bearer it runs over. However, it assumes that
 The multiplexer exposes an interface that hides all the multiplexer details, and a single mini-protocol communication can be written as if it would only communicate with its instance on the remote end. When the multiplexer is instructed to send bytes of some mini-protocol, it splits the data into segments, adds a segment header, encodes it and transmits the segments over to the bearer. When reading data from the network, the segment's headers are used to reassemble mini-protocol byte streams.
 
 ### Wire Format
-:::: center
+<!-- center -->
 
 +----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+----------------------+
 | 0                    | 1                    | 2                    | 3                    | 4                    | 5                    | 6                    | 7                    | 8                    | 9                    | 0                    | 1                    | 2                    | 3                    | 4                    | 5                    | 6                    | 7                    | 8                    | 9                    | 0                    | 1                    | 2                    | 3                    | 4                    | 5                    | 6                    | 7                    | 8                    | 9                    | 0                    | 1                    |

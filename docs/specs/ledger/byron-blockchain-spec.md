@@ -56,7 +56,7 @@ Union override
           & d_0 \mathbin{\underrightarrow\cup}d_1 = d_1 \cup (\mathop{\mathrm{dom}}d_1 \mathbin{\slashed{\lhd}}d_0)
     \end{align*}$$
 
-    ::: caption
+<!-- caption -->
     Definition of the Union Override Operation
     :::
     ::::
@@ -898,7 +898,7 @@ Property 3 expresses the fact the there is a function that allow us to recover 
   \implies
   (\mathsf{f}~(\mathsf{bHead}\ b)~s_2) \xlongrightarrow[\textsc{epoch+bhead+pbft}]{H'_1}\negthickspace^{*} s_h$$*
 
-::: appendices
+<!-- appendices -->
 # Calculating the $t$ parameter
 We originally give the range of $t$ as between $\frac{1}{5}$ and $\frac{1}{4}$. The upper bound here is to reduce the possible number of malicious blocks; if two of the genesis keys are comprimised, the attackers may not be able to produce a longer chain than the honest participants. The lower bound is required to prevent a situation in which a chain produced under the initial Ouroboros setting produces a chain which, according to the new BFT semantics, is invalid.
 
@@ -913,7 +913,7 @@ Appealing to Boole's inequality again, we may multiply this by the number of epo
 Figure 22 gives the bound on the likelihood of threshold violation for $t$ in our plausible range: from this we can see that the likelihood decreases to a negligible level around $0.21$, and so we choose the value of $t=0.22$, giving an upper bound on the likelihood around $6e-10$. Increasing $t$ beyond this point gives no decrease in the likelihood of violation.
 
 
-::: center
+<!-- center -->
 *[Image from original source]*
 
 **Probability of generating an invalid chain for values of $t\in\left[

@@ -1,11 +1,12 @@
 # Code Style Guide
 
-Enforced by **ruff** (lint + isort) and **black** (format). Configuration in `pyproject.toml`.
+Enforced by **ruff** (lint, isort, format, docstrings). Configuration in `pyproject.toml`.
 
 ## Formatting
 
 - **Line length:** 99 characters
-- **Formatter:** black + ruff format
+- **Formatter:** ruff format (black-compatible)
+- **Docstrings:** Google style (enforced by ruff pydocstyle `D` rules)
 - **Pre-commit:** hooks run automatically on `git commit`
 - **CI:** fails on violations
 
@@ -35,6 +36,41 @@ def check_leadership(
 ```
 
 Internal helpers and test functions don't require annotations.
+
+## Docstrings
+
+Follow **Google style** (enforced by ruff `D` rules with `convention = "google"`):
+
+```python
+def evolve_nonce(
+    prev_nonce: EpochNonce,
+    eta_v: bytes,
+    extra_entropy: bytes | None = None,
+) -> EpochNonce:
+    """Evolve the epoch nonce at an epoch boundary.
+
+    At the transition from epoch N to epoch N+1, combines the previous
+    nonce with accumulated VRF outputs.
+
+    Args:
+        prev_nonce: The nonce from the previous epoch.
+        eta_v: The accumulated VRF hash from the stability window.
+        extra_entropy: Optional extra entropy from protocol param updates.
+
+    Returns:
+        The new epoch nonce for the next epoch.
+
+    Raises:
+        ValueError: If nonce bytes are not 32 bytes.
+    """
+```
+
+Key rules:
+- First line is a one-sentence summary ending with a period
+- Blank line between summary and body (if multi-line)
+- Use `Args:`, `Returns:`, `Raises:` sections (Google convention)
+- Section names must end with a colon
+- First word of summary is capitalized
 
 ## Naming
 

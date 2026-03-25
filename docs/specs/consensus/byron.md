@@ -8,7 +8,7 @@ The Byron specification can be found at <https://github.com/input-output-hk/card
 ### Moment of hard fork
 The Byron ledger state provides the current protocol version in
 
-    adoptedProtocolVersion :: ProtocolVersion
+    adoptedProtocolVersion<!-- ProtocolVersion -->
 
 in the `State` type from `Cardano.Chain.Update.Validation.Interface`. This protocol version is a three-tuple *major*, *minor*, *alt*. The Byron specification does not provide any semantic interpretation of these components. By convention (outside of the purview of the Byron specification), the hard fork is initiated the moment that the *major* component of `adoptedProtocolVersion` reaches a predefined, hardcoded, value.
 
@@ -43,7 +43,7 @@ The diagram shown in 1.1{reference-type="ref+label" reference="byron:update-proc
 
 ------------------------------------------------------------------------
 
-::: center
+<!-- center -->
 
 ------------------------------------------------------------------------
 

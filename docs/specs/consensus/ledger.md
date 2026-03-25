@@ -17,22 +17,22 @@ We will start with ledger API that can be defined independent of a choice of blo
 
 Like the other abstractions in the consensus layer, the ledger defines its own type of required static configuration
 
-    type family LedgerCfg l :: Type
+    type family LedgerCfg l<!-- Type -->
 
 #### Tip
 
 We require that any ledger can report its tip as a `Point`. A `Point` is either genesis (no blocks have been applied yet) or a pair of a hash and slot number; it is parametric over $l$ in order to allow different ledgers to use different hash types.
 
     class GetTip l where
-      getTip :: l -> Point l
+      getTip<!-- l -->
 
 #### Ticking
 
 We can now define the `IsLedger` class as
 
     class (GetTip l, GetTip (Ticked l), ..) => IsLedger l where
-      type family LedgerErr l :: Type
-      applyChainTick :: LedgerCfg l -> SlotNo -> l -> Ticked l
+      type family LedgerErr l<!-- Type -->
+      applyChainTick<!-- LedgerCfg -->
 
 The type of `applyChainTick` is similar to the type of `tickChainDepState` we saw in \[consensus:class:state\]{reference-type="ref+label" reference="consensus:class:state"}. Examples of the time-based changes in the ledger state include activating delegation certificates in the Byron ledger, or paying out staking rewards in the Shelley ledger.
 
@@ -64,7 +64,7 @@ The discussion of the difference between, and motivation for, the distinction be
 
 We mentioned at the start of 1.1{reference-type="ref+label" reference="ledger:api"} that a single block can be used with multiple ledgers. Nonetheless, there is one "canonical" ledger for each block; for example, the Shelley block is associated with the Shelley ledger, even if it can also be applied to the extended ledger state or the ledger DB. We express this through a data family linking a block to its "canonical ledger state":
 
-    data family LedgerState blk :: Type
+    data family LedgerState blk<!-- Type -->
 
 and then require that it must be possible to apply a block to its associated ledger state
 
@@ -99,11 +99,11 @@ In \[nonfunctional:network:headerbody\]{reference-type="ref+label" reference="no
 
 Not all is lost, however. The stake distribution used by the Shelley ledger for the sake of the leadership check *is not the *current* stake distribution*, but the stake distribution as it was at a specific point in the past. Moreover, that same stake distribution is then used for all leadership checks in a given period of time.[^3] In the depiction below, the stake distribution as it was at point $b$ is used for the leadership checks near the current tip, the stake distribution at point $a$ was used before that, and so forth:
 
-::: center
+<!-- center -->
 
 This makes it possible to *forecast* what the stake distribution (i.e., the ledger view) will be at various points. For example, if the chain looks like
 
-::: center
+<!-- center -->
 
 then we can "forecast" that the stake distribution at point $c$ will be the one established at point $a$, whereas the stake distribution at point $d$ will be the one established at point $b$. The stake distribution at point $e$ is however not yet known; we say that $e$ is "out of the forecast range".
 
@@ -112,8 +112,8 @@ then we can "forecast" that the stake distribution at point $c$ will be the one 
 Since we're always forecasting what the ledger would look like *if it would be advanced to a particular slot*, the result of forecasting is always something ticked:[^4]
 
     data Forecast a = Forecast {
-          forecastAt  :: WithOrigin SlotNo
-        , forecastFor :: SlotNo -> Except OutsideForecastRange (Ticked a)
+          forecastAt<!-- WithOrigin -->
+        , forecastFor<!-- SlotNo -->
         }
 
 Here `forecastAt` is the tip of the ledger in which the forecast was constructed and `forecastFor` is constructing the forecast for a particular slot, possibly returning an error message of that slot is out of range. This terminology---a forecast constructed *at* a slot and computed *for* a slot---is used throughout both this technical report as well as the consensus layer code base.

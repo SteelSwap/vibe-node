@@ -14,7 +14,7 @@ Notice that $\var{deposits}$, $\var{fees}$, $\var{treasury}$, and $\var{reserves
 
 We define the *Lovelace Value* of a given chain state as:
 
-::: definition
+<!-- definition -->
 []{#def:val label="def:val"} $$\begin{equation*}
     \Val(s~\in~\var{State}) =
         \Val(\var{utxo}) +
@@ -36,7 +36,7 @@ For any state that is used in a given subtransition of $\mathsf{CHAIN}$, we defi
 
 The key property that we want to prove is that no semantic transition changes the value that is captured in the state ($\Val{s}$). This property is easy to state: intuitively, the *Lovelace Value*before the transition is the same as the *Lovelace Value* after that transition.
 
-::: theorem
+<!-- theorem -->
 []{#thm:chain-pres-of-value label="thm:chain-pres-of-value"} For all environments $e$, blocks $b$, and states $s$, $s'$, if $$\begin{equation*}
     e\vdash s\trans{\hyperref[fig:rules:chain]{chain}}{b}s'
 \end{equation*}$$ then $$\begin{equation*}
@@ -45,7 +45,7 @@ The key property that we want to prove is that no semantic transition changes th
 
 We will prove the soundness of Theorem \[thm:chain-pres-of-value\] via a few lemmas.
 
-::: lemma
+<!-- lemma -->
 []{#lemma:value-sum-pres-1 label="lemma:value-sum-pres-1"} For any mapping $m:A\mapsto\Coin$ and set $s\in\powerset{A}$, $$\begin{equation*}
     \Val(\var{m}) = \Val(s\subtractdom m) + \Val(s\restrictdom m)
 \end{equation*}$$
@@ -53,7 +53,7 @@ We will prove the soundness of Theorem \[thm:chain-pres-of-value\] via a few le
 
 *Proof.* easy ◻
 
-::: lemma
+<!-- lemma -->
 []{#lemma:value-sum-pres-2 label="lemma:value-sum-pres-2"} For any mappings $m_1, m_2:A\mapsto\Coin$, if $\dom{m_1}\cap\dom{m_2}=\emptyset$, then $$\begin{equation*}
     \Val(m_1\cup m_2) = \Val(m_1) + \Val(m_2)
 \end{equation*}$$
@@ -61,7 +61,7 @@ We will prove the soundness of Theorem \[thm:chain-pres-of-value\] via a few le
 
 *Proof.* easy ◻
 
-::: lemma
+<!-- lemma -->
 []{#lemma:utxo-pres-of-value label="lemma:utxo-pres-of-value"} For all environments $e$, transactions $t$, and states $s$, $s'$, if $$\begin{equation*}
     e\vdash s\trans{\hyperref[fig:rules:utxo-shelley]{utxo}}{t}s'
 \end{equation*}$$ then $$\begin{equation*}
@@ -96,7 +96,7 @@ We will prove the soundness of Theorem \[thm:chain-pres-of-value\] via a few le
 
 Therefore, by adding the deposits and fees from $s$ to the equality above, it follows that $\Val(s) + w = \Val(s')$. ◻
 
-::: lemma
+<!-- lemma -->
 []{#lemma:deleg-pres-of-value label="lemma:deleg-pres-of-value"} For all environments $e$, transactions $c$, and states $s$, $s'$, if $$\begin{equation*}
     e\vdash s\trans{\hyperref[fig:delegation-rules]{deleg}}{c}s'
 \end{equation*}$$ then $$\begin{equation*}
@@ -106,7 +106,7 @@ Therefore, by adding the deposits and fees from $s$ to the equality above, it fo
 
 *Proof.* The only variable with value in this transition is . Only two of the rules in $\mathsf{DELEG}$ can change , namely $\mathsf{Deleg{-}Reg}$ and $\mathsf{Deleg{-}Dereg}$. However, $\mathsf{Deleg{-}Reg}$ only adds a zero value, and $\mathsf{Deleg{-}Dereg}$ only removes a zero value. ◻
 
-::: lemma
+<!-- lemma -->
 []{#lemma:delegs-pres-of-value label="lemma:delegs-pres-of-value"} For all environments $e$, certificates $\Gamma$, and states $s$, $s'$, if $$\begin{equation*}
     e\vdash s\trans{\hyperref[fig:rules:delegation-sequence]{delegs}}{\Gamma}s'
 \end{equation*}$$ then $$\begin{equation*}
@@ -131,7 +131,7 @@ Therefore, by adding the deposits and fees from $s$ to the equality above, it fo
 
 *In the inductive case*, we look at the rule $\mathsf{Seq{-}delg{-}ind}$. In this case, the lemma then follows directly from Lemma \[lemma:deleg-pres-of-value\]. ◻
 
-::: lemma
+<!-- lemma -->
 []{#lemma:poolreap-pres-of-value label="lemma:poolreap-pres-of-value"} For all environments $e$, epoch $\epsilon$, and states $s$, $s'$, if $$\begin{equation*}
     e\vdash s\trans{\hyperref[fig:rules:pool-reap]{poolreap}}{\epsilon}s'
 \end{equation*}$$ then $$\begin{equation*}
@@ -148,7 +148,7 @@ Therefore, by adding the deposits and fees from $s$ to the equality above, it fo
     \end{array}
 \end{equation*}$$ But this is clear from the definition of $\unionoverridePlus$. ◻
 
-::: lemma
+<!-- lemma -->
 []{#lemma:ru-pres-of-value label="lemma:ru-pres-of-value"} For every $(\Delta t,~\Delta r,~\var{rs},~\Delta f)$ in the range of $\fun{createRUpd}$, $$\begin{equation*}
     \Delta t + \Delta r + \Val(rs) + \Delta f = 0
 \end{equation*}$$
@@ -190,7 +190,7 @@ The *deposit pot* (the variable $\var{deposits}$ in the UTxO State) represents t
 
 **Initial Chain State**
 
-::: theorem
+<!-- theorem -->
 []{#thm:non-neg-deposits label="thm:non-neg-deposits"} Let $n\in\N$ and $c_0\in\ChainState$ be a chain state in which $\var{deposits} ~=~0$, $\var{stkCreds}~=~\emptyset$ and $\var{stPools}~=~\emptyset$, as shown above: If $$\begin{equation*}
     s_0\vdash c_0\trans{\hyperref[fig:rules:chain]{chain}}{b_0}c_1,~~
     s_1\vdash c_1\trans{\hyperref[fig:rules:chain]{chain}}{b_1}c_2,~~
