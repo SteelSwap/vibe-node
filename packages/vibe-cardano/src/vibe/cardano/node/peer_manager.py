@@ -500,7 +500,7 @@ class PeerManager:
                         point = await asyncio.wait_for(fetch_queue.get(), timeout=0.1)
                         batch.append(point)
                         # Drain whatever is immediately available
-                        while len(batch) < 100:
+                        while len(batch) < 500:
                             try:
                                 batch.append(fetch_queue.get_nowait())
                             except asyncio.QueueEmpty:
@@ -791,7 +791,7 @@ class PeerManager:
                     range_queue=range_queue,
                     on_block_received=_on_block,
                     stop_event=stop_event,
-                    max_in_flight=3,
+                    max_in_flight=10,
                     block_queue_size=200,
                 )
             except Exception as exc:
