@@ -70,6 +70,7 @@ __all__ = [
     "BlockFetchClient",
     "run_block_fetch",
     "run_block_fetch_continuous",
+    "run_block_fetch_pipelined",
     "run_block_fetch_server",
     "BlockProvider",
     # Re-export message wrappers for convenience
@@ -624,6 +625,238 @@ async def run_block_fetch_continuous(
             await client.done()
         except (ProtocolError, Exception):
             pass  # Channel may already be closed on shutdown
+
+
+async def run_block_fetch_pipelined(
+    channel: object,
+    range_queue: asyncio.Queue,
+    on_block_received: OnBlockReceived,
+    on_no_blocks: OnNoBlocks | None = None,
+    *,
+    stop_event: asyncio.Event | None = None,
+    max_in_flight: int = 3,
+    block_queue_size: int = 200,
+) -> None:
+    """Run block-fetch with pipelined range requests and decoupled processing.
+
+    Three concurrent tasks:
+    - Sender: pulls ranges from range_queue, sends MsgRequestRange on the
+      raw channel, tracks in-flight batches (capped at max_in_flight).
+    - Receiver: reads raw bytes from channel, decodes CBOR responses,
+      puts block bytes onto block_queue.
+    - Processor: pulls from block_queue, calls on_block_received.
+
+    Bypasses ProtocolRunner for raw channel access (same pattern as
+    pipelined chain-sync). The sender pipelines multiple range requests
+    so the next batch's RTT overlaps with the current batch's streaming.
+
+    Haskell ref: blockFetchClient uses YieldPipelined / Collect to overlap
+    range requests. addBlockRunner processes blocks on a background thread.
+
+    Parameters
+    ----------
+    channel : MiniProtocolChannel
+        The mux channel for block-fetch.
+    range_queue : asyncio.Queue
+        Queue of (point_from, point_to) tuples to fetch.
+    on_block_received : OnBlockReceived
+        Async callback invoked for each block received.
+    on_no_blocks : OnNoBlocks | None
+        Async callback when server has no blocks for a range.
+    stop_event : asyncio.Event | None
+        If provided, all tasks exit when this event is set.
+    max_in_flight : int
+        Maximum concurrent range requests on the wire.
+    block_queue_size : int
+        Bounded size of the block processing queue.
+    """
+    import io as _io
+
+    import cbor2pure as _cbor2
+
+    from vibe.cardano.network.blockfetch import (
+        MSG_BATCH_DONE,
+        MSG_BLOCK,
+        MSG_NO_BLOCKS,
+        MSG_START_BATCH,
+        encode_client_done,
+        encode_request_range,
+    )
+
+    block_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=block_queue_size)
+    in_flight = 0
+    can_send = asyncio.Event()
+    can_send.set()  # Start open — sender can send immediately
+    _recv_buf = b""
+
+    async def _sender() -> None:
+        """Pull ranges from range_queue and send MsgRequestRange."""
+        nonlocal in_flight
+        try:
+            while True:
+                if stop_event is not None and stop_event.is_set():
+                    return
+
+                # Wait until we have capacity
+                if in_flight >= max_in_flight:
+                    can_send.clear()
+                    await can_send.wait()
+                    continue
+
+                try:
+                    point_from, point_to = await asyncio.wait_for(
+                        range_queue.get(), timeout=0.1
+                    )
+                except TimeoutError:
+                    continue
+
+                data = encode_request_range(point_from, point_to)
+                await channel.send(data)
+                in_flight += 1
+        except asyncio.CancelledError:
+            return
+
+    async def _receiver() -> None:
+        """Read responses from channel and dispatch to block_queue."""
+        nonlocal in_flight, _recv_buf
+
+        while True:
+            if stop_event is not None and stop_event.is_set():
+                return
+
+            # Read from channel with timeout so we can check stop_event
+            if _recv_buf:
+                raw = _recv_buf
+                _recv_buf = b""
+            else:
+                try:
+                    raw = await asyncio.wait_for(channel.recv(), timeout=0.5)
+                except TimeoutError:
+                    continue
+                except Exception:
+                    return
+
+            # Accumulate into a bytearray for multi-segment reassembly
+            buf = bytearray(raw)
+
+            # Decode all complete CBOR messages in this buffer
+            while len(buf) > 0:
+                try:
+                    stream = _io.BytesIO(bytes(buf))
+                    dec = _cbor2.CBORDecoder(stream)
+                    msg = dec.decode()
+                    consumed = stream.tell()
+                except Exception:
+                    # Incomplete CBOR — need more data
+                    try:
+                        more = await channel.recv()
+                        buf.extend(more)
+                    except Exception:
+                        return
+                    continue
+
+                # Successfully decoded one message
+                remainder = bytes(buf[consumed:])
+                buf = bytearray()  # Clear — we'll process remainder below
+
+                if not isinstance(msg, list) or len(msg) < 1:
+                    logger.warning("block-fetch pipelined: unexpected CBOR: %s", type(msg))
+                    if remainder:
+                        buf = bytearray(remainder)
+                    continue
+
+                msg_id = msg[0]
+
+                if msg_id == MSG_BLOCK:
+                    # Extract block_cbor from element [1]
+                    block_data = msg[1] if len(msg) > 1 else b""
+                    if isinstance(block_data, bytes):
+                        block_cbor = block_data
+                    elif isinstance(block_data, memoryview):
+                        block_cbor = bytes(block_data)
+                    else:
+                        block_cbor = _cbor2.dumps(block_data)
+                    await block_queue.put(block_cbor)
+                elif msg_id == MSG_START_BATCH:
+                    pass  # Expected — batch is starting
+                elif msg_id == MSG_BATCH_DONE:
+                    in_flight -= 1
+                    can_send.set()
+                elif msg_id == MSG_NO_BLOCKS:
+                    in_flight -= 1
+                    can_send.set()
+
+                # Process any remainder
+                if remainder:
+                    buf = bytearray(remainder)
+
+    async def _processor() -> None:
+        """Pull blocks from block_queue and run on_block_received."""
+        try:
+            while True:
+                if stop_event is not None and stop_event.is_set():
+                    # Drain remaining blocks before exiting
+                    while not block_queue.empty():
+                        try:
+                            block_cbor = block_queue.get_nowait()
+                            await on_block_received(block_cbor)
+                        except asyncio.QueueEmpty:
+                            break
+                    return
+
+                try:
+                    block_cbor = await asyncio.wait_for(
+                        block_queue.get(), timeout=0.1
+                    )
+                except TimeoutError:
+                    continue
+
+                await on_block_received(block_cbor)
+        except asyncio.CancelledError:
+            # Drain remaining
+            while not block_queue.empty():
+                try:
+                    block_cbor = block_queue.get_nowait()
+                    await on_block_received(block_cbor)
+                except asyncio.QueueEmpty:
+                    break
+
+    # Launch sender and processor as tasks; receiver runs in main coroutine
+    sender_task = asyncio.create_task(_sender())
+    processor_task = asyncio.create_task(_processor())
+
+    try:
+        await _receiver()
+    except Exception as exc:
+        logger.warning("block-fetch pipelined receiver error: %s", exc)
+        if stop_event is not None:
+            stop_event.set()
+    finally:
+        # Shutdown: cancel sender, let processor drain, then cancel
+        sender_task.cancel()
+        try:
+            await sender_task
+        except asyncio.CancelledError:
+            pass
+
+        # Send ClientDone if channel is still open
+        try:
+            await channel.send(encode_client_done())
+        except Exception:
+            pass
+
+        # Signal processor to drain and exit
+        if stop_event is not None:
+            stop_event.set()
+        # Give processor time to drain block_queue
+        try:
+            await asyncio.wait_for(processor_task, timeout=5.0)
+        except (TimeoutError, asyncio.CancelledError):
+            processor_task.cancel()
+            try:
+                await processor_task
+            except asyncio.CancelledError:
+                pass
 
 
 # ---------------------------------------------------------------------------
