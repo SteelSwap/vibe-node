@@ -431,7 +431,9 @@ async def _async_init(config: NodeConfig) -> dict:
         active_slot_coeff=config.active_slot_coeff,
     )
     if config.initial_pool_stakes:
-        node_kernel.update_stake_distribution(config.initial_pool_stakes)
+        node_kernel.update_stake_distribution(
+            {}, pool_stakes_direct=config.initial_pool_stakes,
+        )
     if config.protocol_params:
         node_kernel.init_protocol_params(config.protocol_params)
 

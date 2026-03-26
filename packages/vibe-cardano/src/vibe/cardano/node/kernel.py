@@ -141,12 +141,26 @@ class NodeKernel:
             current_epoch,
         )
 
-    def update_stake_distribution(self, utxo_stakes: dict[bytes, int]) -> dict[bytes, int]:
-        """Recompute the per-pool stake distribution."""
-        self._stake_distribution = compute_pool_stake_distribution(
-            self._delegation_state,
-            utxo_stakes,
-        )
+    def update_stake_distribution(
+        self,
+        utxo_stakes: dict[bytes, int],
+        *,
+        pool_stakes_direct: dict[bytes, int] | None = None,
+    ) -> dict[bytes, int]:
+        """Recompute the per-pool stake distribution.
+
+        If pool_stakes_direct is provided (keyed by pool_id -> lovelace),
+        use it directly instead of computing from delegation state + UTxO.
+        This is used for genesis initialization where the delegation state
+        is not yet populated but initial pool stakes are known.
+        """
+        if pool_stakes_direct is not None:
+            self._stake_distribution = dict(pool_stakes_direct)
+        else:
+            self._stake_distribution = compute_pool_stake_distribution(
+                self._delegation_state,
+                utxo_stakes,
+            )
         self.stake_tvar._write(dict(self._stake_distribution))
         total = sum(self._stake_distribution.values())
         logger.info(
