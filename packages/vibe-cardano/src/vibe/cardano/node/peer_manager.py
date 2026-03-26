@@ -451,8 +451,11 @@ class PeerManager:
                         except (NotImplementedError, ValueError):
                             inner = cbor2.loads(header_bytes)
                             hdr_body = inner[0]
-                            slot = hdr_body[1]
+                            slot = hdr_body[1] if isinstance(hdr_body, list) else 0
                             blk_hash = compute_block_hash(header_bytes)
+                            # Extract block_number from header_body[0]
+                            if isinstance(hdr_body, list) and len(hdr_body) > 0:
+                                hdr_block_number = hdr_body[0] if isinstance(hdr_body[0], int) else 0
 
                         point = Point(slot=slot, hash=blk_hash)
                         await fetch_queue.put(point)
