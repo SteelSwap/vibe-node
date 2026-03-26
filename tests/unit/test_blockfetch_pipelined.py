@@ -294,6 +294,84 @@ class TestNoBlocks:
         assert len(blocks) == 2
 
 
+class TestExternalBlockQueue:
+    """Verify run_block_fetch_pipelined works with an externally provided block_queue."""
+
+    @pytest.mark.asyncio
+    async def test_external_block_queue_receives_blocks(self):
+        """When block_queue is provided, blocks go there and no internal processor runs."""
+        channel = FakeChannel()
+        range_queue: asyncio.Queue = asyncio.Queue()
+        block_queue: asyncio.Queue = asyncio.Queue()
+        range_queue.put_nowait((POINT_A, POINT_B))
+
+        stop = asyncio.Event()
+
+        channel.inject(encode_start_batch())
+        channel.inject(encode_block(SAMPLE_BLOCK))
+        channel.inject(encode_batch_done())
+
+        async def stop_after():
+            await asyncio.sleep(0.2)
+            stop.set()
+
+        from vibe.cardano.network.blockfetch_protocol import run_block_fetch_pipelined
+
+        stopper = asyncio.create_task(stop_after())
+        await run_block_fetch_pipelined(
+            channel,
+            range_queue=range_queue,
+            on_block_received=None,
+            stop_event=stop,
+            block_queue=block_queue,
+        )
+        await stopper
+
+        assert not block_queue.empty()
+        block = block_queue.get_nowait()
+        assert block == SAMPLE_BLOCK
+
+    @pytest.mark.asyncio
+    async def test_range_lifecycle_callbacks(self):
+        """on_range_sent and on_range_complete are called for each range."""
+        channel = FakeChannel()
+        range_queue: asyncio.Queue = asyncio.Queue()
+        block_queue: asyncio.Queue = asyncio.Queue()
+        range_queue.put_nowait((POINT_A, POINT_B))
+
+        stop = asyncio.Event()
+        sent_ranges: list[tuple] = []
+        completed_ranges: list[tuple] = []
+
+        # Inject responses after a brief delay so sender populates _range_fifo first
+        async def delayed_responses():
+            await asyncio.sleep(0.05)
+            channel.inject(encode_start_batch())
+            channel.inject(encode_block(SAMPLE_BLOCK))
+            channel.inject(encode_batch_done())
+            await asyncio.sleep(0.3)
+            stop.set()
+
+        from vibe.cardano.network.blockfetch_protocol import run_block_fetch_pipelined
+
+        resp_task = asyncio.create_task(delayed_responses())
+        await run_block_fetch_pipelined(
+            channel,
+            range_queue=range_queue,
+            on_block_received=None,
+            stop_event=stop,
+            block_queue=block_queue,
+            on_range_sent=lambda r: sent_ranges.append(r),
+            on_range_complete=lambda r: completed_ranges.append(r),
+        )
+        await resp_task
+
+        assert len(sent_ranges) == 1
+        assert sent_ranges[0] == (POINT_A, POINT_B)
+        assert len(completed_ranges) == 1
+        assert completed_ranges[0] == (POINT_A, POINT_B)
+
+
 class TestReassembly:
     """Verify receiver handles CBOR messages split across multiple recv() calls."""
 

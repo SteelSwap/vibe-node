@@ -630,12 +630,15 @@ async def run_block_fetch_continuous(
 async def run_block_fetch_pipelined(
     channel: object,
     range_queue: asyncio.Queue,
-    on_block_received: OnBlockReceived,
+    on_block_received: OnBlockReceived | None = None,
     on_no_blocks: OnNoBlocks | None = None,
     *,
     stop_event: asyncio.Event | None = None,
     max_in_flight: int = 3,
     block_queue_size: int = 200,
+    block_queue: asyncio.Queue | None = None,
+    on_range_sent: Callable[[tuple], None] | None = None,
+    on_range_complete: Callable[[tuple], None] | None = None,
 ) -> None:
     """Run block-fetch with pipelined range requests and decoupled processing.
 
@@ -645,6 +648,7 @@ async def run_block_fetch_pipelined(
     - Receiver: reads raw bytes from channel, decodes CBOR responses,
       puts block bytes onto block_queue.
     - Processor: pulls from block_queue, calls on_block_received.
+      Skipped when an external block_queue is provided.
 
     Bypasses ProtocolRunner for raw channel access (same pattern as
     pipelined chain-sync). The sender pipelines multiple range requests
@@ -659,8 +663,9 @@ async def run_block_fetch_pipelined(
         The mux channel for block-fetch.
     range_queue : asyncio.Queue
         Queue of (point_from, point_to) tuples to fetch.
-    on_block_received : OnBlockReceived
-        Async callback invoked for each block received.
+    on_block_received : OnBlockReceived | None
+        Async callback invoked for each block received. Not needed when
+        block_queue is provided externally.
     on_no_blocks : OnNoBlocks | None
         Async callback when server has no blocks for a range.
     stop_event : asyncio.Event | None
@@ -668,7 +673,14 @@ async def run_block_fetch_pipelined(
     max_in_flight : int
         Maximum concurrent range requests on the wire.
     block_queue_size : int
-        Bounded size of the block processing queue.
+        Bounded size of the block processing queue (ignored if block_queue provided).
+    block_queue : asyncio.Queue | None
+        External block queue. When provided, blocks go here and no
+        internal processor task runs.
+    on_range_sent : Callable | None
+        Called with (point_from, point_to) after a range request is sent.
+    on_range_complete : Callable | None
+        Called with (point_from, point_to) when a BatchDone is received.
     """
     import io as _io
 
@@ -683,11 +695,14 @@ async def run_block_fetch_pipelined(
         encode_request_range,
     )
 
-    block_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=block_queue_size)
+    _external_queue = block_queue is not None
+    if block_queue is None:
+        block_queue = asyncio.Queue(maxsize=block_queue_size)
     in_flight = 0
     can_send = asyncio.Event()
     can_send.set()  # Start open — sender can send immediately
     _recv_buf = b""
+    _range_fifo: list[tuple] = []  # FIFO of sent ranges for matching BatchDone/NoBlocks
 
     async def _sender() -> None:
         """Pull ranges from range_queue and send MsgRequestRange."""
@@ -710,9 +725,13 @@ async def run_block_fetch_pipelined(
                 except TimeoutError:
                     continue
 
+                current_range = (point_from, point_to)
                 data = encode_request_range(point_from, point_to)
                 await channel.send(data)
                 in_flight += 1
+                _range_fifo.append(current_range)
+                if on_range_sent is not None:
+                    on_range_sent(current_range)
         except asyncio.CancelledError:
             return
 
@@ -780,11 +799,20 @@ async def run_block_fetch_pipelined(
                 elif msg_id == MSG_START_BATCH:
                     pass  # Expected — batch is starting
                 elif msg_id == MSG_BATCH_DONE:
+                    completed_range = _range_fifo.pop(0) if _range_fifo else None
                     in_flight -= 1
                     can_send.set()
+                    if on_range_complete is not None and completed_range is not None:
+                        on_range_complete(completed_range)
                 elif msg_id == MSG_NO_BLOCKS:
+                    failed_range = _range_fifo.pop(0) if _range_fifo else None
                     in_flight -= 1
                     can_send.set()
+                    if on_no_blocks is not None and failed_range is not None:
+                        try:
+                            await on_no_blocks(failed_range[0], failed_range[1])
+                        except Exception:
+                            pass
 
                 # Process any remainder
                 if remainder:
@@ -821,9 +849,11 @@ async def run_block_fetch_pipelined(
                 except asyncio.QueueEmpty:
                     break
 
-    # Launch sender and processor as tasks; receiver runs in main coroutine
+    # Launch sender and (optionally) processor as tasks; receiver runs in main coroutine
     sender_task = asyncio.create_task(_sender())
-    processor_task = asyncio.create_task(_processor())
+    processor_task = None
+    if not _external_queue:
+        processor_task = asyncio.create_task(_processor())
 
     try:
         await _receiver()
@@ -845,18 +875,18 @@ async def run_block_fetch_pipelined(
         except Exception:
             pass
 
-        # Signal processor to drain and exit
-        if stop_event is not None:
-            stop_event.set()
-        # Give processor time to drain block_queue
-        try:
-            await asyncio.wait_for(processor_task, timeout=5.0)
-        except (TimeoutError, asyncio.CancelledError):
-            processor_task.cancel()
+        # Signal processor to drain and exit (only if we created one)
+        if processor_task is not None:
+            if stop_event is not None:
+                stop_event.set()
             try:
-                await processor_task
-            except asyncio.CancelledError:
-                pass
+                await asyncio.wait_for(processor_task, timeout=5.0)
+            except (TimeoutError, asyncio.CancelledError):
+                processor_task.cancel()
+                try:
+                    await processor_task
+                except asyncio.CancelledError:
+                    pass
 
 
 # ---------------------------------------------------------------------------
