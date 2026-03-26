@@ -560,8 +560,10 @@ class PeerManager:
                 name=f"range-builder-{peer.address}",
             ))
 
-            # Start shared processor task (once, on chain-sync peer)
-            if self._processor_task is None:
+            # Start shared processor task (non-producer only).
+            # Producers use inline _on_block for synchronous nonce updates.
+            is_producer = self._config.pool_keys is not None
+            if self._processor_task is None and not is_producer:
                 self._processor_task = asyncio.create_task(
                     _safe_run(
                         self._shared_block_processor(stop_event),
@@ -576,14 +578,16 @@ class PeerManager:
             # out-of-order from multiple peers and need sequential reordering.
 
         # --- Block-fetch ---
-        # When producing blocks, restrict to chain-sync peer only to keep
-        # blocks in-order for sequential nonce updates. For non-producing
-        # nodes (bulk sync), all peers fetch in parallel.
+        # When producing blocks, use inline _on_block callback (old pattern)
+        # so nonce updates happen synchronously in the block-fetch task.
+        # This matches the 79fb652 architecture that achieved 35% forge rate.
+        # Non-producing nodes use the shared queue for parallel multi-peer.
         is_producer = self._config.pool_keys is not None
         if is_producer and peer_addr != self._chain_sync_peer:
             # Non-chain-sync peers on a producer skip block-fetch
             peer.mux_task = mux_task
             return
+
         async def _peer_block_fetch() -> None:
             from vibe.cardano.network.blockfetch_protocol import run_block_fetch_pipelined
 
@@ -598,24 +602,49 @@ class PeerManager:
                 if tracker is not None:
                     tracker.on_range_complete(peer_addr, r)
 
-            try:
-                await run_block_fetch_pipelined(
-                    bf_channel,
-                    range_queue=shared_range_queue,
-                    on_block_received=None,
-                    stop_event=stop_event,
-                    max_in_flight=20,
-                    block_queue_size=500,
-                    block_queue=shared_block_queue,
-                    on_range_sent=_on_range_sent,
-                    on_range_complete=_on_range_complete,
-                )
-            except Exception as exc:
-                logger.warning("Peer %s: block-fetch error: %s", peer.address, exc)
-            finally:
-                # Re-enqueue in-flight ranges on disconnect
-                if tracker is not None:
-                    tracker.on_peer_disconnect(peer_addr)
+            if is_producer:
+                # Producer mode: inline _on_block callback for synchronous
+                # nonce updates (matching commit 79fb652 architecture).
+                _blocks_stored = [0]
+
+                async def _on_block(block_cbor: bytes) -> None:
+                    await self._process_block_inline(
+                        block_cbor, chain_db, _blocks_stored,
+                    )
+
+                try:
+                    await run_block_fetch_pipelined(
+                        bf_channel,
+                        range_queue=shared_range_queue,
+                        on_block_received=_on_block,
+                        stop_event=stop_event,
+                        max_in_flight=20,
+                        block_queue_size=500,
+                    )
+                except Exception as exc:
+                    logger.warning("Peer %s: block-fetch error: %s", peer.address, exc)
+                finally:
+                    if tracker is not None:
+                        tracker.on_peer_disconnect(peer_addr)
+            else:
+                # Non-producer: use shared queue for parallel multi-peer
+                try:
+                    await run_block_fetch_pipelined(
+                        bf_channel,
+                        range_queue=shared_range_queue,
+                        on_block_received=None,
+                        stop_event=stop_event,
+                        max_in_flight=20,
+                        block_queue_size=500,
+                        block_queue=shared_block_queue,
+                        on_range_sent=_on_range_sent,
+                        on_range_complete=_on_range_complete,
+                    )
+                except Exception as exc:
+                    logger.warning("Peer %s: block-fetch error: %s", peer.address, exc)
+                finally:
+                    if tracker is not None:
+                        tracker.on_peer_disconnect(peer_addr)
 
         peer.protocol_tasks.append(asyncio.create_task(
             _safe_run(_peer_block_fetch(), "block-fetch"),
@@ -671,6 +700,113 @@ class PeerManager:
 
         # Store the mux task -- peer_loop will await it instead of mux.run().
         peer.mux_task = mux_task
+
+    async def _process_block_inline(
+        self, block_cbor: bytes, chain_db: Any, blocks_stored: list[int],
+    ) -> None:
+        """Process a single block inline (producer mode).
+
+        Same logic as _shared_block_processor but called synchronously
+        from the block-fetch callback. This ensures nonce updates happen
+        in the same task as block processing, matching the architecture
+        at commit 79fb652 that achieved 35% forge rate.
+        """
+        import hashlib
+
+        import cbor2pure as cbor2
+
+        try:
+            from vibe.cardano.serialization.block import (
+                Era,
+                decode_block_header_from_array,
+            )
+
+            raw_wire = block_cbor
+            decoded = cbor2.loads(block_cbor)
+
+            if hasattr(decoded, "tag") and decoded.tag == 24:
+                inner = decoded.value
+                if isinstance(inner, bytes):
+                    raw_wire = inner
+                    decoded = cbor2.loads(inner)
+                else:
+                    decoded = inner
+
+            if isinstance(decoded, list) and len(decoded) >= 2 and isinstance(decoded[0], int):
+                era_tag = decoded[0]
+                block_body = decoded[1]
+            elif hasattr(decoded, "tag"):
+                era_tag = decoded.tag
+                block_body = decoded.value
+            else:
+                raise ValueError(f"Unexpected block format: {type(decoded)}")
+
+            raw_block = raw_wire
+            era = Era(era_tag)
+            try:
+                hdr = decode_block_header_from_array(block_body, era)
+                slot = hdr.slot
+                block_number = hdr.block_number
+                prev_hash = hdr.prev_hash or b"\x00" * 32
+                block_hash = hdr.hash
+                hdr_cbor = hdr.header_cbor
+            except NotImplementedError:
+                hdr_arr = block_body[0]
+                hdr_body_arr = hdr_arr[0]
+                block_number = hdr_body_arr[0]
+                slot = hdr_body_arr[1]
+                prev_hash = hdr_body_arr[2] or b"\x00" * 32
+                from vibe.cardano.serialization.transaction import _normalize_cbor_types
+                hdr_cbor = cbor2.dumps(_normalize_cbor_types(hdr_arr))
+                block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
+
+            if chain_db is not None:
+                header_cbor_wrapped = [
+                    max(0, era_tag - 1) if era_tag >= 2 else 0,
+                    cbor2.CBORTag(24, hdr_cbor),
+                ]
+                hdr_vrf_out = getattr(hdr, "vrf_output", None)
+                result = await chain_db.add_block(
+                    slot=slot,
+                    block_hash=block_hash,
+                    predecessor_hash=prev_hash,
+                    block_number=block_number,
+                    cbor_bytes=raw_block,
+                    header_cbor=header_cbor_wrapped,
+                    vrf_output=hdr_vrf_out,
+                )
+
+                if result.adopted and self._block_received_event is not None:
+                    self._block_received_event.set()
+
+                # Nonce update inline -- synchronous with block processing
+                if result.adopted and self._node_kernel is not None:
+                    if result.rollback_depth > 0 and result.intersection_hash is not None:
+                        new_blocks = _get_new_chain_blocks(
+                            chain_db, result.intersection_hash, block_hash,
+                        )
+                        self._node_kernel.on_fork_switch(
+                            result.intersection_hash, new_blocks,
+                        )
+                    else:
+                        self._node_kernel.on_block_adopted(
+                            slot, block_hash, prev_hash, hdr_vrf_out,
+                        )
+
+            blocks_stored[0] += 1
+            tx_count = (
+                len(block_body[1])
+                if len(block_body) > 1 and isinstance(block_body[1], list)
+                else 0
+            )
+            if blocks_stored[0] % 100 == 1 or blocks_stored[0] <= 5:
+                logger.info(
+                    "Block #%d stored at slot %d (%s, %d txs, %d bytes) [%d total]",
+                    block_number, slot, era.name, tx_count,
+                    len(raw_block), blocks_stored[0],
+                )
+        except Exception as exc:
+            logger.error("Block process error: %s", exc, exc_info=True)
 
     async def _shared_block_processor(self, stop_event: asyncio.Event) -> None:
         """Pull blocks from shared_block_queue, decode, validate, and store.
