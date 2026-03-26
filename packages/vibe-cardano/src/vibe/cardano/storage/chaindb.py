@@ -544,138 +544,111 @@ class ChainDB:
             cbor_bytes=cbor_bytes,
         )
 
-        # --- Chain selection ---
-        # Haskell ref: chainSelectionForBlock + comparePraos in ChainSel.hs
-        #   1. Higher block_number wins (longer chain)
-        #   2. Equal block_number: lower VRF leader value wins (tiebreaker)
-        #   3. Equal VRF or no VRF: keep current tip
+        # --- Chain selection (out-of-order safe) ---
+        # Haskell ref: chainSelectionForBlock in ChainSel.hs
+        #   1. Store block (done above)
+        #   2. Check if block is reachable from current chain
+        #   3. Walk successor map forward from predecessor's ALL successors
+        #      to find the best candidate tip
+        #   4. Switch if candidate is preferred over current tip
         old_tip = self._tip
 
-        # Determine if new block should become tip
-        # Haskell ref: comparePraos in Praos/Common.hs
-        #   1. Higher block_number wins (longer chain)
-        #   2. Equal block_number: lower raw VRF output wins (tiebreaker)
-        #   3. Equal or no VRF: keep current tip (ShouldNotSwitch)
-        should_adopt = False
-        new_vrf = vrf_output or b""
-        if self._tip is None:
-            should_adopt = True
-        elif block_number > self._tip.block_number:
-            should_adopt = True
-        elif block_number == self._tip.block_number:
-            # VRF tiebreaker: lower raw VRF output wins
-            # Haskell ref: compare (Down ptvTieBreakVRF) — Down reverses,
-            # so lower OutputVRF is preferred (ShouldSwitch)
-            if new_vrf and self._tip.vrf_output and new_vrf < self._tip.vrf_output:
-                should_adopt = True
-                logger.info(
-                    "ChainDB: VRF tiebreak — switching to block %s at slot %d "
-                    "(new_vrf=%s < tip_vrf=%s)",
-                    block_hash.hex()[:16],
-                    slot,
-                    new_vrf.hex()[:16],
-                    self._tip.vrf_output.hex()[:16],
-                )
-
-        if should_adopt:
-            new_tip = _ChainTip(
-                slot=slot,
-                block_hash=block_hash,
-                block_number=block_number,
-                vrf_output=new_vrf,
-            )
-
-            rollback_depth = 0
-            removed_hashes: set[bytes] = set()
-            intersection_hash: bytes | None = None
-
-            if old_tip is not None and predecessor_hash != old_tip.block_hash:
-                # Fork switch — compute diff
-                rollback_depth, removed_hashes, intersection_hash = self._compute_chain_diff(
-                    block_hash
-                )
-                # Notify followers BEFORE updating fragment (atomic)
-                if rollback_depth > 0 and intersection_hash is not None:
-                    from vibe.cardano.network.chainsync import Point
-
-                    intersection_info = self.volatile_db._block_info.get(
-                        intersection_hash,
-                    )
-                    if intersection_info:
-                        ipoint = Point(
-                            slot=intersection_info.slot,
-                            hash=intersection_hash,
-                        )
-                        self._notify_fork_switch(removed_hashes, ipoint)
-
-            self._tip = new_tip
-            self.tip_tvar._write(new_tip)  # STM TVar update
-
-            # Rebuild or extend fragment
-            if rollback_depth > 0 or old_tip is None:
-                # Full rebuild (fork switch or first block)
-                header_map = {e.block_hash: e.header_cbor for e in self._chain_fragment}
-                header_map[block_hash] = header_cbor
-                self._rebuild_fragment_from_tip(block_hash, header_map)
-            else:
-                # Simple extend — append to fragment
-                entry = FragmentEntry(
-                    slot=slot,
-                    block_hash=block_hash,
-                    block_number=block_number,
-                    predecessor_hash=predecessor_hash,
-                    header_cbor=header_cbor,
-                )
-                self._chain_fragment.append(entry)
-                self._fragment_index[block_hash] = len(self._chain_fragment) - 1
-
-                # Trim to k — use slice instead of pop(0) to avoid O(n) per block
-                if len(self._chain_fragment) > self._k:
-                    excess = len(self._chain_fragment) - self._k
-                    for e in self._chain_fragment[:excess]:
-                        self._fragment_index.pop(e.block_hash, None)
-                    self._chain_fragment = self._chain_fragment[excess:]
-                    # Reindex after trim (only when trim happens)
-                    self._fragment_index = {
-                        e.block_hash: i
-                        for i, e in enumerate(self._chain_fragment)
-                    }
-
-                # Update STM TVar. The list+dict copy is O(k) so we always
-                # do it — the fragment is bounded at k entries.
-                self.fragment_tvar._write(
-                    (list(self._chain_fragment), dict(self._fragment_index))
-                )
-
-            logger.debug(
-                "ChainDB: new tip block %s at slot %d, blockNo %d "
-                "(rollback=%d, fragment=%d)",
-                block_hash.hex()[:16],
-                slot,
-                block_number,
-                rollback_depth,
-                len(self._chain_fragment),
-            )
-
-            self._tip_generation += 1
-            self.tip_changed.set()
-
+        # Check reachability first — if block is unreachable, store but don't change.
+        # Skip for first block (old_tip is None) — any block can start the chain.
+        if old_tip is not None and not self._is_reachable_from_chain(block_hash):
             await self._maybe_advance_immutable()
-
-            return ChainSelectionResult(
-                adopted=True,
-                new_tip=(slot, block_hash, block_number),
-                rollback_depth=rollback_depth,
-                removed_hashes=removed_hashes,
-                intersection_hash=intersection_hash,
+            tip_tuple = (
+                (old_tip.slot, old_tip.block_hash, old_tip.block_number)
+                if old_tip else None
             )
+            return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
 
-        # Not adopted — stored but didn't change tip
-        await self._maybe_advance_immutable()
-        tip_tuple = (
-            (self._tip.slot, self._tip.block_hash, self._tip.block_number) if self._tip else None
+        # Walk successors forward from this block's predecessor's ALL successors
+        candidate_bn, candidate_hash = self._best_candidate_from(block_hash)
+
+        # Determine if the candidate chain is better than current tip
+        should_switch = False
+        new_vrf = vrf_output or b""
+        if old_tip is None:
+            should_switch = True
+        elif candidate_bn > old_tip.block_number:
+            should_switch = True
+        elif candidate_bn == old_tip.block_number:
+            # VRF tiebreaker: only if the candidate tip IS this block
+            if candidate_hash == block_hash and new_vrf and old_tip.vrf_output:
+                if new_vrf < old_tip.vrf_output:
+                    should_switch = True
+                    logger.info(
+                        "ChainDB: VRF tiebreak — switching to block %s at slot %d "
+                        "(new_vrf=%s < tip_vrf=%s)",
+                        block_hash.hex()[:16], slot,
+                        new_vrf.hex()[:16], old_tip.vrf_output.hex()[:16],
+                    )
+
+        if not should_switch:
+            await self._maybe_advance_immutable()
+            tip_tuple = (
+                (old_tip.slot, old_tip.block_hash, old_tip.block_number)
+                if old_tip else None
+            )
+            return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
+
+        # Switch to the candidate chain
+        ct_info = self.volatile_db._block_info[candidate_hash]
+        new_tip = _ChainTip(
+            slot=ct_info.slot,
+            block_hash=candidate_hash,
+            block_number=candidate_bn,
+            vrf_output=new_vrf if candidate_hash == block_hash else b"",
         )
-        return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
+
+        rollback_depth = 0
+        removed_hashes: set[bytes] = set()
+        intersection_hash: bytes | None = None
+
+        if old_tip is not None:
+            # Compute diff — handles both fork switches and gap-fill extensions
+            rollback_depth, removed_hashes, intersection_hash = self._compute_chain_diff(
+                candidate_hash
+            )
+            if rollback_depth > 0 and intersection_hash is not None:
+                from vibe.cardano.network.chainsync import Point
+                intersection_info = self.volatile_db._block_info.get(intersection_hash)
+                if intersection_info:
+                    ipoint = Point(slot=intersection_info.slot, hash=intersection_hash)
+                    self._notify_fork_switch(removed_hashes, ipoint)
+
+        self._tip = new_tip
+        self.tip_tvar._write(new_tip)
+
+        # Rebuild fragment from the new tip
+        header_map = {e.block_hash: e.header_cbor for e in self._chain_fragment}
+        header_map[block_hash] = header_cbor
+        self._rebuild_fragment_from_tip(candidate_hash, header_map)
+
+        # Update STM TVar (atomic snapshot for nonce worker to read)
+        self.fragment_tvar._write(
+            (list(self._chain_fragment), dict(self._fragment_index))
+        )
+
+        logger.debug(
+            "ChainDB: new tip block %s at slot %d, blockNo %d "
+            "(rollback=%d, fragment=%d)",
+            candidate_hash.hex()[:16], ct_info.slot, candidate_bn,
+            rollback_depth, len(self._chain_fragment),
+        )
+
+        self._tip_generation += 1
+        self.tip_changed.set()
+        await self._maybe_advance_immutable()
+
+        return ChainSelectionResult(
+            adopted=True,
+            new_tip=(ct_info.slot, candidate_hash, candidate_bn),
+            rollback_depth=rollback_depth,
+            removed_hashes=removed_hashes,
+            intersection_hash=intersection_hash,
+        )
 
     def add_block_sync(self, **kwargs: Any) -> ChainSelectionResult:
         """Synchronous wrapper for add_block, used by the forge thread.
@@ -774,6 +747,91 @@ class ChainDB:
             if cbor is not None:
                 blocks.append(cbor)
         return blocks if blocks else None
+
+    # ------------------------------------------------------------------
+    # Chain selection helpers (out-of-order safe)
+    # ------------------------------------------------------------------
+
+    def _best_candidate_from(self, start_hash: bytes) -> tuple[int, bytes]:
+        """Walk successor map forward to find the best reachable chain tip.
+
+        Starts from start_hash's predecessor and evaluates ALL successor
+        paths (not just paths through start_hash). This ensures sibling
+        chains are considered when a gap-filling block arrives.
+
+        Returns (block_number, tip_hash) of the best candidate.
+
+        Haskell ref: Paths.maximalCandidates — evaluates all forward
+        paths from the new block's predecessor's successors.
+        """
+        info = self.volatile_db._block_info.get(start_hash)
+        if info is None:
+            return (0, start_hash)
+
+        # Start from the predecessor's successors (all of them)
+        pred_hash = info.predecessor_hash
+        roots = self.volatile_db._successors.get(pred_hash, [start_hash])
+
+        best_bn = 0
+        best_hash = start_hash
+
+        # DFS from each root to find the longest path
+        for root in roots:
+            stack = [root]
+            visited: set[bytes] = set()
+            while stack:
+                h = stack.pop()
+                if h in visited:
+                    continue
+                visited.add(h)
+                bi = self.volatile_db._block_info.get(h)
+                if bi is None:
+                    continue
+                if bi.block_number > best_bn:
+                    best_bn = bi.block_number
+                    best_hash = bi.block_hash
+                for succ in self.volatile_db._successors.get(h, []):
+                    stack.append(succ)
+
+        return best_bn, best_hash
+
+    def _is_reachable_from_chain(self, block_hash: bytes) -> bool:
+        """Walk backward from block_hash through predecessor links.
+
+        Returns True if we reach a block on the current chain fragment,
+        the fragment's anchor (predecessor of oldest entry), or the
+        immutable tip.
+
+        Haskell ref: Paths.isReachable / computeReversePath
+        """
+        # Compute the anchor hash — predecessor of the oldest fragment entry
+        anchor_hash: bytes | None = None
+        if self._chain_fragment:
+            anchor_hash = self._chain_fragment[0].predecessor_hash
+
+        imm_tip_hash = self.immutable_db.get_tip_hash()
+
+        h = block_hash
+        visited: set[bytes] = set()
+        while h:
+            if h in visited:
+                return False  # cycle
+            visited.add(h)
+            # On current chain fragment?
+            if h in self._fragment_index:
+                return True
+            # Is it the fragment anchor?
+            if anchor_hash is not None and h == anchor_hash:
+                return True
+            # Is it the immutable tip?
+            if imm_tip_hash is not None and h == imm_tip_hash:
+                return True
+            # Walk backward
+            info = self.volatile_db._block_info.get(h)
+            if info is None:
+                return False
+            h = info.predecessor_hash
+        return False
 
     # ------------------------------------------------------------------
     # Chain fragment management
