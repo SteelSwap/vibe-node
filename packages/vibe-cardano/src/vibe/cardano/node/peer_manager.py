@@ -462,10 +462,11 @@ class PeerManager:
                             # Use the header's block_number (not session count)
                             # for accurate sync percentage when resuming
                             current_block = hdr_block_number
-                            sync_pct = (
+                            sync_pct = min(
                                 (current_block / tip_block * 100)
                                 if tip_block > 0
-                                else 0.0
+                                else 0.0,
+                                100.0,
                             )
                             logger.info(
                                 "Chain-sync header #%d at slot %d block #%d (%.2f%% synced) from %s",
@@ -899,7 +900,7 @@ class PeerManager:
                 continue
             last_generation = current_gen
 
-            fragment_snapshot, index_snapshot = chain_db.fragment_tvar.read()
+            fragment_snapshot, index_snapshot = chain_db.fragment_tvar.value
             if not fragment_snapshot:
                 continue
 
