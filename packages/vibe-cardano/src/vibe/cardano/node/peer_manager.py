@@ -570,15 +570,10 @@ class PeerManager:
                     name="shared-block-processor",
                 )
 
-            # Start nonce worker (once, on chain-sync peer)
-            if self._nonce_worker_task is None and node_kernel is not None:
-                self._nonce_worker_task = asyncio.create_task(
-                    _safe_run(
-                        self._nonce_worker(stop_event),
-                        "nonce-worker",
-                    ),
-                    name="nonce-worker",
-                )
+            # Nonce worker disabled -- on_block_adopted is called directly
+            # in the shared block processor for immediate forge loop update.
+            # The nonce worker pattern will be needed when blocks truly arrive
+            # out-of-order from multiple peers and need sequential reordering.
 
         # --- Block-fetch (ALL peers) ---
         async def _peer_block_fetch() -> None:
@@ -852,8 +847,26 @@ class PeerManager:
                     if result.adopted and self._block_received_event is not None:
                         self._block_received_event.set()
 
-                    if result.adopted:
-                        self._block_notify.set()
+                    # Update nonce state directly (not via nonce worker)
+                    # to ensure forge loop sees updated state immediately.
+                    if result.adopted and self._node_kernel is not None:
+                        if result.rollback_depth > 0 and result.intersection_hash is not None:
+                            new_blocks = _get_new_chain_blocks(
+                                chain_db,
+                                result.intersection_hash,
+                                block_hash,
+                            )
+                            self._node_kernel.on_fork_switch(
+                                result.intersection_hash,
+                                new_blocks,
+                            )
+                        else:
+                            self._node_kernel.on_block_adopted(
+                                slot,
+                                block_hash,
+                                prev_hash,
+                                hdr_vrf_out,
+                            )
 
                 _blocks_stored += 1
                 tx_count = (
