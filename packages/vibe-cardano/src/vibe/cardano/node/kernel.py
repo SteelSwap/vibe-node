@@ -270,7 +270,11 @@ class NodeKernel:
             self._security_param,
             self._active_slot_coeff,
         )
-        if slot + stab_window < first_slot_next_epoch:
+        # When stab_window >= epoch_length (small devnet epochs), ALL blocks
+        # contribute to the nonce. Otherwise, only blocks before the stability
+        # cutoff contribute. Haskell ref: stabilityWindow caps at epoch_length,
+        # so the condition below becomes trivially true for all blocks.
+        if stab_window >= epoch_len or slot + stab_window < first_slot_next_epoch:
             self._candidate_nonce = self._evolving_nonce
 
         self._lab_nonce = prev_hash
