@@ -824,7 +824,9 @@ class ChainDB:
                 bi = self.volatile_db._block_info.get(h)
                 if bi is None:
                     continue
-                if bi.block_number > best_bn:
+                if bi.block_number > best_bn or (
+                    bi.block_number == best_bn and bi.block_hash < best_hash
+                ):
                     best_bn = bi.block_number
                     best_hash = bi.block_hash
                 for succ in self.volatile_db._successors.get(h, []):
