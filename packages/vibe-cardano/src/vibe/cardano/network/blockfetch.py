@@ -215,15 +215,37 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
         if len(msg) != 2:
             raise ValueError(f"MsgBlock: expected 2 elements, got {len(msg)}")
         block_data = msg[1]
-        # The block arrives as a decoded CBOR object (CBORTag for era-wrapped
-        # blocks). We need raw bytes for storage and decode_block_header().
-        # Re-encode to get the canonical CBOR bytes.
         if isinstance(block_data, bytes):
             block_cbor = block_data
         elif isinstance(block_data, memoryview):
             block_cbor = bytes(block_data)
         else:
-            block_cbor = cbor2.dumps(block_data)
+            # Block body was decoded into a Python object (e.g. CBORTag).
+            # Instead of re-encoding with cbor2.dumps (which mangles
+            # indefinite-length CBOR and breaks hash computation), slice
+            # the original wire bytes to preserve the exact encoding.
+            # Haskell ref: BlockFetchSerialised — raw bytes, no re-encode.
+            import io as _io
+
+            fp = _io.BytesIO(cbor_bytes)
+            # Skip array header
+            additional = cbor_bytes[0] & 0x1F
+            if additional < 24:
+                fp.seek(1)
+            elif additional == 24:
+                fp.seek(2)
+            else:
+                # Indefinite or large — fall back to re-encode
+                block_cbor = cbor2.dumps(block_data)
+                return MsgBlock(block_cbor=block_cbor)
+            # Skip element [0] (msg_id) by decoding it
+            dec = cbor2.CBORDecoder(fp)
+            dec.decode()
+            block_start = fp.tell()
+            # Skip element [1] (block body) to find its extent
+            dec.decode()
+            block_end = fp.tell()
+            block_cbor = cbor_bytes[block_start:block_end]
         return MsgBlock(block_cbor=block_cbor)
 
     elif msg_id == MSG_BATCH_DONE:

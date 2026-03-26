@@ -40,7 +40,7 @@ services:
       dockerfile: infra/preview-sync/Dockerfile.preview-sync
     environment:
       VIBE_NETWORK_MAGIC: "2"
-      VIBE_PEERS: "preview-node.play.dev.cardano.org:3001,3.70.89.92:3001,3.134.226.73:3001,18.185.163.167:3001"
+      VIBE_PEERS: "preview-node.play.dev.cardano.org:3001,52.215.17.31:3001,18.117.34.199:3001,52.211.202.88:3001,99.80.240.19:3001,3.134.226.73:3001,18.185.163.167:3001,13.58.19.0:3001,3.74.40.92:3001"
       VIBE_DATA_DIR: "/data"
       VIBE_GENESIS_DIR: "/genesis"
       VIBE_ERROR_LOG: "/results/errors.log"
