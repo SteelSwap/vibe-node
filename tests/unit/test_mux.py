@@ -92,6 +92,18 @@ class MockBearer:
             raise ConnectionError("mock bearer disconnected")
         await self.outbound.put(segment)
 
+    def buffer_segment(self, segment: MuxSegment) -> None:
+        if self._closed:
+            raise BearerClosedError("mock bearer is closed")
+        if self._disconnect_event.is_set():
+            self._closed = True
+            raise ConnectionError("mock bearer disconnected")
+        self.outbound.put_nowait(segment)
+
+    async def flush(self) -> None:
+        if self._closed:
+            raise BearerClosedError("mock bearer is closed")
+
     async def close(self) -> None:
         self._closed = True
         self._disconnect_event.set()
@@ -1361,6 +1373,14 @@ class FaultyReadBearer:
         if self._closed:
             raise BearerClosedError("faulty bearer is closed")
 
+    def buffer_segment(self, segment: MuxSegment) -> None:
+        if self._closed:
+            raise BearerClosedError("faulty bearer is closed")
+
+    async def flush(self) -> None:
+        if self._closed:
+            raise BearerClosedError("faulty bearer is closed")
+
     async def close(self) -> None:
         self._closed = True
 
@@ -1386,6 +1406,14 @@ class FaultyWriteBearer:
         raise BearerClosedError("faulty write bearer closed")
 
     async def write_segment(self, segment: MuxSegment) -> None:
+        self._closed = True
+        raise ConnectionError("simulated write fault")
+
+    def buffer_segment(self, segment: MuxSegment) -> None:
+        self._closed = True
+        raise ConnectionError("simulated write fault")
+
+    async def flush(self) -> None:
         self._closed = True
         raise ConnectionError("simulated write fault")
 

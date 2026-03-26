@@ -88,6 +88,7 @@ class MiniProtocolChannel:
     )
     _outbound: asyncio.Queue[bytes | object] = field(default_factory=asyncio.Queue, repr=False)
     _closed: bool = field(default=False, repr=False)
+    _on_send: object = field(default=None, repr=False)  # Callable[[], None] | None
 
     def __post_init__(self) -> None:
         if self._inbound is None:
@@ -105,6 +106,8 @@ class MiniProtocolChannel:
         if self._closed:
             raise MuxClosedError(f"channel for protocol {self.protocol_id} is closed")
         await self._outbound.put(payload)
+        if self._on_send is not None:
+            self._on_send()
 
     async def recv(self) -> bytes:
         """Receive inbound payload from the remote peer.
@@ -169,6 +172,7 @@ class Multiplexer:
         "_running",
         "_closed",
         "_stop_event",
+        "_data_available",
     )
 
     def __init__(self, bearer: Bearer, is_initiator: bool) -> None:
@@ -180,6 +184,7 @@ class Multiplexer:
         self._running = False
         self._closed = False
         self._stop_event = asyncio.Event()
+        self._data_available = asyncio.Event()
 
     @property
     def is_initiator(self) -> bool:
@@ -223,6 +228,7 @@ class Multiplexer:
             is_initiator=self._is_initiator,
             max_ingress_size=max_ingress_size,
         )
+        channel._on_send = self._data_available.set
         self._channels[protocol_id] = channel
         return channel
 
@@ -311,9 +317,10 @@ class Multiplexer:
         """Drain outbound queues with round-robin fair scheduling.
 
         Cycles through all registered channels, checking each for an outbound
-        payload. If a payload is available, it's encoded as a MuxSegment and
-        written to the bearer. If no channel has data, we yield briefly to
-        avoid busy-waiting.
+        payload. Segments are buffered via write() and flushed with a single
+        drain() per round-robin pass (batched writes reduce syscall overhead).
+        When no channel has data, we block on an asyncio.Event rather than
+        polling — channels signal the event when they enqueue data.
 
         This ensures fair scheduling: no single protocol can starve others,
         since we advance to the next protocol after sending one segment.
@@ -321,6 +328,10 @@ class Multiplexer:
         Spec reference:
             Ouroboros network spec, Section 1.2 — "The multiplexer scheduler
             must ensure that each mini-protocol gets a fair share of the bearer."
+
+        Haskell reference:
+            Network.Mux.Bearer.Socket uses buffered writes (sendAll) and the
+            mux sender collects from all miniprotocols before writing.
         """
         protocol_ids = list(self._channels.keys())
         if not protocol_ids:
@@ -334,7 +345,7 @@ class Multiplexer:
         while not self._closed:
             sent_any = False
 
-            # One full round-robin pass.
+            # One full round-robin pass — buffer writes, flush once.
             for _ in range(len(protocol_ids)):
                 pid = protocol_ids[idx % len(protocol_ids)]
                 idx += 1
@@ -359,22 +370,46 @@ class Multiplexer:
                     payload=payload,
                 )
                 try:
-                    await self._bearer.write_segment(segment)
+                    self._bearer.buffer_segment(segment)
                 except (BearerClosedError, ConnectionError) as exc:
                     logger.debug("sender: bearer disconnected: %s", exc)
                     return
                 sent_any = True
 
-            if not sent_any:
-                # No data from any channel — wait briefly but remain
-                # responsive to shutdown. We race a short sleep against
-                # the stop event so close() wakes us immediately.
+            # Single flush after the entire round-robin pass.
+            if sent_any:
                 try:
-                    await asyncio.wait_for(self._stop_event.wait(), timeout=0.001)
-                    # Stop event was set — exit the loop.
+                    await self._bearer.flush()
+                except (BearerClosedError, ConnectionError) as exc:
+                    logger.debug("sender: bearer disconnected: %s", exc)
                     return
-                except TimeoutError:
-                    pass
+
+            if not sent_any:
+                # Event-driven wait: block until a channel signals data
+                # or shutdown is requested. No polling.
+                self._data_available.clear()
+                # Double-check after clearing — a send() could have raced
+                # between the round-robin pass and the clear().
+                if any(
+                    not ch._closed and not ch._outbound.empty()
+                    for ch in self._channels.values()
+                ):
+                    continue
+                # Truly idle — wait for data or shutdown.
+                data_task = asyncio.create_task(self._data_available.wait())
+                stop_task = asyncio.create_task(self._stop_event.wait())
+                done, pending = await asyncio.wait(
+                    [data_task, stop_task],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for t in pending:
+                    t.cancel()
+                    try:
+                        await t
+                    except asyncio.CancelledError:
+                        pass
+                if self._stop_event.is_set():
+                    return
 
     async def _receiver_loop(self) -> None:
         """Read segments from the bearer and route to protocol channels.
