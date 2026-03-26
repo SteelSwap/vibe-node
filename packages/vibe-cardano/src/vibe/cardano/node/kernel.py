@@ -267,9 +267,18 @@ class NodeKernel:
 
         vrf_nonce = vrf_nonce_value(vrf_output)
 
+        old_ev = self._evolving_nonce
         self._evolving_nonce = self._combine_nonces(
             self._evolving_nonce,
             vrf_nonce,
+        )
+        logger.info(
+            "Nonce blk slot=%d hash=%s vrf=%s ev=%s->%s",
+            slot,
+            block_hash.hex()[:16],
+            vrf_output.hex()[:16] if vrf_output else "none",
+            old_ev.hex()[:16] if isinstance(old_ev, bytes) else "?",
+            self._evolving_nonce.hex()[:16],
         )
 
         block_epoch = slot // epoch_len
@@ -298,6 +307,22 @@ class NodeKernel:
         if new_epoch <= self._current_epoch:
             return
 
+        # Shelley spec: the epoch nonce has a 1-epoch stabilization lag.
+        # At epoch 0->1, the genesis nonce is retained (no accumulation
+        # has stabilized yet). The first real nonce evolution happens at
+        # epoch 1->2 using epoch 0's accumulated candidate.
+        # Haskell ref: the initial TicknState epochNonce is set by
+        # translateChainDepStateByronToShelley to the genesis nonce and
+        # stays unchanged until the TICKN rule fires with real data.
+        if self._current_epoch == 0:
+            self._last_epoch_block_nonce = self._lab_nonce
+            self._current_epoch = new_epoch
+            logger.info(
+                "Epoch 0->%d: retaining genesis nonce (stabilization lag)",
+                new_epoch,
+            )
+            return
+
         new_nonce_bytes = self._combine_nonces(
             self._candidate_nonce,
             self._last_epoch_block_nonce,
@@ -314,10 +339,14 @@ class NodeKernel:
         self._last_epoch_block_nonce = self._lab_nonce
         self._current_epoch = new_epoch
         logger.info(
-            "Epoch transition %d -> %d (nonce=%s)",
+            "Epoch %d->%d nonce=%s cand=%s lab=%s prevLab=%s evolving=%s",
             old_epoch,
             new_epoch,
             new_nonce_bytes.hex(),
+            self._candidate_nonce.hex()[:16] if isinstance(self._candidate_nonce, bytes) else "?",
+            self._lab_nonce.hex()[:16] if isinstance(self._lab_nonce, bytes) else "?",
+            self._last_epoch_block_nonce.hex()[:16] if isinstance(self._last_epoch_block_nonce, bytes) else "?",
+            self._evolving_nonce.hex()[:16] if isinstance(self._evolving_nonce, bytes) else "?",
             extra={
                 "event": "epoch.transition",
                 "from_epoch": old_epoch,
