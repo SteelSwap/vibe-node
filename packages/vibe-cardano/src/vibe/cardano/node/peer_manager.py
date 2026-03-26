@@ -941,6 +941,16 @@ class PeerManager:
             peer.address,
             extra={"event": "peer.disconnect", "peer": str(peer.address)},
         )
+        # If this was the chain-sync peer, clear so next connecting peer takes over
+        if self._chain_sync_peer == str(peer.address):
+            logger.info(
+                "Chain-sync peer %s disconnected — next peer will take over",
+                peer.address,
+            )
+            self._chain_sync_peer = None
+            # Reset processor/nonce tasks so they restart with the new chain-sync peer
+            self._processor_task = None
+            self._nonce_worker_task = None
         # Signal miniprotocol runners to stop.
         if peer.stop_event is not None:
             peer.stop_event.set()
