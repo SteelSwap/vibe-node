@@ -575,7 +575,15 @@ class PeerManager:
             # The nonce worker pattern will be needed when blocks truly arrive
             # out-of-order from multiple peers and need sequential reordering.
 
-        # --- Block-fetch (ALL peers) ---
+        # --- Block-fetch ---
+        # When producing blocks, restrict to chain-sync peer only to keep
+        # blocks in-order for sequential nonce updates. For non-producing
+        # nodes (bulk sync), all peers fetch in parallel.
+        is_producer = self._config.pool_keys is not None
+        if is_producer and peer_addr != self._chain_sync_peer:
+            # Non-chain-sync peers on a producer skip block-fetch
+            peer.mux_task = mux_task
+            return
         async def _peer_block_fetch() -> None:
             from vibe.cardano.network.blockfetch_protocol import run_block_fetch_pipelined
 
