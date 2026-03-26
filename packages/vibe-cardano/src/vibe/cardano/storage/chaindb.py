@@ -542,6 +542,7 @@ class ChainDB:
             predecessor_hash=predecessor_hash,
             block_number=block_number,
             cbor_bytes=cbor_bytes,
+            vrf_output=vrf_output or b"",
         )
 
         # --- Chain selection (out-of-order safe) ---
@@ -574,15 +575,18 @@ class ChainDB:
         elif candidate_bn > old_tip.block_number:
             should_switch = True
         elif candidate_bn == old_tip.block_number:
-            # VRF tiebreaker: only if the candidate tip IS this block
-            if candidate_hash == block_hash and new_vrf and old_tip.vrf_output:
-                if new_vrf < old_tip.vrf_output:
+            # VRF tiebreaker: lower VRF output wins (Haskell comparePraos).
+            # Use candidate's VRF from BlockInfo (set by _best_candidate_from).
+            cand_info = self.volatile_db._block_info.get(candidate_hash)
+            cand_vrf = (cand_info.vrf_output if cand_info else b"") or new_vrf
+            if cand_vrf and old_tip.vrf_output:
+                if cand_vrf < old_tip.vrf_output:
                     should_switch = True
                     logger.info(
                         "ChainDB: VRF tiebreak — switching to block %s at slot %d "
-                        "(new_vrf=%s < tip_vrf=%s)",
-                        block_hash.hex()[:16], slot,
-                        new_vrf.hex()[:16], old_tip.vrf_output.hex()[:16],
+                        "(cand_vrf=%s < tip_vrf=%s)",
+                        candidate_hash.hex()[:16], slot,
+                        cand_vrf.hex()[:16], old_tip.vrf_output.hex()[:16],
                     )
 
         if not should_switch:
@@ -595,11 +599,14 @@ class ChainDB:
 
         # Switch to the candidate chain
         ct_info = self.volatile_db._block_info[candidate_hash]
+        # Always use the VRF output from BlockInfo so tiebreak works
+        # even when the tip was set via DFS (not the current block).
+        candidate_vrf = ct_info.vrf_output or (new_vrf if candidate_hash == block_hash else b"")
         new_tip = _ChainTip(
             slot=ct_info.slot,
             block_hash=candidate_hash,
             block_number=candidate_bn,
-            vrf_output=new_vrf if candidate_hash == block_hash else b"",
+            vrf_output=candidate_vrf,
         )
 
         rollback_depth = 0
@@ -811,6 +818,7 @@ class ChainDB:
 
         best_bn = 0
         best_hash = start_hash
+        best_vrf = info.vrf_output
 
         # DFS from each root to find the longest path
         for root in roots:
@@ -824,11 +832,15 @@ class ChainDB:
                 bi = self.volatile_db._block_info.get(h)
                 if bi is None:
                     continue
-                if bi.block_number > best_bn or (
-                    bi.block_number == best_bn and bi.block_hash < best_hash
-                ):
+                if bi.block_number > best_bn:
                     best_bn = bi.block_number
                     best_hash = bi.block_hash
+                    best_vrf = bi.vrf_output
+                elif bi.block_number == best_bn and bi.vrf_output and best_vrf:
+                    # VRF tiebreak: lower VRF output wins (Haskell comparePraos)
+                    if bi.vrf_output < best_vrf:
+                        best_hash = bi.block_hash
+                        best_vrf = bi.vrf_output
                 for succ in self.volatile_db._successors.get(h, []):
                     stack.append(succ)
 

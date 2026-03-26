@@ -62,6 +62,7 @@ class BlockInfo:
     slot: int
     predecessor_hash: bytes
     block_number: int
+    vrf_output: bytes = b""  # 64-byte VRF output for chain selection tiebreak
 
 
 class VolatileDB:
@@ -198,6 +199,7 @@ class VolatileDB:
         predecessor_hash: bytes,
         block_number: int,
         cbor_bytes: bytes,
+        vrf_output: bytes = b"",
     ) -> None:
         """Store a block with full metadata, updating all indices.
 
@@ -216,6 +218,7 @@ class VolatileDB:
             predecessor_hash: Hash of the predecessor block.
             block_number: Block number (height).
             cbor_bytes: CBOR-encoded block bytes.
+            vrf_output: 64-byte VRF output for chain selection tiebreak.
         """
         self._check_closed()
 
@@ -224,6 +227,7 @@ class VolatileDB:
             slot=slot,
             predecessor_hash=predecessor_hash,
             block_number=block_number,
+            vrf_output=vrf_output or b"",
         )
 
         self._blocks[block_hash] = cbor_bytes
