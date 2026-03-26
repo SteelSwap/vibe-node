@@ -648,7 +648,7 @@ async def run_chain_sync(
     # ProtocolRunner's strict send-recv agency enforcement.
     #
     # Haskell ref: chainSyncClient uses pipelining with configurable depth.
-    PIPELINE_DEPTH = 50  # Aggressive pipelining to keep headers ahead of block-fetch
+    PIPELINE_DEPTH = 200  # Tuned: enough headroom for block-fetch without mux contention
     request_next_cbor = codec.encode(CsMsgRequestNext())
     in_flight = 0
     _recv_buf = b""

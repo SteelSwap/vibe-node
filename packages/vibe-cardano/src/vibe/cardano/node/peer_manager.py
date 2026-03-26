@@ -791,8 +791,8 @@ class PeerManager:
                     range_queue=range_queue,
                     on_block_received=_on_block,
                     stop_event=stop_event,
-                    max_in_flight=10,
-                    block_queue_size=200,
+                    max_in_flight=20,
+                    block_queue_size=500,
                 )
             except Exception as exc:
                 logger.warning("Peer %s: block-fetch error: %s", peer.address, exc)
