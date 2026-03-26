@@ -621,15 +621,52 @@ class ChainDB:
         self._tip = new_tip
         self.tip_tvar._write(new_tip)
 
-        # Rebuild fragment from the new tip
-        header_map = {e.block_hash: e.header_cbor for e in self._chain_fragment}
-        header_map[block_hash] = header_cbor
-        self._rebuild_fragment_from_tip(candidate_hash, header_map)
-
-        # Update STM TVar (atomic snapshot for nonce worker to read)
-        self.fragment_tvar._write(
-            (list(self._chain_fragment), dict(self._fragment_index))
+        # Fast path: simple extension (no rollback, direct child of old tip,
+        # fragment already at capacity, slot ordering maintained).
+        # O(1) append instead of O(k log k) rebuild.
+        use_fast_path = (
+            old_tip is not None
+            and rollback_depth == 0
+            and candidate_hash == block_hash
+            and ct_info.predecessor_hash == old_tip.block_hash
+            and self._chain_fragment
+            and ct_info.slot >= self._chain_fragment[-1].slot
         )
+
+        if use_fast_path:
+            entry = FragmentEntry(
+                slot=ct_info.slot,
+                block_hash=candidate_hash,
+                block_number=candidate_bn,
+                predecessor_hash=ct_info.predecessor_hash,
+                header_cbor=header_cbor,
+            )
+            self._chain_fragment.append(entry)
+            self._fragment_index[candidate_hash] = len(self._chain_fragment) - 1
+
+            # Trim to k
+            if len(self._chain_fragment) > self._k:
+                excess = len(self._chain_fragment) - self._k
+                for e in self._chain_fragment[:excess]:
+                    self._fragment_index.pop(e.block_hash, None)
+                self._chain_fragment = self._chain_fragment[excess:]
+                self._fragment_index = {
+                    e.block_hash: i
+                    for i, e in enumerate(self._chain_fragment)
+                }
+
+            self.fragment_tvar._write(
+                (list(self._chain_fragment), dict(self._fragment_index))
+            )
+        else:
+            # Full rebuild (fork switch, gap-fill, or first block)
+            header_map = {e.block_hash: e.header_cbor for e in self._chain_fragment}
+            header_map[block_hash] = header_cbor
+            self._rebuild_fragment_from_tip(candidate_hash, header_map)
+
+            self.fragment_tvar._write(
+                (list(self._chain_fragment), dict(self._fragment_index))
+            )
 
         logger.debug(
             "ChainDB: new tip block %s at slot %d, blockNo %d "
