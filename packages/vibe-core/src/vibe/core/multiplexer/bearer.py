@@ -146,7 +146,16 @@ class Bearer:
 
         try:
             self._writer.write(wire)
-            await self._writer.drain()
+            # Only drain when the write buffer exceeds 64KB. Small writes
+            # (e.g. MsgRequestRange ~100 bytes) skip the syscall entirely
+            # and let the OS TCP stack flush naturally. This avoids the
+            # per-segment drain() latency that was our main overhead.
+            try:
+                buf_size = self._writer.transport.get_write_buffer_size()
+                if buf_size > 65536:
+                    await self._writer.drain()
+            except (AttributeError, TypeError):
+                pass
         except (ConnectionError, OSError) as exc:
             self._closed = True
             raise ConnectionError(str(exc)) from exc
