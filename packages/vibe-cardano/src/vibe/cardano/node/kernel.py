@@ -308,13 +308,10 @@ class NodeKernel:
         self._last_epoch_block_nonce = self._lab_nonce
         self._current_epoch = new_epoch
         logger.info(
-            "Epoch transition %d -> %d nonce=%s candidate=%s lab=%s evolving=%s",
+            "Epoch transition %d -> %d (nonce=%s)",
             old_epoch,
             new_epoch,
             new_nonce_bytes.hex(),
-            self._candidate_nonce.hex() if isinstance(self._candidate_nonce, bytes) else str(self._candidate_nonce),
-            self._last_epoch_block_nonce.hex() if isinstance(self._last_epoch_block_nonce, bytes) else "None",
-            self._evolving_nonce.hex()[:16] if isinstance(self._evolving_nonce, bytes) else "?",
             extra={
                 "event": "epoch.transition",
                 "from_epoch": old_epoch,
