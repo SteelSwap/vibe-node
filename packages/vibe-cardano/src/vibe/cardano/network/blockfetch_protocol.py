@@ -775,6 +775,7 @@ async def run_block_fetch_pipelined(
                     continue
 
                 # Successfully decoded one message
+                buf_snapshot = bytes(buf)  # preserve for raw byte slicing
                 remainder = bytes(buf[consumed:])
                 buf = bytearray()  # Clear — we'll process remainder below
 
@@ -787,14 +788,30 @@ async def run_block_fetch_pipelined(
                 msg_id = msg[0]
 
                 if msg_id == MSG_BLOCK:
-                    # Extract block_cbor from element [1]
+                    # Extract block_cbor from element [1].
+                    # Prefer raw byte slice over decoded object to avoid
+                    # re-encoding (Haskell ref: BlockFetchSerialised).
                     block_data = msg[1] if len(msg) > 1 else b""
                     if isinstance(block_data, bytes):
                         block_cbor = block_data
                     elif isinstance(block_data, memoryview):
                         block_cbor = bytes(block_data)
                     else:
-                        block_cbor = _cbor2.dumps(block_data)
+                        # block_data was fully decoded by cbor2 into a
+                        # Python object. Slice original wire bytes instead
+                        # of re-encoding (which mangles indefinite-length
+                        # CBOR and breaks downstream hash computation).
+                        try:
+                            msg_bytes = buf_snapshot[:consumed]
+                            # CBOR array header: 0x82 = 2-element array
+                            # Skip array header (1 byte) + msg_id element
+                            _s = _io.BytesIO(msg_bytes)
+                            _hdr = msg_bytes[0] & 0x1F
+                            _s.seek(1 if _hdr < 24 else 2)
+                            _cbor2.CBORDecoder(_s).decode()  # skip msg_id
+                            block_cbor = msg_bytes[_s.tell():consumed]
+                        except Exception:
+                            block_cbor = _cbor2.dumps(block_data)
                     await block_queue.put(block_cbor)
                 elif msg_id == MSG_START_BATCH:
                     pass  # Expected — batch is starting
