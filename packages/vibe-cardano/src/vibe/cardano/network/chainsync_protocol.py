@@ -699,14 +699,10 @@ async def run_chain_sync(
                 _recv_buf = data + more
                 continue
 
-            in_flight -= 1
-
-            if isinstance(response, CsMsgRollForward):
-                await on_roll_forward(response.header, response.tip)
-            elif isinstance(response, CsMsgRollBackward):
-                await on_roll_backward(response.point, response.tip)
-            elif isinstance(response, CsMsgAwaitReply):
-                # Server is at tip — wait for real response
+            if isinstance(response, CsMsgAwaitReply):
+                # Server is at tip — AwaitReply does NOT consume a
+                # pipelined request (don't decrement in_flight).
+                # Wait for the real response (RollForward/RollBackward).
                 if _recv_buf:
                     data2 = _recv_buf
                     _recv_buf = b""
@@ -722,10 +718,18 @@ async def run_chain_sync(
                 except Exception:
                     _recv_buf = data2
                     continue
+                # Now decrement for the actual response
+                in_flight -= 1
                 if isinstance(response2, CsMsgRollForward):
                     await on_roll_forward(response2.header, response2.tip)
                 elif isinstance(response2, CsMsgRollBackward):
                     await on_roll_backward(response2.point, response2.tip)
+            else:
+                in_flight -= 1
+                if isinstance(response, CsMsgRollForward):
+                    await on_roll_forward(response.header, response.tip)
+                elif isinstance(response, CsMsgRollBackward):
+                    await on_roll_backward(response.point, response.tip)
 
     # Run sender and receiver concurrently
     sender_task = asyncio.create_task(_pipeline_sender())
