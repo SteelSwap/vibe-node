@@ -81,6 +81,11 @@ class _PeerConnection:
     reconnect_delay: float = 1.0
     reconnect_attempt: int = 0
     connected: bool = False
+    protocol_tasks: list = None  # type: ignore[assignment]  # asyncio.Task refs
+
+    def __post_init__(self) -> None:
+        if self.protocol_tasks is None:
+            self.protocol_tasks = []
 
 
 class _RangeTracker:
@@ -227,7 +232,7 @@ class PeerManager:
                 peer.task.cancel()
                 try:
                     await peer.task
-                except asyncio.CancelledError, Exception:
+                except (asyncio.CancelledError, Exception):
                     pass
 
     async def _peer_loop(self, peer: _PeerConnection) -> None:
@@ -387,6 +392,7 @@ class PeerManager:
 
         stop_event = asyncio.Event()
         peer.stop_event = stop_event
+        peer.protocol_tasks = []  # clear from previous connection
 
         async def _safe_run(coro, name: str) -> None:
             """Run a miniprotocol coroutine, suppressing MuxClosedError on shutdown."""
@@ -517,7 +523,7 @@ class PeerManager:
             # Scale pipeline depth with peer count
             pipeline_depth = 200 * max(1, len(self._config.peers))
 
-            asyncio.create_task(
+            peer.protocol_tasks.append(asyncio.create_task(
                 _safe_run(
                     run_chain_sync(
                         channels[CHAIN_SYNC_N2N_ID],
@@ -530,7 +536,7 @@ class PeerManager:
                     "chain-sync",
                 ),
                 name=f"chainsync-{peer.address}",
-            )
+            ))
 
             # Range builder: drain fetch_queue Points into shared range_queue
             async def _range_builder() -> None:
@@ -549,10 +555,10 @@ class PeerManager:
                     if batch:
                         await shared_range_queue.put((batch[0], batch[-1]))
 
-            asyncio.create_task(
+            peer.protocol_tasks.append(asyncio.create_task(
                 _safe_run(_range_builder(), "range-builder"),
                 name=f"range-builder-{peer.address}",
-            )
+            ))
 
             # Start shared processor task (once, on chain-sync peer)
             if self._processor_task is None:
@@ -608,13 +614,13 @@ class PeerManager:
                 if tracker is not None:
                     tracker.on_peer_disconnect(peer_addr)
 
-        asyncio.create_task(
+        peer.protocol_tasks.append(asyncio.create_task(
             _safe_run(_peer_block_fetch(), "block-fetch"),
             name=f"blockfetch-{peer.address}",
-        )
+        ))
 
         # Keep-Alive (protocol 8): periodic pings to keep connection alive.
-        asyncio.create_task(
+        peer.protocol_tasks.append(asyncio.create_task(
             _safe_run(
                 run_keep_alive_client(
                     channels[KEEP_ALIVE_PROTOCOL_ID],
@@ -623,7 +629,7 @@ class PeerManager:
                 "keep-alive",
             ),
             name=f"keepalive-{peer.address}",
-        )
+        ))
 
         # Tx-Submission (protocol 4): respond to server's tx requests.
         # Server drives this protocol (pull-based). We provide empty
@@ -642,7 +648,7 @@ class PeerManager:
         ) -> list[bytes]:
             return []
 
-        asyncio.create_task(
+        peer.protocol_tasks.append(asyncio.create_task(
             _safe_run(
                 run_tx_submission_client(
                     channels[TX_SUBMISSION_N2N_ID],
@@ -653,7 +659,7 @@ class PeerManager:
                 "tx-submission",
             ),
             name=f"txsub-{peer.address}",
-        )
+        ))
 
         # Store the mux task -- peer_loop will await it instead of mux.run().
         peer.mux_task = mux_task
@@ -958,6 +964,16 @@ class PeerManager:
         if peer.stop_event is not None:
             peer.stop_event.set()
             peer.stop_event = None
+        # Cancel all tracked protocol tasks to prevent orphaned coroutines
+        for t in peer.protocol_tasks:
+            if not t.done():
+                t.cancel()
+        for t in peer.protocol_tasks:
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
+        peer.protocol_tasks = []
         if peer.mux is not None:
             try:
                 await peer.mux.close()
@@ -968,7 +984,7 @@ class PeerManager:
             peer.mux_task.cancel()
             try:
                 await peer.mux_task
-            except asyncio.CancelledError, Exception:
+            except (asyncio.CancelledError, Exception):
                 pass
             peer.mux_task = None
         if peer.bearer is not None:
