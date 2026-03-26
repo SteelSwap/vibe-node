@@ -239,11 +239,15 @@ class VolatileDB:
         if slot > self._max_slot:
             self._max_slot = slot
 
-        # Buffer disk writes — flush every N blocks for I/O efficiency
+        # Buffer disk writes — flush every N blocks for I/O efficiency.
+        # Flush runs in a thread pool to avoid blocking the event loop
+        # during the batch of file open/write/close syscalls.
         if self._db_dir is not None:
             self._write_buffer.append((block_hash, cbor_bytes))
             if len(self._write_buffer) >= self._write_batch_size:
-                self._flush_writes()
+                import asyncio
+
+                await asyncio.to_thread(self._flush_writes)
 
         logger.debug(
             "VolatileDB: added block %s at slot %d (predecessor: %s)",
