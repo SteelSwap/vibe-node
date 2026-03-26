@@ -245,10 +245,13 @@ class NodeKernel:
             return a
         return hashlib.blake2b(a + b, digest_size=32).digest()
 
-    def on_block(self, slot: int, prev_hash: bytes, vrf_output: bytes) -> None:
+    def on_block(
+        self, slot: int, block_hash: bytes, vrf_output: bytes,
+    ) -> None:
         """Update Praos chain-dependent state for a block.
 
         Haskell ref: reupdateChainDepState from Praos.hs
+            labNonce = hash of the last applied block (NOT its predecessor).
         """
         epoch_len = self._epoch_length
         if epoch_len <= 0:
@@ -277,7 +280,9 @@ class NodeKernel:
         if stab_window >= epoch_len or slot + stab_window < first_slot_next_epoch:
             self._candidate_nonce = self._evolving_nonce
 
-        self._lab_nonce = prev_hash
+        # labNonce = hash of the last applied block itself (not predecessor).
+        # Haskell ref: lastAppliedHash in PraosState
+        self._lab_nonce = block_hash
 
     def on_epoch_boundary(self, new_epoch: int, extra_entropy: bytes | None = None) -> None:
         """Evolve the epoch nonce at an epoch transition.
@@ -303,10 +308,13 @@ class NodeKernel:
         self._last_epoch_block_nonce = self._lab_nonce
         self._current_epoch = new_epoch
         logger.info(
-            "Epoch transition %d -> %d (nonce=%s)",
+            "Epoch transition %d -> %d nonce=%s candidate=%s lab=%s evolving=%s",
             old_epoch,
             new_epoch,
-            new_nonce_bytes.hex()[:16],
+            new_nonce_bytes.hex(),
+            self._candidate_nonce.hex() if isinstance(self._candidate_nonce, bytes) else str(self._candidate_nonce),
+            self._last_epoch_block_nonce.hex() if isinstance(self._last_epoch_block_nonce, bytes) else "None",
+            self._evolving_nonce.hex()[:16] if isinstance(self._evolving_nonce, bytes) else "?",
             extra={
                 "event": "epoch.transition",
                 "from_epoch": old_epoch,
@@ -376,7 +384,7 @@ class NodeKernel:
         if block_epoch > self._current_epoch:
             self.on_epoch_boundary(block_epoch)
         if vrf_output:
-            self.on_block(slot, prev_hash, vrf_output)
+            self.on_block(slot, block_hash, vrf_output)
         # Save checkpoint AFTER updating state
         self._save_nonce_checkpoint(block_hash)
 
@@ -419,7 +427,7 @@ class NodeKernel:
                 if block_epoch > self._current_epoch:
                     self.on_epoch_boundary(block_epoch)
             if vrf_output:
-                self.on_block(slot, prev_hash, vrf_output)
+                self.on_block(slot, block_hash, vrf_output)
             self._save_nonce_checkpoint(block_hash)
 
         logger.debug(
