@@ -620,11 +620,16 @@ class PeerManager:
         ))
 
         # Keep-Alive (protocol 8): periodic pings to keep connection alive.
+        # Reduced interval from 90s to 10s because we don't yet run the
+        # responder side of keep-alive -- the Haskell node pings us but
+        # we can't respond. Frequent client pings keep the connection
+        # alive from our side despite the missing responder.
         peer.protocol_tasks.append(asyncio.create_task(
             _safe_run(
                 run_keep_alive_client(
                     channels[KEEP_ALIVE_PROTOCOL_ID],
                     stop_event=stop_event,
+                    interval=10.0,
                 ),
                 "keep-alive",
             ),
