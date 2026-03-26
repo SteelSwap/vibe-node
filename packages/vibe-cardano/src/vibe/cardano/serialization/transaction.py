@@ -99,7 +99,14 @@ def _normalize_cbor_types(obj: object) -> object:
     re-serialization wherever possible.
     """
     if isinstance(obj, dict):
-        return {_normalize_cbor_types(k): _normalize_cbor_types(v) for k, v in obj.items()}
+        normalized = {}
+        for k, v in obj.items():
+            nk = _normalize_cbor_types(k)
+            # CBOR maps allow array keys; Python dicts need hashable keys
+            if isinstance(nk, list):
+                nk = tuple(nk)
+            normalized[nk] = _normalize_cbor_types(v)
+        return normalized
     if isinstance(obj, (list, tuple)):
         return [_normalize_cbor_types(item) for item in obj]
     if hasattr(obj, "tag") and hasattr(obj, "value"):
