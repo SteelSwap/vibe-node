@@ -56,7 +56,7 @@
     "pools": {
       "af0025ac474998b015e412ba737e39a791566fb831cbc3211992b468": {
         "publicKey": "af0025ac474998b015e412ba737e39a791566fb831cbc3211992b468",
-        "vrf": "c28a14bec6ed0548d2102b3a78417676a455e5e986f7a8c0bedc4ed0e64278df",
+        "vrf": "4f3e5d48815336864cd07f1c5ffe1d41d014a8a36ae96869c0fda6a3ecaf4473",
         "cost": 0,
         "margin": 0,
         "pledge": 1000000000000,
@@ -74,7 +74,7 @@
       },
       "ef53c0096110bc76c4a66751dcc1492cbd18920fd1fe3970558f73fc": {
         "publicKey": "ef53c0096110bc76c4a66751dcc1492cbd18920fd1fe3970558f73fc",
-        "vrf": "77da062e1fd16375454d9488129406b403d601aff06e20ef378d7118d942a79b",
+        "vrf": "00d745e4edc3da390e4e84ca54befb4cc8de1ffa5f94029251f40cab1133fc3d",
         "cost": 0,
         "margin": 0,
         "pledge": 1000000000000,
@@ -92,7 +92,7 @@
       },
       "aba6a0b3eb356088068b0861dd6ba1ec9f6967c528e6f40daf8ac983": {
         "publicKey": "aba6a0b3eb356088068b0861dd6ba1ec9f6967c528e6f40daf8ac983",
-        "vrf": "ad730ce38e16fc166cf0a39feae199da27148c95ae6d250e7e9b6f16e23b2dc3",
+        "vrf": "586165b2fe669197dc0ed126d6631f76c47bd5475924b6d0c6ea9dd7161a4453",
         "cost": 0,
         "margin": 0,
         "pledge": 1000000000000,
