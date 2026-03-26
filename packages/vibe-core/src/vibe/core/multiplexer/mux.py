@@ -370,19 +370,11 @@ class Multiplexer:
                     payload=payload,
                 )
                 try:
-                    self._bearer.buffer_segment(segment)
+                    await self._bearer.write_segment(segment)
                 except (BearerClosedError, ConnectionError) as exc:
                     logger.debug("sender: bearer disconnected: %s", exc)
                     return
                 sent_any = True
-
-            # Single flush after the entire round-robin pass.
-            if sent_any:
-                try:
-                    await self._bearer.flush()
-                except (BearerClosedError, ConnectionError) as exc:
-                    logger.debug("sender: bearer disconnected: %s", exc)
-                    return
 
             if not sent_any:
                 # Event-driven wait: block until a channel signals data
