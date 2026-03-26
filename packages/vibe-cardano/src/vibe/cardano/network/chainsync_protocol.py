@@ -580,6 +580,7 @@ async def run_chain_sync(
     on_roll_backward: OnRollBackward,
     *,
     stop_event: asyncio.Event | None = None,
+    pipeline_depth: int = 200,
 ) -> None:
     """Run the chain-sync protocol loop.
 
@@ -648,7 +649,7 @@ async def run_chain_sync(
     # ProtocolRunner's strict send-recv agency enforcement.
     #
     # Haskell ref: chainSyncClient uses pipelining with configurable depth.
-    PIPELINE_DEPTH = 200  # Tuned: enough headroom for block-fetch without mux contention
+    PIPELINE_DEPTH = pipeline_depth  # Scales with peer count for multi-peer block-fetch
     request_next_cbor = codec.encode(CsMsgRequestNext())
     in_flight = 0
     _recv_buf = b""
