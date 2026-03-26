@@ -374,15 +374,27 @@ class NodeKernel:
     ) -> None:
         """Update Praos state after a block is adopted by ChainDB.
 
-        Called by peer_manager and forge_loop after chain_db.add_block
-        returns adopted=True. Handles epoch boundary ticking,
-        per-block nonce updates, and checkpoint saving.
+        Always restores state from the predecessor's checkpoint first,
+        then applies this block's contribution. This ensures the nonce
+        is always derived from the chain tip, never from accumulated
+        state that could be stale due to fork switches.
 
-        Haskell ref: updateChainDepState + reupdateChainDepState
+        Haskell ref: reupdateChainDepState runs atomically within chain
+        selection, so state is always consistent with the selected chain.
+        We approximate this by restoring to the predecessor's state
+        before each block update.
         """
         epoch_len = self._epoch_length
         if epoch_len <= 0:
             return
+
+        # Restore to predecessor's nonce state so we always build
+        # from the chain, not from potentially stale accumulation.
+        # This handles fork switches correctly: if the predecessor
+        # changed (new fork), its checkpoint reflects the new chain.
+        if prev_hash and prev_hash != b"\x00" * 32:
+            self._restore_nonce_checkpoint(prev_hash)
+
         block_epoch = slot // epoch_len
         if block_epoch > self._current_epoch:
             self.on_epoch_boundary(block_epoch)
