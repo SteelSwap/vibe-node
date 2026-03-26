@@ -217,7 +217,13 @@ class NodeKernel:
         self._evolving_nonce = genesis_hash
         self._candidate_nonce = genesis_hash
         self._lab_nonce = b"\x00" * 32
-        self._last_epoch_block_nonce = b"\x00" * 32
+        # Haskell: TICKN initial state uses mkNonceFromNumber 0, which is
+        # blake2b_256(0 :: Word64), NOT NeutralNonce. This is a real nonce
+        # value that participates in the first epoch's nonce computation.
+        import struct as _struct
+        self._last_epoch_block_nonce = hashlib.blake2b(
+            _struct.pack(">Q", 0), digest_size=32,
+        ).digest()
         self._epoch_length = epoch_length
         self._security_param = security_param
         self._active_slot_coeff = active_slot_coeff
