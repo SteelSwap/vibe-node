@@ -441,11 +441,13 @@ class PeerManager:
                         wrapped = header[1]
                         header_bytes = wrapped.value if hasattr(wrapped, "value") else wrapped
 
+                        hdr_block_number = 0
                         try:
                             era = Era(era_tag)
                             hdr = decode_block_header_raw(header_bytes, era)
                             slot = hdr.slot
                             blk_hash = hdr.hash
+                            hdr_block_number = getattr(hdr, "block_number", 0) or 0
                         except (NotImplementedError, ValueError):
                             inner = cbor2.loads(header_bytes)
                             hdr_body = inner[0]
@@ -457,15 +459,19 @@ class PeerManager:
 
                         if _headers_received % 1000 == 1 or _headers_received <= 5:
                             tip_block = getattr(tip, "block_number", 0) or 0
+                            # Use the header's block_number (not session count)
+                            # for accurate sync percentage when resuming
+                            current_block = hdr_block_number
                             sync_pct = (
-                                (_headers_received / tip_block * 100)
+                                (current_block / tip_block * 100)
                                 if tip_block > 0
                                 else 0.0
                             )
                             logger.info(
-                                "Chain-sync header #%d at slot %d (%.2f%% synced) from %s",
+                                "Chain-sync header #%d at slot %d block #%d (%.2f%% synced) from %s",
                                 _headers_received,
                                 slot,
+                                current_block,
                                 sync_pct,
                                 peer.address,
                                 extra={
@@ -473,6 +479,7 @@ class PeerManager:
                                     "peer": str(peer.address),
                                     "header_num": _headers_received,
                                     "slot": slot,
+                                    "block_number": current_block,
                                     "hash": blk_hash.hex()[:16],
                                     "sync_pct": round(sync_pct, 2),
                                     "tip_block": tip_block,
