@@ -159,11 +159,26 @@ def encode_no_blocks() -> bytes:
 
 
 def encode_block(block_cbor: bytes) -> bytes:
-    """Encode MsgBlock: ``[4, block_cbor]``.
+    """Encode MsgBlock: ``[4, Tag24(ByteString(block_bytes))]``.
 
-    The block_cbor is passed through as raw CBOR-tagged bytes.
+    Builds the wire bytes directly without CBOR library overhead.
+    The format is fixed: array(2) + uint(4) + Tag(24) + bstr(block).
+
+    Haskell ref: cBlockFetchCodecSerialised uses Serialise instance
+    for Serialised which encodes as Tag 24 + byte string.
     """
-    return cbor2.dumps([MSG_BLOCK, block_cbor])
+    n = len(block_cbor)
+    # CBOR byte string length prefix
+    if n < 24:
+        bstr_hdr = bytes([0x40 | n])
+    elif n < 256:
+        bstr_hdr = bytes([0x58, n])
+    elif n < 65536:
+        bstr_hdr = bytes([0x59, n >> 8, n & 0xFF])
+    else:
+        bstr_hdr = bytes([0x5A, (n >> 24) & 0xFF, (n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF])
+    # array(2) + uint(4) + Tag(24) + bstr header + block bytes
+    return b'\x82\x04\xd8\x18' + bstr_hdr + block_cbor
 
 
 def encode_batch_done() -> bytes:
@@ -215,15 +230,41 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
         if len(msg) != 2:
             raise ValueError(f"MsgBlock: expected 2 elements, got {len(msg)}")
         block_data = msg[1]
-        # The block arrives as a decoded CBOR object (CBORTag for era-wrapped
-        # blocks). We need raw bytes for storage and decode_block_header().
-        # Re-encode to get the canonical CBOR bytes.
+        # Unwrap CBOR-in-CBOR Tag 24 — the block bytes are inside the tag
+        if hasattr(block_data, 'tag') and block_data.tag == 24:
+            block_cbor = block_data.value if isinstance(block_data.value, bytes) else bytes(block_data.value)
+            return MsgBlock(block_cbor=block_cbor)
         if isinstance(block_data, bytes):
             block_cbor = block_data
         elif isinstance(block_data, memoryview):
             block_cbor = bytes(block_data)
         else:
-            block_cbor = cbor2.dumps(block_data)
+            # Block body was decoded into a Python object (e.g. CBORTag).
+            # Instead of re-encoding with cbor2.dumps (which mangles
+            # indefinite-length CBOR and breaks hash computation), slice
+            # the original wire bytes to preserve the exact encoding.
+            # Haskell ref: BlockFetchSerialised — raw bytes, no re-encode.
+            import io as _io
+
+            fp = _io.BytesIO(cbor_bytes)
+            # Skip array header
+            additional = cbor_bytes[0] & 0x1F
+            if additional < 24:
+                fp.seek(1)
+            elif additional == 24:
+                fp.seek(2)
+            else:
+                # Indefinite or large — fall back to re-encode
+                block_cbor = cbor2.dumps(block_data)
+                return MsgBlock(block_cbor=block_cbor)
+            # Skip element [0] (msg_id) by decoding it
+            dec = cbor2.CBORDecoder(fp)
+            dec.decode()
+            block_start = fp.tell()
+            # Skip element [1] (block body) to find its extent
+            dec.decode()
+            block_end = fp.tell()
+            block_cbor = cbor_bytes[block_start:block_end]
         return MsgBlock(block_cbor=block_cbor)
 
     elif msg_id == MSG_BATCH_DONE:

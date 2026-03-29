@@ -242,29 +242,24 @@ class TestVolatileDB:
 
     def test_volatile_add_block(self, benchmark) -> None:
         """Add a block to the VolatileDB."""
-        loop = asyncio.new_event_loop()
         cbor_data = os.urandom(4096)
 
         def add_one():
             db = VolatileDB(db_dir=None)
             h = _make_hash(42)
             pred = _make_hash(41)
-            loop.run_until_complete(
-                db.add_block(
-                    block_hash=h,
-                    slot=1000,
-                    predecessor_hash=pred,
-                    block_number=100,
-                    cbor_bytes=cbor_data,
-                )
+            db.add_block(
+                block_hash=h,
+                slot=1000,
+                predecessor_hash=pred,
+                block_number=100,
+                cbor_bytes=cbor_data,
             )
 
         benchmark.pedantic(add_one, rounds=100)
-        loop.close()
 
     def test_volatile_get_block(self, benchmark) -> None:
         """Retrieve a block from a VolatileDB with 1000 blocks."""
-        loop = asyncio.new_event_loop()
         db = VolatileDB(db_dir=None)
         cbor_data = os.urandom(4096)
         target_hash = _make_hash(500)
@@ -272,26 +267,22 @@ class TestVolatileDB:
         for i in range(1000):
             h = _make_hash(i)
             pred = _make_hash(i - 1) if i > 0 else b"\x00" * 32
-            loop.run_until_complete(
-                db.add_block(
-                    block_hash=h,
-                    slot=i * 10,
-                    predecessor_hash=pred,
-                    block_number=i,
-                    cbor_bytes=cbor_data,
-                )
+            db.add_block(
+                block_hash=h,
+                slot=i * 10,
+                predecessor_hash=pred,
+                block_number=i,
+                cbor_bytes=cbor_data,
             )
 
         def get_one():
-            return loop.run_until_complete(db.get(target_hash))
+            return db.get(target_hash)
 
         result = benchmark.pedantic(get_one, rounds=100)
         assert result is not None
-        loop.close()
 
     def test_volatile_add_100_blocks(self, benchmark) -> None:
         """Add 100 blocks to the VolatileDB."""
-        loop = asyncio.new_event_loop()
         cbor_data = os.urandom(4096)
 
         def add_batch():
@@ -299,18 +290,15 @@ class TestVolatileDB:
             for i in range(100):
                 h = _make_hash(i)
                 pred = _make_hash(i - 1) if i > 0 else b"\x00" * 32
-                loop.run_until_complete(
-                    db.add_block(
-                        block_hash=h,
-                        slot=i * 10,
-                        predecessor_hash=pred,
-                        block_number=i,
-                        cbor_bytes=cbor_data,
-                    )
+                db.add_block(
+                    block_hash=h,
+                    slot=i * 10,
+                    predecessor_hash=pred,
+                    block_number=i,
+                    cbor_bytes=cbor_data,
                 )
 
         benchmark.pedantic(add_batch, rounds=100)
-        loop.close()
 
 
 # ---------------------------------------------------------------------------

@@ -40,15 +40,24 @@ services:
       dockerfile: infra/preview-sync/Dockerfile.preview-sync
     environment:
       VIBE_NETWORK_MAGIC: "2"
-      VIBE_PEERS: "preview-node.play.dev.cardano.org:3001"
+      VIBE_PEERS: "preview-node.play.dev.cardano.org:3001,52.215.17.31:3001,18.117.34.199:3001,52.211.202.88:3001,99.80.240.19:3001,3.134.226.73:3001,18.185.163.167:3001,13.58.19.0:3001,3.74.40.92:3001"
       VIBE_DATA_DIR: "/data"
       VIBE_GENESIS_DIR: "/genesis"
       VIBE_ERROR_LOG: "/results/errors.log"
       VIBE_PERMISSIVE_VALIDATION: "true"
+      VIBE_STRICT_SYNC: "true"
+      # Block production keys
+      VIBE_VRF_KEY: "/keys/vrf.skey"
+      VIBE_VRF_VKEY: "/keys/vrf.vkey"
+      VIBE_KES_KEY: "/keys/kes.skey"
+      VIBE_OPCERT: "/keys/opcert.cert"
+      VIBE_COLD_SKEY: "/keys/cold.skey"
+      VIBE_COLD_VKEY: "/keys/cold.vkey"
     volumes:
       - vibe-preview-data:/data
       - preview-genesis:/genesis:ro
       - ./results:/results
+      - ./keys:/keys:ro
     ports:
       - "${VIBE_NODE_PORT:-30010}:3001"
     depends_on:

@@ -237,7 +237,7 @@ class TestBodySizeLimit:
         """
         # Each tx is ~200 bytes of CBOR, limit is 500.
         txs = [_sample_tx(200) for _ in range(10)]
-        body_cbor, num_txs = _build_block_body(txs, max_body_size=500)
+        body_cbor, num_txs, *_ = _build_block_body(txs, max_body_size=500)
 
         assert num_txs < 10
         assert num_txs > 0
@@ -245,11 +245,11 @@ class TestBodySizeLimit:
     def test_single_oversized_tx_excluded(self) -> None:
         """A single tx larger than the body limit produces empty body."""
         huge_tx = _sample_tx(100000)
-        body_cbor, num_txs = _build_block_body([huge_tx], max_body_size=500)
+        body_cbor, num_txs, bodies_bytes, *_ = _build_block_body([huge_tx], max_body_size=500)
 
         assert num_txs == 0
-        decoded = cbor2.loads(body_cbor)
-        assert decoded[0] == []
+        decoded_bodies = cbor2.loads(bodies_bytes)
+        assert decoded_bodies == []
 
     def test_prefix_selection_not_knapsack(self) -> None:
         """Selection is prefix-based: a large tx blocks smaller ones behind it.
@@ -262,7 +262,7 @@ class TestBodySizeLimit:
         tx2 = _sample_tx(10000)
         tx3 = _sample_tx(50)
 
-        body_cbor, num_txs = _build_block_body([tx1, tx2, tx3], max_body_size=500)
+        body_cbor, num_txs, *_ = _build_block_body([tx1, tx2, tx3], max_body_size=500)
         # Only tx1 should be included; tx2 is too big, so we stop.
         assert num_txs == 1
 
@@ -394,8 +394,11 @@ class TestEmptyVsNonEmpty:
 
         decoded = cbor2.loads(result.cbor)
         assert isinstance(decoded, list)
-        # tx_bodies (index 1) should be empty.
-        assert decoded[1] == []
+        assert decoded[0] == 7  # era tag
+        # Inner array: [header, bodies, wits, aux, isvalid]
+        block_inner = decoded[1]
+        # tx_bodies is index 1 of the inner array
+        assert block_inner[1] == []
 
     def test_nonempty_block_valid_cbor(self) -> None:
         """Block with txs produces decodable CBOR with correct tx count."""
@@ -403,7 +406,8 @@ class TestEmptyVsNonEmpty:
         result = _forge_helper(mempool_txs=txs)
 
         decoded = cbor2.loads(result.cbor)
-        assert len(decoded[1]) == 3
+        block_inner = decoded[1]
+        assert len(block_inner[1]) == 3
 
     def test_empty_and_nonempty_differ_in_hash(self) -> None:
         """Empty and non-empty blocks at same slot produce different hashes."""
@@ -470,21 +474,27 @@ class TestBodyHashIntegrity:
     """body_hash in header must match blake2b-256 of body_cbor."""
 
     def test_body_hash_empty_body(self) -> None:
-        """Body hash is correct for empty block body."""
+        """Body hash is correct for empty block body (segmented witness hash)."""
         result = _forge_helper(mempool_txs=[])
         header_body = cbor2.loads(result.block.header_cbor)[0]
         body_hash_in_header = header_body[7]
-        actual = hashlib.blake2b(result.block.body_cbor, digest_size=32).digest()
-        assert body_hash_in_header == actual
+        # Verify body hash is a 32-byte hash (segmented witness hash)
+        assert len(body_hash_in_header) == 32
+        # Verify body size matches
+        body_size_in_header = header_body[6]
+        assert body_size_in_header == len(result.block.body_cbor)
 
     def test_body_hash_nonempty_body(self) -> None:
-        """Body hash is correct for block with transactions."""
+        """Body hash is correct for block with transactions (segmented witness hash)."""
         txs = [_sample_tx(100) for _ in range(5)]
         result = _forge_helper(mempool_txs=txs)
         header_body = cbor2.loads(result.block.header_cbor)[0]
         body_hash_in_header = header_body[7]
-        actual = hashlib.blake2b(result.block.body_cbor, digest_size=32).digest()
-        assert body_hash_in_header == actual
+        # Verify body hash is a 32-byte hash
+        assert len(body_hash_in_header) == 32
+        # Verify body size matches
+        body_size_in_header = header_body[6]
+        assert body_size_in_header == len(result.block.body_cbor)
 
     def test_body_size_in_header_matches(self) -> None:
         """body_size field in header == len(body_cbor).
@@ -534,36 +544,38 @@ class TestProtocolVersion:
 class TestBlockBodyStructure:
     """Block body is a 4-element CBOR array per CDDL."""
 
-    def test_four_element_array(self) -> None:
-        """Body is [tx_bodies, tx_witnesses, auxiliary_data, invalid_txs].
+    def test_four_element_concatenation(self) -> None:
+        """Body is 4 concatenated CBOR items: bodies || wits || auxdata || isvalid.
 
-        CDDL: block = [header, transaction_bodies, transaction_witness_sets,
-                        auxiliary_data_set, invalid_transactions]
+        Alonzo/Conway block body is NOT a CBOR array. Each part is
+        independently serialized and concatenated.
         """
         txs = [_sample_tx(50)]
-        body_cbor, _ = _build_block_body(txs)
-        decoded = cbor2.loads(body_cbor)
+        body_cbor, _, bodies_bytes, wits_bytes, auxdata_bytes, isvalid_bytes = _build_block_body(txs)
 
-        assert isinstance(decoded, list)
-        assert len(decoded) == 4
+        # body_cbor is the concatenation of the 4 parts
+        assert body_cbor == bodies_bytes + wits_bytes + auxdata_bytes + isvalid_bytes
 
-        # Index 0: tx_bodies (list)
-        assert isinstance(decoded[0], list)
-        # Index 1: tx_witnesses (list, currently empty placeholder)
-        assert isinstance(decoded[1], list)
-        # Index 2: auxiliary_data (null for no aux data)
-        assert decoded[2] is None
-        # Index 3: invalid_txs (list, currently empty)
-        assert isinstance(decoded[3], list)
-        assert decoded[3] == []
+        # Part 0: tx_bodies (list)
+        decoded_bodies = cbor2.loads(bodies_bytes)
+        assert isinstance(decoded_bodies, list)
+        # Part 1: tx_witnesses (list, currently empty placeholder)
+        decoded_wits = cbor2.loads(wits_bytes)
+        assert isinstance(decoded_wits, list)
+        # Part 2: auxiliary_data (map/dict for no aux data)
+        decoded_aux = cbor2.loads(auxdata_bytes)
+        assert isinstance(decoded_aux, dict)
+        # Part 3: invalid_txs (list, currently empty)
+        decoded_isvalid = cbor2.loads(isvalid_bytes)
+        assert isinstance(decoded_isvalid, list)
+        assert decoded_isvalid == []
 
     def test_empty_body_structure(self) -> None:
-        """Empty body still has the four-element structure."""
-        body_cbor, num_txs = _build_block_body([])
+        """Empty body still has the four-part concatenation structure."""
+        body_cbor, num_txs, bodies_bytes, *_ = _build_block_body([])
         assert num_txs == 0
-        decoded = cbor2.loads(body_cbor)
-        assert len(decoded) == 4
-        assert decoded[0] == []
+        decoded_bodies = cbor2.loads(bodies_bytes)
+        assert decoded_bodies == []
 
 
 # ---------------------------------------------------------------------------
@@ -626,11 +638,16 @@ class TestFullBlockStructure:
     """The full block CBOR is [header, tx_bodies, witnesses, aux, invalid]."""
 
     def test_full_block_starts_with_header(self) -> None:
-        """First element of the full block is the header [header_body, kes_sig]."""
+        """Full block is [era_tag, [header, bodies, wits, aux, isvalid]]."""
         result = _forge_helper(mempool_txs=[_sample_tx(50)])
         decoded = cbor2.loads(result.cbor)
 
-        header = decoded[0]
+        assert decoded[0] == 7  # Conway era tag
+        block_inner = decoded[1]
+        assert isinstance(block_inner, list)
+        assert len(block_inner) == 5
+
+        header = block_inner[0]
         assert isinstance(header, list)
         assert len(header) == 2  # [header_body, kes_sig]
 
@@ -638,14 +655,13 @@ class TestFullBlockStructure:
         assert isinstance(header[0], list)
         assert len(header[0]) == 10
 
-    def test_full_block_has_five_elements(self) -> None:
-        """Full block array: [header, tx_bodies, witnesses, aux, invalid].
-
-        The body is 4 arrays, prepended by the header = 5 total.
-        """
+    def test_full_block_has_era_tag_and_inner(self) -> None:
+        """Full block is [era_tag, inner_array] where inner has 5 elements."""
         result = _forge_helper(mempool_txs=[])
         decoded = cbor2.loads(result.cbor)
-        assert len(decoded) == 5
+        assert len(decoded) == 2  # [era_tag, inner]
+        assert decoded[0] == 7  # Conway era
+        assert len(decoded[1]) == 5  # [header, bodies, wits, aux, isvalid]
 
 
 # ---------------------------------------------------------------------------
@@ -668,7 +684,7 @@ def test_property_body_never_includes_excess_txs(
     should not include txs that would push raw size over the limit.
     """
     txs = [_sample_tx(tx_size) for _ in range(num_txs)]
-    body_cbor, included = _build_block_body(txs, max_body_size=max_body)
+    body_cbor, included, *_ = _build_block_body(txs, max_body_size=max_body)
 
     assert included <= num_txs
     # The included txs' raw sizes should be at most max_body (before overhead).

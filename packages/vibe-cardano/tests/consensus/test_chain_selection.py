@@ -89,22 +89,18 @@ class TestVRFTieBreaking:
         b = _make_candidate(block_number=100, vrf_output=low_vrf)
         assert compare_chains(a, b) == Preference.PREFER_SECOND
 
-    def test_equal_vrf_falls_through_to_hash(self) -> None:
+    def test_equal_vrf_returns_equal(self) -> None:
+        """Haskell: no hash fallback — equal VRF = EQUAL."""
         same_vrf = b"\xab" * 64
-        low_hash = b"\x00" * 32
-        high_hash = b"\xff" * 32
-        a = _make_candidate(block_number=100, tip_hash=low_hash, vrf_output=same_vrf)
-        b = _make_candidate(block_number=100, tip_hash=high_hash, vrf_output=same_vrf)
-        assert compare_chains(a, b) == Preference.PREFER_FIRST
+        a = _make_candidate(block_number=100, tip_hash=b"\x00" * 32, vrf_output=same_vrf)
+        b = _make_candidate(block_number=100, tip_hash=b"\xff" * 32, vrf_output=same_vrf)
+        assert compare_chains(a, b) == Preference.EQUAL
 
-    def test_only_one_has_vrf_falls_to_hash(self) -> None:
-        """When only one chain has VRF output, fall through to hash."""
-        low_hash = b"\x00" * 32
-        high_hash = b"\xff" * 32
-        a = _make_candidate(block_number=100, tip_hash=low_hash, vrf_output=b"\xff" * 64)
-        b = _make_candidate(block_number=100, tip_hash=high_hash, vrf_output=None)
-        # VRF comparison skipped (only one has it), falls to hash
-        assert compare_chains(a, b) == Preference.PREFER_FIRST
+    def test_only_one_has_vrf_returns_equal(self) -> None:
+        """Haskell: no hash fallback — missing VRF = EQUAL."""
+        a = _make_candidate(block_number=100, vrf_output=b"\xff" * 64)
+        b = _make_candidate(block_number=100, vrf_output=None)
+        assert compare_chains(a, b) == Preference.EQUAL
 
 
 # ---------------------------------------------------------------------------
@@ -112,11 +108,13 @@ class TestVRFTieBreaking:
 # ---------------------------------------------------------------------------
 
 
-class TestHashTieBreaking:
-    def test_lower_hash_wins(self) -> None:
+class TestNoHashFallback:
+    """Haskell has no block-hash fallback — EQUAL when VRF unavailable."""
+
+    def test_no_vrf_returns_equal(self) -> None:
         a = _make_candidate(block_number=100, tip_hash=b"\x00" * 32)
         b = _make_candidate(block_number=100, tip_hash=b"\xff" * 32)
-        assert compare_chains(a, b) == Preference.PREFER_FIRST
+        assert compare_chains(a, b) == Preference.EQUAL
 
     def test_equal_hash_is_equal(self) -> None:
         h = b"\x42" * 32

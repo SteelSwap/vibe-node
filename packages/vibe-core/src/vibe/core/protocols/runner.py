@@ -216,23 +216,25 @@ class ProtocolRunner(Generic[St]):
         # Read bytes from the channel, prepending any buffered data.
         # Large messages (e.g., blocks with transactions) may span multiple
         # SDU segments (max 12,288 bytes each). We accumulate segments
-        # until we have a complete CBOR message.
+        # using a bytearray buffer (O(1) append) instead of bytes
+        # concatenation (O(n) copy per segment).
         #
-        # Haskell ref: Network.Mux.Ingress accumulates bytes per-channel;
-        # the codec reads from the buffer as a byte stream.
+        # Haskell ref: Network.Mux.Ingress accumulates bytes per-channel
+        # as a lazy Builder (O(1) append), codec reads from the stream.
         if self._recv_buf:
-            data = self._recv_buf
+            buf = bytearray(self._recv_buf)
             self._recv_buf = b""
         else:
-            data = await self._channel.recv()
+            buf = bytearray(await self._channel.recv())
 
         import cbor2pure as _cbor2
 
         # Try to decode. If the CBOR is incomplete (message spans multiple
-        # SDU segments), read more segments and retry.
+        # SDU segments), read more segments into the buffer and retry.
         max_reassembly_attempts = 50  # ~600KB at 12KB/segment
         for _attempt in range(max_reassembly_attempts):
             try:
+                data = bytes(buf)  # CBORDecoder needs immutable bytes
                 decoder = _cbor2.CBORDecoder(io.BytesIO(data))
                 decoder.decode()  # consume first CBOR item
                 consumed = decoder.fp.tell()
@@ -248,14 +250,14 @@ class ProtocolRunner(Generic[St]):
                 # Check if this looks like incomplete data (premature end)
                 err_str = str(exc).lower()
                 if "end of" in err_str or "truncated" in err_str or "premature" in err_str or "incomplete" in err_str:
-                    # Read another segment and concatenate
+                    # Read another segment and append to buffer (O(1))
                     try:
                         more = await self._channel.recv()
-                        data = data + more
+                        buf.extend(more)
                     except Exception:
                         raise CodecError(
                             f"Failed to decode message at state {self._state!r}: "
-                            f"{exc} (after {len(data)} bytes across {_attempt + 1} segments)"
+                            f"{exc} (after {len(buf)} bytes across {_attempt + 1} segments)"
                         ) from exc
                 else:
                     raise CodecError(

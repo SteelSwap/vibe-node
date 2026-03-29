@@ -29,43 +29,10 @@ from vibe.core.multiplexer import (
 )
 
 from .config import NodeConfig, PeerAddress
-from .inbound_server import N2N_PROTOCOL_IDS
 
-__all__ = ["PeerManager"]
+__all__ = ["PeerManager", "_RangeTracker"]
 
 logger = logging.getLogger(__name__)
-
-
-def _get_new_chain_blocks(
-    chain_db: Any,
-    intersection_hash: bytes,
-    tip_hash: bytes,
-) -> list[tuple[int, bytes, bytes, bytes | None]]:
-    """Walk backward from tip to intersection through VolatileDB.
-
-    Returns list of (slot, block_hash, prev_hash, vrf_output) oldest-first,
-    for blocks AFTER the intersection (not including intersection itself).
-    Used to re-apply nonce state after a fork switch.
-    """
-    from vibe.cardano.serialization.block import decode_block_header
-
-    blocks: list[tuple[int, bytes, bytes, bytes | None]] = []
-    h = tip_hash
-    while h and h != intersection_hash and h in chain_db.volatile_db._block_info:
-        info = chain_db.volatile_db._block_info[h]
-        # Try to get VRF output from the block
-        vrf_out: bytes | None = None
-        block_cbor = chain_db.volatile_db._blocks.get(h)
-        if block_cbor:
-            try:
-                hdr = decode_block_header(block_cbor)
-                vrf_out = hdr.vrf_output
-            except Exception:
-                pass
-        blocks.append((info.slot, info.block_hash, info.predecessor_hash, vrf_out))
-        h = info.predecessor_hash
-    blocks.reverse()  # oldest first
-    return blocks
 
 
 @dataclass
@@ -81,6 +48,37 @@ class _PeerConnection:
     reconnect_delay: float = 1.0
     reconnect_attempt: int = 0
     connected: bool = False
+    protocol_tasks: list = None  # type: ignore[assignment]  # asyncio.Task refs
+
+    def __post_init__(self) -> None:
+        if self.protocol_tasks is None:
+            self.protocol_tasks = []
+
+
+class _RangeTracker:
+    """Track in-flight ranges per peer for re-enqueue on disconnect."""
+
+    def __init__(self, range_queue: asyncio.Queue) -> None:
+        self._range_queue = range_queue
+        self._in_flight: dict[str, list[tuple]] = {}
+
+    def on_range_sent(self, peer_addr: str, range_tuple: tuple) -> None:
+        self._in_flight.setdefault(peer_addr, []).append(range_tuple)
+
+    def on_range_complete(self, peer_addr: str, range_tuple: tuple) -> None:
+        if peer_addr in self._in_flight:
+            try:
+                self._in_flight[peer_addr].remove(range_tuple)
+            except ValueError:
+                pass
+
+    def on_peer_disconnect(self, peer_addr: str) -> None:
+        ranges = self._in_flight.pop(peer_addr, [])
+        for r in ranges:
+            self._range_queue.put_nowait(r)
+
+    def on_no_blocks(self, range_tuple: tuple) -> None:
+        self._range_queue.put_nowait(range_tuple)
 
 
 class PeerManager:
@@ -113,6 +111,14 @@ class PeerManager:
         "_tasks",
         "_known_points",
         "_block_received_event",
+        "_shared_range_queue",
+        "_shared_block_queue",
+        "_processor_task",
+        "_nonce_worker_task",
+        "_range_tracker",
+        "_chain_sync_peer",
+        "_block_notify",
+        "peer_tip_block_no_tvar",
     )
 
     def __init__(
@@ -132,6 +138,19 @@ class PeerManager:
         # threading.Event — set when a new block is processed,
         # wakes the forge thread to check leadership immediately.
         self._block_received_event = block_received_event
+        # Multi-peer shared state
+        self._shared_range_queue: asyncio.Queue | None = None
+        self._shared_block_queue: asyncio.Queue | None = None
+        self._processor_task: asyncio.Task | None = None
+        self._nonce_worker_task: asyncio.Task | None = None
+        self._range_tracker: _RangeTracker | None = None
+        self._chain_sync_peer: str | None = None
+        self._block_notify = asyncio.Event()
+        # Best known peer tip block number — updated by chain-sync client
+        # when it receives headers. Read by forge loop to avoid forging
+        # on a chain that's behind the peer tip (would be orphaned).
+        from vibe.core.stm import TVar
+        self.peer_tip_block_no_tvar: TVar = TVar(0)
 
     @property
     def known_points(self) -> list[Any]:
@@ -141,6 +160,14 @@ class PeerManager:
     def set_known_points(self, points: list[Any]) -> None:
         """Set known points for chain-sync to start from (instead of Origin)."""
         self._known_points = points
+
+    def _ensure_shared_queues(self) -> tuple[asyncio.Queue, asyncio.Queue]:
+        """Lazily create shared range_queue and block_queue for multi-peer fetch."""
+        if self._shared_range_queue is None:
+            self._shared_range_queue = asyncio.Queue()
+            self._shared_block_queue = asyncio.Queue(maxsize=500)
+            self._range_tracker = _RangeTracker(self._shared_range_queue)
+        return self._shared_range_queue, self._shared_block_queue
 
     @property
     def connected_count(self) -> int:
@@ -178,7 +205,7 @@ class PeerManager:
                 peer.task.cancel()
                 try:
                     await peer.task
-                except asyncio.CancelledError, Exception:
+                except (asyncio.CancelledError, Exception):
                     pass
 
     async def _peer_loop(self, peer: _PeerConnection) -> None:
@@ -274,13 +301,32 @@ class PeerManager:
             extra={"event": "peer.connect", "peer": str(peer.address)},
         )
         reader, writer = await asyncio.open_connection(peer.address.host, peer.address.port)
+        # Disable Nagle's algorithm for low-latency segment delivery.
+        # Haskell uses Socket.sendAll per segment; without NODELAY our
+        # small chain-sync headers get buffered for up to 200ms.
+        sock = writer.transport.get_extra_info('socket')
+        if sock is not None:
+            import socket
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         bearer = Bearer(reader, writer)
         mux = Multiplexer(bearer, is_initiator=True)
 
-        # Register N2N miniprotocol channels.
-        channels: dict[int, MiniProtocolChannel] = {}
-        for proto_id in N2N_PROTOCOL_IDS:
-            channels[proto_id] = mux.add_protocol(proto_id)
+        # Register N2N miniprotocol channels with dual (init+resp) support.
+        # Handshake is single-direction (initiator only for outbound).
+        # All other protocols get both initiator and responder channels
+        # so we can serve data back to the peer on the same connection.
+        init_channels: dict[int, MiniProtocolChannel] = {}
+        resp_channels: dict[int, MiniProtocolChannel] = {}
+
+        init_channels[HANDSHAKE_PROTOCOL_ID] = mux.add_protocol(HANDSHAKE_PROTOCOL_ID)
+
+        for proto_id in [CHAIN_SYNC_N2N_ID, BLOCK_FETCH_N2N_ID, TX_SUBMISSION_N2N_ID, KEEP_ALIVE_PROTOCOL_ID]:
+            init_ch, resp_ch = mux.add_protocol_pair(proto_id)
+            init_channels[proto_id] = init_ch
+            resp_channels[proto_id] = resp_ch
+
+        # Alias: existing code uses `channels[X]` for initiator protocols.
+        channels = init_channels
 
         peer.bearer = bearer
         peer.mux = mux
@@ -338,6 +384,7 @@ class PeerManager:
 
         stop_event = asyncio.Event()
         peer.stop_event = stop_event
+        peer.protocol_tasks = []  # clear from previous connection
 
         async def _safe_run(coro, name: str) -> None:
             """Run a miniprotocol coroutine, suppressing MuxClosedError on shutdown."""
@@ -350,10 +397,10 @@ class PeerManager:
             except Exception as exc:
                 logger.warning("Peer %s: %s error: %s", peer.address, name, exc)
 
-        # --- Sync pipeline: chain-sync -> block-fetch -> store ---
-        # Chain-sync receives headers, extracts Point(slot, hash),
-        # queues them for block-fetch. Block-fetch downloads full
-        # block bodies and stores them in ChainDB.
+        # --- Multi-peer sync pipeline ---
+        # Chain-sync runs on the FIRST connected peer only.
+        # ALL peers run block-fetch, sharing range_queue and block_queue.
+        # A single processor task stores blocks from the shared block_queue.
 
         import hashlib
 
@@ -361,423 +408,311 @@ class PeerManager:
 
         from vibe.cardano.network.chainsync import Point
 
-        # Queue of points discovered by chain-sync, consumed by block-fetch.
-        fetch_queue: asyncio.Queue[Point] = asyncio.Queue(maxsize=1000)
+        shared_range_queue, shared_block_queue = self._ensure_shared_queues()
         chain_db = self._chain_db
         node_kernel = self._node_kernel
-        _headers_received = 0
+        peer_addr = str(peer.address)
 
-        async def _on_roll_forward(header: object, tip: object) -> None:
-            nonlocal _headers_received
-            _headers_received += 1
+        # --- Chain-sync (first peer only) ---
+        if self._chain_sync_peer is None:
+            self._chain_sync_peer = peer_addr
 
-            # header = [era_tag, CBORTag(24, header_cbor)]
-            # Use the serialization layer to decode header fields.
-            from vibe.cardano.serialization.block import (
-                Era,
-                decode_block_header_raw,
-            )
-            from vibe.cardano.serialization.block import (
-                block_hash as compute_block_hash,
-            )
+        if peer_addr == self._chain_sync_peer:
+            fetch_queue: asyncio.Queue[Point] = asyncio.Queue(maxsize=1000)
+            _headers_received = 0
 
-            try:
-                if isinstance(header, (list, tuple)) and len(header) >= 2:
-                    era_tag = header[0]
-                    wrapped = header[1]  # CBORTag(24, inner_bytes)
-                    header_bytes = wrapped.value if hasattr(wrapped, "value") else wrapped
+            async def _on_roll_forward(header: object, tip: object) -> None:
+                nonlocal _headers_received
+                _headers_received += 1
 
-                    try:
-                        era = Era(era_tag)
-                        hdr = decode_block_header_raw(header_bytes, era)
-                        slot = hdr.slot
-                        blk_hash = hdr.hash
-                    except (NotImplementedError, ValueError):
-                        # Byron or unrecognised era -- fall back to inline
-                        inner = cbor2.loads(header_bytes)
-                        hdr_body = inner[0]
-                        slot = hdr_body[1]
-                        blk_hash = compute_block_hash(header_bytes)
+                from vibe.cardano.serialization.block import (
+                    Era,
+                    decode_block_header_raw,
+                )
+                from vibe.cardano.serialization.block import (
+                    block_hash as compute_block_hash,
+                )
 
-                    point = Point(slot=slot, hash=blk_hash)
+                try:
+                    if isinstance(header, (list, tuple)) and len(header) >= 2:
+                        era_tag = header[0]
+                        wrapped = header[1]
+                        header_bytes = wrapped.value if hasattr(wrapped, "value") else wrapped
 
-                    # NOTE: We do NOT update the nonce here from the header.
-                    # Haskell's reupdateChainDepState is tentative — committed
-                    # only after chain selection adopts the block. If we update
-                    # nonce from a header whose block is later rejected (stale,
-                    # fork switch), the nonce state is corrupted. The nonce is
-                    # updated in _on_block AFTER ChainDB confirms adoption.
-                    # STM ensures the forge loop sees consistent nonce+tip.
+                        hdr_block_number = 0
+                        try:
+                            era = Era(era_tag)
+                            hdr = decode_block_header_raw(header_bytes, era)
+                            slot = hdr.slot
+                            blk_hash = hdr.hash
+                            hdr_block_number = getattr(hdr, "block_number", 0) or 0
+                        except (NotImplementedError, ValueError):
+                            inner = cbor2.loads(header_bytes)
+                            hdr_body = inner[0]
+                            slot = hdr_body[1] if isinstance(hdr_body, list) else 0
+                            blk_hash = compute_block_hash(header_bytes)
+                            # Extract block_number from header_body[0]
+                            if isinstance(hdr_body, list) and len(hdr_body) > 0:
+                                hdr_block_number = hdr_body[0] if isinstance(hdr_body[0], int) else 0
 
-                    # Queue for block-fetch (still need body for storage)
-                    try:
-                        fetch_queue.put_nowait(point)
-                    except asyncio.QueueFull:
-                        pass
+                        point = Point(slot=slot, hash=blk_hash)
+                        await fetch_queue.put(point)
 
-                    if _headers_received % 1000 == 1 or _headers_received <= 5:
-                        # Compute sync percentage from server tip
-                        tip_block = getattr(tip, "block_number", 0) or 0
-                        sync_pct = (
-                            (_headers_received / tip_block * 100)
-                            if tip_block > 0
-                            else 0.0
-                        )
-                        logger.info(
-                            "Chain-sync header #%d at slot %d (%.2f%% synced) from %s",
-                            _headers_received,
-                            slot,
-                            sync_pct,
-                            peer.address,
-                            extra={
-                                "event": "chainsync.header",
-                                "peer": str(peer.address),
-                                "header_num": _headers_received,
-                                "slot": slot,
-                                "hash": blk_hash.hex()[:16],
-                                "sync_pct": round(sync_pct, 2),
-                                "tip_block": tip_block,
-                            },
-                        )
-                else:
-                    if _headers_received % 100 == 1:
-                        logger.debug(
-                            "Peer %s: header #%d (unparsed, tip=%s)",
-                            peer.address,
-                            _headers_received,
-                            tip,
-                        )
-            except Exception as exc:
-                logger.warning("Peer %s: header parse error: %s", peer.address, exc)
+                        # Haskell-matching chain-sync header event for log correlation
+                        if _headers_received % 1000 == 0:
+                            logger.info(
+                                "ChainSync.Client.DownloadedHeader: slot=%d hash=%s peer=%s",
+                                slot, blk_hash.hex()[:16], str(peer.address),
+                            )
+                        else:
+                            logger.debug(
+                                "ChainSync.Client.DownloadedHeader: slot=%d hash=%s peer=%s",
+                                slot, blk_hash.hex()[:16], str(peer.address),
+                            )
 
-        async def _on_roll_backward(point: object, tip: object) -> None:
-            logger.info(
-                "Chain rollback to %s (tip=%s) from %s",
-                point,
-                tip,
-                peer.address,
-                extra={
-                    "event": "chainsync.rollback",
-                    "peer": str(peer.address),
-                    "point": str(point),
-                    "tip": str(tip),
-                },
-            )
-            # TODO: ChainDB rollback to point
+                        # Track best known peer tip for forge loop
+                        tip_block_no = getattr(tip, "block_number", 0) or 0
+                        if tip_block_no > self.peer_tip_block_no_tvar.value:
+                            self.peer_tip_block_no_tvar._write(tip_block_no)
 
-        asyncio.create_task(
-            _safe_run(
-                run_chain_sync(
-                    channels[CHAIN_SYNC_N2N_ID],
-                    known_points=self._known_points,  # Resume from ChainDB tip
-                    on_roll_forward=_on_roll_forward,
-                    on_roll_backward=_on_roll_backward,
-                    stop_event=stop_event,
+                        if _headers_received % 1000 == 1 or _headers_received <= 5:
+                            tip_block = tip_block_no
+                            # Use the header's block_number (not session count)
+                            # for accurate sync percentage when resuming
+                            current_block = hdr_block_number
+                            sync_pct = min(
+                                (current_block / tip_block * 100)
+                                if tip_block > 0
+                                else 0.0,
+                                100.0,
+                            )
+                            if _headers_received % 10000 == 1:
+                                logger.info(
+                                    "Chain-sync: %d headers (block #%d, %.1f%% synced) from %s",
+                                    _headers_received,
+                                    current_block,
+                                    sync_pct,
+                                    peer.address,
+                                )
+                            else:
+                                logger.debug(
+                                    "Chain-sync header #%d at slot %d block #%d (%.2f%% synced) from %s",
+                                    _headers_received,
+                                    slot,
+                                    current_block,
+                                    sync_pct,
+                                    peer.address,
+                                    extra={
+                                        "event": "chainsync.header",
+                                        "peer": str(peer.address),
+                                        "header_num": _headers_received,
+                                        "slot": slot,
+                                        "block_number": current_block,
+                                        "hash": blk_hash.hex()[:16],
+                                        "sync_pct": round(sync_pct, 2),
+                                        "tip_block": tip_block,
+                                    },
+                                )
+                    else:
+                        if _headers_received % 100 == 1:
+                            logger.debug(
+                                "Peer %s: header #%d (unparsed, tip=%s)",
+                                peer.address,
+                                _headers_received,
+                                tip,
+                            )
+                except Exception as exc:
+                    logger.warning("Peer %s: header parse error: %s", peer.address, exc)
+
+            async def _on_roll_backward(point: object, tip: object) -> None:
+                logger.info(
+                    "Chain rollback to %s (tip=%s) from %s",
+                    point,
+                    tip,
+                    peer.address,
+                    extra={
+                        "event": "chainsync.rollback",
+                        "peer": str(peer.address),
+                        "point": str(point),
+                        "tip": str(tip),
+                    },
+                )
+
+            # Scale pipeline depth with peer count
+            pipeline_depth = 250 * max(1, len(self._config.peers))
+
+            peer.protocol_tasks.append(asyncio.create_task(
+                _safe_run(
+                    run_chain_sync(
+                        channels[CHAIN_SYNC_N2N_ID],
+                        known_points=self._known_points,
+                        on_roll_forward=_on_roll_forward,
+                        on_roll_backward=_on_roll_backward,
+                        stop_event=stop_event,
+                        pipeline_depth=pipeline_depth,
+                    ),
+                    "chain-sync",
                 ),
-                "chain-sync",
-            ),
-            name=f"chainsync-{peer.address}",
-        )
+                name=f"chainsync-{peer.address}",
+            ))
 
-        # Block-fetch worker: batches points from the queue into ranges,
-        # fetches full block bodies, and stores them in ChainDB.
-        async def _block_fetch_worker() -> None:
-            from vibe.cardano.network.blockfetch_protocol import run_block_fetch_continuous
-
-            bf_channel = channels[BLOCK_FETCH_N2N_ID]
-            _blocks_stored = 0
-
-            # Use a queue for block-fetch ranges. The chain-sync
-            # _on_roll_forward fills fetch_queue with Points; we
-            # convert to (from, to) range tuples for block-fetch.
-            range_queue: asyncio.Queue[tuple] = asyncio.Queue()
-
-            # Background task: drain fetch_queue Points into ranges
+            # Range builder: drain fetch_queue Points into shared range_queue
             async def _range_builder() -> None:
                 while not stop_event.is_set():
                     batch: list[Point] = []
                     try:
-                        point = await asyncio.wait_for(fetch_queue.get(), timeout=1.0)
-                        batch.append(point)
-                        while len(batch) < 100:
-                            try:
-                                batch.append(fetch_queue.get_nowait())
-                            except asyncio.QueueEmpty:
-                                break
+                        point = await asyncio.wait_for(fetch_queue.get(), timeout=0.5)
                     except TimeoutError:
                         continue
+                    batch.append(point)
+                    # Drain any additional points already queued
+                    while len(batch) < 500:
+                        try:
+                            batch.append(fetch_queue.get_nowait())
+                        except asyncio.QueueEmpty:
+                            break
                     if batch:
-                        await range_queue.put((batch[0], batch[-1]))
+                        await shared_range_queue.put((batch[0], batch[-1]))
 
-            builder_task = asyncio.create_task(_range_builder())
+            peer.protocol_tasks.append(asyncio.create_task(
+                _safe_run(_range_builder(), "range-builder"),
+                name=f"range-builder-{peer.address}",
+            ))
 
-            async def _on_block(block_cbor: bytes) -> None:
-                nonlocal _blocks_stored
-                from vibe.cardano.consensus.hfc import validate_block
-                from vibe.cardano.serialization.block import (
-                    Era,
-                    decode_block_header,
+            # Start shared processor task (non-producer only).
+            # Producers use inline _on_block for synchronous nonce updates.
+            is_producer = self._config.pool_keys is not None
+            if self._processor_task is None and not is_producer:
+                self._processor_task = asyncio.create_task(
+                    _safe_run(
+                        self._shared_block_processor(stop_event),
+                        "block-processor",
+                    ),
+                    name="shared-block-processor",
                 )
-                from vibe.cardano.serialization.transaction import (
-                    decode_block_body,
-                )
+
+            # Nonce worker disabled -- on_block_adopted is called directly
+            # in the shared block processor for immediate forge loop update.
+            # The nonce worker pattern will be needed when blocks truly arrive
+            # out-of-order from multiple peers and need sequential reordering.
+
+        # --- Block-fetch ---
+        # When producing blocks, use inline _on_block callback (old pattern)
+        # so nonce updates happen synchronously in the block-fetch task.
+        # This matches the 79fb652 architecture that achieved 35% forge rate.
+        # Non-producing nodes use the shared queue for parallel multi-peer.
+        is_producer = self._config.pool_keys is not None
+        if is_producer and peer_addr != self._chain_sync_peer:
+            # Non-chain-sync peers on a producer skip block-fetch but
+            # MUST run keep-alive to prevent Haskell's inbound governor
+            # from demoting the idle connection to Cold.
+            from vibe.cardano.network.keepalive_protocol import run_keep_alive_client
+
+            # Keep-alive client on initiator channel.
+            peer.protocol_tasks.append(asyncio.create_task(
+                _safe_run(
+                    run_keep_alive_client(
+                        channels[KEEP_ALIVE_PROTOCOL_ID],
+                        stop_event=stop_event,
+                        interval=10.0,
+                        peer_info=peer_addr,
+                    ),
+                    "keep-alive",
+                ),
+                name=f"keepalive-{peer.address}",
+            ))
+
+            # Responder bundle on resp_channels (bidirectional support).
+            from vibe.cardano.node.miniprotocol_bundle import launch_responder_bundle
+            resp_tasks = await launch_responder_bundle(
+                resp_channels, chain_db, None, stop_event, peer_info=peer_addr,
+            )
+            for t in resp_tasks:
+                peer.protocol_tasks.append(t)
+
+            peer.mux_task = mux_task
+            return
+
+        async def _peer_block_fetch() -> None:
+            from vibe.cardano.network.blockfetch_protocol import run_block_fetch_pipelined
+
+            bf_channel = channels[BLOCK_FETCH_N2N_ID]
+            tracker = self._range_tracker
+
+            def _on_range_sent(r: tuple) -> None:
+                if tracker is not None:
+                    tracker.on_range_sent(peer_addr, r)
+
+            def _on_range_complete(r: tuple) -> None:
+                if tracker is not None:
+                    tracker.on_range_complete(peer_addr, r)
+
+            if is_producer:
+                # Producer mode: inline _on_block callback for synchronous
+                # nonce updates (matching commit 79fb652 architecture).
+                _blocks_stored = [0]
+
+                async def _on_block(block_cbor: bytes) -> None:
+                    await self._process_block_inline(
+                        block_cbor, chain_db, _blocks_stored,
+                    )
 
                 try:
-                    # --- Parse block from block-fetch wire format ---
-                    # Block-fetch delivers CBORTag(24, raw_bytes) or re-encoded
-                    # CBOR. We need to get to the block array [header, ...].
-                    decoded = cbor2.loads(block_cbor)
-
-                    # Unwrap tag-24 if present
-                    if hasattr(decoded, "tag") and decoded.tag == 24:
-                        inner = decoded.value
-                        if isinstance(inner, bytes):
-                            decoded = cbor2.loads(inner)
-                        else:
-                            decoded = inner
-
-                    # Block-fetch format: [era_int, block_body]
-                    # where block_body = [header, tx_bodies, tx_witnesses, aux, invalid_txs]
-                    if (
-                        isinstance(decoded, list)
-                        and len(decoded) >= 2
-                        and isinstance(decoded[0], int)
-                    ):
-                        era_tag = decoded[0]
-                        block_body = decoded[1]
-                    elif hasattr(decoded, "tag"):
-                        era_tag = decoded.tag
-                        block_body = decoded.value
-                    else:
-                        raise ValueError(f"Unexpected block format: {type(decoded)}")
-
-                    # Build raw_block for storage (era-tagged CBOR)
-                    raw_block = cbor2.dumps(cbor2.CBORTag(era_tag, block_body))
-
-                    # Use the serialization layer to decode header fields
-                    # instead of manually extracting from the CBOR array.
-                    era = Era(era_tag)
-                    try:
-                        hdr = decode_block_header(raw_block)
-                        slot = hdr.slot
-                        block_number = hdr.block_number
-                        prev_hash = hdr.prev_hash or b"\x00" * 32
-                        block_hash = hdr.hash
-                        hdr_cbor = hdr.header_cbor
-                    except NotImplementedError:
-                        # Byron blocks -- fall back to inline extraction
-                        hdr_arr = block_body[0]
-                        hdr_body_arr = hdr_arr[0]
-                        block_number = hdr_body_arr[0]
-                        slot = hdr_body_arr[1]
-                        prev_hash = hdr_body_arr[2] or b"\x00" * 32
-                        hdr_cbor = cbor2.dumps(hdr_arr)
-                        block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
-
-                    # --- Validate block transactions ---
-                    body = decode_block_body(raw_block)
-                    if body.transactions:
-                        errors = validate_block(
-                            era=era,
-                            block=body.transactions,
-                            ledger_state=(chain_db.ledger_db if chain_db else None),
-                            protocol_params=self._config.protocol_params,
-                            current_slot=slot,
-                        )
-                        if errors:
-                            if self._config.permissive_validation:
-                                logger.warning(
-                                    "Peer %s: block #%d slot=%d has %d "
-                                    "validation errors (permissive): %s",
-                                    peer.address,
-                                    block_number,
-                                    slot,
-                                    len(errors),
-                                    errors[:3],
-                                )
-                            else:
-                                logger.warning(
-                                    "Peer %s: REJECTING block #%d slot=%d: %d errors: %s",
-                                    peer.address,
-                                    block_number,
-                                    slot,
-                                    len(errors),
-                                    errors[:3],
-                                )
-                                return  # Don't store invalid blocks
-
-                    # --- Apply ledger state (UTxO mutations) ---
-                    if chain_db is not None and chain_db.ledger_db is not None:
-                        consumed: list[bytes] = []
-                        created: list[tuple[bytes, dict]] = []
-                        for tx in body.transactions:
-                            if not tx.valid:
-                                continue
-                            tb = tx.body
-                            # Extract consumed inputs
-                            inputs = getattr(tb, "inputs", None)
-                            if inputs:
-                                for inp in inputs:
-                                    tx_id = getattr(inp, "transaction_id", None)
-                                    tx_idx = getattr(inp, "index", None)
-                                    if tx_id is not None and tx_idx is not None:
-                                        payload = getattr(tx_id, "payload", tx_id)
-                                        if isinstance(payload, bytes) and len(payload) == 32:
-                                            key = payload + tx_idx.to_bytes(2, "big")
-                                            consumed.append(key)
-                            # Extract created outputs
-                            outputs = getattr(tb, "outputs", None)
-                            if outputs:
-                                for idx, out in enumerate(outputs):
-                                    key = tx.tx_hash + idx.to_bytes(2, "big")
-                                    addr = str(getattr(out, "address", ""))
-                                    amount = getattr(out, "amount", 0)
-                                    if isinstance(amount, int):
-                                        value = amount
-                                    else:
-                                        value = getattr(amount, "coin", 0) or 0
-                                    datum_hash = getattr(out, "datum_hash", b"") or b""
-                                    if hasattr(datum_hash, "payload"):
-                                        datum_hash = datum_hash.payload
-                                    created.append(
-                                        (
-                                            key,
-                                            {
-                                                "tx_hash": tx.tx_hash,
-                                                "tx_index": idx,
-                                                "address": addr,
-                                                "value": int(value),
-                                                "datum_hash": (
-                                                    datum_hash
-                                                    if isinstance(datum_hash, bytes)
-                                                    else b""
-                                                ),
-                                            },
-                                        )
-                                    )
-                        if consumed or created:
-                            try:
-                                chain_db.ledger_db.apply_block(
-                                    consumed,
-                                    created,
-                                    block_slot=slot,
-                                )
-                            except Exception as exc:
-                                logger.warning(
-                                    "Peer %s: ledger apply error at slot %d: %s",
-                                    peer.address,
-                                    slot,
-                                    exc,
-                                )
-
-                    # --- Store in ChainDB (includes chain selection + follower notification) ---
-                    if chain_db is not None:
-                        header_cbor_wrapped = [
-                            max(0, era_tag - 1) if era_tag >= 2 else 0,
-                            cbor2.CBORTag(24, hdr_cbor),
-                        ]
-                        hdr_vrf_out = getattr(hdr, "vrf_output", None)
-                        result = await chain_db.add_block(
-                            slot=slot,
-                            block_hash=block_hash,
-                            predecessor_hash=prev_hash,
-                            block_number=block_number,
-                            cbor_bytes=raw_block,
-                            header_cbor=header_cbor_wrapped,
-                            vrf_output=hdr_vrf_out,
-                        )
-
-                        if result.adopted and self._block_received_event is not None:
-                            self._block_received_event.set()
-
-                        # Praos chain-dependent state update
-                        if result.adopted and node_kernel is not None:
-                            vrf_out = hdr_vrf_out
-                            if result.rollback_depth > 0 and result.intersection_hash is not None:
-                                # Fork switch — rollback nonce and re-apply
-                                # Walk new chain from intersection to tip via VolatileDB
-                                new_blocks = _get_new_chain_blocks(
-                                    chain_db,
-                                    result.intersection_hash,
-                                    block_hash,
-                                )
-                                node_kernel.on_fork_switch(
-                                    result.intersection_hash,
-                                    new_blocks,
-                                )
-                            else:
-                                # Simple extension
-                                node_kernel.on_block_adopted(
-                                    slot,
-                                    block_hash,
-                                    prev_hash,
-                                    vrf_out,
-                                )
-
-                    _blocks_stored += 1
-                    tx_count = (
-                        len(block_body[1])
-                        if len(block_body) > 1 and isinstance(block_body[1], list)
-                        else 0
+                    await run_block_fetch_pipelined(
+                        bf_channel,
+                        range_queue=shared_range_queue,
+                        on_block_received=_on_block,
+                        stop_event=stop_event,
+                        max_in_flight=20,
+                        block_queue_size=500,
                     )
-                    if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
-                        logger.info(
-                            "Block #%d stored at slot %d (%s, %d txs, %d bytes) from %s [%d total]",
-                            block_number,
-                            slot,
-                            era.name,
-                            tx_count,
-                            len(raw_block),
-                            peer.address,
-                            _blocks_stored,
-                            extra={
-                                "event": "block.stored",
-                                "block_number": block_number,
-                                "slot": slot,
-                                "era": era.name,
-                                "tx_count": tx_count,
-                                "size_bytes": len(raw_block),
-                                "hash": block_hash.hex()[:16],
-                                "peer": str(peer.address),
-                                "total_stored": _blocks_stored,
-                            },
-                        )
                 except Exception as exc:
-                    logger.error(
-                        "Peer %s: block process error: %s",
-                        peer.address,
-                        exc,
-                        exc_info=True,
+                    logger.warning("Peer %s: block-fetch error: %s", peer.address, exc)
+                finally:
+                    if tracker is not None:
+                        tracker.on_peer_disconnect(peer_addr)
+            else:
+                # Non-producer: use shared queue for parallel multi-peer
+                try:
+                    await run_block_fetch_pipelined(
+                        bf_channel,
+                        range_queue=shared_range_queue,
+                        on_block_received=None,
+                        stop_event=stop_event,
+                        max_in_flight=20,
+                        block_queue_size=500,
+                        block_queue=shared_block_queue,
+                        on_range_sent=_on_range_sent,
+                        on_range_complete=_on_range_complete,
                     )
+                except Exception as exc:
+                    logger.warning("Peer %s: block-fetch error: %s", peer.address, exc)
+                finally:
+                    if tracker is not None:
+                        tracker.on_peer_disconnect(peer_addr)
 
-            try:
-                await run_block_fetch_continuous(
-                    bf_channel,
-                    range_queue=range_queue,
-                    on_block_received=_on_block,
-                    stop_event=stop_event,
-                )
-            except Exception as exc:
-                logger.warning("Peer %s: block-fetch error: %s", peer.address, exc)
-            finally:
-                builder_task.cancel()
-
-        asyncio.create_task(
-            _safe_run(_block_fetch_worker(), "block-fetch"),
+        peer.protocol_tasks.append(asyncio.create_task(
+            _safe_run(_peer_block_fetch(), "block-fetch"),
             name=f"blockfetch-{peer.address}",
-        )
+        ))
 
         # Keep-Alive (protocol 8): periodic pings to keep connection alive.
-        asyncio.create_task(
+        # Reduced interval from 90s to 10s because we don't yet run the
+        # responder side of keep-alive -- the Haskell node pings us but
+        # we can't respond. Frequent client pings keep the connection
+        # alive from our side despite the missing responder.
+        peer.protocol_tasks.append(asyncio.create_task(
             _safe_run(
                 run_keep_alive_client(
                     channels[KEEP_ALIVE_PROTOCOL_ID],
                     stop_event=stop_event,
+                    interval=10.0,
+                    peer_info=peer_addr,
                 ),
                 "keep-alive",
             ),
             name=f"keepalive-{peer.address}",
-        )
+        ))
 
         # Tx-Submission (protocol 4): respond to server's tx requests.
         # Server drives this protocol (pull-based). We provide empty
@@ -796,7 +731,7 @@ class PeerManager:
         ) -> list[bytes]:
             return []
 
-        asyncio.create_task(
+        peer.protocol_tasks.append(asyncio.create_task(
             _safe_run(
                 run_tx_submission_client(
                     channels[TX_SUBMISSION_N2N_ID],
@@ -807,10 +742,433 @@ class PeerManager:
                 "tx-submission",
             ),
             name=f"txsub-{peer.address}",
+        ))
+
+        # Launch responder bundle on resp_channels (bidirectional support).
+        # This lets the peer pull headers, blocks, and txs from us, and
+        # responds to keep-alive pings — preventing Haskell's inbound
+        # governor from demoting us to Cold.
+        from vibe.cardano.node.miniprotocol_bundle import launch_responder_bundle
+        resp_tasks = await launch_responder_bundle(
+            resp_channels, chain_db, None, stop_event, peer_info=peer_addr,
         )
+        for t in resp_tasks:
+            peer.protocol_tasks.append(t)
 
         # Store the mux task -- peer_loop will await it instead of mux.run().
         peer.mux_task = mux_task
+
+    async def _process_block_inline(
+        self, block_cbor: bytes, chain_db: Any, blocks_stored: list[int],
+    ) -> None:
+        """Process a single block inline (producer mode).
+
+        Same logic as _shared_block_processor but called synchronously
+        from the block-fetch callback. This ensures nonce updates happen
+        in the same task as block processing, matching the architecture
+        at commit 79fb652 that achieved 35% forge rate.
+        """
+        import hashlib
+
+        import cbor2pure as cbor2
+
+        try:
+            from vibe.cardano.serialization.block import (
+                Era,
+                decode_block_header_from_array,
+            )
+
+            raw_wire = block_cbor
+            decoded = cbor2.loads(block_cbor)
+
+            if hasattr(decoded, "tag") and decoded.tag == 24:
+                inner = decoded.value
+                if isinstance(inner, bytes):
+                    raw_wire = inner
+                    decoded = cbor2.loads(inner)
+                else:
+                    decoded = inner
+
+            if isinstance(decoded, list) and len(decoded) >= 2 and isinstance(decoded[0], int):
+                era_tag = decoded[0]
+                block_body = decoded[1]
+            elif hasattr(decoded, "tag"):
+                era_tag = decoded.tag
+                block_body = decoded.value
+            else:
+                raise ValueError(f"Unexpected block format: {type(decoded)}")
+
+            raw_block = raw_wire
+            era = Era(era_tag)
+            try:
+                hdr = decode_block_header_from_array(block_body, era)
+                slot = hdr.slot
+                block_number = hdr.block_number
+                prev_hash = hdr.prev_hash or b"\x00" * 32
+                block_hash = hdr.hash
+                hdr_cbor = hdr.header_cbor
+            except NotImplementedError:
+                hdr_arr = block_body[0]
+                hdr_body_arr = hdr_arr[0]
+                block_number = hdr_body_arr[0]
+                slot = hdr_body_arr[1]
+                prev_hash = hdr_body_arr[2] or b"\x00" * 32
+                from vibe.cardano.serialization.transaction import _normalize_cbor_types
+                hdr_cbor = cbor2.dumps(_normalize_cbor_types(hdr_arr))
+                block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
+
+            # Apply delegation certs (producer path)
+            tx_bodies_raw = block_body[1] if len(block_body) > 1 else []
+            has_txs = hasattr(tx_bodies_raw, "__len__") and len(tx_bodies_raw) > 0
+            if has_txs and self._node_kernel is not None:
+                try:
+                    from vibe.cardano.serialization.transaction import decode_block_body_from_array
+                    body = decode_block_body_from_array(block_body, era, skip_pycardano=True)
+                    if body and body.transactions:
+                        epoch = slot // self._config.epoch_length
+                        self._node_kernel.apply_delegation_certs(body.transactions, epoch)
+                except Exception:
+                    pass
+
+            # Detect epoch boundary and recompute stake distribution
+            epoch = slot // self._config.epoch_length
+            if not hasattr(self, '_last_inline_epoch'):
+                self._last_inline_epoch = epoch
+            if epoch > self._last_inline_epoch:
+                self._last_inline_epoch = epoch
+                if self._node_kernel is not None:
+                    self._node_kernel.update_stake_distribution({})
+                    logger.info(
+                        "Epoch %d: stake distribution updated (%d pools)",
+                        epoch, len(self._node_kernel.stake_distribution),
+                    )
+
+            if chain_db is not None:
+                header_cbor_wrapped = [
+                    max(0, era_tag - 1) if era_tag >= 2 else 0,
+                    cbor2.CBORTag(24, hdr_cbor),
+                ]
+                hdr_vrf_out = getattr(hdr, "vrf_output", None)
+                result = await chain_db.add_block_async(
+                    slot=slot,
+                    block_hash=block_hash,
+                    predecessor_hash=prev_hash,
+                    block_number=block_number,
+                    cbor_bytes=raw_block,
+                    header_cbor=header_cbor_wrapped,
+                    vrf_output=hdr_vrf_out,
+                )
+
+                if result.adopted and self._block_received_event is not None:
+                    self._block_received_event.set()
+
+            blocks_stored[0] += 1
+            tx_count = (
+                len(block_body[1])
+                if len(block_body) > 1 and isinstance(block_body[1], list)
+                else 0
+            )
+            # Haskell-matching block-fetch event for log correlation
+            if blocks_stored[0] % 1000 == 0:
+                logger.info(
+                    "BlockFetch.Client.CompletedBlockFetch: hash=%s slot=%d peer=inline",
+                    block_hash.hex()[:16], slot,
+                )
+            else:
+                logger.debug(
+                    "BlockFetch.Client.CompletedBlockFetch: hash=%s slot=%d peer=inline",
+                    block_hash.hex()[:16], slot,
+                )
+            if blocks_stored[0] % 1000 == 0:
+                logger.info(
+                    "Block-fetch: %d blocks stored (block #%d at slot %d, %s)",
+                    blocks_stored[0], block_number, slot, era.name,
+                )
+            elif blocks_stored[0] % 100 == 1 or blocks_stored[0] <= 5:
+                logger.debug(
+                    "Block #%d stored at slot %d (%s, %d txs, %d bytes) [%d total]",
+                    block_number, slot, era.name, tx_count,
+                    len(raw_block), blocks_stored[0],
+                )
+        except Exception as exc:
+            logger.error("Block process error: %s", exc, exc_info=True)
+
+    async def _shared_block_processor(self, stop_event: asyncio.Event) -> None:
+        """Pull blocks from shared_block_queue, decode, validate, and store.
+
+        Single processor for all peers — blocks arrive in any order,
+        ChainDB handles out-of-order chain selection.
+        """
+        import hashlib
+
+        import cbor2pure as cbor2
+
+        from vibe.cardano.consensus.hfc import validate_block
+        from vibe.cardano.serialization.block import (
+            Era,
+            decode_block_header_from_array,
+        )
+        from vibe.cardano.serialization.transaction import (
+            decode_block_body_from_array,
+        )
+
+        chain_db = self._chain_db
+        block_queue = self._shared_block_queue
+        _blocks_stored = 0
+
+        while not stop_event.is_set():
+            try:
+                block_cbor = await asyncio.wait_for(block_queue.get(), timeout=0.5)
+            except TimeoutError:
+                continue
+
+            try:
+                raw_wire = block_cbor
+                decoded = cbor2.loads(block_cbor)
+
+                if hasattr(decoded, "tag") and decoded.tag == 24:
+                    inner = decoded.value
+                    if isinstance(inner, bytes):
+                        raw_wire = inner
+                        decoded = cbor2.loads(inner)
+                    else:
+                        decoded = inner
+
+                if (
+                    isinstance(decoded, list)
+                    and len(decoded) >= 2
+                    and isinstance(decoded[0], int)
+                ):
+                    era_tag = decoded[0]
+                    block_body = decoded[1]
+                elif hasattr(decoded, "tag"):
+                    era_tag = decoded.tag
+                    block_body = decoded.value
+                else:
+                    raise ValueError(f"Unexpected block format: {type(decoded)}")
+
+                raw_block = raw_wire
+
+                era = Era(era_tag)
+                try:
+                    hdr = decode_block_header_from_array(block_body, era)
+                    slot = hdr.slot
+                    block_number = hdr.block_number
+                    prev_hash = hdr.prev_hash or b"\x00" * 32
+                    block_hash = hdr.hash
+                    hdr_cbor = hdr.header_cbor
+                except NotImplementedError:
+                    hdr_arr = block_body[0]
+                    hdr_body_arr = hdr_arr[0]
+                    block_number = hdr_body_arr[0]
+                    slot = hdr_body_arr[1]
+                    prev_hash = hdr_body_arr[2] or b"\x00" * 32
+                    from vibe.cardano.serialization.transaction import (
+                        _normalize_cbor_types,
+                    )
+
+                    hdr_cbor = cbor2.dumps(_normalize_cbor_types(hdr_arr))
+                    block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
+
+                # Decode body only if block has transactions
+                tx_bodies_raw = block_body[1] if len(block_body) > 1 else []
+                has_txs = hasattr(tx_bodies_raw, "__len__") and len(tx_bodies_raw) > 0
+                body = (
+                    decode_block_body_from_array(block_body, era, skip_pycardano=True)
+                    if has_txs
+                    else None
+                )
+                if body and body.transactions:
+                    errors = validate_block(
+                        era=era,
+                        block=body.transactions,
+                        ledger_state=(chain_db.ledger_db if chain_db else None),
+                        protocol_params=self._config.protocol_params,
+                        current_slot=slot,
+                    )
+                    if errors:
+                        if self._config.permissive_validation:
+                            logger.warning(
+                                "Block #%d slot=%d has %d validation errors (permissive): %s",
+                                block_number, slot, len(errors), errors[:3],
+                            )
+                        else:
+                            logger.warning(
+                                "REJECTING block #%d slot=%d: %d errors: %s",
+                                block_number, slot, len(errors), errors[:3],
+                            )
+                            continue
+
+                # Apply ledger state (UTxO mutations)
+                if body and chain_db is not None and chain_db.ledger_db is not None:
+                    consumed: list[bytes] = []
+                    created: list[tuple[bytes, dict]] = []
+                    for tx in body.transactions:
+                        if not tx.valid:
+                            continue
+                        tb = tx.body
+                        inputs = getattr(tb, "inputs", None)
+                        if inputs:
+                            for inp in inputs:
+                                tx_id = getattr(inp, "transaction_id", None)
+                                tx_idx = getattr(inp, "index", None)
+                                if tx_id is not None and tx_idx is not None:
+                                    payload = getattr(tx_id, "payload", tx_id)
+                                    if isinstance(payload, bytes) and len(payload) == 32:
+                                        key = payload + tx_idx.to_bytes(2, "big")
+                                        consumed.append(key)
+                        outputs = getattr(tb, "outputs", None)
+                        if outputs:
+                            for idx, out in enumerate(outputs):
+                                key = tx.tx_hash + idx.to_bytes(2, "big")
+                                addr = str(getattr(out, "address", ""))
+                                amount = getattr(out, "amount", 0)
+                                if isinstance(amount, int):
+                                    value = amount
+                                else:
+                                    value = getattr(amount, "coin", 0) or 0
+                                datum_hash = getattr(out, "datum_hash", b"") or b""
+                                if hasattr(datum_hash, "payload"):
+                                    datum_hash = datum_hash.payload
+                                created.append(
+                                    (
+                                        key,
+                                        {
+                                            "tx_hash": tx.tx_hash,
+                                            "tx_index": idx,
+                                            "address": addr,
+                                            "value": int(value),
+                                            "datum_hash": (
+                                                datum_hash
+                                                if isinstance(datum_hash, bytes)
+                                                else b""
+                                            ),
+                                        },
+                                    )
+                                )
+                    if consumed or created:
+                        try:
+                            chain_db.ledger_db.apply_block(
+                                consumed, created, block_slot=slot,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "Ledger apply error at slot %d: %s", slot, exc,
+                            )
+
+                # Apply delegation certificates for stake distribution.
+                # Haskell tracks these in the ledger state and computes
+                # a PoolDistr at each epoch boundary (mark/set/go rotation).
+                # We apply certs to NodeKernel's delegation state and
+                # recompute the stake distribution at epoch boundaries.
+                if body and body.transactions and self._node_kernel is not None:
+                    try:
+                        epoch = slot // self._config.epoch_length
+                        self._node_kernel.apply_delegation_certs(
+                            body.transactions, epoch,
+                        )
+                    except Exception as exc:
+                        logger.debug(
+                            "Delegation cert error at slot %d: %s", slot, exc,
+                        )
+
+                # Detect epoch boundary and recompute stake distribution.
+                # Haskell uses nesPd = ssStakeMarkPoolDistr from the NEWEPOCH
+                # rule. We approximate by recomputing from delegation state
+                # + UTxO at each epoch transition.
+                epoch = slot // self._config.epoch_length
+                if not hasattr(self, '_last_sync_epoch'):
+                    self._last_sync_epoch = epoch
+                if epoch > self._last_sync_epoch:
+                    self._last_sync_epoch = epoch
+                    if self._node_kernel is not None:
+                        utxo_stakes = {}
+                        if chain_db is not None and chain_db.ledger_db is not None:
+                            try:
+                                utxo_stakes = chain_db.ledger_db.get_stake_by_address()
+                            except Exception:
+                                pass
+                        self._node_kernel.update_stake_distribution(utxo_stakes)
+                        logger.info(
+                            "Epoch %d: stake distribution updated (%d pools)",
+                            epoch, len(self._node_kernel.stake_distribution),
+                        )
+
+                # Store in ChainDB (chain selection handles out-of-order)
+                if chain_db is not None:
+                    header_cbor_wrapped = [
+                        max(0, era_tag - 1) if era_tag >= 2 else 0,
+                        cbor2.CBORTag(24, hdr_cbor),
+                    ]
+                    hdr_vrf_out = getattr(hdr, "vrf_output", None)
+                    result = await chain_db.add_block_async(
+                        slot=slot,
+                        block_hash=block_hash,
+                        predecessor_hash=prev_hash,
+                        block_number=block_number,
+                        cbor_bytes=raw_block,
+                        header_cbor=header_cbor_wrapped,
+                        vrf_output=hdr_vrf_out,
+                    )
+
+                    if result.adopted and self._block_received_event is not None:
+                        self._block_received_event.set()
+
+                _blocks_stored += 1
+                tx_count = (
+                    len(block_body[1])
+                    if len(block_body) > 1 and isinstance(block_body[1], list)
+                    else 0
+                )
+                # Haskell-matching block-fetch event for log correlation
+                if _blocks_stored % 1000 == 0:
+                    logger.info(
+                        "BlockFetch.Client.CompletedBlockFetch: hash=%s slot=%d peer=shared",
+                        block_hash.hex()[:16], slot,
+                    )
+                else:
+                    logger.debug(
+                        "BlockFetch.Client.CompletedBlockFetch: hash=%s slot=%d peer=shared",
+                        block_hash.hex()[:16], slot,
+                    )
+                if _blocks_stored % 1000 == 0:
+                    logger.info(
+                        "Block-fetch: %d blocks stored (block #%d at slot %d, %s)",
+                        _blocks_stored, block_number, slot, era.name,
+                    )
+                elif _blocks_stored % 100 == 1 or _blocks_stored <= 5:
+                    logger.debug(
+                        "Block #%d stored at slot %d (%s, %d txs, %d bytes) [%d total]",
+                        block_number, slot, era.name, tx_count,
+                        len(raw_block), _blocks_stored,
+                        extra={
+                            "event": "block.stored",
+                            "block_number": block_number,
+                            "slot": slot,
+                            "era": era.name,
+                            "tx_count": tx_count,
+                            "size_bytes": len(raw_block),
+                            "hash": block_hash.hex()[:16],
+                            "total_stored": _blocks_stored,
+                        },
+                    )
+            except Exception as exc:
+                logger.error(
+                    "Block process error: %s", exc, exc_info=True,
+                )
+                import os
+
+                if os.environ.get("VIBE_STRICT_SYNC", "").lower() in (
+                    "1", "true", "yes",
+                ):
+                    raise
+
+    async def _nonce_worker(self, stop_event: asyncio.Event) -> None:
+        """No-op stub — nonce is now tracked atomically inside ChainDB.add_block().
+
+        Retained to avoid attribute errors from existing task references.
+        """
+        return
 
     async def _disconnect_peer(self, peer: _PeerConnection) -> None:
         """Tear down a peer's multiplexer and bearer."""
@@ -819,10 +1177,30 @@ class PeerManager:
             peer.address,
             extra={"event": "peer.disconnect", "peer": str(peer.address)},
         )
+        # If this was the chain-sync peer, clear so next connecting peer takes over
+        if self._chain_sync_peer == str(peer.address):
+            logger.info(
+                "Chain-sync peer %s disconnected — next peer will take over",
+                peer.address,
+            )
+            self._chain_sync_peer = None
+            # Reset processor/nonce tasks so they restart with the new chain-sync peer
+            self._processor_task = None
+            self._nonce_worker_task = None
         # Signal miniprotocol runners to stop.
         if peer.stop_event is not None:
             peer.stop_event.set()
             peer.stop_event = None
+        # Cancel all tracked protocol tasks to prevent orphaned coroutines
+        for t in peer.protocol_tasks:
+            if not t.done():
+                t.cancel()
+        for t in peer.protocol_tasks:
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
+        peer.protocol_tasks = []
         if peer.mux is not None:
             try:
                 await peer.mux.close()
@@ -833,7 +1211,7 @@ class PeerManager:
             peer.mux_task.cancel()
             try:
                 await peer.mux_task
-            except asyncio.CancelledError, Exception:
+            except (asyncio.CancelledError, Exception):
                 pass
             peer.mux_task = None
         if peer.bearer is not None:

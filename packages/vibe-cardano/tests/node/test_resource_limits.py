@@ -168,7 +168,7 @@ class TestVolatilePruner:
         for i in range(20):
             block_hash = i.to_bytes(32, "big")
             pred_hash = (i - 1).to_bytes(32, "big") if i > 0 else b"\x00" * 32
-            await vdb.add_block(
+            vdb.add_block(
                 block_hash=block_hash,
                 slot=i * 10,  # slots 0, 10, 20, ..., 190
                 predecessor_hash=pred_hash,
@@ -204,7 +204,7 @@ class TestVolatilePruner:
         for i in range(3):
             block_hash = i.to_bytes(32, "big")
             pred_hash = (i - 1).to_bytes(32, "big") if i > 0 else b"\x00" * 32
-            await vdb.add_block(
+            vdb.add_block(
                 block_hash=block_hash,
                 slot=i,
                 predecessor_hash=pred_hash,

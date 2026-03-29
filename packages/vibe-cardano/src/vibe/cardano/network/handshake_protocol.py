@@ -310,7 +310,9 @@ async def run_handshake_client(
         HandshakeTimeoutError: If the handshake exceeds the timeout.
         HandshakeError: For unexpected protocol errors.
     """
-    # Build version table with current N2N versions
+    # Build version table with InitiatorAndResponder (the default).
+    # Our mux now supports dual channels per protocol, so we can serve
+    # responder-side traffic on outbound connections.
     version_table = build_version_table(network_magic)
 
     # Encode MsgProposeVersions
@@ -370,7 +372,7 @@ async def run_handshake_server(
         HandshakeTimeoutError: If the handshake exceeds the timeout.
         HandshakeError: For unexpected protocol errors.
     """
-    # Build our version table
+    # Build our version table with InitiatorAndResponder (the default).
     server_versions = build_version_table(network_magic)
 
     try:

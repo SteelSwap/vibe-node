@@ -33,14 +33,17 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
 from .immutable import ImmutableDB
 from .ledger import LedgerDB
+from .ledger_seq import LedgerSeq
 from .volatile import BlockInfo, VolatileDB
 
 __all__ = [
+    "BlockToAdd",
     "ChainDB",
     "ChainSelectionError",
     "ChainSelectionResult",
@@ -104,6 +107,28 @@ class ChainSelectionResult:
     """Hash of the fork point (common ancestor), or None if no rollback."""
 
 
+@dataclass
+class BlockToAdd:
+    """Queue entry for the chain selection runner.
+
+    Holds all parameters for add_block plus signaling fields for the
+    caller to wait on the result.
+
+    Haskell ref: BlockToAdd in ChainDB.Impl.Types
+    """
+
+    slot: int
+    block_hash: bytes
+    predecessor_hash: bytes
+    block_number: int
+    cbor_bytes: bytes
+    header_cbor: Any = None
+    vrf_output: bytes | None = None
+    result: ChainSelectionResult | None = field(default=None, init=False)
+    error: Exception | None = field(default=None, init=False)
+    done: threading.Event = field(default_factory=threading.Event, init=False)
+
+
 class ChainDB:
     """Coordinator for ImmutableDB, VolatileDB, and LedgerDB.
 
@@ -148,9 +173,14 @@ class ChainDB:
         self._chain_fragment: list[FragmentEntry] = []
         self._fragment_index: dict[bytes, int] = {}
 
-        # Thread-safe tip change notification.
-        self.tip_changed: threading.Event = threading.Event()
+        # Tip change notification — generation counter + per-follower events.
+        # The generation counter increments on every tip change; followers
+        # compare against their last-seen generation to detect changes
+        # without the lost-wakeup race of a shared threading.Event.
+        # Haskell ref: STM retry on TVar read handles this naturally.
         self._tip_generation: int = 0
+        self._follower_events: dict[int, threading.Event] = {}
+        self._async_follower_events: dict[int, tuple[Any, Any]] = {}  # fid → (asyncio.Event, loop)
 
         # STM TVars for cross-thread shared state.
         # Haskell ref: cdbChain :: TVar (AnchoredFragment)
@@ -163,6 +193,324 @@ class ChainDB:
         # Haskell ref: cdbFollowers TVar
         self._followers: dict[int, Any] = {}
         self._next_follower_id: int = 0
+        self._followers_lock = threading.Lock()
+
+        # LedgerSeq for atomic nonce tracking (None until init_praos_state called).
+        # Haskell ref: cdbLedgerDB :: LedgerDB
+        self._ledger_seq: LedgerSeq | None = None
+        self.praos_nonce_tvar: TVar = TVar(None)  # epoch nonce bytes | None
+
+        # Lock serializing all _process_block calls. Acquired by both
+        # the chain-sel runner (for received blocks) and the forge loop
+        # (for inline-processed forged blocks).
+        self._chain_sel_lock = threading.Lock()
+
+        # Chain selection queue — serializes all add_block processing
+        # through a single thread. Haskell ref: cdbChainSelQueue (TBQueue)
+        import queue
+        self._chain_sel_queue: queue.Queue[BlockToAdd | None] = queue.Queue()
+        self._chain_sel_thread: threading.Thread | None = None
+
+    # ------------------------------------------------------------------
+    # Praos nonce state (LedgerSeq)
+    # ------------------------------------------------------------------
+
+    def init_praos_state(
+        self,
+        genesis_hash: bytes,
+        epoch_length: int,
+        security_param: int,
+        active_slot_coeff: float,
+    ) -> None:
+        """Create the initial LedgerSeq and set the praos nonce TVar.
+
+        Called during node startup after genesis parameters are known.
+        Creates a genesis PraosState and wraps it in a LedgerSeq anchored
+        at the genesis hash.
+
+        Haskell ref: initialisation of cdbLedgerDB with genesis ledger state.
+        """
+        from vibe.cardano.consensus.praos_state import genesis_praos_state
+
+        initial_state = genesis_praos_state(
+            genesis_hash=genesis_hash,
+            epoch_length=epoch_length,
+            security_param=security_param,
+            active_slot_coeff=active_slot_coeff,
+        )
+        self._ledger_seq = LedgerSeq(
+            anchor_state=initial_state,
+            anchor_hash=genesis_hash,
+            max_rollback=self._k,
+        )
+        self.praos_nonce_tvar._write(initial_state.epoch_nonce)
+        logger.info(
+            "ChainDB: praos state initialised (epoch_nonce=%s, epoch_length=%d, k=%d)",
+            initial_state.epoch_nonce.hex(),
+            epoch_length,
+            security_param,
+        )
+
+    def _walk_chain(
+        self, intersection_hash: bytes, tip_hash: bytes,
+    ) -> list[tuple[int, bytes, bytes, bytes | None]]:
+        """Walk backward from tip to intersection, return blocks oldest-first.
+
+        Each element is (slot, block_hash, prev_hash, vrf_output).
+        Used during fork switches to collect blocks on the new chain
+        for LedgerSeq replay.
+
+        Haskell ref: Paths.computeReversePath — walks backward through
+        VolatileDB predecessor links.
+        """
+        blocks: list[tuple[int, bytes, bytes, bytes | None]] = []
+        h = tip_hash
+        while h and h != intersection_hash:
+            info = self.volatile_db._block_info.get(h)
+            if info is None:
+                break
+            vrf_out = info.vrf_output if info.vrf_output else None
+            blocks.append((info.slot, info.block_hash, info.predecessor_hash, vrf_out))
+            h = info.predecessor_hash
+        blocks.reverse()
+        return blocks
+
+    # ------------------------------------------------------------------
+    # Initial chain selection (startup)
+    # ------------------------------------------------------------------
+
+    async def initial_chain_selection(self) -> int:
+        """Reconstruct the selected chain from on-disk storage.
+
+        Called during startup to recover state from a previous run.
+        Walks the VolatileDB successor map from the ImmutableDB tip
+        anchor to find the best chain, then builds the chain fragment.
+
+        Haskell ref:
+            ChainSel.initialChainSelection — reads ImmutableDB tip,
+            constructs maximal candidates from VolatileDB, runs chain
+            selection, stores result in cdbChain TVar.
+
+        Returns:
+            Number of blocks in the reconstructed chain fragment.
+        """
+        # Step 1: Load volatile blocks from disk
+        from vibe.cardano.serialization.block import decode_block_header
+
+        def _parse_header(cbor_bytes: bytes) -> BlockInfo:
+            """Extract BlockInfo from raw block CBOR."""
+            try:
+                hdr = decode_block_header(cbor_bytes)
+                return BlockInfo(
+                    block_hash=hdr.hash,
+                    slot=hdr.slot,
+                    predecessor_hash=hdr.prev_hash or b"\x00" * 32,
+                    block_number=hdr.block_number,
+                )
+            except NotImplementedError:
+                # Byron blocks — fall back to inline extraction
+                import hashlib
+
+                import cbor2pure as cbor2
+
+                decoded = cbor2.loads(cbor_bytes)
+                if hasattr(decoded, "tag"):
+                    block_body = decoded.value
+                elif isinstance(decoded, list) and len(decoded) >= 2:
+                    block_body = decoded[1] if isinstance(decoded[0], int) else decoded
+                else:
+                    block_body = decoded
+                hdr_arr = block_body[0]
+                hdr_body = hdr_arr[0] if isinstance(hdr_arr, list) else hdr_arr
+                block_number = hdr_body[0] if isinstance(hdr_body, list) else 0
+                slot = hdr_body[1] if isinstance(hdr_body, list) else 0
+                prev_hash = hdr_body[2] if isinstance(hdr_body, list) else b"\x00" * 32
+                if not isinstance(prev_hash, bytes):
+                    prev_hash = b"\x00" * 32
+                hdr_cbor = cbor2.dumps(hdr_arr)
+                block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
+                return BlockInfo(
+                    block_hash=block_hash,
+                    slot=slot,
+                    predecessor_hash=prev_hash,
+                    block_number=block_number,
+                )
+
+        loaded = 0
+        if self.volatile_db._db_dir is not None:
+            loaded = await self.volatile_db.load_from_disk(_parse_header)
+
+        if loaded == 0:
+            logger.info("ChainDB: no volatile blocks to restore")
+            return 0
+
+        # Step 2: Find the anchor (ImmutableDB tip or chain root)
+        # Haskell ref: ImmutableDB.getTipAnchor — anchor of the chain fragment
+        immutable_tip_hash = self.immutable_db.get_tip_hash()
+        immutable_tip_slot = self.immutable_db.get_tip_slot()
+        if immutable_tip_hash is not None:
+            anchor_hash = immutable_tip_hash
+            # We don't have block_number from ImmutableDB directly
+            anchor_block_number = -1
+        else:
+            # No immutable blocks — find the root of the volatile chain.
+            # The root's predecessor hash is NOT in the volatile DB.
+            # This is the "anchor" that the chain hangs from.
+            roots: list[bytes] = []
+            non_bytes_preds = 0
+            for bh, info in self.volatile_db._block_info.items():
+                pred = info.predecessor_hash
+                if not isinstance(pred, bytes):
+                    non_bytes_preds += 1
+                    continue  # Skip non-bytes predecessor (corrupt/Byron)
+                if pred not in self.volatile_db._block_info:
+                    roots.append(pred)
+            logger.info(
+                "ChainDB: root scan — %d roots found, %d non-bytes predecessors skipped, "
+                "%d total blocks",
+                len(roots),
+                non_bytes_preds,
+                len(self.volatile_db._block_info),
+            )
+            # Deduplicate — all chain roots should share the same predecessor
+            root_set = set(roots)
+            if len(root_set) == 1:
+                anchor_hash = root_set.pop()
+            elif root_set:
+                # Multiple roots — pick the one with the most successors
+                anchor_hash = max(
+                    root_set,
+                    key=lambda h: len(self.volatile_db._successors.get(h, [])),
+                )
+            else:
+                anchor_hash = b"\x00" * 32
+            anchor_block_number = -1
+
+        # Step 3: Walk successor chains from anchor to find all maximal candidates
+        # Haskell ref: Paths.maximalCandidates — DFS through successor map
+        def _walk_longest_chain(start_hash: bytes) -> list[BlockInfo]:
+            """Iterative walk from start_hash to find the longest chain.
+
+            Uses iterative traversal instead of recursive DFS to avoid
+            stack overflow on long chains (k can be 2160+ on mainnet).
+            At each fork, picks the successor with the highest block number.
+
+            Haskell ref: Paths.maximalCandidates — but simplified to
+            pick the best successor at each step (greedy) rather than
+            enumerating all candidates.
+            """
+            chain: list[BlockInfo] = []
+            current = start_hash
+            while True:
+                successors = self.volatile_db._successors.get(current, [])
+                if not successors:
+                    break
+                # Pick the best successor (highest block number, then slot)
+                best_succ = None
+                best_info = None
+                for succ_hash in successors:
+                    info = self.volatile_db._block_info.get(succ_hash)
+                    if info is None:
+                        continue
+                    if best_info is None or (
+                        info.block_number > best_info.block_number
+                        or (
+                            info.block_number == best_info.block_number
+                            and info.slot > best_info.slot
+                        )
+                    ):
+                        best_succ = succ_hash
+                        best_info = info
+                if best_info is None:
+                    break
+                chain.append(best_info)
+                current = best_succ
+            return chain
+
+        chain = _walk_longest_chain(anchor_hash)
+        anchor_repr = anchor_hash.hex()[:16] if isinstance(anchor_hash, bytes) else repr(anchor_hash)
+        logger.info(
+            "ChainDB: chain walk from anchor %s found %d blocks "
+            "(successors at anchor: %d)",
+            anchor_repr,
+            len(chain),
+            len(self.volatile_db._successors.get(anchor_hash, [])),
+        )
+        candidates = [chain] if chain else []
+
+        if not candidates:
+            logger.info(
+                "ChainDB: volatile blocks loaded but no chain extends from anchor"
+            )
+            return 0
+
+        # Step 4: Select the best candidate
+        # Haskell ref: preferAnchoredCandidate — highest block number, VRF tiebreak
+        best = max(
+            candidates,
+            key=lambda chain: (
+                chain[-1].block_number,
+                chain[-1].slot,
+            ),
+        )
+
+        # Step 5: Build chain fragment (last k blocks, oldest-first)
+        if len(best) > self._k:
+            best = best[-self._k :]
+
+        fragment: list[FragmentEntry] = []
+        for info in best:
+            block_cbor = self.volatile_db._blocks.get(info.block_hash)
+            header_cbor_data = (
+                self._extract_header_from_block(block_cbor)
+                if block_cbor else None
+            )
+            fragment.append(
+                FragmentEntry(
+                    slot=info.slot,
+                    block_hash=info.block_hash,
+                    block_number=info.block_number,
+                    predecessor_hash=info.predecessor_hash,
+                    header_cbor=header_cbor_data,
+                )
+            )
+
+        # Step 6: Store the chain fragment and update tip
+        self._chain_fragment = fragment
+        self._fragment_index = {e.block_hash: i for i, e in enumerate(fragment)}
+
+        tip_entry = fragment[-1]
+        self._tip = _ChainTip(
+            slot=tip_entry.slot,
+            block_hash=tip_entry.block_hash,
+            block_number=tip_entry.block_number,
+        )
+        self._immutable_tip_block_number = anchor_block_number
+
+        # Update STM TVars
+        self.tip_tvar._write(self._tip)
+        self.fragment_tvar._write(
+            (list(self._chain_fragment), dict(self._fragment_index))
+        )
+        self._notify_tip_changed()
+
+        logger.info(
+            "ChainDB: initial chain selection — %d blocks, tip at slot %d block #%d "
+            "(from %d volatile blocks, anchor block #%d)",
+            len(fragment),
+            tip_entry.slot,
+            tip_entry.block_number,
+            loaded,
+            anchor_block_number if anchor_block_number >= 0 else 0,
+            extra={
+                "event": "chaindb.initial_selection",
+                "fragment_length": len(fragment),
+                "tip_slot": tip_entry.slot,
+                "tip_block": tip_entry.block_number,
+                "volatile_loaded": loaded,
+            },
+        )
+        return len(fragment)
 
     # ------------------------------------------------------------------
     # Properties
@@ -206,15 +554,55 @@ class ChainDB:
         """
         from vibe.cardano.storage.chain_follower import ChainFollower
 
-        fid = self._next_follower_id
-        self._next_follower_id += 1
-        follower = ChainFollower(fid, self)
-        self._followers[fid] = follower
+        with self._followers_lock:
+            fid = self._next_follower_id
+            self._next_follower_id += 1
+            self._follower_events[fid] = threading.Event()
+            follower = ChainFollower(fid, self)
+            self._followers[fid] = follower
         return follower
 
     def close_follower(self, follower_id: int) -> None:
         """Remove a follower when the peer disconnects."""
-        self._followers.pop(follower_id, None)
+        with self._followers_lock:
+            self._followers.pop(follower_id, None)
+            self._follower_events.pop(follower_id, None)
+            self._async_follower_events.pop(follower_id, None)
+
+    def _register_async_follower(
+        self, follower_id: int, async_event: Any, loop: Any,
+    ) -> None:
+        """Register an asyncio.Event + event loop for instant cross-thread wake.
+
+        Called by ChainFollower.instruction() on first await. The event loop
+        is needed for call_soon_threadsafe from _notify_tip_changed.
+        """
+        with self._followers_lock:
+            self._async_follower_events[follower_id] = (async_event, loop)
+
+    def _notify_tip_changed(self) -> None:
+        """Wake all follower events so each sees the new tip.
+
+        Uses loop.call_soon_threadsafe to set asyncio.Events from any thread,
+        matching Haskell's STM retry instant-wake pattern. Falls back to
+        threading.Event for followers that haven't registered async events.
+        """
+        with self._followers_lock:
+            async_items = list(self._async_follower_events.items())
+            event_items = list(self._follower_events.values())
+
+        # Async followers — instant wake via call_soon_threadsafe
+        for fid, (async_evt, loop) in async_items:
+            try:
+                loop.call_soon_threadsafe(async_evt.set)
+            except RuntimeError:
+                # Loop closed — remove stale registration
+                with self._followers_lock:
+                    self._async_follower_events.pop(fid, None)
+
+        # Legacy threading.Event followers (backward compat)
+        for evt in event_items:
+            evt.set()
 
     def _notify_fork_switch(
         self,
@@ -229,14 +617,16 @@ class ChainDB:
         Haskell ref: switchTo in ChainSel.hs — notifies followers in
         same STM transaction as cdbChain update.
         """
-        for follower in self._followers.values():
+        with self._followers_lock:
+            followers = list(self._followers.values())
+        for follower in followers:
             follower.notify_fork_switch(removed_hashes, intersection_point)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    async def add_block(
+    async def _process_block(
         self,
         slot: int,
         block_hash: bytes,
@@ -246,7 +636,10 @@ class ChainDB:
         header_cbor: Any = None,
         vrf_output: bytes | None = None,
     ) -> ChainSelectionResult:
-        """Receive a block and route it through the storage pipeline.
+        """Process a single block through the storage pipeline (private).
+
+        Only called by the chain selection runner thread. External callers
+        must use add_block() or add_block_async().
 
         1. Ignore blocks at or below the immutable tip.
         2. Store in VolatileDB.
@@ -259,6 +652,8 @@ class ChainDB:
             Ouroboros.Consensus.Storage.ChainDB.Impl.addBlockAsync
             Ouroboros.Consensus.Storage.ChainDB.Impl.ChainSel.chainSelSync
         """
+        t_start = time.monotonic()
+
         # --- Ignore blocks at or below immutable tip ---
         if (
             self._immutable_tip_block_number is not None
@@ -278,168 +673,406 @@ class ChainDB:
             return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
 
         # --- Store in VolatileDB ---
-        await self.volatile_db.add_block(
+        self.volatile_db.add_block(
             block_hash=block_hash,
             slot=slot,
             predecessor_hash=predecessor_hash,
             block_number=block_number,
             cbor_bytes=cbor_bytes,
+            vrf_output=vrf_output or b"",
         )
 
-        # --- Chain selection ---
-        # Haskell ref: chainSelectionForBlock + comparePraos in ChainSel.hs
-        #   1. Higher block_number wins (longer chain)
-        #   2. Equal block_number: lower VRF leader value wins (tiebreaker)
-        #   3. Equal VRF or no VRF: keep current tip
+        t_volatile = time.monotonic()
+
+        # --- Chain selection (out-of-order safe) ---
+        # Haskell ref: chainSelectionForBlock in ChainSel.hs
+        #   1. Store block (done above)
+        #   2. Check if block is reachable from current chain
+        #   3. Walk successor map forward from predecessor's ALL successors
+        #      to find the best candidate tip
+        #   4. Switch if candidate is preferred over current tip
         old_tip = self._tip
 
-        # Determine if new block should become tip
-        # Haskell ref: comparePraos in Praos/Common.hs
-        #   1. Higher block_number wins (longer chain)
-        #   2. Equal block_number: lower raw VRF output wins (tiebreaker)
-        #   3. Equal or no VRF: keep current tip (ShouldNotSwitch)
-        should_adopt = False
-        new_vrf = vrf_output or b""
-        if self._tip is None:
-            should_adopt = True
-        elif block_number > self._tip.block_number:
-            should_adopt = True
-        elif block_number == self._tip.block_number:
-            # VRF tiebreaker: lower raw VRF output wins
-            # Haskell ref: compare (Down ptvTieBreakVRF) — Down reverses,
-            # so lower OutputVRF is preferred (ShouldSwitch)
-            if new_vrf and self._tip.vrf_output and new_vrf < self._tip.vrf_output:
-                should_adopt = True
-                logger.info(
-                    "ChainDB: VRF tiebreak — switching to block %s at slot %d "
-                    "(new_vrf=%s < tip_vrf=%s)",
-                    block_hash.hex()[:16],
-                    slot,
-                    new_vrf.hex()[:16],
-                    self._tip.vrf_output.hex()[:16],
-                )
-
-        if should_adopt:
-            new_tip = _ChainTip(
-                slot=slot,
-                block_hash=block_hash,
-                block_number=block_number,
-                vrf_output=new_vrf,
-            )
-
-            rollback_depth = 0
-            removed_hashes: set[bytes] = set()
-            intersection_hash: bytes | None = None
-
-            if old_tip is not None and predecessor_hash != old_tip.block_hash:
-                # Fork switch — compute diff
-                rollback_depth, removed_hashes, intersection_hash = self._compute_chain_diff(
-                    block_hash
-                )
-                # Notify followers BEFORE updating fragment (atomic)
-                if rollback_depth > 0 and intersection_hash is not None:
-                    from vibe.cardano.network.chainsync import Point
-
-                    intersection_info = self.volatile_db._block_info.get(
-                        intersection_hash,
-                    )
-                    if intersection_info:
-                        ipoint = Point(
-                            slot=intersection_info.slot,
-                            hash=intersection_hash,
-                        )
-                        self._notify_fork_switch(removed_hashes, ipoint)
-
-            self._tip = new_tip
-            self.tip_tvar._write(new_tip)  # STM TVar update
-
-            # Rebuild or extend fragment
-            if rollback_depth > 0 or old_tip is None:
-                # Full rebuild (fork switch or first block)
-                header_map = {e.block_hash: e.header_cbor for e in self._chain_fragment}
-                header_map[block_hash] = header_cbor
-                self._rebuild_fragment_from_tip(block_hash, header_map)
-            else:
-                # Simple extend — append to fragment
-                entry = FragmentEntry(
-                    slot=slot,
-                    block_hash=block_hash,
-                    block_number=block_number,
-                    predecessor_hash=predecessor_hash,
-                    header_cbor=header_cbor,
-                )
-                idx = len(self._chain_fragment)
-                self._chain_fragment.append(entry)
-                self._fragment_index[block_hash] = idx
-                # Trim to k
-                while len(self._chain_fragment) > self._k:
-                    removed_entry = self._chain_fragment.pop(0)
-                    self._fragment_index.pop(removed_entry.block_hash, None)
-                # Reindex after trim
-                if len(self._chain_fragment) < idx + 1:
-                    self._fragment_index = {
-                        e.block_hash: i for i, e in enumerate(self._chain_fragment)
-                    }
-                # Update STM TVar
-                self.fragment_tvar._write((list(self._chain_fragment), dict(self._fragment_index)))
-
-            logger.debug(
-                "ChainDB: new tip block %s at slot %d, blockNo %d (rollback=%d, fragment=%d)",
-                block_hash.hex()[:16],
-                slot,
-                block_number,
-                rollback_depth,
-                len(self._chain_fragment),
-            )
-
-            # Set tip_changed — stays set until consumers clear it.
-            # This ensures no waiter misses the notification.
-            self._tip_generation += 1
-            self.tip_changed.set()
-
+        # Check reachability first — if block is unreachable, store but don't change.
+        # Skip for first block (old_tip is None) — any block can start the chain.
+        if old_tip is not None and not self._is_reachable_from_chain(block_hash):
             await self._maybe_advance_immutable()
-
-            return ChainSelectionResult(
-                adopted=True,
-                new_tip=(slot, block_hash, block_number),
-                rollback_depth=rollback_depth,
-                removed_hashes=removed_hashes,
-                intersection_hash=intersection_hash,
+            tip_tuple = (
+                (old_tip.slot, old_tip.block_hash, old_tip.block_number)
+                if old_tip else None
             )
+            return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
 
-        # Not adopted — stored but didn't change tip
-        await self._maybe_advance_immutable()
-        tip_tuple = (
-            (self._tip.slot, self._tip.block_hash, self._tip.block_number) if self._tip else None
+        # Walk successors forward from this block's predecessor's ALL successors
+        candidate_bn, candidate_hash = self._best_candidate_from(block_hash)
+
+        # Determine if the candidate chain is better than current tip
+        should_switch = False
+        new_vrf = vrf_output or b""
+        if old_tip is None:
+            should_switch = True
+        elif candidate_bn > old_tip.block_number:
+            should_switch = True
+        elif candidate_bn == old_tip.block_number:
+            # VRF tiebreaker: lower VRF output wins (Haskell comparePraos).
+            # Use candidate's VRF from BlockInfo (set by _best_candidate_from).
+            cand_info = self.volatile_db._block_info.get(candidate_hash)
+            cand_vrf = (cand_info.vrf_output if cand_info else b"") or new_vrf
+            if cand_vrf and old_tip.vrf_output:
+                if cand_vrf < old_tip.vrf_output:
+                    should_switch = True
+                    logger.info(
+                        "ChainDB: VRF tiebreak — switching to block %s at slot %d "
+                        "(cand_vrf=%s < tip_vrf=%s)",
+                        candidate_hash.hex()[:16], slot,
+                        cand_vrf.hex()[:16], old_tip.vrf_output.hex()[:16],
+                    )
+
+        if not should_switch:
+            await self._maybe_advance_immutable()
+            tip_tuple = (
+                (old_tip.slot, old_tip.block_hash, old_tip.block_number)
+                if old_tip else None
+            )
+            return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
+
+        # Switch to the candidate chain
+        ct_info = self.volatile_db._block_info[candidate_hash]
+        # Always use the VRF output from BlockInfo so tiebreak works
+        # even when the tip was set via DFS (not the current block).
+        candidate_vrf = ct_info.vrf_output or (new_vrf if candidate_hash == block_hash else b"")
+        new_tip = _ChainTip(
+            slot=ct_info.slot,
+            block_hash=candidate_hash,
+            block_number=candidate_bn,
+            vrf_output=candidate_vrf,
         )
-        return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
 
-    def add_block_sync(self, **kwargs: Any) -> ChainSelectionResult:
-        """Synchronous wrapper for add_block, used by the forge thread.
+        rollback_depth = 0
+        removed_hashes: set[bytes] = set()
+        intersection_hash: bytes | None = None
 
-        Uses a thread-local event loop to avoid conflicts with other
-        threads' event loops.
+        if old_tip is not None:
+            # Compute diff — handles both fork switches and gap-fill extensions
+            rollback_depth, removed_hashes, intersection_hash = self._compute_chain_diff(
+                candidate_hash
+            )
+        # Notify followers of fork switch BEFORE fragment update.
+        # The follower's _lock ensures it checks _pending_rollback AFTER
+        # it was set, preventing the race where it reads a stale fragment.
+        if rollback_depth > 0 and intersection_hash is not None:
+            from vibe.cardano.network.chainsync import Point as _Point
+            intersection_info = self.volatile_db._block_info.get(intersection_hash)
+            if intersection_info:
+                ipoint = _Point(slot=intersection_info.slot, hash=intersection_hash)
+                self._notify_fork_switch(removed_hashes, ipoint)
+
+        # --- LedgerSeq nonce update BEFORE tip TVar ---
+        # Must happen before tip_tvar._write() so the forge loop's
+        # STM transaction never sees a new tip with a stale nonce.
+        # Haskell does this atomically in a single STM transaction
+        # (switchTo in ChainSel.hs); we approximate by ordering the
+        # writes: nonce first, tip second.
+        if self._ledger_seq is not None:
+            if rollback_depth > 0 and intersection_hash is not None:
+                rolled = self._ledger_seq.rollback_to_hash(intersection_hash)
+                if rolled is not None:
+                    new_blocks = self._walk_chain(intersection_hash, candidate_hash)
+                    missing_vrf = sum(1 for _, _, _, v in new_blocks if not v)
+                    if missing_vrf:
+                        logger.warning(
+                            "LedgerSeq fork switch: %d/%d blocks missing VRF output",
+                            missing_vrf, len(new_blocks),
+                        )
+                    for blk_slot, blk_hash, blk_prev, blk_vrf in new_blocks:
+                        rolled = rolled.extend(
+                            slot=blk_slot, block_hash=blk_hash,
+                            prev_hash=blk_prev,
+                            vrf_output=blk_vrf or b"\x00" * 64,
+                        )
+                    self._ledger_seq = rolled
+                else:
+                    logger.warning(
+                        "LedgerSeq: no checkpoint at intersection %s (seq len=%d)",
+                        intersection_hash.hex()[:16],
+                        self._ledger_seq.length(),
+                    )
+            else:
+                if vrf_output:
+                    self._ledger_seq = self._ledger_seq.extend(
+                        slot=slot, block_hash=candidate_hash,
+                        prev_hash=predecessor_hash, vrf_output=vrf_output,
+                    )
+                else:
+                    logger.warning(
+                        "LedgerSeq: block at slot %d has no VRF output — skipping nonce update",
+                        slot,
+                    )
+            # Write nonce BEFORE tip so forge loop never reads new tip + old nonce
+            self.praos_nonce_tvar._write(self._ledger_seq.tip_state().epoch_nonce)
+
+        t_ledger = time.monotonic()
+
+        self._tip = new_tip
+        self.tip_tvar._write(new_tip)
+
+        # Fast path: simple extension (no rollback, direct child of old tip,
+        # fragment already at capacity, slot ordering maintained).
+        use_fast_path = (
+            old_tip is not None
+            and rollback_depth == 0
+            and candidate_hash == block_hash
+            and ct_info.predecessor_hash == old_tip.block_hash
+            and self._chain_fragment
+            and ct_info.slot >= self._chain_fragment[-1].slot
+        )
+
+        if use_fast_path:
+            entry = FragmentEntry(
+                slot=ct_info.slot,
+                block_hash=candidate_hash,
+                block_number=candidate_bn,
+                predecessor_hash=ct_info.predecessor_hash,
+                header_cbor=header_cbor,
+            )
+            if self._chain_fragment:
+                prev_bn = self._chain_fragment[-1].block_number
+                if candidate_bn != prev_bn + 1:
+                    logger.warning(
+                        "ChainDB.FastPathGap: prev_bn=%d candidate_bn=%d slot=%d",
+                        prev_bn, candidate_bn, ct_info.slot,
+                    )
+            self._chain_fragment.append(entry)
+            self._fragment_index[candidate_hash] = len(self._chain_fragment) - 1
+
+            if len(self._chain_fragment) > self._k:
+                excess = len(self._chain_fragment) - self._k
+                for e in self._chain_fragment[:excess]:
+                    self._fragment_index.pop(e.block_hash, None)
+                self._chain_fragment = self._chain_fragment[excess:]
+                self._fragment_index = {
+                    e.block_hash: i
+                    for i, e in enumerate(self._chain_fragment)
+                }
+
+            self.fragment_tvar._write(
+                (list(self._chain_fragment), dict(self._fragment_index))
+            )
+        else:
+            header_map = {e.block_hash: e.header_cbor for e in self._chain_fragment}
+            header_map[block_hash] = header_cbor
+            self._rebuild_fragment_from_tip(candidate_hash, header_map)
+
+        t_chainsel = time.monotonic()
+
+        logger.debug(
+            "ChainDB: new tip block %s at slot %d, blockNo %d "
+            "(rollback=%d, fragment=%d)",
+            candidate_hash.hex()[:16], ct_info.slot, candidate_bn,
+            rollback_depth, len(self._chain_fragment),
+        )
+
+        # Haskell-matching ChainDB events for log correlation.
+        # At tip: match Haskell's format exactly (full hash).
+        # During sync: debug per-block, periodic info summaries.
+        full_hash = candidate_hash.hex()
+        if rollback_depth > 0:
+            logger.info(
+                "Switched to a fork, new tip: %s at slot %d",
+                full_hash, ct_info.slot,
+            )
+        else:
+            now = time.monotonic()
+            self._block_count_since_log = getattr(self, '_block_count_since_log', 0) + 1
+            last_log_time = getattr(self, '_last_progress_log', 0.0)
+            elapsed = now - last_log_time if last_log_time > 0 else 0
+            if elapsed >= 10.0 and self._block_count_since_log > 10:
+                # Bulk sync — summarize
+                bps = self._block_count_since_log / elapsed
+                logger.info(
+                    "Syncing, block_no=%d slot=%d (%.0f blocks/sec)",
+                    candidate_bn, ct_info.slot, bps,
+                )
+                self._block_count_since_log = 0
+                self._last_progress_log = now
+            elif elapsed >= 10.0 or last_log_time == 0:
+                # At tip — match Haskell format
+                logger.info(
+                    "Chain extended, new tip: %s at slot %d",
+                    full_hash, ct_info.slot,
+                )
+                self._block_count_since_log = 0
+                self._last_progress_log = now
+            else:
+                logger.debug(
+                    "Chain extended, new tip: %s at slot %d",
+                    full_hash, ct_info.slot,
+                )
+
+        self._tip_generation += 1
+        self._notify_tip_changed()
+        t_notify = time.monotonic()
+
+        logger.debug(
+            "ChainDB.Timing: volatile=%.1fms ledger=%.1fms chainsel=%.1fms notify=%.1fms total=%.1fms",
+            (t_volatile - t_start) * 1000,
+            (t_ledger - t_volatile) * 1000,
+            (t_chainsel - t_ledger) * 1000,
+            (t_notify - t_chainsel) * 1000,
+            (t_notify - t_start) * 1000,
+        )
+
+        await self._maybe_advance_immutable()
+
+        return ChainSelectionResult(
+            adopted=True,
+            new_tip=(ct_info.slot, candidate_hash, candidate_bn),
+            rollback_depth=rollback_depth,
+            removed_hashes=removed_hashes,
+            intersection_hash=intersection_hash,
+        )
+
+    # ------------------------------------------------------------------
+    # Chain selection runner (serialized on dedicated thread)
+    # ------------------------------------------------------------------
+
+    def start_chain_sel_runner(self) -> None:
+        """Launch the chain selection background thread.
+
+        Must be called before any add_block() calls. The thread runs
+        a while-loop pulling BlockToAdd entries from the queue and
+        processing them one at a time.
+
+        Haskell ref: addBlockRunner in Background.hs
         """
         import asyncio as _asyncio
 
-        # Get or create a thread-local event loop
-        try:
-            loop = _asyncio.get_event_loop()
-            if loop.is_running():
-                # Can't use running loop — create a new one
-                loop = _asyncio.new_event_loop()
-                try:
-                    return loop.run_until_complete(self.add_block(**kwargs))
-                finally:
-                    loop.close()
-            else:
-                return loop.run_until_complete(self.add_block(**kwargs))
-        except RuntimeError:
+        def _runner() -> None:
             loop = _asyncio.new_event_loop()
             try:
-                return loop.run_until_complete(self.add_block(**kwargs))
+                while True:
+                    entry = self._chain_sel_queue.get()
+                    if entry is None:
+                        break  # Shutdown sentinel
+                    try:
+                        with self._chain_sel_lock:
+                            result = loop.run_until_complete(
+                                self._process_block(
+                                    slot=entry.slot,
+                                    block_hash=entry.block_hash,
+                                    predecessor_hash=entry.predecessor_hash,
+                                    block_number=entry.block_number,
+                                    cbor_bytes=entry.cbor_bytes,
+                                    header_cbor=entry.header_cbor,
+                                    vrf_output=entry.vrf_output,
+                                )
+                            )
+                        entry.result = result
+                    except Exception as exc:
+                        entry.error = exc
+                    finally:
+                        entry.done.set()
             finally:
                 loop.close()
+
+        self._chain_sel_thread = threading.Thread(
+            target=_runner, daemon=True, name="vibe-chainsel",
+        )
+        self._chain_sel_thread.start()
+        logger.info("Chain selection runner started (thread=%s)", self._chain_sel_thread.name)
+
+    def stop_chain_sel_runner(self) -> None:
+        """Stop the chain selection background thread."""
+        if self._chain_sel_thread is not None:
+            self._chain_sel_queue.put(None)
+            self._chain_sel_thread.join(timeout=5)
+            self._chain_sel_thread = None
+            logger.info("Chain selection runner stopped")
+
+    def add_block(
+        self,
+        slot: int,
+        block_hash: bytes,
+        predecessor_hash: bytes,
+        block_number: int,
+        cbor_bytes: bytes,
+        header_cbor: Any = None,
+        vrf_output: bytes | None = None,
+    ) -> ChainSelectionResult:
+        """Enqueue a block for chain selection and wait for the result.
+
+        This is the public API. It is synchronous -- callers on async
+        event loops should use add_block_async() instead.
+
+        Haskell ref: addBlockAsync + atomically (blockProcessed promise)
+        """
+        entry = BlockToAdd(
+            slot=slot,
+            block_hash=block_hash,
+            predecessor_hash=predecessor_hash,
+            block_number=block_number,
+            cbor_bytes=cbor_bytes,
+            header_cbor=header_cbor,
+            vrf_output=vrf_output,
+        )
+        self._chain_sel_queue.put(entry)
+        entry.done.wait()
+        if entry.error is not None:
+            raise entry.error
+        assert entry.result is not None
+        return entry.result
+
+    def add_block_inline(
+        self,
+        slot: int,
+        block_hash: bytes,
+        predecessor_hash: bytes,
+        block_number: int,
+        cbor_bytes: bytes,
+        header_cbor: Any = None,
+        vrf_output: bytes | None = None,
+    ) -> ChainSelectionResult:
+        """Process a block inline on the caller's thread (no queue hop).
+
+        Used by the forge loop for self-forged blocks. Acquires
+        _chain_sel_lock to serialize with the queue-based runner.
+        Avoids the queue latency that causes missed slot checks.
+
+        The caller MUST be on a thread that can block (not an asyncio
+        event loop). The forge loop runs on the main OS thread, so
+        this is safe.
+        """
+        import asyncio as _asyncio
+
+        with self._chain_sel_lock:
+            # Use a temporary event loop for the async _process_block.
+            # This is cheap (~10us) and avoids sharing the runner's loop.
+            loop = _asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(
+                    self._process_block(
+                        slot=slot,
+                        block_hash=block_hash,
+                        predecessor_hash=predecessor_hash,
+                        block_number=block_number,
+                        cbor_bytes=cbor_bytes,
+                        header_cbor=header_cbor,
+                        vrf_output=vrf_output,
+                    )
+                )
+            finally:
+                loop.close()
+
+    async def add_block_async(
+        self,
+        **kwargs: Any,
+    ) -> ChainSelectionResult:
+        """Async wrapper for add_block, for callers on event loops.
+
+        Uses asyncio.to_thread to avoid blocking the caller's event loop.
+        """
+        import asyncio as _asyncio
+        return await _asyncio.to_thread(self.add_block, **kwargs)
 
     async def get_tip(self) -> tuple[int, bytes, int] | None:
         """Return the current chain tip as (slot, hash, block_number).
@@ -456,7 +1089,7 @@ class ChainDB:
         Haskell reference:
             Ouroboros.Consensus.Storage.ChainDB.API.getBlockComponent
         """
-        result = await self.volatile_db.get_block(block_hash)
+        result = self.volatile_db.get_block(block_hash)
         if result is not None:
             return result
         return await self.immutable_db.get_block(block_hash)
@@ -466,55 +1099,195 @@ class ChainDB:
         point_from: Any,
         point_to: Any,
     ) -> list[bytes] | None:
-        """Get blocks in a range, for block-fetch serving.
+        """Get blocks in a range [point_from, point_to] for block-fetch.
 
-        Walks the chain fragment from point_from to point_to and
-        returns the CBOR bytes for each block.
+        Walks backward from point_to through VolatileDB predecessor
+        links to build the path, then serves block CBOR bytes from
+        VolatileDB/ImmutableDB. The chain fragment is NOT used.
 
-        Haskell ref: ChainDB iterator API
+        Haskell ref:
+            ChainDB.stream in Iterator.hs — creates an iterator that
+            walks backward from end through VolatileDB (computePath
+            in Paths.hs), then serves from both ImmutableDB and
+            VolatileDB. getAnyBlockComponent in Query.hs — searches
+            VolatileDB first, then ImmutableDB.
         """
         from vibe.cardano.network.chainsync import ORIGIN, Point
 
-        if not self._chain_fragment:
-            return None
-
-        # Find start index
-        if point_from is ORIGIN or point_from == ORIGIN:
-            start_idx = 0
-        elif isinstance(point_from, Point):
-            idx = self._fragment_index.get(point_from.hash)
-            if idx is None:
-                return None
-            start_idx = idx
-        else:
-            start_idx = 0
-
-        # Find end index
+        # Extract hashes from points
         if point_to is ORIGIN or point_to == ORIGIN:
-            end_idx = 0
-        elif isinstance(point_to, Point):
-            idx = self._fragment_index.get(point_to.hash)
-            if idx is None:
-                return None
-            end_idx = idx
-        else:
-            end_idx = len(self._chain_fragment) - 1
+            return None
+        if not isinstance(point_to, Point):
+            return None
+        end_hash = point_to.hash
 
-        if start_idx > end_idx:
+        if point_from is ORIGIN or point_from == ORIGIN:
+            start_hash = None  # Walk all the way back
+        elif isinstance(point_from, Point):
+            start_hash = point_from.hash
+        else:
+            start_hash = None
+
+        # Walk backward from end_hash through VolatileDB predecessor links
+        # to collect the path of block hashes from start to end.
+        # Haskell ref: computePath / computeReversePath in Paths.hs
+        path: list[bytes] = []
+        h = end_hash
+        while h is not None:
+            if h not in self.volatile_db._block_info:
+                # Block not in VolatileDB — might be in ImmutableDB.
+                # For now, stop the backward walk here. A full
+                # implementation would switch to ImmutableDB iteration.
+                break
+            path.append(h)
+            if start_hash is not None and h == start_hash:
+                break  # Reached the start point
+            info = self.volatile_db._block_info[h]
+            h = info.predecessor_hash
+            # Safety: limit to 2*k to avoid infinite loops on corrupt data
+            if len(path) > self._k * 2:
+                break
+
+        if not path:
             return None
 
-        # Fetch block CBOR for each entry in range
+        # Reverse to get oldest-first order
+        path.reverse()
+
+        # Fetch CBOR bytes for each block in the path
         blocks: list[bytes] = []
-        for i in range(start_idx, end_idx + 1):
-            entry = self._chain_fragment[i]
-            cbor = await self.get_block(entry.block_hash)
+        for block_hash in path:
+            cbor = await self.get_block(block_hash)
             if cbor is not None:
                 blocks.append(cbor)
         return blocks if blocks else None
 
     # ------------------------------------------------------------------
+    # Chain selection helpers (out-of-order safe)
+    # ------------------------------------------------------------------
+
+    def _best_candidate_from(self, start_hash: bytes) -> tuple[int, bytes]:
+        """Walk successor map forward to find the best reachable chain tip.
+
+        Starts from start_hash's predecessor and evaluates ALL successor
+        paths (not just paths through start_hash). This ensures sibling
+        chains are considered when a gap-filling block arrives.
+
+        Returns (block_number, tip_hash) of the best candidate.
+
+        Haskell ref: Paths.maximalCandidates — evaluates all forward
+        paths from the new block's predecessor's successors.
+        """
+        info = self.volatile_db._block_info.get(start_hash)
+        if info is None:
+            return (0, start_hash)
+
+        # Start from the predecessor's successors (all of them)
+        pred_hash = info.predecessor_hash
+        roots = self.volatile_db._successors.get(pred_hash, [start_hash])
+
+        best_bn = 0
+        best_hash = start_hash
+        best_vrf = info.vrf_output
+
+        # DFS from each root to find the longest path
+        for root in roots:
+            stack = [root]
+            visited: set[bytes] = set()
+            while stack:
+                h = stack.pop()
+                if h in visited:
+                    continue
+                visited.add(h)
+                bi = self.volatile_db._block_info.get(h)
+                if bi is None:
+                    continue
+                if bi.block_number > best_bn:
+                    best_bn = bi.block_number
+                    best_hash = bi.block_hash
+                    best_vrf = bi.vrf_output
+                elif bi.block_number == best_bn and bi.vrf_output and best_vrf:
+                    # VRF tiebreak: lower VRF output wins (Haskell comparePraos)
+                    if bi.vrf_output < best_vrf:
+                        best_hash = bi.block_hash
+                        best_vrf = bi.vrf_output
+                for succ in self.volatile_db._successors.get(h, []):
+                    stack.append(succ)
+
+        return best_bn, best_hash
+
+    def _is_reachable_from_chain(self, block_hash: bytes) -> bool:
+        """Walk backward from block_hash through predecessor links.
+
+        Returns True if we reach a block on the current chain fragment,
+        the fragment's anchor (predecessor of oldest entry), or the
+        immutable tip.
+
+        Haskell ref: Paths.isReachable / computeReversePath
+        """
+        # Compute the anchor hash — predecessor of the oldest fragment entry
+        anchor_hash: bytes | None = None
+        if self._chain_fragment:
+            anchor_hash = self._chain_fragment[0].predecessor_hash
+
+        imm_tip_hash = self.immutable_db.get_tip_hash()
+
+        h = block_hash
+        visited: set[bytes] = set()
+        while h:
+            if h in visited:
+                return False  # cycle
+            visited.add(h)
+            # On current chain fragment?
+            if h in self._fragment_index:
+                return True
+            # Is it the fragment anchor?
+            if anchor_hash is not None and h == anchor_hash:
+                return True
+            # Is it the immutable tip?
+            if imm_tip_hash is not None and h == imm_tip_hash:
+                return True
+            # Walk backward
+            info = self.volatile_db._block_info.get(h)
+            if info is None:
+                return False
+            h = info.predecessor_hash
+        return False
+
+    # ------------------------------------------------------------------
     # Chain fragment management
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_header_from_block(block_cbor: bytes) -> list | None:
+        """Extract wrapped header CBOR from a full block's CBOR bytes.
+
+        Returns [era_tag, CBORTag(24, header_bytes)] suitable for chain-sync
+        serving, or None if extraction fails.
+
+        Haskell ref: getBlockHeader extracts the header from a SerializedBlock.
+        """
+        try:
+            import cbor2pure as cbor2
+
+            decoded = cbor2.loads(block_cbor)
+            if hasattr(decoded, "tag"):
+                era_tag = decoded.tag
+                block_body = decoded.value
+            elif isinstance(decoded, list) and isinstance(decoded[0], int):
+                era_tag = decoded[0]
+                block_body = decoded[1]
+            else:
+                era_tag = 0
+                block_body = decoded
+            hdr_arr = block_body[0] if isinstance(block_body, list) else block_body
+            hdr_cbor = cbor2.dumps(hdr_arr)
+            return [
+                max(0, era_tag - 1) if era_tag >= 2 else 0,
+                cbor2.CBORTag(24, hdr_cbor),
+            ]
+        except Exception:
+            return None
 
     def _rebuild_fragment_from_tip(
         self,
@@ -531,6 +1304,25 @@ class ChainDB:
         while h and h in self.volatile_db._block_info and len(fragment) < self._k:
             info = self.volatile_db._block_info[h]
             hdr = header_cbor_map.get(h)
+            # If header not in map (block from new fork), extract from
+            # VolatileDB block bytes.  Missing headers cause chain-sync
+            # followers to skip blocks (the follower advances client_point
+            # past the None-header entry, but the server treats it as
+            # "await", creating a block_number gap).
+            if hdr is None:
+                block_cbor = self.volatile_db._blocks.get(h)
+                if block_cbor:
+                    hdr = self._extract_header_from_block(block_cbor)
+                    if hdr is not None:
+                        logger.debug(
+                            "ChainDB.RebuildExtract: extracted header for bn=%d hash=%s",
+                            info.block_number, h.hex()[:16],
+                        )
+                if hdr is None:
+                    logger.warning(
+                        "ChainDB.RebuildMissingHeader: bn=%d hash=%s in_volatile=%s",
+                        info.block_number, h.hex()[:16], block_cbor is not None,
+                    )
             fragment.append(
                 FragmentEntry(
                     slot=info.slot,
@@ -541,9 +1333,16 @@ class ChainDB:
                 )
             )
             h = info.predecessor_hash
-        fragment.reverse()  # oldest first
-        # Ensure monotonic slot ordering (required by Haskell chain-sync)
-        fragment.sort(key=lambda e: e.slot)
+        fragment.reverse()  # oldest first (predecessor chain order)
+        # Diagnostic: check for block_no gaps in rebuilt fragment
+        for i in range(1, len(fragment)):
+            if fragment[i].block_number != fragment[i-1].block_number + 1:
+                logger.warning(
+                    "ChainDB.FragmentGap: pos=%d prev_blk=%d next_blk=%d prev_slot=%d next_slot=%d prev_hash=%s next_hash=%s",
+                    i, fragment[i-1].block_number, fragment[i].block_number,
+                    fragment[i-1].slot, fragment[i].slot,
+                    fragment[i-1].block_hash.hex()[:16], fragment[i].block_hash.hex()[:16],
+                )
         self._chain_fragment = fragment
         self._fragment_index = {e.block_hash: i for i, e in enumerate(fragment)}
         # Update STM TVar
@@ -594,7 +1393,7 @@ class ChainDB:
         Haskell reference:
             Ouroboros.Consensus.Storage.ChainDB.Impl.copyToImmutableDB
         """
-        all_info = await self.volatile_db.get_all_block_info()
+        all_info = self.volatile_db.get_all_block_info()
         to_promote: list[BlockInfo] = [
             info for info in all_info.values() if info.slot <= new_immutable_slot
         ]
@@ -602,7 +1401,7 @@ class ChainDB:
 
         copied = 0
         for info in to_promote:
-            cbor_bytes = await self.volatile_db.get_block(info.block_hash)
+            cbor_bytes = self.volatile_db.get_block(info.block_hash)
             if cbor_bytes is None:
                 continue
             try:
@@ -621,7 +1420,7 @@ class ChainDB:
                     exc_info=True,
                 )
 
-        gc_count = await self.volatile_db.gc(new_immutable_slot)
+        gc_count = self.volatile_db.gc(new_immutable_slot)
         logger.debug(
             "ChainDB: GC removed %d volatile blocks at or below slot %d",
             gc_count,
@@ -646,7 +1445,7 @@ class ChainDB:
 
         new_imm_block_number = tip_bn - self._k
 
-        all_info = await self.volatile_db.get_all_block_info()
+        all_info = self.volatile_db.get_all_block_info()
         target_block: BlockInfo | None = None
         for info in all_info.values():
             if info.block_number == new_imm_block_number:
@@ -682,9 +1481,9 @@ class ChainDB:
 
     async def wipe_volatile(self) -> None:
         """Wipe the volatile DB, reverting the chain to the immutable tip."""
-        all_info = await self.volatile_db.get_all_block_info()
+        all_info = self.volatile_db.get_all_block_info()
         for bh in list(all_info.keys()):
-            await self.volatile_db.remove_block(bh)
+            self.volatile_db.remove_block(bh)
 
         imm_tip_slot = self.immutable_db.get_tip_slot()
         imm_tip_hash = self.immutable_db.get_tip_hash()

@@ -65,7 +65,7 @@ async def _add_chain(
             predecessor_hash=predecessor,
             block_number=block_num,
         )
-        await db.add_block(h, slot, predecessor, block_num, _cbor(block_num))
+        db.add_block(h, slot, predecessor, block_num, _cbor(block_num))
         infos.append(info)
         predecessor = h
     return infos
@@ -126,20 +126,20 @@ class TestBlockOperations:
     async def test_add_and_get_block(self) -> None:
         db = VolatileDB()
         h = _hash(1)
-        await db.add_block(h, 100, _genesis_hash(), 1, _cbor(1))
-        assert await db.get_block(h) == _cbor(1)
+        db.add_block(h, 100, _genesis_hash(), 1, _cbor(1))
+        assert db.get_block(h) == _cbor(1)
 
     async def test_get_missing_block_returns_none(self) -> None:
         db = VolatileDB()
-        assert await db.get_block(_hash(999)) is None
+        assert db.get_block(_hash(999)) is None
 
     async def test_add_block_stores_metadata(self) -> None:
         db = VolatileDB()
         h = _hash(1)
         pred = _genesis_hash()
-        await db.add_block(h, 42, pred, 1, _cbor(1))
+        db.add_block(h, 42, pred, 1, _cbor(1))
 
-        info = await db.get_block_info(h)
+        info = db.get_block_info(h)
         assert info is not None
         assert info.block_hash == h
         assert info.slot == 42
@@ -148,20 +148,20 @@ class TestBlockOperations:
 
     async def test_get_block_info_missing_returns_none(self) -> None:
         db = VolatileDB()
-        assert await db.get_block_info(_hash(999)) is None
+        assert db.get_block_info(_hash(999)) is None
 
     async def test_block_count(self) -> None:
         db = VolatileDB()
         assert db.block_count == 0
-        await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+        db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
         assert db.block_count == 1
-        await db.add_block(_hash(2), 2, _hash(1), 2, _cbor(2))
+        db.add_block(_hash(2), 2, _hash(1), 2, _cbor(2))
         assert db.block_count == 2
 
     async def test_get_all_block_info(self) -> None:
         db = VolatileDB()
         await _add_chain(db, 1, 3)
-        all_info = await db.get_all_block_info()
+        all_info = db.get_all_block_info()
         assert len(all_info) == 3
         assert all(isinstance(v, BlockInfo) for v in all_info.values())
 
@@ -177,8 +177,8 @@ class TestSuccessorMap:
     async def test_successors_of_genesis(self) -> None:
         """Genesis hash should have successors after adding blocks."""
         db = VolatileDB()
-        await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
-        succs = await db.get_successors(_genesis_hash())
+        db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+        succs = db.get_successors(_genesis_hash())
         assert succs == [_hash(1)]
 
     async def test_linear_chain_successors(self) -> None:
@@ -187,13 +187,13 @@ class TestSuccessorMap:
         await _add_chain(db, 1, 5)
 
         # Genesis -> block 1
-        assert await db.get_successors(_genesis_hash()) == [_hash(1)]
+        assert db.get_successors(_genesis_hash()) == [_hash(1)]
         # Block 1 -> block 2
-        assert await db.get_successors(_hash(1)) == [_hash(2)]
+        assert db.get_successors(_hash(1)) == [_hash(2)]
         # Block 4 -> block 5
-        assert await db.get_successors(_hash(4)) == [_hash(5)]
+        assert db.get_successors(_hash(4)) == [_hash(5)]
         # Block 5 (tip) has no successors
-        assert await db.get_successors(_hash(5)) == []
+        assert db.get_successors(_hash(5)) == []
 
     async def test_fork_tracking(self) -> None:
         """A predecessor with two successors represents a fork.
@@ -203,33 +203,33 @@ class TestSuccessorMap:
         """
         db = VolatileDB()
         # Block A at slot 1 from genesis
-        await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+        db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
         # Fork: block B and block C both extend block A
-        await db.add_block(_hash(2), 2, _hash(1), 2, _cbor(2))
-        await db.add_block(_hash(3), 2, _hash(1), 3, _cbor(3))
+        db.add_block(_hash(2), 2, _hash(1), 2, _cbor(2))
+        db.add_block(_hash(3), 2, _hash(1), 3, _cbor(3))
 
-        succs = await db.get_successors(_hash(1))
+        succs = db.get_successors(_hash(1))
         assert set(succs) == {_hash(2), _hash(3)}
 
     async def test_successors_empty_for_unknown_hash(self) -> None:
         db = VolatileDB()
-        assert await db.get_successors(_hash(999)) == []
+        assert db.get_successors(_hash(999)) == []
 
     async def test_no_duplicate_successors(self) -> None:
         """Adding the same block twice should not create duplicate entries."""
         db = VolatileDB()
         h = _hash(1)
         pred = _genesis_hash()
-        await db.add_block(h, 1, pred, 1, _cbor(1))
-        await db.add_block(h, 1, pred, 1, _cbor(1))  # re-add
-        assert await db.get_successors(pred) == [h]
+        db.add_block(h, 1, pred, 1, _cbor(1))
+        db.add_block(h, 1, pred, 1, _cbor(1))  # re-add
+        assert db.get_successors(pred) == [h]
 
     async def test_successor_removed_on_block_delete(self) -> None:
         """Removing a block should clean up the successor map."""
         db = VolatileDB()
-        await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
-        await db.remove_block(_hash(1))
-        assert await db.get_successors(_genesis_hash()) == []
+        db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+        db.remove_block(_hash(1))
+        assert db.get_successors(_genesis_hash()) == []
 
 
 # ---------------------------------------------------------------------------
@@ -242,28 +242,28 @@ class TestMaxSlot:
 
     async def test_empty_db_max_slot(self) -> None:
         db = VolatileDB()
-        assert await db.get_max_slot() == -1
+        assert db.get_max_slot() == -1
 
     async def test_max_slot_tracks_highest(self) -> None:
         db = VolatileDB()
-        await db.add_block(_hash(1), 10, _genesis_hash(), 1, _cbor(1))
-        assert await db.get_max_slot() == 10
-        await db.add_block(_hash(2), 20, _hash(1), 2, _cbor(2))
-        assert await db.get_max_slot() == 20
+        db.add_block(_hash(1), 10, _genesis_hash(), 1, _cbor(1))
+        assert db.get_max_slot() == 10
+        db.add_block(_hash(2), 20, _hash(1), 2, _cbor(2))
+        assert db.get_max_slot() == 20
 
     async def test_max_slot_recomputed_on_tip_removal(self) -> None:
         """If the block at max slot is removed, max_slot should update."""
         db = VolatileDB()
-        await db.add_block(_hash(1), 10, _genesis_hash(), 1, _cbor(1))
-        await db.add_block(_hash(2), 20, _hash(1), 2, _cbor(2))
-        await db.remove_block(_hash(2))
-        assert await db.get_max_slot() == 10
+        db.add_block(_hash(1), 10, _genesis_hash(), 1, _cbor(1))
+        db.add_block(_hash(2), 20, _hash(1), 2, _cbor(2))
+        db.remove_block(_hash(2))
+        assert db.get_max_slot() == 10
 
     async def test_max_slot_returns_negative_after_all_removed(self) -> None:
         db = VolatileDB()
-        await db.add_block(_hash(1), 5, _genesis_hash(), 1, _cbor(1))
-        await db.remove_block(_hash(1))
-        assert await db.get_max_slot() == -1
+        db.add_block(_hash(1), 5, _genesis_hash(), 1, _cbor(1))
+        db.remove_block(_hash(1))
+        assert db.get_max_slot() == -1
 
 
 # ---------------------------------------------------------------------------
@@ -285,21 +285,21 @@ class TestGarbageCollection:
         """
         db = VolatileDB()
         await _add_chain(db, 1, 10)
-        removed = await db.gc(immutable_tip_slot=5)
+        removed = db.gc(immutable_tip_slot=5)
         assert removed == 5
         assert db.block_count == 5
         # Blocks 1-5 (slots 1-5) should be gone
         for i in range(1, 6):
-            assert await db.get_block(_hash(i)) is None
+            assert db.get_block(_hash(i)) is None
         # Blocks 6-10 (slots 6-10) should remain
         for i in range(6, 11):
-            assert await db.get_block(_hash(i)) is not None
+            assert db.get_block(_hash(i)) is not None
 
     async def test_gc_removes_zero_when_nothing_old(self) -> None:
         """GC with a slot below all stored blocks removes nothing."""
         db = VolatileDB()
         await _add_chain(db, 100, 5, start_number=1)
-        removed = await db.gc(immutable_tip_slot=50)
+        removed = db.gc(immutable_tip_slot=50)
         assert removed == 0
         assert db.block_count == 5
 
@@ -307,15 +307,15 @@ class TestGarbageCollection:
         """GC at or above max slot removes everything."""
         db = VolatileDB()
         await _add_chain(db, 1, 5)
-        removed = await db.gc(immutable_tip_slot=5)
+        removed = db.gc(immutable_tip_slot=5)
         assert removed == 5
         assert db.block_count == 0
-        assert await db.get_max_slot() == -1
+        assert db.get_max_slot() == -1
 
     async def test_gc_on_empty_db(self) -> None:
         """GC on an empty DB is a no-op."""
         db = VolatileDB()
-        removed = await db.gc(immutable_tip_slot=100)
+        removed = db.gc(immutable_tip_slot=100)
         assert removed == 0
 
     async def test_gc_removes_fork_blocks(self) -> None:
@@ -324,34 +324,34 @@ class TestGarbageCollection:
         """
         db = VolatileDB()
         # Main chain: genesis -> A(slot 1) -> B(slot 2) -> C(slot 3)
-        await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
-        await db.add_block(_hash(2), 2, _hash(1), 2, _cbor(2))
-        await db.add_block(_hash(3), 3, _hash(2), 3, _cbor(3))
+        db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+        db.add_block(_hash(2), 2, _hash(1), 2, _cbor(2))
+        db.add_block(_hash(3), 3, _hash(2), 3, _cbor(3))
         # Fork: genesis -> X(slot 1) -> Y(slot 2)
-        await db.add_block(_hash(10), 1, _genesis_hash(), 1, _cbor(10))
-        await db.add_block(_hash(11), 2, _hash(10), 2, _cbor(11))
+        db.add_block(_hash(10), 1, _genesis_hash(), 1, _cbor(10))
+        db.add_block(_hash(11), 2, _hash(10), 2, _cbor(11))
 
-        removed = await db.gc(immutable_tip_slot=2)
+        removed = db.gc(immutable_tip_slot=2)
         # Should remove A, B, X, Y (all at slot <= 2) = 4 blocks
         assert removed == 4
         # Only C (slot 3) remains
         assert db.block_count == 1
-        assert await db.get_block(_hash(3)) is not None
+        assert db.get_block(_hash(3)) is not None
 
     async def test_gc_updates_successor_map(self) -> None:
         """After GC, the successor map should be cleaned up."""
         db = VolatileDB()
         await _add_chain(db, 1, 5)
-        await db.gc(immutable_tip_slot=3)
+        db.gc(immutable_tip_slot=3)
         # Predecessor entries for removed blocks should be cleaned
-        assert await db.get_successors(_genesis_hash()) == []
+        assert db.get_successors(_genesis_hash()) == []
 
     async def test_gc_updates_max_slot(self) -> None:
         """Max slot should reflect remaining blocks after GC."""
         db = VolatileDB()
         await _add_chain(db, 1, 10)
-        await db.gc(immutable_tip_slot=7)
-        assert await db.get_max_slot() == 10
+        db.gc(immutable_tip_slot=7)
+        assert db.get_max_slot() == 10
 
     async def test_gc_collectable_predicate(self) -> None:
         """test_garbage_collect_collectable_predicate:
@@ -361,9 +361,9 @@ class TestGarbageCollection:
         # Add blocks at slots 1, 5, 10, 15, 20
         for i, slot in enumerate([1, 5, 10, 15, 20], start=1):
             pred = _genesis_hash() if i == 1 else _hash(i - 1)
-            await db.add_block(_hash(i), slot, pred, i, _cbor(i))
+            db.add_block(_hash(i), slot, pred, i, _cbor(i))
 
-        removed = await db.gc(immutable_tip_slot=10)
+        removed = db.gc(immutable_tip_slot=10)
         assert removed == 3  # slots 1, 5, 10
         assert db.block_count == 2  # slots 15, 20 remain
 
@@ -379,14 +379,14 @@ class TestGarbageCollection:
 
         # Simulate "copy to immutable" by reading blocks (no removal yet)
         for i in range(1, 6):
-            data = await db.get_block(_hash(i))
+            data = db.get_block(_hash(i))
             assert data is not None  # Still readable
 
         # All 10 blocks are still in VolatileDB
         assert db.block_count == 10
 
         # Only GC actually removes them
-        await db.gc(immutable_tip_slot=5)
+        db.gc(immutable_tip_slot=5)
         assert db.block_count == 5
 
 
@@ -400,26 +400,26 @@ class TestBlockRemoval:
 
     async def test_remove_existing_block(self) -> None:
         db = VolatileDB()
-        await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
-        assert await db.remove_block(_hash(1)) is True
-        assert await db.get_block(_hash(1)) is None
-        assert await db.get_block_info(_hash(1)) is None
+        db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+        assert db.remove_block(_hash(1)) is True
+        assert db.get_block(_hash(1)) is None
+        assert db.get_block_info(_hash(1)) is None
 
     async def test_remove_nonexistent_block(self) -> None:
         db = VolatileDB()
-        assert await db.remove_block(_hash(999)) is False
+        assert db.remove_block(_hash(999)) is False
 
     async def test_remove_cleans_successor_map(self) -> None:
         """test_garbage_collect_file_removes_all_hashes_from_maps:
         Removing a block should remove it from the predecessor's successor list.
         """
         db = VolatileDB()
-        await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
-        await db.add_block(_hash(2), 2, _hash(1), 2, _cbor(2))
-        await db.add_block(_hash(3), 3, _hash(1), 3, _cbor(3))  # fork
+        db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+        db.add_block(_hash(2), 2, _hash(1), 2, _cbor(2))
+        db.add_block(_hash(3), 3, _hash(1), 3, _cbor(3))  # fork
 
-        await db.remove_block(_hash(2))
-        succs = await db.get_successors(_hash(1))
+        db.remove_block(_hash(2))
+        succs = db.get_successors(_hash(1))
         assert _hash(2) not in succs
         assert _hash(3) in succs
 
@@ -433,25 +433,25 @@ class TestPersistence:
     """Test on-disk block file storage and recovery."""
 
     async def test_add_block_creates_file(self, tmp_path: Path) -> None:
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(1)
-        await db.add_block(h, 1, _genesis_hash(), 1, _cbor(1))
+        db.add_block(h, 1, _genesis_hash(), 1, _cbor(1))
         filepath = tmp_path / f"{h.hex()}.block"
         assert filepath.exists()
         assert filepath.read_bytes() == _cbor(1)
 
     async def test_remove_block_deletes_file(self, tmp_path: Path) -> None:
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(1)
-        await db.add_block(h, 1, _genesis_hash(), 1, _cbor(1))
-        await db.remove_block(h)
+        db.add_block(h, 1, _genesis_hash(), 1, _cbor(1))
+        db.remove_block(h)
         filepath = tmp_path / f"{h.hex()}.block"
         assert not filepath.exists()
 
     async def test_gc_deletes_files(self, tmp_path: Path) -> None:
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         await _add_chain(db, 1, 5)
-        await db.gc(immutable_tip_slot=3)
+        db.gc(immutable_tip_slot=3)
         # Blocks 1-3 files should be gone
         for i in range(1, 4):
             assert not (tmp_path / f"{_hash(i).hex()}.block").exists()
@@ -462,11 +462,11 @@ class TestPersistence:
     async def test_load_from_disk_recovers_state(self, tmp_path: Path) -> None:
         """Startup recovery: scan directory to rebuild in-memory indices."""
         # Phase 1: populate and close
-        db1 = VolatileDB(db_dir=tmp_path)
+        db1 = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         await _add_chain(db1, 10, 3)
 
         # Phase 2: new instance, load from disk
-        db2 = VolatileDB(db_dir=tmp_path)
+        db2 = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         def parse_header(cbor_bytes: bytes) -> BlockInfo:
             """Reverse-engineer the test block number from fake CBOR."""
@@ -482,20 +482,20 @@ class TestPersistence:
         loaded = await db2.load_from_disk(parse_header)
         assert loaded == 3
         assert db2.block_count == 3
-        assert await db2.get_max_slot() == 12
+        assert db2.get_max_slot() == 12
 
         # Successor map should be rebuilt
-        assert await db2.get_successors(_genesis_hash()) == [_hash(1)]
+        assert db2.get_successors(_genesis_hash()) == [_hash(1)]
 
     async def test_load_from_disk_skips_corrupt_files(self, tmp_path: Path) -> None:
         """Corrupt block files are skipped during recovery."""
-        db = VolatileDB(db_dir=tmp_path)
-        await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
+        db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
 
         # Write a corrupt file
         (tmp_path / "deadbeef.block").write_bytes(b"not valid")
 
-        db2 = VolatileDB(db_dir=tmp_path)
+        db2 = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         def parse_header(cbor_bytes: bytes) -> BlockInfo:
             text = cbor_bytes.decode()
@@ -520,7 +520,7 @@ class TestPersistence:
 
     async def test_put_creates_file(self, tmp_path: Path) -> None:
         """KeyValueStore.put also persists to disk."""
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(42)
         await db.put(h, b"raw-data")
         filepath = tmp_path / f"{h.hex()}.block"
@@ -530,9 +530,9 @@ class TestPersistence:
     async def test_db_dir_created_if_missing(self, tmp_path: Path) -> None:
         """VolatileDB creates the db_dir if it doesn't exist."""
         new_dir = tmp_path / "volatile" / "blocks"
-        db = VolatileDB(db_dir=new_dir)
+        db = VolatileDB(db_dir=new_dir, write_batch_size=1)
         assert new_dir.exists()
-        await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+        db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
         assert (new_dir / f"{_hash(1).hex()}.block").exists()
 
 
@@ -553,7 +553,7 @@ class TestCloseThenOperate:
     async def test_close_then_get_raises(self) -> None:
         """get() on a closed DB raises."""
         db = VolatileDB()
-        await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+        db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
         db.close()
 
         with pytest.raises(ClosedVolatileDBError):
@@ -565,7 +565,7 @@ class TestCloseThenOperate:
         db.close()
 
         with pytest.raises(ClosedVolatileDBError):
-            await db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
+            db.add_block(_hash(1), 1, _genesis_hash(), 1, _cbor(1))
 
     async def test_close_is_idempotent(self) -> None:
         """Closing twice doesn't raise."""
@@ -604,18 +604,18 @@ class TestDuplicateBlock:
         pred = _genesis_hash()
         cbor = _cbor(1)
 
-        await db.add_block(h, 1, pred, 1, cbor)
+        db.add_block(h, 1, pred, 1, cbor)
         assert db.block_count == 1
 
         # Add the exact same block again
-        await db.add_block(h, 1, pred, 1, cbor)
+        db.add_block(h, 1, pred, 1, cbor)
         assert db.block_count == 1  # Still 1, not 2
 
         # The block should still be retrievable
-        assert await db.get_block(h) == cbor
+        assert db.get_block(h) == cbor
 
         # Successor map should not have duplicates
-        succs = await db.get_successors(pred)
+        succs = db.get_successors(pred)
         assert succs == [h]  # Only one entry
 
     async def test_duplicate_block_different_cbor_overwrites(self) -> None:
@@ -628,8 +628,8 @@ class TestDuplicateBlock:
         h = _hash(1)
         pred = _genesis_hash()
 
-        await db.add_block(h, 1, pred, 1, b"original")
-        await db.add_block(h, 1, pred, 1, b"updated")
+        db.add_block(h, 1, pred, 1, b"original")
+        db.add_block(h, 1, pred, 1, b"updated")
 
         assert db.block_count == 1
-        assert await db.get_block(h) == b"updated"
+        assert db.get_block(h) == b"updated"

@@ -146,6 +146,40 @@ class Bearer:
 
         try:
             self._writer.write(wire)
+            # Drain immediately so the bytes reach the peer. The mux
+            # sender uses buffer_segment() + flush() for batching,
+            # but write_segment is the public API used by direct
+            # callers (integration tests, raw protocol usage).
+            await self._writer.drain()
+        except (ConnectionError, OSError) as exc:
+            self._closed = True
+            raise ConnectionError(str(exc)) from exc
+
+    def buffer_segment(self, segment: MuxSegment) -> None:
+        """Buffer a segment without flushing to the socket.
+
+        Call flush() after buffering one or more segments to send them
+        all in a single syscall. Used by the mux sender to batch writes
+        across a round-robin pass.
+
+        Raises:
+            BearerClosedError: If the bearer is already closed.
+        """
+        if self._closed:
+            raise BearerClosedError("bearer is closed")
+        wire = encode_segment(segment)
+        self._writer.write(wire)
+
+    async def flush(self) -> None:
+        """Flush all buffered writes to the socket.
+
+        Raises:
+            BearerClosedError: If the bearer is already closed.
+            ConnectionError: On broken pipe or connection reset.
+        """
+        if self._closed:
+            raise BearerClosedError("bearer is closed")
+        try:
             await self._writer.drain()
         except (ConnectionError, OSError) as exc:
             self._closed = True

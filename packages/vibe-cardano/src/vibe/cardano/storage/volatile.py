@@ -62,6 +62,7 @@ class BlockInfo:
     slot: int
     predecessor_hash: bytes
     block_number: int
+    vrf_output: bytes = b""  # 64-byte VRF output for chain selection tiebreak
 
 
 class VolatileDB:
@@ -76,7 +77,9 @@ class VolatileDB:
             exist.  Pass ``None`` for a pure in-memory store (no persistence).
     """
 
-    def __init__(self, db_dir: Path | None = None) -> None:
+    def __init__(
+        self, db_dir: Path | None = None, write_batch_size: int = 50,
+    ) -> None:
         # Core index: block_hash -> CBOR block bytes
         self._blocks: dict[bytes, bytes] = {}
 
@@ -94,6 +97,36 @@ class VolatileDB:
         if db_dir is not None:
             db_dir.mkdir(parents=True, exist_ok=True)
 
+        # Buffered disk writes — accumulate blocks and flush every N inserts.
+        # Reduces I/O overhead during bulk sync (was: 1 write per block).
+        self._write_batch_size = write_batch_size
+        self._write_buffer: list[tuple[bytes, bytes]] = []  # (hash, cbor)
+
+        # Background disk writer — processes batches without blocking
+        # the chain selection runner. Uses a queue + daemon thread.
+        import queue as _queue
+        self._disk_queue: _queue.Queue[list[tuple[bytes, bytes]] | None] = _queue.Queue()
+        self._disk_thread: object = None
+        if db_dir is not None:
+            import threading
+            def _disk_writer():
+                while True:
+                    batch = self._disk_queue.get()
+                    if batch is None:
+                        self._disk_queue.task_done()
+                        break
+                    for bh, cb in batch:
+                        try:
+                            self._write_file(bh, cb)
+                        except OSError:
+                            logger.warning(
+                                "VolatileDB: disk write failed for %s",
+                                bh.hex()[:16],
+                            )
+                    self._disk_queue.task_done()
+            self._disk_thread = threading.Thread(target=_disk_writer, daemon=True)
+            self._disk_thread.start()
+
         # Closed flag
         self._closed: bool = False
 
@@ -107,12 +140,25 @@ class VolatileDB:
             raise ClosedVolatileDBError("VolatileDB has been closed")
 
     def close(self) -> None:
-        """Close the VolatileDB, preventing further operations.
+        """Close the VolatileDB, flushing buffered writes first.
 
         Haskell reference:
             Ouroboros.Consensus.Storage.VolatileDB.API.closeDB
         """
+        self._flush_writes()
         self._closed = True
+
+    def _flush_writes(self) -> None:
+        """Flush remaining buffered writes and stop background writer."""
+        # Send remaining buffer to writer
+        if self._write_buffer and self._db_dir is not None:
+            self._disk_queue.put(list(self._write_buffer))
+            self._write_buffer.clear()
+        # Signal writer to stop and wait
+        if self._disk_thread is not None:
+            self._disk_queue.put(None)  # Sentinel
+            self._disk_thread.join(timeout=5)
+            self._disk_thread = None
 
     @property
     def is_closed(self) -> bool:
@@ -175,21 +221,20 @@ class VolatileDB:
     # Cardano-specific VolatileDB operations
     # -------------------------------------------------------------------
 
-    async def add_block(
+    def add_block(
         self,
         block_hash: bytes,
         slot: int,
         predecessor_hash: bytes,
         block_number: int,
         cbor_bytes: bytes,
+        vrf_output: bytes = b"",
     ) -> None:
         """Store a block with full metadata, updating all indices.
 
-        This is the primary insertion method.  It updates:
-        - The block store (hash -> CBOR bytes)
-        - The metadata index (hash -> BlockInfo)
-        - The successor map (predecessor -> [successors])
-        - The max slot tracker
+        This is synchronous — all operations are in-memory dict updates.
+        Disk writes are buffered and flushed synchronously when the
+        batch is full.
 
         Haskell reference:
             Ouroboros.Consensus.Storage.VolatileDB.Impl.putBlock
@@ -200,6 +245,7 @@ class VolatileDB:
             predecessor_hash: Hash of the predecessor block.
             block_number: Block number (height).
             cbor_bytes: CBOR-encoded block bytes.
+            vrf_output: 64-byte VRF output for chain selection tiebreak.
         """
         self._check_closed()
 
@@ -208,6 +254,7 @@ class VolatileDB:
             slot=slot,
             predecessor_hash=predecessor_hash,
             block_number=block_number,
+            vrf_output=vrf_output or b"",
         )
 
         self._blocks[block_hash] = cbor_bytes
@@ -223,9 +270,17 @@ class VolatileDB:
         if slot > self._max_slot:
             self._max_slot = slot
 
-        # Persist to disk
+        # Buffer disk writes — send to background writer when batch is full.
         if self._db_dir is not None:
-            self._write_file(block_hash, cbor_bytes)
+            self._write_buffer.append((block_hash, cbor_bytes))
+            if len(self._write_buffer) >= self._write_batch_size:
+                batch = list(self._write_buffer)
+                self._write_buffer.clear()
+                self._disk_queue.put(batch)
+                # For small batches (tests), wait for completion so
+                # files exist immediately after add_block returns.
+                if self._write_batch_size <= 5:
+                    self._disk_queue.join()
 
         logger.debug(
             "VolatileDB: added block %s at slot %d (predecessor: %s)",
@@ -234,7 +289,7 @@ class VolatileDB:
             predecessor_hash.hex()[:16],
         )
 
-    async def get_block(self, block_hash: bytes) -> bytes | None:
+    def get_block(self, block_hash: bytes) -> bytes | None:
         """Look up a block by hash.
 
         Alias for :meth:`get` with a more descriptive name.
@@ -247,7 +302,7 @@ class VolatileDB:
         """
         return self._blocks.get(block_hash)
 
-    async def get_block_info(self, block_hash: bytes) -> BlockInfo | None:
+    def get_block_info(self, block_hash: bytes) -> BlockInfo | None:
         """Retrieve metadata for a block without the full CBOR payload.
 
         Args:
@@ -258,7 +313,7 @@ class VolatileDB:
         """
         return self._block_info.get(block_hash)
 
-    async def get_successors(self, block_hash: bytes) -> list[bytes]:
+    def get_successors(self, block_hash: bytes) -> list[bytes]:
         """Get the hashes of all known successor blocks.
 
         Used by chain selection to walk forward from a given block and
@@ -275,7 +330,7 @@ class VolatileDB:
         """
         return list(self._successors.get(block_hash, []))
 
-    async def get_max_slot(self) -> int:
+    def get_max_slot(self) -> int:
         """Return the highest slot number of any block in the store.
 
         Returns:
@@ -283,7 +338,7 @@ class VolatileDB:
         """
         return self._max_slot
 
-    async def remove_block(self, block_hash: bytes) -> bool:
+    def remove_block(self, block_hash: bytes) -> bool:
         """Remove a single block from the store and all indices.
 
         Used when promoting a block to the ImmutableDB.
@@ -296,7 +351,7 @@ class VolatileDB:
         """
         return self._remove_block(block_hash)
 
-    async def gc(self, immutable_tip_slot: int) -> int:
+    def gc(self, immutable_tip_slot: int) -> int:
         """Garbage-collect all blocks with slot <= immutable_tip_slot.
 
         After the immutable tip advances, blocks at or before that slot
@@ -322,7 +377,7 @@ class VolatileDB:
         )
         return len(to_remove)
 
-    async def get_all_block_info(self) -> dict[bytes, BlockInfo]:
+    def get_all_block_info(self) -> dict[bytes, BlockInfo]:
         """Return metadata for all blocks in the store.
 
         Useful for chain selection which needs to scan all volatile blocks

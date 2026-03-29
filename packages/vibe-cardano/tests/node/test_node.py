@@ -302,9 +302,9 @@ class TestMiniprotocolBundles:
         bearer = Bearer(reader, writer)
         mux = _setup_n2n_mux(bearer, is_initiator=True)
 
-        # Verify all N2N protocol channels are registered.
+        # Verify all N2N protocol channels are registered (keyed by (pid, direction) tuple).
         for proto_id in N2N_PROTOCOL_IDS:
-            assert proto_id in mux._channels
+            assert (proto_id, True) in mux._channels
 
         assert mux.is_initiator is True
 
@@ -316,7 +316,7 @@ class TestMiniprotocolBundles:
         mux = _setup_n2c_mux(bearer)
 
         for proto_id in N2C_PROTOCOL_IDS:
-            assert proto_id in mux._channels
+            assert (proto_id, False) in mux._channels
 
         # N2C is always responder-side.
         assert mux.is_initiator is False

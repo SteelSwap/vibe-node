@@ -224,7 +224,7 @@ async def test_shutdown_cancels_all_tasks() -> None:
             task.cancel()
             try:
                 await task
-            except asyncio.CancelledError, Exception:
+            except (asyncio.CancelledError, Exception):
                 pass
 
     # All tasks should now be done
@@ -267,7 +267,7 @@ async def test_no_task_destroyed_warnings() -> None:
                 task.cancel()
                 try:
                     await task
-                except asyncio.CancelledError, Exception:
+                except (asyncio.CancelledError, Exception):
                     pass
 
         # Check no "destroyed" warnings
@@ -408,6 +408,7 @@ async def test_chaindb_not_corrupted_after_shutdown(tmp_path: Path) -> None:
         ledger_db=ledger_db,
         k=2160,
     )
+    chain_db.start_chain_sel_runner()
 
     # Add a few blocks
     genesis_hash = b"\x00" * 32
@@ -415,7 +416,7 @@ async def test_chaindb_not_corrupted_after_shutdown(tmp_path: Path) -> None:
 
     for i in range(1, 6):
         block_hash = bytes([i]) * 32
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=i * 10,
             block_hash=block_hash,
             predecessor_hash=prev_hash,
@@ -431,7 +432,8 @@ async def test_chaindb_not_corrupted_after_shutdown(tmp_path: Path) -> None:
     assert tip_slot == 50
     assert tip_block_number == 5
 
-    # Simulate shutdown: close ChainDB
+    # Simulate shutdown: stop chain sel runner and close ChainDB
+    chain_db.stop_chain_sel_runner()
     chain_db.close()
     assert chain_db.is_closed, "ChainDB should report as closed"
 

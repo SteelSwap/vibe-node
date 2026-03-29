@@ -55,6 +55,13 @@ class HungBearer:
         await self._hung_event.wait()
         raise RuntimeError("unreachable")
 
+    def buffer_segment(self, segment: MuxSegment) -> None:
+        pass  # Hung — buffer is a no-op
+
+    async def flush(self) -> None:
+        await self._hung_event.wait()
+        raise RuntimeError("unreachable")
+
     async def close(self) -> None:
         self._closed = True
         self._hung_event.set()  # unblock anything waiting
@@ -81,6 +88,12 @@ class SlowBearer:
     async def write_segment(self, segment: MuxSegment) -> None:
         await asyncio.sleep(self._delay)
 
+    def buffer_segment(self, segment: MuxSegment) -> None:
+        pass
+
+    async def flush(self) -> None:
+        await asyncio.sleep(self._delay)
+
     async def close(self) -> None:
         self._closed = True
 
@@ -101,6 +114,12 @@ class FastBearer:
 
     async def write_segment(self, segment: MuxSegment) -> None:
         self._written.append(segment)
+
+    def buffer_segment(self, segment: MuxSegment) -> None:
+        self._written.append(segment)
+
+    async def flush(self) -> None:
+        pass
 
     async def close(self) -> None:
         self._closed = True
@@ -269,6 +288,7 @@ class TestTimeoutDuringMuxRead:
         mux._running = False
         mux._closed = False
         mux._stop_event = asyncio.Event()
+        mux._data_available = asyncio.Event()
 
         mux.add_protocol(0)
 
