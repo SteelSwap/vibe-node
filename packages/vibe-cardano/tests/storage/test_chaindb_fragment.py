@@ -25,15 +25,17 @@ def chain_db(tmp_path):
     vol = VolatileDB(db_dir=None)  # in-memory
     imm = ImmutableDB(base_dir=tmp_path / "immutable")
     led = LedgerDB()
-    return ChainDB(imm, vol, led, k=10)
+    db = ChainDB(imm, vol, led, k=10)
+    db.start_chain_sel_runner()
+    yield db
+    db.stop_chain_sel_runner()
 
 
 class TestChainFragment:
     """Test that add_block maintains the chain fragment correctly."""
 
-    @pytest.mark.asyncio
-    async def test_first_block_creates_fragment(self, chain_db):
-        result = await chain_db.add_block(
+    def test_first_block_creates_fragment(self, chain_db):
+        result = chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),
@@ -46,9 +48,8 @@ class TestChainFragment:
         assert len(frag) == 1
         assert frag[0].block_hash == _hash(1)
 
-    @pytest.mark.asyncio
-    async def test_extending_chain_appends_to_fragment(self, chain_db):
-        await chain_db.add_block(
+    def test_extending_chain_appends_to_fragment(self, chain_db):
+        chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),
@@ -56,7 +57,7 @@ class TestChainFragment:
             cbor_bytes=b"b1",
             header_cbor=_hdr(1),
         )
-        result = await chain_db.add_block(
+        result = chain_db.add_block(
             slot=2,
             block_hash=_hash(2),
             predecessor_hash=_hash(1),
@@ -71,9 +72,8 @@ class TestChainFragment:
         assert frag[0].block_hash == _hash(1)
         assert frag[1].block_hash == _hash(2)
 
-    @pytest.mark.asyncio
-    async def test_worse_block_not_adopted(self, chain_db):
-        await chain_db.add_block(
+    def test_worse_block_not_adopted(self, chain_db):
+        chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),
@@ -81,7 +81,7 @@ class TestChainFragment:
             cbor_bytes=b"b1",
             header_cbor=_hdr(1),
         )
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=2,
             block_hash=_hash(2),
             predecessor_hash=_hash(1),
@@ -90,7 +90,7 @@ class TestChainFragment:
             header_cbor=_hdr(2),
         )
         # Block at same height — not adopted (no improvement)
-        result = await chain_db.add_block(
+        result = chain_db.add_block(
             slot=3,
             block_hash=_hash(99),
             predecessor_hash=_hash(1),
@@ -100,12 +100,11 @@ class TestChainFragment:
         )
         assert result.adopted is False
 
-    @pytest.mark.asyncio
-    async def test_fragment_trimmed_to_k(self, chain_db):
+    def test_fragment_trimmed_to_k(self, chain_db):
         # k=10, add 15 blocks
         prev = _hash(0)
         for i in range(1, 16):
-            await chain_db.add_block(
+            chain_db.add_block(
                 slot=i,
                 block_hash=_hash(i),
                 predecessor_hash=prev,
@@ -121,10 +120,9 @@ class TestChainFragment:
 class TestChainSelectionResult:
     """Test ChainSelectionResult fields for different scenarios."""
 
-    @pytest.mark.asyncio
-    async def test_fork_switch_result(self, chain_db):
+    def test_fork_switch_result(self, chain_db):
         # Build chain: 0 → 1 → 2
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),
@@ -132,7 +130,7 @@ class TestChainSelectionResult:
             cbor_bytes=b"b1",
             header_cbor=_hdr(1),
         )
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=2,
             block_hash=_hash(2),
             predecessor_hash=_hash(1),
@@ -141,7 +139,7 @@ class TestChainSelectionResult:
             header_cbor=_hdr(2),
         )
         # Fork: 0 → 1 → 3 (block_number=3, better than 2)
-        result = await chain_db.add_block(
+        result = chain_db.add_block(
             slot=3,
             block_hash=_hash(3),
             predecessor_hash=_hash(1),
@@ -154,9 +152,8 @@ class TestChainSelectionResult:
         assert _hash(2) in result.removed_hashes
         assert result.intersection_hash == _hash(1)
 
-    @pytest.mark.asyncio
-    async def test_fragment_correct_after_fork_switch(self, chain_db):
-        await chain_db.add_block(
+    def test_fragment_correct_after_fork_switch(self, chain_db):
+        chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),
@@ -164,7 +161,7 @@ class TestChainSelectionResult:
             cbor_bytes=b"b1",
             header_cbor=_hdr(1),
         )
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=2,
             block_hash=_hash(2),
             predecessor_hash=_hash(1),
@@ -172,7 +169,7 @@ class TestChainSelectionResult:
             cbor_bytes=b"b2",
             header_cbor=_hdr(2),
         )
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=3,
             block_hash=_hash(3),
             predecessor_hash=_hash(1),
@@ -186,12 +183,11 @@ class TestChainSelectionResult:
         assert _hash(3) in hashes
         assert _hash(2) not in hashes  # orphaned
 
-    @pytest.mark.asyncio
-    async def test_below_immutable_tip_not_adopted(self, chain_db):
+    def test_below_immutable_tip_not_adopted(self, chain_db):
         """Block below immutable tip should be ignored."""
         # Manually set immutable tip
         chain_db._immutable_tip_block_number = 5
-        result = await chain_db.add_block(
+        result = chain_db.add_block(
             slot=3,
             block_hash=_hash(3),
             predecessor_hash=_hash(2),

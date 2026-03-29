@@ -155,7 +155,7 @@ class TestWriteSegment:
         await bearer.write_segment(seg)
 
         writer.write.assert_called_once_with(expected_wire)
-        writer.drain.assert_awaited_once()
+        # drain() is only called when buffer exceeds 64KB threshold
 
     async def test_write_empty_payload(self) -> None:
         """Write a segment with empty payload."""
@@ -245,7 +245,7 @@ class TestConnectionErrors:
         """Write on a broken pipe raises ConnectionError and marks closed."""
         seg = MuxSegment(timestamp=0, protocol_id=0, is_initiator=True, payload=b"x")
         bearer, writer = _make_bearer()
-        writer.drain = AsyncMock(side_effect=BrokenPipeError("broken pipe"))
+        writer.write.side_effect = BrokenPipeError("broken pipe")
 
         with pytest.raises(ConnectionError, match="broken pipe"):
             await bearer.write_segment(seg)
@@ -256,7 +256,7 @@ class TestConnectionErrors:
         """Write on a reset connection raises ConnectionError."""
         seg = MuxSegment(timestamp=0, protocol_id=0, is_initiator=True, payload=b"x")
         bearer, writer = _make_bearer()
-        writer.drain = AsyncMock(side_effect=ConnectionResetError("reset"))
+        writer.write.side_effect = ConnectionResetError("reset")
 
         with pytest.raises(ConnectionError):
             await bearer.write_segment(seg)

@@ -18,7 +18,6 @@ Antithesis compatibility:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from pathlib import Path
 
@@ -73,23 +72,23 @@ class TestChainDBTraceEvents:
         - ChangingSelection
     """
 
-    @pytest.mark.asyncio
-    async def test_chaindb_trace_events(self, tmp_path: Path) -> None:
+    def test_chaindb_trace_events(self, tmp_path: Path) -> None:
         """add_block logs 'new tip' when extending the chain."""
         db = _make_chaindb(tmp_path)
+        db.start_chain_sel_runner()
 
         # Capture log output.
         log_messages: list[str] = []
         handler = logging.Handler()
         handler.emit = lambda record: log_messages.append(record.getMessage())
-        logger = logging.getLogger("vibe.cardano.storage.chaindb")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
+        cdb_logger = logging.getLogger("vibe.cardano.storage.chaindb")
+        cdb_logger.addHandler(handler)
+        cdb_logger.setLevel(logging.DEBUG)
 
         try:
             genesis_hash = _make_block_hash(0)
             block_hash = _make_block_hash(1)
-            await db.add_block(
+            db.add_block(
                 slot=1,
                 block_hash=block_hash,
                 predecessor_hash=genesis_hash,
@@ -101,51 +100,54 @@ class TestChainDBTraceEvents:
             new_tip_logs = [m for m in log_messages if "new tip" in m.lower()]
             assert len(new_tip_logs) >= 1, f"Expected 'new tip' log, got: {log_messages}"
         finally:
-            logger.removeHandler(handler)
+            cdb_logger.removeHandler(handler)
+            db.stop_chain_sel_runner()
 
-    @pytest.mark.asyncio
-    async def test_chaindb_trace_ignored_old_block(self, tmp_path: Path) -> None:
+    def test_chaindb_trace_ignored_old_block(self, tmp_path: Path) -> None:
         """Blocks at or below the immutable tip are logged as ignored."""
         db = _make_chaindb(tmp_path, k=2)
-
-        # Build a chain long enough to advance the immutable tip.
-        genesis_hash = _make_block_hash(0)
-        prev_hash = genesis_hash
-        for i in range(1, 10):
-            bh = _make_block_hash(i)
-            await db.add_block(
-                slot=i,
-                block_hash=bh,
-                predecessor_hash=prev_hash,
-                block_number=i,
-                cbor_bytes=_make_cbor(i),
-            )
-            prev_hash = bh
-
-        # The immutable tip should have advanced.
-        assert db._immutable_tip_block_number is not None
-        imm_bn = db._immutable_tip_block_number
-
-        # Now try to add a block at block_number <= immutable tip.
-        log_messages: list[str] = []
-        handler = logging.Handler()
-        handler.emit = lambda record: log_messages.append(record.getMessage())
-        logger = logging.getLogger("vibe.cardano.storage.chaindb")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
+        db.start_chain_sel_runner()
 
         try:
-            await db.add_block(
-                slot=1,
-                block_hash=_make_block_hash(999),
-                predecessor_hash=genesis_hash,
-                block_number=1,
-                cbor_bytes=_make_cbor(999),
-            )
-            ignored_logs = [m for m in log_messages if "ignoring" in m.lower()]
-            assert len(ignored_logs) >= 1
+            # Build a chain long enough to advance the immutable tip.
+            genesis_hash = _make_block_hash(0)
+            prev_hash = genesis_hash
+            for i in range(1, 10):
+                bh = _make_block_hash(i)
+                db.add_block(
+                    slot=i,
+                    block_hash=bh,
+                    predecessor_hash=prev_hash,
+                    block_number=i,
+                    cbor_bytes=_make_cbor(i),
+                )
+                prev_hash = bh
+
+            # The immutable tip should have advanced.
+            assert db._immutable_tip_block_number is not None
+
+            # Now try to add a block at block_number <= immutable tip.
+            log_messages: list[str] = []
+            handler = logging.Handler()
+            handler.emit = lambda record: log_messages.append(record.getMessage())
+            cdb_logger = logging.getLogger("vibe.cardano.storage.chaindb")
+            cdb_logger.addHandler(handler)
+            cdb_logger.setLevel(logging.DEBUG)
+
+            try:
+                db.add_block(
+                    slot=1,
+                    block_hash=_make_block_hash(999),
+                    predecessor_hash=genesis_hash,
+                    block_number=1,
+                    cbor_bytes=_make_cbor(999),
+                )
+                ignored_logs = [m for m in log_messages if "ignoring" in m.lower()]
+                assert len(ignored_logs) >= 1
+            finally:
+                cdb_logger.removeHandler(handler)
         finally:
-            logger.removeHandler(handler)
+            db.stop_chain_sel_runner()
 
 
 # ---------------------------------------------------------------------------
@@ -165,32 +167,36 @@ class TestChainDBBetweenCurrentChain:
     async def test_chaindb_between_current_chain(self, tmp_path: Path) -> None:
         """Blocks between two slots on the current chain are retrievable."""
         db = _make_chaindb(tmp_path)
-        genesis_hash = _make_block_hash(0)
-        prev_hash = genesis_hash
-        hashes = []
+        db.start_chain_sel_runner()
+        try:
+            genesis_hash = _make_block_hash(0)
+            prev_hash = genesis_hash
+            hashes = []
 
-        for i in range(1, 6):
-            bh = _make_block_hash(i)
-            hashes.append(bh)
-            await db.add_block(
-                slot=i,
-                block_hash=bh,
-                predecessor_hash=prev_hash,
-                block_number=i,
-                cbor_bytes=_make_cbor(i),
-            )
-            prev_hash = bh
+            for i in range(1, 6):
+                bh = _make_block_hash(i)
+                hashes.append(bh)
+                db.add_block(
+                    slot=i,
+                    block_hash=bh,
+                    predecessor_hash=prev_hash,
+                    block_number=i,
+                    cbor_bytes=_make_cbor(i),
+                )
+                prev_hash = bh
 
-        # All blocks should be in volatile DB and retrievable.
-        for bh in hashes:
-            data = await db.get_block(bh)
-            assert data is not None, f"Block {bh.hex()[:8]} not found"
+            # All blocks should be in volatile DB and retrievable.
+            for bh in hashes:
+                data = db.get_block(bh)
+                assert data is not None, f"Block {bh.hex()[:8]} not found"
 
-        # Tip should be the last block.
-        tip = await db.get_tip()
-        assert tip is not None
-        assert tip[0] == 5
-        assert tip[1] == hashes[-1]
+            # Tip should be the last block.
+            tip = await db.get_tip()
+            assert tip is not None
+            assert tip[0] == 5
+            assert tip[1] == hashes[-1]
+        finally:
+            db.stop_chain_sel_runner()
 
 
 # ---------------------------------------------------------------------------
@@ -202,59 +208,64 @@ class TestChainDBRegression773:
     """Regression test: concurrent add_block calls don't corrupt state.
 
     This simulates the scenario from Haskell issue #773 where concurrent
-    block additions could lead to inconsistent chain state. Our asyncio
-    implementation should be safe because Python's GIL + await points
-    provide natural serialization, but we verify the invariant holds.
+    block additions could lead to inconsistent chain state. With the new
+    serialized chain selection runner, all blocks are processed sequentially
+    on a single thread, so this is inherently safe.
 
     Haskell reference:
         ouroboros-consensus issue #773
         "Concurrent addBlock may corrupt the chain"
     """
 
-    @pytest.mark.asyncio
-    async def test_chaindb_regression_773(self, tmp_path: Path) -> None:
+    def test_chaindb_regression_773(self, tmp_path: Path) -> None:
         """Concurrent add_block calls don't leave the DB in an inconsistent state.
 
-        We add blocks concurrently from two "forks" and verify that:
+        We add blocks from two "forks" and verify that:
         1. The tip is one of the valid chain tips (not a corrupted mix).
         2. All added blocks are retrievable.
         3. The tip block_number is the highest among all added blocks.
         """
+        import threading
+
         db = _make_chaindb(tmp_path, k=100)  # large k to avoid immutable advancement
-        genesis_hash = _make_block_hash(0)
+        db.start_chain_sel_runner()
+        try:
+            genesis_hash = _make_block_hash(0)
 
-        # Fork A: blocks 1..5 (hashes 1..5)
-        fork_a_hashes = [_make_block_hash(i) for i in range(1, 6)]
-        # Fork B: blocks 1..5 (hashes 101..105)
-        fork_b_hashes = [_make_block_hash(100 + i) for i in range(1, 6)]
+            # Fork A: blocks 1..5 (hashes 1..5)
+            fork_a_hashes = [_make_block_hash(i) for i in range(1, 6)]
+            # Fork B: blocks 1..5 (hashes 101..105)
+            fork_b_hashes = [_make_block_hash(100 + i) for i in range(1, 6)]
 
-        async def add_fork(hashes: list[bytes], offset: int) -> None:
-            prev = genesis_hash
-            for i, bh in enumerate(hashes, 1):
-                await db.add_block(
-                    slot=i + offset,
-                    block_hash=bh,
-                    predecessor_hash=prev,
-                    block_number=i,
-                    cbor_bytes=_make_cbor(i + offset),
-                )
-                prev = bh
+            def add_fork(hashes: list[bytes], offset: int) -> None:
+                prev = genesis_hash
+                for i, bh in enumerate(hashes, 1):
+                    db.add_block(
+                        slot=i + offset,
+                        block_hash=bh,
+                        predecessor_hash=prev,
+                        block_number=i,
+                        cbor_bytes=_make_cbor(i + offset),
+                    )
+                    prev = bh
 
-        # Run concurrently.
-        await asyncio.gather(
-            add_fork(fork_a_hashes, 0),
-            add_fork(fork_b_hashes, 10),
-        )
+            # Run concurrently via threads.
+            t1 = threading.Thread(target=add_fork, args=(fork_a_hashes, 0))
+            t2 = threading.Thread(target=add_fork, args=(fork_b_hashes, 10))
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
 
-        # Verify: tip should be valid (one of the fork tips).
-        tip = await db.get_tip()
-        assert tip is not None
-        tip_slot, tip_hash = tip[0], tip[1]
+            # Verify: tip should be valid (one of the fork tips).
+            tip = db._tip
+            assert tip is not None
 
-        # All blocks from both forks should be retrievable.
-        for bh in fork_a_hashes + fork_b_hashes:
-            data = await db.get_block(bh)
-            assert data is not None, f"Block {bh.hex()[:8]} missing after concurrent add"
+            # All blocks from both forks should be in volatile.
+            for bh in fork_a_hashes + fork_b_hashes:
+                assert bh in db.volatile_db._blocks or db.volatile_db._blocks.get(bh) is not None
+        finally:
+            db.stop_chain_sel_runner()
 
     @pytest.mark.asyncio
     async def test_chaindb_regression_773_working(self, tmp_path: Path) -> None:
@@ -262,48 +273,57 @@ class TestChainDBRegression773:
 
         After concurrent additions, the chain tip must be the block
         with the highest block_number. Both forks go to block_number 5,
-        so the tip should be from whichever fork was processed last
+        so the tip should be from whichever fork was processed first
         (or the first one seen, since ties keep existing tip).
         """
+        import threading
+
         db = _make_chaindb(tmp_path, k=100)
-        genesis_hash = _make_block_hash(0)
+        db.start_chain_sel_runner()
+        try:
+            genesis_hash = _make_block_hash(0)
 
-        # Fork A: blocks at slots 1..5, block_numbers 1..5
-        async def add_fork_a() -> None:
-            prev = genesis_hash
-            for i in range(1, 6):
-                bh = _make_block_hash(i)
-                await db.add_block(
-                    slot=i,
-                    block_hash=bh,
-                    predecessor_hash=prev,
-                    block_number=i,
-                    cbor_bytes=_make_cbor(i),
-                )
-                prev = bh
+            def add_fork_a() -> None:
+                prev = genesis_hash
+                for i in range(1, 6):
+                    bh = _make_block_hash(i)
+                    db.add_block(
+                        slot=i,
+                        block_hash=bh,
+                        predecessor_hash=prev,
+                        block_number=i,
+                        cbor_bytes=_make_cbor(i),
+                    )
+                    prev = bh
 
-        # Fork B: blocks at slots 11..15, block_numbers 1..5
-        async def add_fork_b() -> None:
-            prev = genesis_hash
-            for i in range(1, 6):
-                bh = _make_block_hash(100 + i)
-                await db.add_block(
-                    slot=10 + i,
-                    block_hash=bh,
-                    predecessor_hash=prev,
-                    block_number=i,
-                    cbor_bytes=_make_cbor(100 + i),
-                )
-                prev = bh
+            def add_fork_b() -> None:
+                prev = genesis_hash
+                for i in range(1, 6):
+                    bh = _make_block_hash(100 + i)
+                    db.add_block(
+                        slot=10 + i,
+                        block_hash=bh,
+                        predecessor_hash=prev,
+                        block_number=i,
+                        cbor_bytes=_make_cbor(100 + i),
+                    )
+                    prev = bh
 
-        await asyncio.gather(add_fork_a(), add_fork_b())
+            t1 = threading.Thread(target=add_fork_a)
+            t2 = threading.Thread(target=add_fork_b)
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
 
-        # Tip should exist and be at block_number 5.
-        tip = await db.get_tip()
-        assert tip is not None
+            # Tip should exist and be at block_number 5.
+            tip = await db.get_tip()
+            assert tip is not None
 
-        # The DB should not be in a corrupted state — max_slot should
-        # be one of the valid fork tip slots (5 or 15).
-        max_slot = await db.get_max_slot()
-        assert max_slot is not None
-        assert max_slot in (5, 15), f"Unexpected max_slot={max_slot}"
+            # The DB should not be in a corrupted state — max_slot should
+            # be one of the valid fork tip slots (5 or 15).
+            max_slot = await db.get_max_slot()
+            assert max_slot is not None
+            assert max_slot in (5, 15), f"Unexpected max_slot={max_slot}"
+        finally:
+            db.stop_chain_sel_runner()

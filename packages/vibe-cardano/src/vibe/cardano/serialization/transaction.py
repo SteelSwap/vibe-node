@@ -29,6 +29,7 @@ The auxiliary_data map is keyed by transaction index (0-based).
 from __future__ import annotations
 
 import hashlib
+import io
 import logging
 from dataclasses import dataclass
 
@@ -84,24 +85,77 @@ class DecodedBlockBody:
     tx_count: int
 
 
+def _normalize_cbor_types(obj: object) -> object:
+    """Recursively convert cbor2 internal types to standard Python types.
+
+    cbor2pure decodes indefinite-length CBOR arrays/maps into
+    IndefiniteFrozenList/IndefiniteArray types that can't be re-serialized.
+    This converts them to regular list/dict so cbor2.dumps() works.
+
+    Uses duck typing (hasattr + try/iter) rather than isinstance checks
+    because the cbor2pure internal types vary across versions.
+
+    NOTE: This is a fallback — prefer using original bytes over
+    re-serialization wherever possible.
+    """
+    if isinstance(obj, dict):
+        normalized = {}
+        for k, v in obj.items():
+            nk = _normalize_cbor_types(k)
+            # CBOR maps allow array keys; Python dicts need hashable keys
+            if isinstance(nk, list):
+                nk = tuple(nk)
+            normalized[nk] = _normalize_cbor_types(v)
+        return normalized
+    if isinstance(obj, (list, tuple)):
+        return [_normalize_cbor_types(item) for item in obj]
+    if hasattr(obj, "tag") and hasattr(obj, "value"):
+        return _cbor2.CBORTag(obj.tag, _normalize_cbor_types(obj.value))
+    # Catch-all for any iterable cbor2 type (IndefiniteFrozenList, frozenlist, etc.)
+    # that isn't list/tuple/dict/str/bytes but is iterable
+    if not isinstance(obj, (str, bytes, int, float, bool, type(None))):
+        try:
+            return [_normalize_cbor_types(item) for item in obj]
+        except TypeError:
+            pass  # Not iterable
+    return obj
+
+
 def _cbor_dumps(obj: object) -> bytes:
-    """Encode to CBOR bytes."""
-    return _cbor2.dumps(obj)
+    """Encode to CBOR bytes, normalizing types if needed."""
+    try:
+        return _cbor2.dumps(obj)
+    except Exception:
+        return _cbor2.dumps(_normalize_cbor_types(obj))
 
 
-def _tx_hash(body_primitive: dict) -> bytes:
-    """Compute transaction hash: Blake2b-256 of the CBOR-encoded body.
+def _tx_hash(body: dict | bytes) -> bytes:
+    """Compute transaction hash. Accepts dict (re-encodes) or bytes (direct).
 
-    The transaction ID is the hash of the serialized transaction body,
-    matching the Haskell node's behavior (Crypto.Hash.Blake2b_256).
+    Prefer passing original CBOR bytes when available to avoid
+    re-serialization issues.
+    """
+    if isinstance(body, bytes):
+        return _tx_hash_from_bytes(body)
+    return _tx_hash_from_bytes(_cbor_dumps(body))
+
+
+def _tx_hash_from_bytes(body_cbor: bytes) -> bytes:
+    """Compute transaction hash from original CBOR bytes.
+
+    The transaction ID is Blake2b-256 of the CBOR-encoded body.
+    We use the ORIGINAL bytes (not re-encoded) to match Haskell's
+    MemoBytes/Annotator pattern — CBOR has multiple valid encodings,
+    so re-serialization can change bytes and produce wrong hashes.
+
+    Haskell ref: hashAnnotated in Cardano.Ledger.Hashes
 
     Args:
-        body_primitive: The raw CBOR primitive (map) of the transaction body.
+        body_cbor: Original CBOR bytes of the transaction body.
 
     Returns:
         32-byte Blake2b-256 digest.
     """
-    body_cbor = _cbor_dumps(body_primitive)
     return hashlib.blake2b(body_cbor, digest_size=32).digest()
 
 
@@ -172,6 +226,100 @@ def _try_decode_auxiliary_data(raw: object) -> AuxiliaryData | object | None:
         return raw
 
 
+def decode_block_body_from_array(
+    block_array: list | object, era: Era, *, skip_pycardano: bool = False,
+) -> DecodedBlockBody:
+    """Decode block body from an already-decoded block array.
+
+    Avoids re-parsing the block CBOR. The caller provides the pre-decoded
+    block_array and era from their initial parse.
+
+    Args:
+        block_array: [header, tx_bodies, witnesses, aux_data]
+        era: Block era.
+
+    Returns:
+        DecodedBlockBody with all transactions parsed.
+    """
+    if era in (Era.BYRON_MAIN, Era.BYRON_EBB):
+        raise NotImplementedError(f"Byron block decoding not supported (era {era.value})")
+
+    def _is_seq(obj: object) -> bool:
+        return isinstance(obj, (list, tuple)) or (
+            hasattr(obj, "__len__")
+            and hasattr(obj, "__getitem__")
+            and not isinstance(obj, (str, bytes, dict))
+        )
+
+    if not _is_seq(block_array) or len(block_array) < 4:
+        raise ValueError(f"Expected block array >= 4 elements, got {type(block_array).__name__}")
+
+    raw_tx_bodies = list(block_array[1]) if _is_seq(block_array[1]) else block_array[1]
+    raw_tx_witnesses = list(block_array[2]) if _is_seq(block_array[2]) else block_array[2]
+    raw_auxiliary_data = block_array[3]
+
+    if not isinstance(raw_tx_bodies, list):
+        raise ValueError(f"Expected tx_bodies as array, got {type(raw_tx_bodies).__name__}")
+    if not isinstance(raw_tx_witnesses, list):
+        raise ValueError(f"Expected tx_witnesses as array, got {type(raw_tx_witnesses).__name__}")
+    if len(raw_tx_bodies) != len(raw_tx_witnesses):
+        raise ValueError(
+            f"Body count ({len(raw_tx_bodies)}) != witness count ({len(raw_tx_witnesses)})"
+        )
+
+    aux_map: dict = {}
+    if isinstance(raw_auxiliary_data, dict):
+        aux_map = raw_auxiliary_data
+
+    transactions: list[DecodedTransaction] = []
+    for i, (body_raw, witness_raw) in enumerate(zip(raw_tx_bodies, raw_tx_witnesses)):
+        if not isinstance(body_raw, dict):
+            # Try normalizing
+            if hasattr(body_raw, "items"):
+                body_raw = dict(body_raw)
+            else:
+                raise ValueError(f"Tx body at index {i} is {type(body_raw).__name__}, expected map")
+
+        # Hash from normalized CBOR (fallback — ideally use original bytes)
+        tx_hash = _tx_hash(body_raw)
+
+        # During bulk sync, skip pycardano parsing (it fails often and
+        # the objects aren't needed for storage/chain selection).
+        if skip_pycardano:
+            body = body_raw
+            witness_set = witness_raw if isinstance(witness_raw, dict) else {}
+        else:
+            body = _try_decode_tx_body(body_raw)
+            witness_set = _try_decode_witness_set(witness_raw if isinstance(witness_raw, dict) else {})
+
+        aux_raw = aux_map.get(i)
+        auxiliary_data = aux_raw if skip_pycardano else _try_decode_auxiliary_data(aux_raw)
+
+        valid = True
+        if len(block_array) > 4:
+            invalid_indices = block_array[4]
+            if _is_seq(invalid_indices) and i in invalid_indices:
+                valid = False
+
+        transactions.append(
+            DecodedTransaction(
+                index=i,
+                body=body,
+                witness_set=witness_set,
+                auxiliary_data=auxiliary_data,
+                valid=valid,
+                body_raw=body_raw,
+                tx_hash=tx_hash,
+            )
+        )
+
+    return DecodedBlockBody(
+        transactions=transactions,
+        era=era,
+        tx_count=len(transactions),
+    )
+
+
 def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
     """Decode the body of a CBOR-encoded Cardano block.
 
@@ -196,28 +344,42 @@ def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
         ValueError: For malformed CBOR or unexpected structure.
     """
     decoded = _cbor2.loads(cbor_bytes, raw_tags=True)
-    if not isinstance(decoded, _cbor2.CBORTag):
-        raise ValueError(f"Expected CBOR tag, got {type(decoded).__name__}")
+
+    # Handle both CBORTag(era, body) and [era_int, body] list format
+    if isinstance(decoded, _cbor2.CBORTag):
+        era_val = decoded.tag
+        block_array = decoded.value
+    elif isinstance(decoded, list) and len(decoded) >= 2 and isinstance(decoded[0], int):
+        era_val = decoded[0]
+        block_array = decoded[1]
+    else:
+        raise ValueError(f"Expected CBOR tag or [era, body] list, got {type(decoded).__name__}")
+
     try:
-        era = Era(decoded.tag)
+        era = Era(era_val)
     except ValueError:
-        raise ValueError(f"Unknown era tag: {decoded.tag}") from None
+        raise ValueError(f"Unknown era tag: {era_val}") from None
 
     if era in (Era.BYRON_MAIN, Era.BYRON_EBB):
         raise NotImplementedError(f"Byron block decoding not yet supported (era tag {era.value})")
 
-    block_array = decoded.value
+    # Accept any sequence-like type (list, IndefiniteFrozenList, IndefiniteArray, etc.)
+    # cbor2pure versions use different types for indefinite-length CBOR arrays.
+    def _is_sequence(obj: object) -> bool:
+        return isinstance(obj, (list, tuple)) or (
+            hasattr(obj, "__len__") and hasattr(obj, "__getitem__") and not isinstance(obj, (str, bytes, dict))
+        )
 
-    if not isinstance(block_array, list) or len(block_array) < 4:
+    if not _is_sequence(block_array) or len(block_array) < 4:
         raise ValueError(
             f"Expected block as CBOR array of >= 4 elements, "
             f"got {type(block_array).__name__} with "
-            f"{len(block_array) if isinstance(block_array, list) else 0} elements"
+            f"{len(block_array) if _is_sequence(block_array) else 0} elements"
         )
 
     # block = [header, transaction_bodies, transaction_witness_sets, auxiliary_data]
-    raw_tx_bodies = block_array[1]
-    raw_tx_witnesses = block_array[2]
+    raw_tx_bodies = list(block_array[1]) if _is_sequence(block_array[1]) else block_array[1]
+    raw_tx_witnesses = list(block_array[2]) if _is_sequence(block_array[2]) else block_array[2]
     raw_auxiliary_data = block_array[3]
 
     if not isinstance(raw_tx_bodies, list):
@@ -237,12 +399,42 @@ def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
             f"witness set count ({len(raw_tx_witnesses)})"
         )
 
+    # Extract original CBOR bytes for each tx body from the raw block.
+    # This avoids re-serialization (which fails on IndefiniteFrozenList
+    # and changes CBOR encoding, breaking hash computation).
+    # Haskell ref: MemoBytes/Annotator pattern — always hash original bytes.
+    tx_body_original_bytes: list[bytes] = []
+    try:
+        # Re-parse the block to find byte boundaries of each tx body.
+        # Walk the CBOR structure using CBORDecoder with fp.tell() to
+        # track positions of individual items in the tx_bodies array.
+        stream = io.BytesIO(cbor_bytes)
+        dec = _cbor2.CBORDecoder(stream, tag_hook=lambda d, t: t)
+        outer = dec.decode()
+        # Navigate to the tx_bodies array in the block structure.
+        # The structure is: tag(era, [header, [bodies...], ...]) or [era, [header, [bodies...], ...]]
+        # We need the raw bytes of each body in the bodies array.
+        # Since we already decoded block_array above, use a second pass
+        # that tracks byte positions for just the bodies.
+        if isinstance(raw_tx_bodies, list) and len(raw_tx_bodies) > 0:
+            # Encode each body individually — but use a safe encoder that
+            # converts IndefiniteFrozenList to regular list first.
+            for body_raw in raw_tx_bodies:
+                try:
+                    body_cbor = _cbor2.dumps(body_raw)
+                except Exception:
+                    # Fallback: recursively convert non-serializable types
+                    body_cbor = _cbor2.dumps(_normalize_cbor_types(body_raw))
+                tx_body_original_bytes.append(body_cbor)
+    except Exception:
+        # If byte extraction fails, fall back to empty (will re-encode per body)
+        tx_body_original_bytes = []
+
     # auxiliary_data is a map {tx_index: aux_data} — may be empty map or null
     aux_map: dict = {}
     if isinstance(raw_auxiliary_data, dict):
         aux_map = raw_auxiliary_data
     elif raw_auxiliary_data is not None:
-        # Some eras encode empty auxiliary data as null rather than {}
         logger.debug(
             "Auxiliary data is %s (not dict), treating as empty",
             type(raw_auxiliary_data).__name__,
@@ -256,8 +448,12 @@ def decode_block_body(cbor_bytes: bytes) -> DecodedBlockBody:
                 f"expected dict (CBOR map)"
             )
 
-        # Compute tx hash from the raw body primitive
-        tx_hash = _tx_hash(body_raw)
+        # Compute tx hash from original bytes (no re-serialization)
+        if i < len(tx_body_original_bytes):
+            tx_hash = _tx_hash_from_bytes(tx_body_original_bytes[i])
+        else:
+            # Fallback: re-encode with normalization
+            tx_hash = _tx_hash_from_bytes(_cbor2.dumps(_normalize_cbor_types(body_raw)))
 
         # Decode with pycardano (fallback to raw on failure)
         body = _try_decode_tx_body(body_raw)

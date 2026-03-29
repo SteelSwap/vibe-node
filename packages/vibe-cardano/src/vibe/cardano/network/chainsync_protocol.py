@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -580,6 +581,7 @@ async def run_chain_sync(
     on_roll_backward: OnRollBackward,
     *,
     stop_event: asyncio.Event | None = None,
+    pipeline_depth: int = 200,
 ) -> None:
     """Run the chain-sync protocol loop.
 
@@ -640,33 +642,116 @@ async def run_chain_sync(
             "tip_block": tip.block_number,
         },
     )
+    # Haskell-matching intersection event for log correlation
+    logger.info(
+        "ChainSync.Client.FoundIntersection: point=%s tip_block=%d",
+        intersection, tip.block_number,
+    )
 
-    # Step 2: Sync loop
-    while True:
-        # Check stop condition
-        if stop_event is not None and stop_event.is_set():
-            logger.debug("Chain-sync stop requested, sending Done")
-            await client.done()
-            return
+    # Step 2: Pipelined sync loop
+    # Send multiple MsgRequestNext without waiting for responses.
+    # Use two concurrent tasks: sender fills the pipeline, receiver
+    # processes responses. Both use the raw channel to bypass the
+    # ProtocolRunner's strict send-recv agency enforcement.
+    #
+    # Haskell ref: chainSyncClient uses pipelining with configurable depth.
+    PIPELINE_DEPTH = pipeline_depth  # Scales with peer count for multi-peer block-fetch
+    request_next_cbor = codec.encode(CsMsgRequestNext())
+    in_flight = 0
+    _recv_buf = b""
+    _pipeline_space = asyncio.Event()
+    _pipeline_space.set()  # Initially has space
 
-        response = await client.request_next()
+    async def _pipeline_sender():
+        """Send MsgRequestNext up to pipeline depth."""
+        nonlocal in_flight
+        while True:
+            if stop_event is not None and stop_event.is_set():
+                return
+            if in_flight < PIPELINE_DEPTH:
+                await channel.send(request_next_cbor)
+                in_flight += 1
+            else:
+                _pipeline_space.clear()
+                await _pipeline_space.wait()  # Wake when receiver decrements
 
-        if isinstance(response, CsMsgRollForward):
-            await on_roll_forward(response.header, response.tip)
+    async def _pipeline_receiver():
+        """Receive and dispatch responses."""
+        nonlocal in_flight, _recv_buf
+        import io as _io
 
-        elif isinstance(response, CsMsgRollBackward):
-            await on_roll_backward(response.point, response.tip)
+        import cbor2pure as _cbor2
 
-        elif isinstance(response, CsMsgAwaitReply):
-            logger.debug("Chain-sync: at tip, awaiting new block")
-            # Server said "nothing new" — wait for actual data.
-            # In StNext(MustReply) now, server MUST send roll fwd/bwd.
-            response = await client.recv_after_await()
+        while True:
+            if stop_event is not None and stop_event.is_set():
+                return
 
-            if isinstance(response, CsMsgRollForward):
-                await on_roll_forward(response.header, response.tip)
-            elif isinstance(response, CsMsgRollBackward):
-                await on_roll_backward(response.point, response.tip)
+            # Read from channel
+            if _recv_buf:
+                data = _recv_buf
+                _recv_buf = b""
+            else:
+                data = await channel.recv()
+
+            # Decode first CBOR message
+            try:
+                dec = _cbor2.CBORDecoder(_io.BytesIO(data))
+                dec.decode()
+                consumed = dec.fp.tell()
+                if consumed < len(data):
+                    _recv_buf = data[consumed:]
+                msg_bytes = data[:consumed]
+                response = codec.decode(msg_bytes)
+            except Exception:
+                # Incomplete data — read more
+                more = await channel.recv()
+                _recv_buf = data + more
+                continue
+
+            if isinstance(response, CsMsgAwaitReply):
+                # Server is at tip — AwaitReply does NOT consume a
+                # pipelined request (don't decrement in_flight).
+                # Wait for the real response (RollForward/RollBackward).
+                if _recv_buf:
+                    data2 = _recv_buf
+                    _recv_buf = b""
+                else:
+                    data2 = await channel.recv()
+                try:
+                    dec2 = _cbor2.CBORDecoder(_io.BytesIO(data2))
+                    dec2.decode()
+                    consumed2 = dec2.fp.tell()
+                    if consumed2 < len(data2):
+                        _recv_buf = data2[consumed2:]
+                    response2 = codec.decode(data2[:consumed2])
+                except Exception:
+                    _recv_buf = data2
+                    continue
+                # Now decrement for the actual response
+                in_flight -= 1
+                _pipeline_space.set()  # Wake sender
+                if isinstance(response2, CsMsgRollForward):
+                    await on_roll_forward(response2.header, response2.tip)
+                elif isinstance(response2, CsMsgRollBackward):
+                    await on_roll_backward(response2.point, response2.tip)
+            else:
+                in_flight -= 1
+                _pipeline_space.set()  # Wake sender
+                if isinstance(response, CsMsgRollForward):
+                    await on_roll_forward(response.header, response.tip)
+                elif isinstance(response, CsMsgRollBackward):
+                    await on_roll_backward(response.point, response.tip)
+
+    # Run sender and receiver concurrently
+    sender_task = asyncio.create_task(_pipeline_sender())
+    try:
+        await _pipeline_receiver()
+    finally:
+        sender_task.cancel()
+        try:
+            await sender_task
+        except asyncio.CancelledError:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -758,7 +843,8 @@ async def run_chain_sync_server(
 
     client_point: PointOrOrigin = ORIGIN
 
-    logger.debug("Chain-sync server started")
+    logger.debug("Chain-sync server started (follower=%s)",
+                  follower.id if follower else "none")
 
     while True:
         if stop_event is not None and stop_event.is_set():
@@ -786,51 +872,71 @@ async def run_chain_sync_server(
             else:
                 action, header, point, tip = await chain_provider.next_block(client_point)
 
+            if action == "roll_forward" and header is None:
+                # Block exists but header CBOR is missing (fork switch rebuilt
+                # fragment without header data). Treat as await so the protocol
+                # doesn't get stuck in StNext. Without this fix, the outer loop
+                # calls recv_message() while server has agency, crashing with
+                # "should send, not receive".
+                action = "await"
+
             if action == "roll_forward" and header is not None:
                 if follower is None:
                     client_point = point  # type: ignore[assignment]
+                t_send_start = time.monotonic()
                 await runner.send_message(CsMsgRollForward(header=header, tip=tip))
+                t_send_done = time.monotonic()
+                send_ms = (t_send_done - t_send_start) * 1000
+                if send_ms > 1.0:
+                    logger.info(
+                        "ChainSync.Server.Timing: send_header=%.1fms",
+                        send_ms,
+                    )
             elif action == "roll_backward" and point is not None:
                 if follower is None:
                     client_point = point
+                logger.info(
+                    "ChainSync.Server.RollBack: to_slot=%s",
+                    getattr(point, 'slot', '?'),
+                )
                 await runner.send_message(CsMsgRollBackward(point=point, tip=tip))
             elif action == "await":
-                # Send AwaitReply, then block until new data.
-                await runner.send_message(CsMsgAwaitReply())
-                # Now in StNext(MustReply) — must send roll_forward or
-                # roll_backward next. Wait for follower/chain_provider to
-                # have data.
+                # At tip — send MsgAwaitReply IMMEDIATELY to transition
+                # Haskell's client from StCanAwait (10s timeout) to
+                # StMustReply (601-911s timeout for non-trustable,
+                # infinite for trustable peers).
                 #
-                # While we poll for new blocks, the client may disconnect
-                # (MsgDone from StIdle is not valid here per the FSM, but
-                # the channel may close). We catch exceptions to exit
-                # gracefully rather than crashing.
+                # Haskell ref: chainSyncServerPeer in Server.hs
+                #   Right waiting -> Yield MsgAwaitReply $ Effect (waiting >>= ...)
+                await runner.send_message(CsMsgAwaitReply())
+
+                # Now in StMustReply — block until data arrives.
+                # Use instruction_blocking() which waits for the
+                # chain tip to change via asyncio.Event.
                 try:
-                    while True:
-                        if stop_event is not None and stop_event.is_set():
-                            return
-                        if follower is not None:
-                            action2, header2, point2, tip2 = await follower.instruction()
-                        else:
+                    if follower is not None:
+                        action2, header2, point2, tip2 = await follower.instruction_blocking()
+                    else:
+                        # Legacy path: poll chain_provider
+                        while True:
+                            if stop_event is not None and stop_event.is_set():
+                                return
                             action2, header2, point2, tip2 = await chain_provider.next_block(
                                 client_point
                             )
-                        if action2 == "roll_forward" and header2 is not None:
-                            if follower is None:
-                                client_point = point2  # type: ignore[assignment]
-                            await runner.send_message(CsMsgRollForward(header=header2, tip=tip2))
-                            break
-                        elif action2 == "roll_backward" and point2 is not None:
-                            if follower is None:
-                                client_point = point2
-                            await runner.send_message(CsMsgRollBackward(point=point2, tip=tip2))
-                            break
-                        # Still no data — brief sleep to avoid busy-wait.
-                        await asyncio.sleep(0.1)
+                            if action2 != "await":
+                                break
+                            await asyncio.sleep(0.001)
+
+                    if action2 == "roll_forward" and header2 is not None:
+                        if follower is None:
+                            client_point = point2  # type: ignore[assignment]
+                        await runner.send_message(CsMsgRollForward(header=header2, tip=tip2))
+                    elif action2 == "roll_backward" and point2 is not None:
+                        if follower is None:
+                            client_point = point2
+                        await runner.send_message(CsMsgRollBackward(point=point2, tip=tip2))
                 except (asyncio.CancelledError, Exception) as exc:
-                    # Client disconnected or channel closed while we were
-                    # waiting for new blocks. This is expected — the client
-                    # may send MsgDone (closing the channel) at any time.
                     logger.debug(
                         "Chain-sync server: client disconnected during await: %s",
                         exc,

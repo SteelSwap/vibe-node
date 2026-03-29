@@ -45,7 +45,7 @@ def make_block_cbor(slot: int, block_number: int) -> bytes:
     return struct.pack(">QI", slot, block_number) + b"\x00" * 20
 
 
-async def add_chain(
+def add_chain(
     chain_db: ChainDB,
     start_slot: int,
     count: int,
@@ -64,7 +64,7 @@ async def add_chain(
         bn = start_block_number + i
         bh = make_hash(hash_offset + i)
         cbor = make_block_cbor(slot, bn)
-        await chain_db.add_block(slot, bh, pred, bn, cbor)
+        chain_db.add_block(slot, bh, pred, bn, cbor)
         blocks.append((slot, bh, pred, bn, cbor))
         pred = bh
     return blocks
@@ -81,7 +81,10 @@ def chain_db(tmp_path):
     imm = ImmutableDB(base_dir=tmp_path / "immutable", epoch_size=1000)
     vol = VolatileDB(db_dir=tmp_path / "volatile")
     led = LedgerDB(k=3, snapshot_dir=tmp_path / "ledger")
-    return ChainDB(immutable_db=imm, volatile_db=vol, ledger_db=led, k=3)
+    db = ChainDB(immutable_db=imm, volatile_db=vol, ledger_db=led, k=3)
+    db.start_chain_sel_runner()
+    yield db
+    db.stop_chain_sel_runner()
 
 
 @pytest.fixture
@@ -90,7 +93,10 @@ def chain_db_k10(tmp_path):
     imm = ImmutableDB(base_dir=tmp_path / "immutable", epoch_size=1000)
     vol = VolatileDB(db_dir=tmp_path / "volatile")
     led = LedgerDB(k=10, snapshot_dir=tmp_path / "ledger")
-    return ChainDB(immutable_db=imm, volatile_db=vol, ledger_db=led, k=10)
+    db = ChainDB(immutable_db=imm, volatile_db=vol, ledger_db=led, k=10)
+    db.start_chain_sel_runner()
+    yield db
+    db.stop_chain_sel_runner()
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +109,7 @@ async def test_add_block_updates_tip(chain_db):
     """Adding blocks should advance the chain tip."""
     assert await chain_db.get_tip() is None
 
-    blocks = await add_chain(chain_db, start_slot=1, count=3)
+    blocks = add_chain(chain_db, start_slot=1, count=3)
     tip = await chain_db.get_tip()
     assert tip is not None
     assert tip[0] == 3  # slot
@@ -114,7 +120,7 @@ async def test_add_block_updates_tip(chain_db):
 async def test_tip_advances_with_each_block(chain_db):
     """Tip should update after every block with a higher block_number."""
     for i in range(1, 6):
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=i,
             block_hash=make_hash(i),
             predecessor_hash=make_hash(i - 1) if i > 1 else GENESIS_HASH,
@@ -141,10 +147,10 @@ async def test_chain_selection_prefers_higher_block_number(chain_db):
     Spec: test_chain_selection_prefers_higher_select_view
     """
     # Chain A: blocks 1,2,3
-    await add_chain(chain_db, start_slot=1, count=3, hash_offset=100)
+    add_chain(chain_db, start_slot=1, count=3, hash_offset=100)
 
     # Chain B (fork from genesis): blocks 1,2,3,4 — higher block_number
-    await add_chain(chain_db, start_slot=10, count=4, hash_offset=200)
+    add_chain(chain_db, start_slot=10, count=4, hash_offset=200)
 
     tip = await chain_db.get_tip()
     assert tip is not None
@@ -160,10 +166,10 @@ async def test_chain_selection_equal_block_number_keeps_existing(chain_db):
     Spec: test_chain_selection_equal_select_view_incomparable
     """
     # Chain A: blocks 1,2,3
-    blocks_a = await add_chain(chain_db, start_slot=1, count=3, hash_offset=100)
+    blocks_a = add_chain(chain_db, start_slot=1, count=3, hash_offset=100)
 
     # Chain B (fork from genesis): also blocks 1,2,3 — same height
-    blocks_b = await add_chain(chain_db, start_slot=10, count=3, hash_offset=200)
+    blocks_b = add_chain(chain_db, start_slot=10, count=3, hash_offset=200)
 
     tip = await chain_db.get_tip()
     assert tip is not None
@@ -184,7 +190,7 @@ async def test_blocks_promoted_to_immutable_after_k(chain_db):
     With k=3, after adding blocks 1..7, blocks 1..4 should be in immutable
     (tip block_number=7, immutable tip = 7-3 = 4).
     """
-    blocks = await add_chain(chain_db, start_slot=1, count=7)
+    blocks = add_chain(chain_db, start_slot=1, count=7)
 
     # The immutable tip should have advanced
     imm_tip_slot = chain_db.immutable_db.get_tip_slot()
@@ -199,7 +205,7 @@ async def test_blocks_promoted_to_immutable_after_k(chain_db):
     # Blocks 5-7 should still be in volatile (or possibly GC'd from volatile
     # if they were below the GC threshold — but blocks 5-7 are above slot 4)
     for slot, bh, _, bn, cbor in blocks[4:]:
-        result = await chain_db.volatile_db.get_block(bh)
+        result = chain_db.volatile_db.get_block(bh)
         assert result == cbor, f"Block at slot {slot} missing from volatile"
 
 
@@ -210,11 +216,11 @@ async def test_gc_cleans_volatile_after_promotion(chain_db):
     With k=3, after adding blocks 1..7, blocks 1..4 get promoted and
     GC'd from volatile.
     """
-    blocks = await add_chain(chain_db, start_slot=1, count=7)
+    blocks = add_chain(chain_db, start_slot=1, count=7)
 
     # Blocks at or below immutable slot 4 should be gone from volatile
     for slot, bh, _, bn, cbor in blocks[:4]:
-        result = await chain_db.volatile_db.get_block(bh)
+        result = chain_db.volatile_db.get_block(bh)
         assert result is None, f"Block at slot {slot} should have been GC'd from volatile"
 
 
@@ -231,7 +237,7 @@ async def test_get_block_searches_volatile_then_immutable(chain_db):
 
     Spec: test_get_block_queries_volatile_first_then_immutable
     """
-    blocks = await add_chain(chain_db, start_slot=1, count=7)
+    blocks = add_chain(chain_db, start_slot=1, count=7)
 
     # Block at slot 2 (promoted to immutable, GC'd from volatile)
     result = await chain_db.get_block(blocks[1][1])
@@ -252,11 +258,11 @@ async def test_get_block_fallback_to_immutable(chain_db):
 
     Spec: test_get_block_component_not_in_volatile_falls_back_to_immutable
     """
-    blocks = await add_chain(chain_db, start_slot=1, count=7)
+    blocks = add_chain(chain_db, start_slot=1, count=7)
 
     # Slot 1 block: promoted to immutable, GC'd from volatile
     bh = blocks[0][1]
-    assert await chain_db.volatile_db.get_block(bh) is None
+    assert chain_db.volatile_db.get_block(bh) is None
     assert await chain_db.immutable_db.get_block(bh) is not None
 
     # ChainDB should still find it
@@ -277,7 +283,7 @@ async def test_all_blocks_accessible(chain_db):
 
     Spec: test_blocks_is_union_of_volatile_and_immutable
     """
-    blocks = await add_chain(chain_db, start_slot=1, count=7)
+    blocks = add_chain(chain_db, start_slot=1, count=7)
 
     for slot, bh, _, bn, cbor in blocks:
         result = await chain_db.get_block(bh)
@@ -299,13 +305,13 @@ async def test_ignore_block_older_than_immutable_tip(chain_db):
     Spec: test_ignore_block_older_than_immutable_tip
     """
     # Build chain long enough to advance immutable tip
-    await add_chain(chain_db, start_slot=1, count=7)
+    add_chain(chain_db, start_slot=1, count=7)
     # Immutable tip is at block_number=4
 
     # Try to add a block with block_number=2 (below immutable tip)
     old_hash = make_hash(900)
     vol_count_before = chain_db.volatile_db.block_count
-    await chain_db.add_block(
+    chain_db.add_block(
         slot=50,
         block_hash=old_hash,
         predecessor_hash=GENESIS_HASH,
@@ -314,7 +320,7 @@ async def test_ignore_block_older_than_immutable_tip(chain_db):
     )
     # Should not have been added to volatile
     assert chain_db.volatile_db.block_count == vol_count_before
-    assert await chain_db.volatile_db.get_block(old_hash) is None
+    assert chain_db.volatile_db.get_block(old_hash) is None
 
 
 @pytest.mark.asyncio
@@ -323,18 +329,18 @@ async def test_ignore_block_equal_to_immutable_tip(chain_db):
 
     Spec: test_ignore_block_equal_to_immutable_tip
     """
-    await add_chain(chain_db, start_slot=1, count=7)
+    add_chain(chain_db, start_slot=1, count=7)
     # Immutable tip at block_number=4
 
     eq_hash = make_hash(901)
-    await chain_db.add_block(
+    chain_db.add_block(
         slot=51,
         block_hash=eq_hash,
         predecessor_hash=GENESIS_HASH,
         block_number=4,
         cbor_bytes=make_block_cbor(51, 4),
     )
-    assert await chain_db.volatile_db.get_block(eq_hash) is None
+    assert chain_db.volatile_db.get_block(eq_hash) is None
 
 
 @pytest.mark.asyncio
@@ -343,11 +349,11 @@ async def test_accept_block_one_above_immutable_tip(chain_db):
 
     Spec: test_accept_block_one_above_immutable_tip
     """
-    await add_chain(chain_db, start_slot=1, count=7)
+    add_chain(chain_db, start_slot=1, count=7)
     # Immutable tip at block_number=4
 
     new_hash = make_hash(902)
-    await chain_db.add_block(
+    chain_db.add_block(
         slot=52,
         block_hash=new_hash,
         predecessor_hash=make_hash(4),
@@ -355,7 +361,7 @@ async def test_accept_block_one_above_immutable_tip(chain_db):
         cbor_bytes=make_block_cbor(52, 5),
     )
     # Should be in volatile
-    assert await chain_db.volatile_db.get_block(new_hash) is not None
+    assert chain_db.volatile_db.get_block(new_hash) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -373,14 +379,14 @@ async def test_immutable_tip_never_rolls_back(chain_db_k10):
     db = chain_db_k10  # k=10
 
     # Build a chain of 15 blocks — immutable tip advances to blockNo 5
-    await add_chain(db, start_slot=1, count=15)
+    add_chain(db, start_slot=1, count=15)
 
     imm_bn_1 = db._immutable_tip_block_number
     assert imm_bn_1 is not None
     assert imm_bn_1 == 5  # 15 - 10 = 5
 
     # Extend the chain further
-    await add_chain(
+    add_chain(
         db,
         start_slot=16,
         count=5,
@@ -404,11 +410,11 @@ async def test_immutable_tip_never_rolls_back(chain_db_k10):
 async def test_advance_immutable_explicit(chain_db):
     """Explicitly advancing the immutable tip should move blocks."""
     # Add 5 blocks (not enough for automatic promotion with k=3)
-    blocks = await add_chain(chain_db, start_slot=1, count=3)
+    blocks = add_chain(chain_db, start_slot=1, count=3)
 
     # All should be in volatile
     for _, bh, _, _, cbor in blocks:
-        assert await chain_db.volatile_db.get_block(bh) == cbor
+        assert chain_db.volatile_db.get_block(bh) == cbor
 
     # Manually advance immutable to slot 2
     copied = await chain_db.advance_immutable(2)
@@ -419,7 +425,7 @@ async def test_advance_immutable_explicit(chain_db):
         assert await chain_db.immutable_db.get_block(bh) == cbor
 
     # Block 3 should still be in volatile
-    assert await chain_db.volatile_db.get_block(blocks[2][1]) is not None
+    assert chain_db.volatile_db.get_block(blocks[2][1]) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -454,7 +460,7 @@ def test_repr_empty(chain_db):
 @pytest.mark.asyncio
 async def test_repr_with_blocks(chain_db):
     """Repr of ChainDB with blocks should show tip info."""
-    await add_chain(chain_db, start_slot=1, count=2)
+    add_chain(chain_db, start_slot=1, count=2)
     r = repr(chain_db)
     assert "slot=2" in r
     assert "blockNo=2" in r
@@ -476,21 +482,21 @@ async def test_fork_blocks_older_than_immutable_ignored(chain_db):
     a competing fork starting at blockNo=1 should have its early blocks
     ignored because they're at or below the immutable tip.
     """
-    await add_chain(chain_db, start_slot=1, count=7)
+    add_chain(chain_db, start_slot=1, count=7)
     # Immutable tip at blockNo=4
 
     # Try a competing fork from genesis with block_numbers 1-3
     # These should all be ignored (below immutable tip)
     for i in range(1, 4):
         fork_hash = make_hash(800 + i)
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=100 + i,
             block_hash=fork_hash,
             predecessor_hash=make_hash(800 + i - 1) if i > 1 else GENESIS_HASH,
             block_number=i,
             cbor_bytes=make_block_cbor(100 + i, i),
         )
-        assert await chain_db.volatile_db.get_block(fork_hash) is None
+        assert chain_db.volatile_db.get_block(fork_hash) is None
 
     # Tip should still be the original chain
     tip = await chain_db.get_tip()
@@ -509,24 +515,25 @@ async def test_fork_blocks_older_than_immutable_ignored(chain_db):
 
 @pytest.mark.asyncio
 async def test_concurrent_read_during_write(chain_db):
-    """Use asyncio tasks: one writer, one reader. No crashes.
+    """Use threads for writing, async for reading. No crashes.
 
-    This tests that the ChainDB is safe for concurrent async access.
-    A writer task adds blocks while a reader task queries get_block
-    and get_tip. Neither task should crash or produce corrupted results.
+    This tests that the ChainDB is safe for concurrent access.
+    A writer thread adds blocks while a reader task queries get_block
+    and get_tip. Neither should crash or produce corrupted results.
     """
     import asyncio
+    import threading
 
     NUM_BLOCKS = 20
     read_results = []
-    write_done = asyncio.Event()
+    write_done = threading.Event()
 
-    async def writer():
-        """Add blocks sequentially."""
+    def writer():
+        """Add blocks sequentially via sync add_block."""
         pred = GENESIS_HASH
         for i in range(1, NUM_BLOCKS + 1):
             bh = make_hash(i)
-            await chain_db.add_block(
+            chain_db.add_block(
                 slot=i,
                 block_hash=bh,
                 predecessor_hash=pred,
@@ -534,7 +541,6 @@ async def test_concurrent_read_during_write(chain_db):
                 cbor_bytes=make_block_cbor(i, i),
             )
             pred = bh
-            await asyncio.sleep(0)  # yield to reader
         write_done.set()
 
     async def reader():
@@ -546,10 +552,13 @@ async def test_concurrent_read_during_write(chain_db):
                 # Try to read the tip block
                 result = await chain_db.get_block(tip[1])
                 read_results.append(("block", result is not None))
-            await asyncio.sleep(0)  # yield back
+            await asyncio.sleep(0.001)  # yield back
 
-    # Run both tasks concurrently
-    await asyncio.gather(writer(), reader())
+    # Run writer in thread, reader as async task
+    t = threading.Thread(target=writer)
+    t.start()
+    await reader()
+    t.join()
 
     # Verify: no crashes occurred, writer completed, final state is valid
     tip = await chain_db.get_tip()
@@ -568,7 +577,7 @@ async def test_concurrent_read_during_write(chain_db):
 
 @pytest.mark.asyncio
 async def test_concurrent_add_blocks(chain_db):
-    """Multiple async tasks adding blocks simultaneously. State remains consistent.
+    """Multiple threads adding blocks simultaneously. State remains consistent.
 
     This verifies that the ChainDB doesn't crash or corrupt state when
     multiple producers feed it blocks concurrently. In practice this
@@ -578,28 +587,22 @@ async def test_concurrent_add_blocks(chain_db):
     The final state must be consistent: tip is the highest block_number,
     and every block that was added is retrievable.
     """
-    import asyncio
+    import threading
 
     NUM_CHAINS = 3
     BLOCKS_PER_CHAIN = 5  # Keep small to avoid immutable promotion complexity
 
     all_hashes: list[list[bytes]] = [[] for _ in range(NUM_CHAINS)]
 
-    async def add_fork(chain_id: int):
-        """Add a chain of blocks from a fork.
-
-        Each fork uses non-overlapping block_number ranges to avoid
-        competing for the same immutable slot ranges. Fork 0 uses
-        block_numbers 1..5, fork 1 uses 6..10, fork 2 uses 11..15.
-        The last fork has the highest block_number and wins chain selection.
-        """
+    def add_fork(chain_id: int):
+        """Add a chain of blocks from a fork."""
         pred = GENESIS_HASH
         base_offset = chain_id * 1000
         bn_offset = chain_id * BLOCKS_PER_CHAIN
         for i in range(1, BLOCKS_PER_CHAIN + 1):
             bh = make_hash(base_offset + i)
             all_hashes[chain_id].append(bh)
-            await chain_db.add_block(
+            chain_db.add_block(
                 slot=base_offset + i,
                 block_hash=bh,
                 predecessor_hash=pred,
@@ -607,18 +610,17 @@ async def test_concurrent_add_blocks(chain_db):
                 cbor_bytes=make_block_cbor(base_offset + i, bn_offset + i),
             )
             pred = bh
-            await asyncio.sleep(0)  # yield to other tasks
 
-    # Run all fork writers concurrently
-    await asyncio.gather(*(add_fork(c) for c in range(NUM_CHAINS)))
+    # Run all fork writers concurrently in threads
+    threads = [threading.Thread(target=add_fork, args=(c,)) for c in range(NUM_CHAINS)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
     # Verify final state consistency
     tip = await chain_db.get_tip()
     assert tip is not None
-
-    # The last fork (chain_id=2) should win since it has highest block_numbers
-    # (block_number = 11..15 vs 1..5 and 6..10)
-    last_fork_max_bn = NUM_CHAINS * BLOCKS_PER_CHAIN
 
     # All blocks should be retrievable from at least the winning chain
     found_count = 0
@@ -638,6 +640,7 @@ async def test_concurrent_add_blocks(chain_db):
     assert tip_block is not None, "Tip block must be retrievable"
 
 
+@pytest.mark.asyncio
 async def test_add_future_block_rejected(chain_db):
     """Block with slot far in the future should be accepted by storage
     (future-slot filtering is a consensus-layer concern, not storage).
@@ -653,11 +656,11 @@ async def test_add_future_block_rejected(chain_db):
     behavior for when we add it.
     """
     # Add a base chain
-    await add_chain(chain_db, start_slot=1, count=3)
+    add_chain(chain_db, start_slot=1, count=3)
 
     # Add a block at a very high slot — should be accepted by storage
     future_hash = make_hash(999)
-    await chain_db.add_block(
+    chain_db.add_block(
         slot=999_999,
         block_hash=future_hash,
         predecessor_hash=make_hash(3),
@@ -665,7 +668,7 @@ async def test_add_future_block_rejected(chain_db):
         cbor_bytes=make_block_cbor(999_999, 4),
     )
     # Block should be stored in volatile
-    assert await chain_db.volatile_db.get_block(future_hash) is not None
+    assert chain_db.volatile_db.get_block(future_hash) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -682,12 +685,12 @@ async def test_get_max_slot(chain_db):
     """
     assert await chain_db.get_max_slot() is None
 
-    blocks = await add_chain(chain_db, start_slot=5, count=4)
+    blocks = add_chain(chain_db, start_slot=5, count=4)
     max_slot = await chain_db.get_max_slot()
     assert max_slot == 8  # slots 5, 6, 7, 8
 
     # Add more blocks
-    await add_chain(
+    add_chain(
         chain_db,
         start_slot=20,
         count=2,
@@ -717,11 +720,14 @@ async def test_close_then_reopen(tmp_path):
     vol = VolatileDB(db_dir=tmp_path / "volatile")
     led = LedgerDB(k=3, snapshot_dir=tmp_path / "ledger")
     db = ChainDB(immutable_db=imm, volatile_db=vol, ledger_db=led, k=3)
+    db.start_chain_sel_runner()
 
-    blocks = await add_chain(db, start_slot=1, count=7)
+    blocks = add_chain(db, start_slot=1, count=7)
     # After 7 blocks with k=3, immutable tip is at blockNo=4 (slot 4)
     imm_tip = db.immutable_db.get_tip_slot()
     assert imm_tip == 4
+
+    db.stop_chain_sel_runner()
 
     # Close
     db.close()
@@ -755,7 +761,7 @@ async def test_wipe_volatile_db(chain_db):
     After wiping the volatile DB, only immutable blocks should remain
     accessible and the tip should revert to the immutable tip.
     """
-    blocks = await add_chain(chain_db, start_slot=1, count=7)
+    blocks = add_chain(chain_db, start_slot=1, count=7)
     # Immutable tip at slot 4, volatile has blocks 5-7
 
     tip_before = await chain_db.get_tip()
@@ -772,7 +778,7 @@ async def test_wipe_volatile_db(chain_db):
 
     # Volatile blocks should be gone
     for slot, bh, _, bn, cbor in blocks[4:]:
-        assert await chain_db.volatile_db.get_block(bh) is None
+        assert chain_db.volatile_db.get_block(bh) is None
 
     # Immutable blocks should still be accessible
     for slot, bh, _, bn, cbor in blocks[:4]:
@@ -800,13 +806,13 @@ async def test_get_block_after_gc_returns_none(tmp_path):
 
     # Add a fork block directly to volatile (not on the main chain)
     fork_hash = make_hash(500)
-    await vol.add_block(fork_hash, 3, GENESIS_HASH, 1, b"fork_block")
+    vol.add_block(fork_hash, 3, GENESIS_HASH, 1, b"fork_block")
 
     # Block should be findable initially
     assert await db.get_block(fork_hash) is not None
 
     # GC the volatile DB at slot 5 (removes block at slot 3)
-    await vol.gc(immutable_tip_slot=5)
+    vol.gc(immutable_tip_slot=5)
 
     # Block should no longer be findable
     assert await db.get_block(fork_hash) is None

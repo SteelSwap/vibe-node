@@ -24,6 +24,7 @@ from vibe.cardano.network.local_statequery import LOCAL_STATE_QUERY_PROTOCOL_ID
 from vibe.cardano.network.local_txmonitor import LOCAL_TX_MONITOR_ID
 from vibe.cardano.network.local_txsubmission import LOCAL_TX_SUBMISSION_ID
 from vibe.cardano.network.txsubmission import TX_SUBMISSION_N2N_ID
+from vibe.cardano.node.miniprotocol_bundle import launch_initiator_bundle, launch_responder_bundle
 from vibe.core.multiplexer import (
     Bearer,
     BearerClosedError,
@@ -137,13 +138,10 @@ async def run_n2n_server(
         network_magic: Network magic for handshake negotiation.
         shutdown_event: Set when the node is shutting down.
     """
-    from vibe.cardano.network.blockfetch_protocol import run_block_fetch_server
-    from vibe.cardano.network.chainsync_protocol import run_chain_sync_server
     from vibe.cardano.network.handshake_protocol import (
         HandshakeError,
         run_handshake_server,
     )
-    from vibe.cardano.network.keepalive_protocol import run_keep_alive_server
 
     conn_tasks: list[asyncio.Task[None]] = []
 
@@ -157,22 +155,40 @@ async def run_n2n_server(
             extra={"event": "peer.inbound", "peer": str(peer_info)},
         )
 
+        # Disable Nagle for low-latency segment delivery
+        sock = writer.transport.get_extra_info('socket')
+        if sock is not None:
+            import socket
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
         bearer = Bearer(reader, writer)
         mux = Multiplexer(bearer, is_initiator=False)
 
-        # Register N2N miniprotocol channels.
-        channels: dict[int, MiniProtocolChannel] = {}
-        for proto_id in N2N_PROTOCOL_IDS:
-            channels[proto_id] = mux.add_protocol(proto_id)
+        # Register dual channels for bidirectional miniprotocol support.
+        # Handshake only needs the responder direction (we respond to the
+        # connecting peer).  All other protocols get both initiator and
+        # responder channels so Haskell's inbound governor sees
+        # initiator-direction traffic (keep-alive pings, tx-sub responses)
+        # and keeps the connection warm instead of demoting to Cold.
+        init_channels: dict[int, MiniProtocolChannel] = {}
+        resp_channels: dict[int, MiniProtocolChannel] = {}
+
+        # Handshake -- single direction (responder only).
+        resp_channels[HANDSHAKE_PROTOCOL_ID] = mux.add_protocol(HANDSHAKE_PROTOCOL_ID)
+
+        # All other N2N protocols -- dual channels.
+        for proto_id in [CHAIN_SYNC_N2N_ID, BLOCK_FETCH_N2N_ID, TX_SUBMISSION_N2N_ID, KEEP_ALIVE_PROTOCOL_ID]:
+            init_ch, resp_ch = mux.add_protocol_pair(proto_id)
+            init_channels[proto_id] = init_ch
+            resp_channels[proto_id] = resp_ch
 
         # Start the mux in background.
         mux_task = asyncio.create_task(mux.run(), name=f"mux-inbound-{peer_info}")
         stop = asyncio.Event()
-        follower = None
 
         try:
             # Run handshake responder on channel 0.
-            hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
+            hs_channel = resp_channels[HANDSHAKE_PROTOCOL_ID]
             result = await run_handshake_server(hs_channel, network_magic)
             logger.info(
                 "Peer %s handshake accepted (inbound, v%d)",
@@ -186,102 +202,18 @@ async def run_n2n_server(
                 },
             )
 
-            # Helper: wrap server coroutines so MuxClosedError on
-            # peer disconnect doesn't produce "Task exception never retrieved"
-            async def _safe_server(coro, name: str) -> None:
-                try:
-                    await coro
-                except MuxClosedError, BearerClosedError:
-                    logger.debug("N2N inbound %s: %s disconnected", peer_info, name)
-                except asyncio.CancelledError:
-                    pass
-                except Exception as exc:
-                    logger.debug("N2N inbound %s: %s error: %s", peer_info, name, exc)
-
-            # Launch keep-alive server (echo pings back).
-            asyncio.create_task(
-                _safe_server(
-                    run_keep_alive_server(
-                        channels[KEEP_ALIVE_PROTOCOL_ID],
-                        stop_event=stop,
-                    ),
-                    "keep-alive",
-                ),
-                name=f"ka-server-{peer_info}",
+            # Launch responder bundle (chain-sync server, block-fetch server,
+            # keep-alive server, tx-submission server).
+            await launch_responder_bundle(
+                resp_channels, chain_db, mempool, stop, peer_info=str(peer_info)
             )
 
-            # Launch chain-sync server (serve our headers to the peer).
-            # Follower comes from ChainDB (source of truth for selected chain).
-            if chain_db is not None:
-                follower = chain_db.new_follower()
-                asyncio.create_task(
-                    _safe_server(
-                        run_chain_sync_server(
-                            channels[CHAIN_SYNC_N2N_ID],
-                            follower=follower,
-                            stop_event=stop,
-                        ),
-                        "chain-sync",
-                    ),
-                    name=f"cs-server-{peer_info}",
-                )
-
-            # Launch block-fetch server (serve full blocks to the peer).
-            # Uses chain_db for block lookups (volatile + immutable).
-            if chain_db is not None:
-                asyncio.create_task(
-                    _safe_server(
-                        run_block_fetch_server(
-                            channels[BLOCK_FETCH_N2N_ID],
-                            block_provider=chain_db,
-                            stop_event=stop,
-                        ),
-                        "block-fetch",
-                    ),
-                    name=f"bf-server-{peer_info}",
-                )
-
-            # Launch tx-submission server (pull txs from peer into mempool).
-            if mempool is not None:
-                from vibe.cardano.network.txsubmission_protocol import (
-                    run_tx_submission_server,
-                )
-
-                async def _on_tx_ids(txids: list[tuple[bytes, int]]) -> None:
-                    logger.debug(
-                        "N2N inbound %s: received %d tx IDs",
-                        peer_info,
-                        len(txids),
-                    )
-
-                async def _on_txs(txs: list[bytes]) -> None:
-                    for tx_cbor in txs:
-                        try:
-                            await mempool.add_tx(tx_cbor)
-                            logger.debug(
-                                "N2N inbound %s: added tx to mempool (%d bytes)",
-                                peer_info,
-                                len(tx_cbor),
-                            )
-                        except Exception as exc:
-                            logger.debug(
-                                "N2N inbound %s: tx rejected: %s",
-                                peer_info,
-                                exc,
-                            )
-
-                asyncio.create_task(
-                    _safe_server(
-                        run_tx_submission_server(
-                            channels[TX_SUBMISSION_N2N_ID],
-                            on_tx_ids_received=_on_tx_ids,
-                            on_txs_received=_on_txs,
-                            stop_event=stop,
-                        ),
-                        "tx-submission",
-                    ),
-                    name=f"txsub-server-{peer_info}",
-                )
+            # Launch initiator bundle (keep-alive client, tx-submission client).
+            # Provides initiator-direction traffic so Haskell's inbound governor
+            # keeps the connection warm instead of demoting to Cold after 5s.
+            await launch_initiator_bundle(
+                init_channels, stop, peer_info=str(peer_info)
+            )
 
             # Wait for mux to end (peer disconnect) or shutdown.
             done, _ = await asyncio.wait(
@@ -295,14 +227,12 @@ async def run_n2n_server(
             logger.debug("N2N inbound %s ended: %s", peer_info, exc)
         finally:
             stop.set()
-            if follower is not None and chain_db is not None:
-                chain_db.close_follower(follower.id)
             await mux.close()
             if not mux_task.done():
                 mux_task.cancel()
                 try:
                     await mux_task
-                except asyncio.CancelledError, Exception:
+                except (asyncio.CancelledError, Exception):
                     pass
 
     try:

@@ -95,11 +95,11 @@ class TestDiskErrorDuringPutBlock:
         (since VolatileDB updates memory first, then persists).
         But on recovery, only persisted blocks survive.
         """
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(1)
 
         # Add one block successfully
-        await db.add_block(h, 1, _genesis_hash(), 1, _cbor(1))
+        db.add_block(h, 1, _genesis_hash(), 1, _cbor(1))
         assert db.block_count == 1
         assert (tmp_path / f"{h.hex()}.block").exists()
 
@@ -113,12 +113,17 @@ class TestDiskErrorDuringPutBlock:
 
         db._write_file = failing_write  # type: ignore[assignment]
 
-        with pytest.raises(OSError, match="Simulated disk error"):
-            await db.add_block(h2, 2, h, 2, _cbor(2))
+        # With background disk writes, the disk error is caught and logged
+        # but doesn't propagate to the caller. The block IS added in memory.
+        db.add_block(h2, 2, h, 2, _cbor(2))
 
-        # In-memory state got the block (write happens after index update)
-        # but on-disk it's missing. Verify first block is still intact.
+        # In-memory state has both blocks
+        assert db.block_count == 2
+        assert db.get_block(h2) == _cbor(2)
+        # First block persisted, second didn't (disk error)
         assert (tmp_path / f"{h.hex()}.block").exists()
+        # Wait for background writer to process
+        db._disk_queue.join()
         assert not (tmp_path / f"{h2.hex()}.block").exists()
 
 
@@ -137,13 +142,13 @@ class TestDiskErrorDuringGarbageCollect:
 
     async def test_gc_partial_failure_no_data_loss(self, tmp_path: Path) -> None:
         """Simulate a partial failure during GC file deletion."""
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         # Add 5 blocks
         pred = _genesis_hash()
         for i in range(1, 6):
             h = _hash(i)
-            await db.add_block(h, i, pred, i, _cbor(i))
+            db.add_block(h, i, pred, i, _cbor(i))
             pred = h
 
         # Verify all files exist
@@ -151,12 +156,12 @@ class TestDiskErrorDuringGarbageCollect:
             assert (tmp_path / f"{_hash(i).hex()}.block").exists()
 
         # GC should remove blocks 1-3 (slot <= 3)
-        removed = await db.gc(immutable_tip_slot=3)
+        removed = db.gc(immutable_tip_slot=3)
         assert removed == 3
 
         # Blocks 4-5 should survive on disk and in memory
         for i in range(4, 6):
-            assert await db.get_block(_hash(i)) is not None
+            assert db.get_block(_hash(i)) is not None
             assert (tmp_path / f"{_hash(i).hex()}.block").exists()
 
 
@@ -174,9 +179,9 @@ class TestDiskErrorDuringClose:
 
     async def test_close_does_not_corrupt_disk_state(self, tmp_path: Path) -> None:
         """After close, on-disk block files remain intact."""
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(1)
-        await db.add_block(h, 1, _genesis_hash(), 1, _cbor(1))
+        db.add_block(h, 1, _genesis_hash(), 1, _cbor(1))
 
         db.close()
         assert db.is_closed
@@ -185,7 +190,7 @@ class TestDiskErrorDuringClose:
         assert (tmp_path / f"{h.hex()}.block").exists()
 
         # New instance can read the file
-        db2 = VolatileDB(db_dir=tmp_path)
+        db2 = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         def parse_header(cbor_bytes: bytes) -> BlockInfo:
             n = int(cbor_bytes.decode().split("-")[-1])
@@ -198,7 +203,7 @@ class TestDiskErrorDuringClose:
 
         loaded = await db2.load_from_disk(parse_header)
         assert loaded == 1
-        assert await db2.get_block(h) == _cbor(1)
+        assert db2.get_block(h) == _cbor(1)
 
 
 # ---------------------------------------------------------------------------
@@ -224,28 +229,28 @@ class TestDuplicateBlockDifferentOrigin:
         h = _hash(1)
         pred = _genesis_hash()
 
-        await db.add_block(h, 1, pred, 1, b"cbor-from-peer-A")
+        db.add_block(h, 1, pred, 1, b"cbor-from-peer-A")
         assert db.block_count == 1
 
         # Same block hash from a different source
-        await db.add_block(h, 1, pred, 1, b"cbor-from-peer-B")
+        db.add_block(h, 1, pred, 1, b"cbor-from-peer-B")
         assert db.block_count == 1
 
         # Latest data wins (dict behavior)
-        assert await db.get_block(h) == b"cbor-from-peer-B"
+        assert db.get_block(h) == b"cbor-from-peer-B"
 
         # Successor map has no duplicates
-        succs = await db.get_successors(pred)
+        succs = db.get_successors(pred)
         assert succs == [h]
 
     async def test_duplicate_block_on_disk_is_idempotent(self, tmp_path: Path) -> None:
         """Re-adding a block to a persistent DB overwrites the file."""
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
         h = _hash(1)
         pred = _genesis_hash()
 
-        await db.add_block(h, 1, pred, 1, b"original")
-        await db.add_block(h, 1, pred, 1, b"replacement")
+        db.add_block(h, 1, pred, 1, b"original")
+        db.add_block(h, 1, pred, 1, b"replacement")
 
         filepath = tmp_path / f"{h.hex()}.block"
         assert filepath.read_bytes() == b"replacement"
@@ -269,13 +274,13 @@ class TestConcurrentWriterSimulation:
         """One writer adds blocks, another fails mid-add. Recovery
         should yield the successfully written blocks.
         """
-        db = VolatileDB(db_dir=tmp_path)
+        db = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         # Writer 1: successfully adds blocks 1-3
         pred = _genesis_hash()
         for i in range(1, 4):
             h = _hash(i)
-            await db.add_block(h, i, pred, i, _cbor(i))
+            db.add_block(h, i, pred, i, _cbor(i))
             pred = h
 
         assert db.block_count == 3
@@ -287,7 +292,7 @@ class TestConcurrentWriterSimulation:
         block4_path.write_bytes(_cbor(4))
 
         # "Crash" — create a new instance and recover
-        db2 = VolatileDB(db_dir=tmp_path)
+        db2 = VolatileDB(db_dir=tmp_path, write_batch_size=1)
 
         def parse_header(cbor_bytes: bytes) -> BlockInfo:
             n = int(cbor_bytes.decode().split("-")[-1])

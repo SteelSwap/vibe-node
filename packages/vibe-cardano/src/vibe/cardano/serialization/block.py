@@ -325,18 +325,32 @@ def _decode_header_body_babbage(items: list, era: Era, header_cbor: bytes) -> Bl
 def _decode_tagged_block(cbor_bytes: bytes) -> tuple[Era, object]:
     """Decode a tagged block, returning (era, block_payload).
 
+    Handles two formats:
+    1. CBORTag(era, block_body) — our internal storage format
+    2. [era_int, block_body] — HFC wire format from block-fetch
+
     Uses raw_tags=True so CBOR tags 0-7 are returned as CBORTag objects
     instead of being interpreted as semantic types (datetime, bignum, etc.).
     """
     decoded = cbor2.loads(cbor_bytes, raw_tags=True)
-    if not isinstance(decoded, cbor2.CBORTag):
-        raise ValueError(f"Expected CBOR tag, got {type(decoded).__name__}")
-    try:
-        era = Era(decoded.tag)
-    except ValueError:
-        raise ValueError(f"Unknown era tag: {decoded.tag}") from None
 
-    return era, decoded.value
+    # Format 1: CBORTag(era, value) — our tagged storage format
+    if isinstance(decoded, cbor2.CBORTag):
+        try:
+            era = Era(decoded.tag)
+        except ValueError:
+            raise ValueError(f"Unknown era tag: {decoded.tag}") from None
+        return era, decoded.value
+
+    # Format 2: [era_int, block_body] — HFC wire format from block-fetch
+    if isinstance(decoded, list) and len(decoded) >= 2 and isinstance(decoded[0], int):
+        try:
+            era = Era(decoded[0])
+        except ValueError:
+            raise ValueError(f"Unknown era tag: {decoded[0]}") from None
+        return era, decoded[1]
+
+    raise ValueError(f"Expected CBOR tag or [era, body] list, got {type(decoded).__name__}")
 
 
 def decode_block_header(cbor_bytes: bytes) -> BlockHeader:
@@ -393,6 +407,70 @@ def decode_block_header(cbor_bytes: bytes) -> BlockHeader:
 
     if not isinstance(header_body, list):
         raise ValueError(f"Expected header_body as CBOR array, got {type(header_body).__name__}")
+
+    if era in _TWO_VRF_ERAS:
+        return _decode_header_body_shelley(header_body, era, header_cbor)
+    elif era in _SINGLE_VRF_ERAS:
+        return _decode_header_body_babbage(header_body, era, header_cbor)
+    else:
+        raise ValueError(f"Unhandled era: {era}")
+
+
+def decode_block_header_from_array(
+    block_array: list | object, era: Era, header_cbor_override: bytes | None = None,
+) -> BlockHeader:
+    """Decode a block header from an already-decoded block array.
+
+    Avoids re-parsing the entire block CBOR — the caller provides the
+    pre-decoded block_array and era tag from their initial parse.
+
+    This is the "decode once" optimization: the block is decoded once
+    in _on_block, and the parsed structure is passed through to header
+    and body decoding without re-serialization.
+
+    Args:
+        block_array: The decoded block body: [header, tx_bodies, witnesses, aux]
+        era: The era of this block.
+        header_cbor_override: If provided, use these bytes for the header hash
+            instead of re-encoding. Preferred for hash correctness.
+
+    Returns:
+        Decoded BlockHeader.
+    """
+    if era in (Era.BYRON_MAIN, Era.BYRON_EBB):
+        raise NotImplementedError(f"Byron block decoding not supported (era {era.value})")
+
+    # Accept any sequence type (IndefiniteFrozenList, etc.)
+    if not hasattr(block_array, "__getitem__") or len(block_array) < 4:
+        raise ValueError(
+            f"Expected block as array of >= 4 elements, got {type(block_array).__name__}"
+        )
+
+    header_array = block_array[0]
+    if not hasattr(header_array, "__getitem__") or len(header_array) != 2:
+        raise ValueError(
+            f"Expected header as array of 2 elements, got {type(header_array).__name__}"
+        )
+
+    if header_cbor_override is not None:
+        header_cbor = header_cbor_override
+    else:
+        # Re-encode header for hash computation.
+        # Try direct encode first (fast path), normalize only on failure.
+        try:
+            header_cbor = cbor2.dumps(header_array)
+        except Exception:
+            from vibe.cardano.serialization.transaction import _normalize_cbor_types
+
+            header_cbor = cbor2.dumps(_normalize_cbor_types(header_array))
+
+    header_body = header_array[0]
+    if not hasattr(header_body, "__getitem__"):
+        raise ValueError(f"Expected header_body as array, got {type(header_body).__name__}")
+
+    # Convert to list for consistent indexing
+    if not isinstance(header_body, list):
+        header_body = list(header_body)
 
     if era in _TWO_VRF_ERAS:
         return _decode_header_body_shelley(header_body, era, header_cbor)
