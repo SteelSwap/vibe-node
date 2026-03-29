@@ -368,29 +368,15 @@ def forge_block(
     )
 
     # Step 8: Assemble full block for storage.
-    # Haskell's Shelley block on disk is [era_tag, block_body] where
-    # block_body uses encCBORGroup (4 consecutive items, NOT an array).
-    # The wire format for a Shelley block is:
-    #   CBOR array(5): [header, tx_bodies, tx_witnesses, aux_data, invalid_txs]
-    # wrapped in [era_tag, ...] for the HFC.
+    # Format: [era_tag, [header, bodies, wits, aux, isvalid]]
+    # Built by concatenating raw CBOR bytes directly — no decode/re-encode.
     #
-    # Haskell ref: ShelleyBlock serialization uses encCBOR which produces
-    #   encodeListLen 5 <> header <> encCBORGroup body
-    # i.e., a 5-element array: header + 4 body parts.
-    #
-    # For storage, we produce [era_tag, [header, bodies, wits, aux, isvalid]]
-    # matching how received Haskell blocks are stored in VolatileDB.
-    full_block = cbor2.dumps([
-        7,  # Conway era tag
-        [
-            header_array,  # [header_body, kes_signature]
-            cbor2.loads(bodies_bytes),  # tx bodies array
-            cbor2.loads(wits_bytes),  # tx witness sets array
-            cbor2.loads(auxdata_bytes),  # aux data map
-            cbor2.loads(isvalid_bytes),  # invalid tx indices
-        ],
-    ])
-    full_block_cbor = full_block
+    # CBOR structure:
+    #   82         array(2)  — [era_tag, block_body]
+    #   07         uint(7)   — Conway era
+    #   85         array(5)  — [header, bodies, wits, aux, isvalid]
+    #   <header_cbor> <bodies_bytes> <wits_bytes> <auxdata_bytes> <isvalid_bytes>
+    full_block_cbor = b'\x82\x07\x85' + header_cbor + bodies_bytes + wits_bytes + auxdata_bytes + isvalid_bytes
 
     logger.debug(
         "forge_block: block #%d slot=%d txs=%d header=%d body=%d hash=%s",

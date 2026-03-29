@@ -192,7 +192,7 @@ class VolatileDB:
     # Cardano-specific VolatileDB operations
     # -------------------------------------------------------------------
 
-    async def add_block(
+    def add_block(
         self,
         block_hash: bytes,
         slot: int,
@@ -203,11 +203,9 @@ class VolatileDB:
     ) -> None:
         """Store a block with full metadata, updating all indices.
 
-        This is the primary insertion method.  It updates:
-        - The block store (hash -> CBOR bytes)
-        - The metadata index (hash -> BlockInfo)
-        - The successor map (predecessor -> [successors])
-        - The max slot tracker
+        This is synchronous — all operations are in-memory dict updates.
+        Disk writes are buffered and flushed synchronously when the
+        batch is full.
 
         Haskell reference:
             Ouroboros.Consensus.Storage.VolatileDB.Impl.putBlock
@@ -243,15 +241,11 @@ class VolatileDB:
         if slot > self._max_slot:
             self._max_slot = slot
 
-        # Buffer disk writes — flush every N blocks for I/O efficiency.
-        # Flush runs in a thread pool to avoid blocking the event loop
-        # during the batch of file open/write/close syscalls.
+        # Buffer disk writes — flush synchronously when batch is full.
         if self._db_dir is not None:
             self._write_buffer.append((block_hash, cbor_bytes))
             if len(self._write_buffer) >= self._write_batch_size:
-                import asyncio
-
-                await asyncio.to_thread(self._flush_writes)
+                self._flush_writes()
 
         logger.debug(
             "VolatileDB: added block %s at slot %d (predecessor: %s)",
@@ -260,7 +254,7 @@ class VolatileDB:
             predecessor_hash.hex()[:16],
         )
 
-    async def get_block(self, block_hash: bytes) -> bytes | None:
+    def get_block(self, block_hash: bytes) -> bytes | None:
         """Look up a block by hash.
 
         Alias for :meth:`get` with a more descriptive name.
@@ -273,7 +267,7 @@ class VolatileDB:
         """
         return self._blocks.get(block_hash)
 
-    async def get_block_info(self, block_hash: bytes) -> BlockInfo | None:
+    def get_block_info(self, block_hash: bytes) -> BlockInfo | None:
         """Retrieve metadata for a block without the full CBOR payload.
 
         Args:
@@ -309,7 +303,7 @@ class VolatileDB:
         """
         return self._max_slot
 
-    async def remove_block(self, block_hash: bytes) -> bool:
+    def remove_block(self, block_hash: bytes) -> bool:
         """Remove a single block from the store and all indices.
 
         Used when promoting a block to the ImmutableDB.
@@ -322,7 +316,7 @@ class VolatileDB:
         """
         return self._remove_block(block_hash)
 
-    async def gc(self, immutable_tip_slot: int) -> int:
+    def gc(self, immutable_tip_slot: int) -> int:
         """Garbage-collect all blocks with slot <= immutable_tip_slot.
 
         After the immutable tip advances, blocks at or before that slot
@@ -348,7 +342,7 @@ class VolatileDB:
         )
         return len(to_remove)
 
-    async def get_all_block_info(self) -> dict[bytes, BlockInfo]:
+    def get_all_block_info(self) -> dict[bytes, BlockInfo]:
         """Return metadata for all blocks in the store.
 
         Useful for chain selection which needs to scan all volatile blocks

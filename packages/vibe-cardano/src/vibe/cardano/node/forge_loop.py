@@ -259,44 +259,18 @@ def forge_loop(
                 kes_sk = evolved
             _current_kes_period = new_kes_period
 
-        # --- STM transaction: read state + check + forge ---
-        # Reads tip, nonce, stake via TVars. If any change between
-        # read and commit (e.g., header processing on Thread 2),
-        # the transaction retries automatically.
-        # Haskell ref: the forge loop uses STM to read getCurrentChain
-        # and tickChainDepState atomically.
-        from vibe.core.stm import atomically
-
-        def _forge_tx(tx):
-            """STM transaction: read shared state, check leadership, forge."""
-            # Read tip from ChainDB TVar
-            tip_val = tx.read(chain_db.tip_tvar) if chain_db is not None else None
-            if tip_val is not None:
-                # Haskell uses 3k/f as the syncing threshold. With
-                # activeSlotsCoeff=0.1 and k=10 that's 300 seconds.
-                # Using ceil(3k/f) slots to match Haskell's maxRollbacks.
-                max_behind = int(3 * config.security_param / config.active_slot_coeff)
-                if slot - tip_val.slot > max_behind:
-                    return None  # Still syncing
-            elif slot > 10:
-                return None
-
-            # Read nonce + stake from NodeKernel TVars
-            nonce_val = tx.read(chain_db.praos_nonce_tvar) if chain_db is not None else epoch_nonce
-            stake_val = tx.read(node_kernel.stake_tvar) if node_kernel is not None else {}
-
-            return {
-                "tip": tip_val,
-                "nonce": nonce_val,
-                "stake": stake_val,
-            }
-
-        snapshot = atomically(_forge_tx)
-        if snapshot is None:
+        # --- Read shared state via TVar.value (no STM overhead) ---
+        # These are read-only, non-transactional reads. The chain
+        # selection thread serializes all writes, so the values are
+        # always internally consistent. Direct .value reads avoid
+        # the 7 lock acquisitions of a full STM transaction.
+        tip_snap = chain_db.tip_tvar.value if chain_db is not None else None
+        if tip_snap is not None:
+            max_behind = int(3 * config.security_param / config.active_slot_coeff)
+            if slot - tip_snap.slot > max_behind:
+                continue  # Still syncing
+        elif slot > 10:
             continue
-
-        # Extract snapshot values
-        tip_snap = snapshot["tip"]
         if tip_snap is not None:
             # Epoch boundary guard: if the forge slot is in a newer epoch
             # than the tip AND the nonce hasn't been updated yet, the
@@ -326,8 +300,8 @@ def forge_loop(
             prev_header_hash = tip_snap.block_hash
             prev_block_number = tip_snap.block_number
 
-        epoch_nonce = snapshot["nonce"]
-        stake_snap = snapshot["stake"]
+        epoch_nonce = chain_db.praos_nonce_tvar.value if chain_db is not None else epoch_nonce
+        stake_snap = node_kernel.stake_tvar.value if node_kernel is not None else {}
         if stake_snap:
             pool_stake = stake_snap.get(pool_id, 0)
             total_stake = sum(stake_snap.values())
@@ -385,7 +359,7 @@ def forge_loop(
 
             # --- Store forged block ---
             if chain_db is not None:
-                result = chain_db.add_block(
+                result = chain_db.add_block_inline(
                     slot=forged.block.slot,
                     block_hash=forged.block.block_hash,
                     predecessor_hash=forged_predecessor,

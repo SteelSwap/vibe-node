@@ -205,7 +205,7 @@ class ChainFollower:
             t_wait_start = time.monotonic()
             try:
                 await asyncio.wait_for(
-                    self._async_event.wait(), timeout=30.0,
+                    self._async_event.wait(), timeout=5.0,
                 )
             except TimeoutError:
                 pass

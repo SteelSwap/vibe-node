@@ -837,24 +837,6 @@ async def run_chain_sync_server(
     )
 
     client_point: PointOrOrigin = ORIGIN
-    last_sent_block_no: int | None = None  # Track for UnexpectedBlockNo prevention
-
-    def _extract_block_no(header_cbor: Any) -> int | None:
-        """Extract block_number from wrapped header CBOR."""
-        try:
-            if isinstance(header_cbor, (list, tuple)) and len(header_cbor) >= 2:
-                inner = header_cbor[1]
-                raw = inner.value if hasattr(inner, 'value') else inner
-                if isinstance(raw, bytes):
-                    import cbor2pure as _cbor2
-                    decoded = _cbor2.loads(raw)
-                    if isinstance(decoded, (list, tuple)):
-                        hdr_body = decoded[0]
-                        if isinstance(hdr_body, (list, tuple)):
-                            return hdr_body[0]
-        except Exception:
-            pass
-        return None
 
     logger.debug("Chain-sync server started (follower=%s)",
                   follower.id if follower else "none")
@@ -894,17 +876,8 @@ async def run_chain_sync_server(
                 action = "await"
 
             if action == "roll_forward" and header is not None:
-                hdr_bn = _extract_block_no(header)
-                logger.debug("ChainSync.Server.BnCheck: hdr_bn=%s last=%s", hdr_bn, last_sent_block_no)
-                if hdr_bn is not None and last_sent_block_no is not None:
-                    if hdr_bn != last_sent_block_no + 1:
-                        logger.warning(
-                            "ChainSync.Server.BlockNoSkip: last=%d hdr=%d",
-                            last_sent_block_no, hdr_bn,
-                        )
                 if follower is None:
                     client_point = point  # type: ignore[assignment]
-                last_sent_block_no = hdr_bn
                 t_send_start = time.monotonic()
                 await runner.send_message(CsMsgRollForward(header=header, tip=tip))
                 t_send_done = time.monotonic()
@@ -917,19 +890,9 @@ async def run_chain_sync_server(
             elif action == "roll_backward" and point is not None:
                 if follower is None:
                     client_point = point
-                # Find the block_number at the rollback point so we can
-                # track what Haskell expects next. The client resets its
-                # tip to this point's block_number.
-                rollback_bn = None
-                if follower is not None and hasattr(point, 'hash'):
-                    frag, frag_idx = follower._chain_db.fragment_tvar.value
-                    rb_idx = frag_idx.get(point.hash)
-                    if rb_idx is not None and rb_idx < len(frag):
-                        rollback_bn = frag[rb_idx].block_number
-                last_sent_block_no = rollback_bn
                 logger.info(
-                    "ChainSync.Server.RollBack: to_slot=%s rollback_bn=%s",
-                    getattr(point, 'slot', '?'), rollback_bn,
+                    "ChainSync.Server.RollBack: to_slot=%s",
+                    getattr(point, 'slot', '?'),
                 )
                 await runner.send_message(CsMsgRollBackward(point=point, tip=tip))
             elif action == "await":
@@ -963,18 +926,10 @@ async def run_chain_sync_server(
                     if action2 == "roll_forward" and header2 is not None:
                         if follower is None:
                             client_point = point2  # type: ignore[assignment]
-                        last_sent_block_no = _extract_block_no(header2)
                         await runner.send_message(CsMsgRollForward(header=header2, tip=tip2))
                     elif action2 == "roll_backward" and point2 is not None:
                         if follower is None:
                             client_point = point2
-                        rollback_bn2 = None
-                        if follower is not None and hasattr(point2, 'hash'):
-                            frag2, frag_idx2 = follower._chain_db.fragment_tvar.value
-                            rb_idx2 = frag_idx2.get(point2.hash)
-                            if rb_idx2 is not None and rb_idx2 < len(frag2):
-                                rollback_bn2 = frag2[rb_idx2].block_number
-                        last_sent_block_no = rollback_bn2
                         await runner.send_message(CsMsgRollBackward(point=point2, tip=tip2))
                 except (asyncio.CancelledError, Exception) as exc:
                     logger.debug(

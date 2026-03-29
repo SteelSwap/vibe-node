@@ -200,6 +200,11 @@ class ChainDB:
         self._ledger_seq: LedgerSeq | None = None
         self.praos_nonce_tvar: TVar = TVar(None)  # epoch nonce bytes | None
 
+        # Lock serializing all _process_block calls. Acquired by both
+        # the chain-sel runner (for received blocks) and the forge loop
+        # (for inline-processed forged blocks).
+        self._chain_sel_lock = threading.Lock()
+
         # Chain selection queue — serializes all add_block processing
         # through a single thread. Haskell ref: cdbChainSelQueue (TBQueue)
         import queue
@@ -668,7 +673,7 @@ class ChainDB:
             return ChainSelectionResult(adopted=False, new_tip=tip_tuple)
 
         # --- Store in VolatileDB ---
-        await self.volatile_db.add_block(
+        self.volatile_db.add_block(
             block_hash=block_hash,
             slot=slot,
             predecessor_hash=predecessor_hash,
@@ -926,17 +931,18 @@ class ChainDB:
                     if entry is None:
                         break  # Shutdown sentinel
                     try:
-                        result = loop.run_until_complete(
-                            self._process_block(
-                                slot=entry.slot,
-                                block_hash=entry.block_hash,
-                                predecessor_hash=entry.predecessor_hash,
-                                block_number=entry.block_number,
-                                cbor_bytes=entry.cbor_bytes,
-                                header_cbor=entry.header_cbor,
-                                vrf_output=entry.vrf_output,
+                        with self._chain_sel_lock:
+                            result = loop.run_until_complete(
+                                self._process_block(
+                                    slot=entry.slot,
+                                    block_hash=entry.block_hash,
+                                    predecessor_hash=entry.predecessor_hash,
+                                    block_number=entry.block_number,
+                                    cbor_bytes=entry.cbor_bytes,
+                                    header_cbor=entry.header_cbor,
+                                    vrf_output=entry.vrf_output,
+                                )
                             )
-                        )
                         entry.result = result
                     except Exception as exc:
                         entry.error = exc
@@ -992,6 +998,47 @@ class ChainDB:
         assert entry.result is not None
         return entry.result
 
+    def add_block_inline(
+        self,
+        slot: int,
+        block_hash: bytes,
+        predecessor_hash: bytes,
+        block_number: int,
+        cbor_bytes: bytes,
+        header_cbor: Any = None,
+        vrf_output: bytes | None = None,
+    ) -> ChainSelectionResult:
+        """Process a block inline on the caller's thread (no queue hop).
+
+        Used by the forge loop for self-forged blocks. Acquires
+        _chain_sel_lock to serialize with the queue-based runner.
+        Avoids the queue latency that causes missed slot checks.
+
+        The caller MUST be on a thread that can block (not an asyncio
+        event loop). The forge loop runs on the main OS thread, so
+        this is safe.
+        """
+        import asyncio as _asyncio
+
+        with self._chain_sel_lock:
+            # Use a temporary event loop for the async _process_block.
+            # This is cheap (~10us) and avoids sharing the runner's loop.
+            loop = _asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(
+                    self._process_block(
+                        slot=slot,
+                        block_hash=block_hash,
+                        predecessor_hash=predecessor_hash,
+                        block_number=block_number,
+                        cbor_bytes=cbor_bytes,
+                        header_cbor=header_cbor,
+                        vrf_output=vrf_output,
+                    )
+                )
+            finally:
+                loop.close()
+
     async def add_block_async(
         self,
         **kwargs: Any,
@@ -1018,7 +1065,7 @@ class ChainDB:
         Haskell reference:
             Ouroboros.Consensus.Storage.ChainDB.API.getBlockComponent
         """
-        result = await self.volatile_db.get_block(block_hash)
+        result = self.volatile_db.get_block(block_hash)
         if result is not None:
             return result
         return await self.immutable_db.get_block(block_hash)
@@ -1322,7 +1369,7 @@ class ChainDB:
         Haskell reference:
             Ouroboros.Consensus.Storage.ChainDB.Impl.copyToImmutableDB
         """
-        all_info = await self.volatile_db.get_all_block_info()
+        all_info = self.volatile_db.get_all_block_info()
         to_promote: list[BlockInfo] = [
             info for info in all_info.values() if info.slot <= new_immutable_slot
         ]
@@ -1330,7 +1377,7 @@ class ChainDB:
 
         copied = 0
         for info in to_promote:
-            cbor_bytes = await self.volatile_db.get_block(info.block_hash)
+            cbor_bytes = self.volatile_db.get_block(info.block_hash)
             if cbor_bytes is None:
                 continue
             try:
@@ -1349,7 +1396,7 @@ class ChainDB:
                     exc_info=True,
                 )
 
-        gc_count = await self.volatile_db.gc(new_immutable_slot)
+        gc_count = self.volatile_db.gc(new_immutable_slot)
         logger.debug(
             "ChainDB: GC removed %d volatile blocks at or below slot %d",
             gc_count,
@@ -1374,7 +1421,7 @@ class ChainDB:
 
         new_imm_block_number = tip_bn - self._k
 
-        all_info = await self.volatile_db.get_all_block_info()
+        all_info = self.volatile_db.get_all_block_info()
         target_block: BlockInfo | None = None
         for info in all_info.values():
             if info.block_number == new_imm_block_number:
@@ -1410,9 +1457,9 @@ class ChainDB:
 
     async def wipe_volatile(self) -> None:
         """Wipe the volatile DB, reverting the chain to the immutable tip."""
-        all_info = await self.volatile_db.get_all_block_info()
+        all_info = self.volatile_db.get_all_block_info()
         for bh in list(all_info.keys()):
-            await self.volatile_db.remove_block(bh)
+            self.volatile_db.remove_block(bh)
 
         imm_tip_slot = self.immutable_db.get_tip_slot()
         imm_tip_hash = self.immutable_db.get_tip_hash()
