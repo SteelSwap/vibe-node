@@ -817,6 +817,32 @@ class PeerManager:
                 hdr_cbor = cbor2.dumps(_normalize_cbor_types(hdr_arr))
                 block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
 
+            # Apply delegation certs (producer path)
+            tx_bodies_raw = block_body[1] if len(block_body) > 1 else []
+            has_txs = hasattr(tx_bodies_raw, "__len__") and len(tx_bodies_raw) > 0
+            if has_txs and self._node_kernel is not None:
+                try:
+                    from vibe.cardano.serialization.transaction import decode_block_body_from_array
+                    body = decode_block_body_from_array(block_body, era, skip_pycardano=True)
+                    if body and body.transactions:
+                        epoch = slot // self._config.epoch_length
+                        self._node_kernel.apply_delegation_certs(body.transactions, epoch)
+                except Exception:
+                    pass
+
+            # Detect epoch boundary and recompute stake distribution
+            epoch = slot // self._config.epoch_length
+            if not hasattr(self, '_last_inline_epoch'):
+                self._last_inline_epoch = epoch
+            if epoch > self._last_inline_epoch:
+                self._last_inline_epoch = epoch
+                if self._node_kernel is not None:
+                    self._node_kernel.update_stake_distribution({})
+                    logger.info(
+                        "Epoch %d: stake distribution updated (%d pools)",
+                        epoch, len(self._node_kernel.stake_distribution),
+                    )
+
             if chain_db is not None:
                 header_cbor_wrapped = [
                     max(0, era_tag - 1) if era_tag >= 2 else 0,
@@ -1029,6 +1055,44 @@ class PeerManager:
                             logger.warning(
                                 "Ledger apply error at slot %d: %s", slot, exc,
                             )
+
+                # Apply delegation certificates for stake distribution.
+                # Haskell tracks these in the ledger state and computes
+                # a PoolDistr at each epoch boundary (mark/set/go rotation).
+                # We apply certs to NodeKernel's delegation state and
+                # recompute the stake distribution at epoch boundaries.
+                if body and body.transactions and self._node_kernel is not None:
+                    try:
+                        epoch = slot // self._config.epoch_length
+                        self._node_kernel.apply_delegation_certs(
+                            body.transactions, epoch,
+                        )
+                    except Exception as exc:
+                        logger.debug(
+                            "Delegation cert error at slot %d: %s", slot, exc,
+                        )
+
+                # Detect epoch boundary and recompute stake distribution.
+                # Haskell uses nesPd = ssStakeMarkPoolDistr from the NEWEPOCH
+                # rule. We approximate by recomputing from delegation state
+                # + UTxO at each epoch transition.
+                epoch = slot // self._config.epoch_length
+                if not hasattr(self, '_last_sync_epoch'):
+                    self._last_sync_epoch = epoch
+                if epoch > self._last_sync_epoch:
+                    self._last_sync_epoch = epoch
+                    if self._node_kernel is not None:
+                        utxo_stakes = {}
+                        if chain_db is not None and chain_db.ledger_db is not None:
+                            try:
+                                utxo_stakes = chain_db.ledger_db.get_stake_by_address()
+                            except Exception:
+                                pass
+                        self._node_kernel.update_stake_distribution(utxo_stakes)
+                        logger.info(
+                            "Epoch %d: stake distribution updated (%d pools)",
+                            epoch, len(self._node_kernel.stake_distribution),
+                        )
 
                 # Store in ChainDB (chain selection handles out-of-order)
                 if chain_db is not None:

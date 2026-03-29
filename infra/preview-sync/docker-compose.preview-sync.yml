@@ -46,10 +46,18 @@ services:
       VIBE_ERROR_LOG: "/results/errors.log"
       VIBE_PERMISSIVE_VALIDATION: "true"
       VIBE_STRICT_SYNC: "true"
+      # Block production keys
+      VIBE_VRF_KEY: "/keys/vrf.skey"
+      VIBE_VRF_VKEY: "/keys/vrf.vkey"
+      VIBE_KES_KEY: "/keys/kes.skey"
+      VIBE_OPCERT: "/keys/opcert.cert"
+      VIBE_COLD_SKEY: "/keys/cold.skey"
+      VIBE_COLD_VKEY: "/keys/cold.vkey"
     volumes:
       - vibe-preview-data:/data
       - preview-genesis:/genesis:ro
       - ./results:/results
+      - ./keys:/keys:ro
     ports:
       - "${VIBE_NODE_PORT:-30010}:3001"
     depends_on:
