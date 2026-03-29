@@ -872,18 +872,16 @@ class ChainDB:
             rollback_depth, len(self._chain_fragment),
         )
 
-        # Haskell-matching ChainDB events for log correlation
-        hash_hex = candidate_hash.hex()[:16]
+        # Haskell-matching ChainDB events for log correlation.
+        # At tip: match Haskell's format exactly (full hash).
+        # During sync: debug per-block, periodic info summaries.
+        full_hash = candidate_hash.hex()
         if rollback_depth > 0:
             logger.info(
-                "ChainDB.AddBlockEvent.SwitchedToAFork: tip=%s slot=%d block_no=%d rollback=%d",
-                hash_hex, ct_info.slot, candidate_bn, rollback_depth,
+                "Switched to a fork, new tip: %s at slot %d",
+                full_hash, ct_info.slot,
             )
         else:
-            # During bulk sync (many blocks per second), log at debug
-            # with periodic info summaries. At the tip (one block every
-            # few seconds), log every block at info.
-            # Track blocks-per-second: if >10 bps, we're syncing.
             now = time.monotonic()
             self._block_count_since_log = getattr(self, '_block_count_since_log', 0) + 1
             last_log_time = getattr(self, '_last_progress_log', 0.0)
@@ -892,23 +890,23 @@ class ChainDB:
                 # Bulk sync — summarize
                 bps = self._block_count_since_log / elapsed
                 logger.info(
-                    "ChainDB.SyncProgress: block_no=%d slot=%d tip=%s %.0f blocks/sec",
-                    candidate_bn, ct_info.slot, hash_hex, bps,
+                    "Syncing, block_no=%d slot=%d (%.0f blocks/sec)",
+                    candidate_bn, ct_info.slot, bps,
                 )
                 self._block_count_since_log = 0
                 self._last_progress_log = now
             elif elapsed >= 10.0 or last_log_time == 0:
-                # At tip or first block — log normally
+                # At tip — match Haskell format
                 logger.info(
-                    "ChainDB.AddBlockEvent.AddedToCurrentChain: tip=%s slot=%d block_no=%d",
-                    hash_hex, ct_info.slot, candidate_bn,
+                    "Chain extended, new tip: %s at slot %d",
+                    full_hash, ct_info.slot,
                 )
                 self._block_count_since_log = 0
                 self._last_progress_log = now
             else:
                 logger.debug(
-                    "ChainDB.AddBlockEvent.AddedToCurrentChain: tip=%s slot=%d block_no=%d",
-                    hash_hex, ct_info.slot, candidate_bn,
+                    "Chain extended, new tip: %s at slot %d",
+                    full_hash, ct_info.slot,
                 )
 
         self._tip_generation += 1
