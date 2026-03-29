@@ -659,6 +659,8 @@ async def run_chain_sync(
     request_next_cbor = codec.encode(CsMsgRequestNext())
     in_flight = 0
     _recv_buf = b""
+    _pipeline_space = asyncio.Event()
+    _pipeline_space.set()  # Initially has space
 
     async def _pipeline_sender():
         """Send MsgRequestNext up to pipeline depth."""
@@ -670,7 +672,8 @@ async def run_chain_sync(
                 await channel.send(request_next_cbor)
                 in_flight += 1
             else:
-                await asyncio.sleep(0.001)  # yield, wait for responses
+                _pipeline_space.clear()
+                await _pipeline_space.wait()  # Wake when receiver decrements
 
     async def _pipeline_receiver():
         """Receive and dispatch responses."""
@@ -726,12 +729,14 @@ async def run_chain_sync(
                     continue
                 # Now decrement for the actual response
                 in_flight -= 1
+                _pipeline_space.set()  # Wake sender
                 if isinstance(response2, CsMsgRollForward):
                     await on_roll_forward(response2.header, response2.tip)
                 elif isinstance(response2, CsMsgRollBackward):
                     await on_roll_backward(response2.point, response2.tip)
             else:
                 in_flight -= 1
+                _pipeline_space.set()  # Wake sender
                 if isinstance(response, CsMsgRollForward):
                     await on_roll_forward(response.header, response.tip)
                 elif isinstance(response, CsMsgRollBackward):

@@ -561,15 +561,16 @@ class PeerManager:
                 while not stop_event.is_set():
                     batch: list[Point] = []
                     try:
-                        point = await asyncio.wait_for(fetch_queue.get(), timeout=0.1)
-                        batch.append(point)
-                        while len(batch) < 500:
-                            try:
-                                batch.append(fetch_queue.get_nowait())
-                            except asyncio.QueueEmpty:
-                                break
+                        point = await asyncio.wait_for(fetch_queue.get(), timeout=0.5)
                     except TimeoutError:
                         continue
+                    batch.append(point)
+                    # Drain any additional points already queued
+                    while len(batch) < 500:
+                        try:
+                            batch.append(fetch_queue.get_nowait())
+                        except asyncio.QueueEmpty:
+                            break
                     if batch:
                         await shared_range_queue.put((batch[0], batch[-1]))
 
@@ -891,7 +892,7 @@ class PeerManager:
 
         while not stop_event.is_set():
             try:
-                block_cbor = await asyncio.wait_for(block_queue.get(), timeout=0.1)
+                block_cbor = await asyncio.wait_for(block_queue.get(), timeout=0.5)
             except TimeoutError:
                 continue
 

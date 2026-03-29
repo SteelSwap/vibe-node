@@ -611,7 +611,9 @@ async def run_block_fetch_continuous(
                 break
 
             try:
-                point_from, point_to = await asyncio.wait_for(range_queue.get(), timeout=0.1)
+                point_from, point_to = await asyncio.wait_for(
+                    range_queue.get(), timeout=0.5
+                )
             except TimeoutError:
                 continue
 
@@ -721,7 +723,7 @@ async def run_block_fetch_pipelined(
 
                 try:
                     point_from, point_to = await asyncio.wait_for(
-                        range_queue.get(), timeout=0.1
+                        range_queue.get(), timeout=0.5
                     )
                 except TimeoutError:
                     continue
@@ -852,11 +854,10 @@ async def run_block_fetch_pipelined(
 
                 try:
                     block_cbor = await asyncio.wait_for(
-                        block_queue.get(), timeout=0.1
+                        block_queue.get(), timeout=0.5
                     )
                 except TimeoutError:
                     continue
-
                 await on_block_received(block_cbor)
         except asyncio.CancelledError:
             # Drain remaining
@@ -898,7 +899,7 @@ async def run_block_fetch_pipelined(
             if stop_event is not None:
                 stop_event.set()
             try:
-                await asyncio.wait_for(processor_task, timeout=5.0)
+                await asyncio.wait_for(processor_task, timeout=0.5)
             except (TimeoutError, asyncio.CancelledError):
                 processor_task.cancel()
                 try:
