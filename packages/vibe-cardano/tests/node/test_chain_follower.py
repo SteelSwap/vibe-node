@@ -26,7 +26,10 @@ def chain_db(tmp_path):
     vol = VolatileDB(db_dir=None)
     imm = ImmutableDB(base_dir=tmp_path / "imm")
     led = LedgerDB()
-    return ChainDB(imm, vol, led, k=10)
+    db = ChainDB(imm, vol, led, k=10)
+    db.start_chain_sel_runner()
+    yield db
+    db.stop_chain_sel_runner()
 
 
 class TestFollowerBasic:
@@ -58,7 +61,7 @@ class TestFollowerInstruction:
     @pytest.mark.asyncio
     async def test_roll_forward(self, chain_db):
         f = chain_db.new_follower()
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),
@@ -74,7 +77,7 @@ class TestFollowerInstruction:
     @pytest.mark.asyncio
     async def test_advances_through_chain(self, chain_db):
         f = chain_db.new_follower()
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),
@@ -82,7 +85,7 @@ class TestFollowerInstruction:
             cbor_bytes=b"b1",
             header_cbor=_hdr(1),
         )
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=2,
             block_hash=_hash(2),
             predecessor_hash=_hash(1),
@@ -101,7 +104,7 @@ class TestFollowerInstruction:
     async def test_two_followers_independent(self, chain_db):
         f1 = chain_db.new_follower()
         f2 = chain_db.new_follower()
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),
@@ -109,7 +112,7 @@ class TestFollowerInstruction:
             cbor_bytes=b"b1",
             header_cbor=_hdr(1),
         )
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=2,
             block_hash=_hash(2),
             predecessor_hash=_hash(1),
@@ -130,7 +133,7 @@ class TestFollowerForkSwitch:
     @pytest.mark.asyncio
     async def test_rollback_on_fork(self, chain_db):
         f = chain_db.new_follower()
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),
@@ -138,7 +141,7 @@ class TestFollowerForkSwitch:
             cbor_bytes=b"b1",
             header_cbor=_hdr(1),
         )
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=2,
             block_hash=_hash(2),
             predecessor_hash=_hash(1),
@@ -149,7 +152,7 @@ class TestFollowerForkSwitch:
         await f.instruction()  # block 1
         await f.instruction()  # block 2
         # Fork: 1 → 3 (better, block_number=3)
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=3,
             block_hash=_hash(3),
             predecessor_hash=_hash(1),
@@ -168,7 +171,7 @@ class TestFollowerForkSwitch:
     async def test_unaffected_follower_continues(self, chain_db):
         f_affected = chain_db.new_follower()
         f_safe = chain_db.new_follower()
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),
@@ -176,7 +179,7 @@ class TestFollowerForkSwitch:
             cbor_bytes=b"b1",
             header_cbor=_hdr(1),
         )
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=2,
             block_hash=_hash(2),
             predecessor_hash=_hash(1),
@@ -187,7 +190,7 @@ class TestFollowerForkSwitch:
         await f_affected.instruction()  # block 1
         await f_affected.instruction()  # block 2
         await f_safe.instruction()  # block 1 only
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=3,
             block_hash=_hash(3),
             predecessor_hash=_hash(1),
@@ -209,7 +212,7 @@ class TestFollowerFindIntersect:
     @pytest.mark.asyncio
     async def test_intersect_with_known_point(self, chain_db):
         f = chain_db.new_follower()
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),
@@ -217,7 +220,7 @@ class TestFollowerFindIntersect:
             cbor_bytes=b"b1",
             header_cbor=_hdr(1),
         )
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=2,
             block_hash=_hash(2),
             predecessor_hash=_hash(1),
@@ -237,7 +240,7 @@ class TestFollowerFindIntersect:
     @pytest.mark.asyncio
     async def test_intersect_falls_back_to_origin(self, chain_db):
         f = chain_db.new_follower()
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=1,
             block_hash=_hash(1),
             predecessor_hash=_hash(0),

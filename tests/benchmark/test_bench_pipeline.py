@@ -62,23 +62,21 @@ def chain_db(tmp_path):
 @pytest.fixture
 def populated_chain_db(chain_db):
     """ChainDB with 50 blocks already added."""
-
-    async def _populate():
-        prev = _hash(0)
-        for i in range(1, 51):
-            await chain_db.add_block(
-                slot=i * 10,
-                block_hash=_hash(i),
-                predecessor_hash=prev,
-                block_number=i,
-                cbor_bytes=_block_cbor(i),
-                header_cbor=_hdr(i),
-                vrf_output=_vrf(i),
-            )
-            prev = _hash(i)
-
-    asyncio.run(_populate())
-    return chain_db
+    chain_db.start_chain_sel_runner()
+    prev = _hash(0)
+    for i in range(1, 51):
+        chain_db.add_block(
+            slot=i * 10,
+            block_hash=_hash(i),
+            predecessor_hash=prev,
+            block_number=i,
+            cbor_bytes=_block_cbor(i),
+            header_cbor=_hdr(i),
+            vrf_output=_vrf(i),
+        )
+        prev = _hash(i)
+    yield chain_db
+    chain_db.stop_chain_sel_runner()
 
 
 # ---------------------------------------------------------------------------
@@ -97,16 +95,14 @@ class TestChainDBAddBlock:
         def add_one():
             i = counter[0]
             counter[0] += 1
-            asyncio.run(
-                db.add_block(
-                    slot=i * 10,
-                    block_hash=_hash(i),
-                    predecessor_hash=_hash(i - 1),
-                    block_number=i,
-                    cbor_bytes=_block_cbor(i),
-                    header_cbor=_hdr(i),
-                    vrf_output=_vrf(i),
-                )
+            db.add_block(
+                slot=i * 10,
+                block_hash=_hash(i),
+                predecessor_hash=_hash(i - 1),
+                block_number=i,
+                cbor_bytes=_block_cbor(i),
+                header_cbor=_hdr(i),
+                vrf_output=_vrf(i),
             )
 
         benchmark(add_one)
@@ -120,16 +116,14 @@ class TestChainDBAddBlock:
             i = counter[0]
             counter[0] += 1
             # Fork from block 45 (5 blocks of rollback)
-            asyncio.run(
-                db.add_block(
-                    slot=i * 10 + 5,
-                    block_hash=_hash(10000 + i),
-                    predecessor_hash=_hash(45),
-                    block_number=i,
-                    cbor_bytes=_block_cbor(i),
-                    header_cbor=_hdr(i),
-                    vrf_output=_vrf(10000 + i),
-                )
+            db.add_block(
+                slot=i * 10 + 5,
+                block_hash=_hash(10000 + i),
+                predecessor_hash=_hash(45),
+                block_number=i,
+                cbor_bytes=_block_cbor(i),
+                header_cbor=_hdr(i),
+                vrf_output=_vrf(10000 + i),
             )
 
         benchmark(add_fork)
@@ -142,16 +136,14 @@ class TestChainDBAddBlock:
         def add_tiebreak():
             i = counter[0]
             counter[0] += 1
-            asyncio.run(
-                db.add_block(
-                    slot=500 + i,
-                    block_hash=_hash(20000 + i),
-                    predecessor_hash=_hash(49),
-                    block_number=50,
-                    cbor_bytes=_block_cbor(50),
-                    header_cbor=_hdr(50),
-                    vrf_output=_vrf(20000 + i),
-                )
+            db.add_block(
+                slot=500 + i,
+                block_hash=_hash(20000 + i),
+                predecessor_hash=_hash(49),
+                block_number=50,
+                cbor_bytes=_block_cbor(50),
+                header_cbor=_hdr(50),
+                vrf_output=_vrf(20000 + i),
             )
 
         benchmark(add_tiebreak)
@@ -242,8 +234,7 @@ class TestFullPipeline:
             i = counter[0]
             counter[0] += 1
             # Receive block
-            asyncio.run(
-                db.add_block(
+            db.add_block(
                     slot=i * 10,
                     block_hash=_hash(i),
                     predecessor_hash=_hash(i - 1),
@@ -251,7 +242,6 @@ class TestFullPipeline:
                     cbor_bytes=_block_cbor(i),
                     header_cbor=_hdr(i),
                     vrf_output=_vrf(i),
-                )
             )
             # Serve to follower
             asyncio.run(follower.instruction())
@@ -270,8 +260,7 @@ class TestFullPipeline:
         times = []
         for i in range(51, 61):
             start = time.perf_counter_ns()
-            asyncio.run(
-                db.add_block(
+            db.add_block(
                     slot=i * 10,
                     block_hash=_hash(i),
                     predecessor_hash=_hash(i - 1),
@@ -279,7 +268,6 @@ class TestFullPipeline:
                     cbor_bytes=_block_cbor(i),
                     header_cbor=_hdr(i),
                     vrf_output=_vrf(i),
-                )
             )
             asyncio.run(follower.instruction())
             elapsed_ms = (time.perf_counter_ns() - start) / 1_000_000
@@ -397,6 +385,7 @@ class TestBlockDecodePipeline:
         imm = ImmutableDB(base_dir=tmp_path / "imm")
         led = LedgerDB()
         db = ChainDB(imm, vol, led, k=432)
+        db.start_chain_sel_runner()
 
         # Pre-build all blocks
         blocks = [self._make_babbage_block(i, num_txs=0) for i in range(1, 1001)]
@@ -410,8 +399,7 @@ class TestBlockDecodePipeline:
             era = Era(era_tag)
             hdr = decode_block_header_from_array(block_body, era)
             body = decode_block_body_from_array(block_body, era)
-            asyncio.run(
-                db.add_block(
+            db.add_block(
                     slot=hdr.slot,
                     block_hash=hdr.hash,
                     predecessor_hash=hdr.prev_hash or b"\x00" * 32,
@@ -419,7 +407,6 @@ class TestBlockDecodePipeline:
                     cbor_bytes=block_cbor,
                     header_cbor=_hdr(i + 1),
                     vrf_output=hdr.vrf_output,
-                )
             )
 
         elapsed = time.perf_counter() - start
@@ -441,6 +428,7 @@ class TestBlockDecodePipeline:
         imm = ImmutableDB(base_dir=tmp_path / "imm")
         led = LedgerDB()
         db = ChainDB(imm, vol, led, k=432)
+        db.start_chain_sel_runner()
 
         # Pre-build blocks with 14 txs each
         blocks = [self._make_babbage_block(i, num_txs=14) for i in range(1, 101)]
@@ -454,8 +442,7 @@ class TestBlockDecodePipeline:
             era = Era(era_tag)
             hdr = decode_block_header_from_array(block_body, era)
             body = decode_block_body_from_array(block_body, era)
-            asyncio.run(
-                db.add_block(
+            db.add_block(
                     slot=hdr.slot,
                     block_hash=hdr.hash,
                     predecessor_hash=hdr.prev_hash or b"\x00" * 32,
@@ -463,7 +450,6 @@ class TestBlockDecodePipeline:
                     cbor_bytes=block_cbor,
                     header_cbor=_hdr(i + 1),
                     vrf_output=hdr.vrf_output,
-                )
             )
 
         elapsed = time.perf_counter() - start

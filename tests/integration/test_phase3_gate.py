@@ -55,13 +55,14 @@ async def test_storage_engine_with_synthetic_chain(tmp_path, cardano_node_availa
         ledger_db=ledger_db,
         k=5,
     )
+    chain_db.start_chain_sel_runner()
 
     # Add 20 blocks
     prev = GENESIS_HASH
     for i in range(1, 21):
         bh = i.to_bytes(32, "big")
         block_data = f"block-{i}".encode().ljust(64, b"\x00")
-        await chain_db.add_block(
+        chain_db.add_block(
             slot=i,
             block_hash=bh,
             predecessor_hash=prev,
@@ -77,6 +78,8 @@ async def test_storage_engine_with_synthetic_chain(tmp_path, cardano_node_availa
     # Recent block from volatile
     recent = await chain_db.get_block(b"\x00" * 31 + b"\x14")
     assert recent is not None
+
+    chain_db.stop_chain_sel_runner()
 
 
 # ---------------------------------------------------------------------------

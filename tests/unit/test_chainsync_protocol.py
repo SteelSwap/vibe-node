@@ -815,8 +815,9 @@ class TestRunChainSync:
             # Should receive FindIntersect with Origin
             sent = await channel.drain()
             await channel.inject(encode_intersect_found(ORIGIN, GENESIS_TIP))
-            # Will get Done since stop is already set
-            await channel.drain()
+            # The pipelined sync loop checks stop_event before sending
+            # MsgRequestNext, so no Done message is sent. The server
+            # just needs to respond to the intersection request.
 
         server = asyncio.create_task(fake_server())
 

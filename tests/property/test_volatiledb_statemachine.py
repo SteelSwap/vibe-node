@@ -193,12 +193,12 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         else:
             pred = GENESIS_HASH
 
-        run_async(self._db.add_block(block_hash, slot, pred, block_number, cbor))
+        self._db.add_block(block_hash, slot, pred, block_number, cbor)
         self._model.add_block(block_hash, slot, pred, block_number, cbor)
         self._added_hashes.append(block_hash)
 
         # Immediate verification
-        result = run_async(self._db.get_block(block_hash))
+        result = self._db.get_block(block_hash)
         assert result == cbor
 
     @rule(data=st.data())
@@ -208,7 +208,7 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         idx = data.draw(st.integers(min_value=0, max_value=len(self._added_hashes) - 1))
         block_hash = self._added_hashes[idx]
 
-        real_result = run_async(self._db.get_block(block_hash))
+        real_result = self._db.get_block(block_hash)
         model_result = self._model.get_block(block_hash)
 
         assert real_result == model_result, (
@@ -223,7 +223,7 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         idx = data.draw(st.integers(min_value=0, max_value=len(self._added_hashes) - 1))
         block_hash = self._added_hashes[idx]
 
-        real_succs = run_async(self._db.get_successors(block_hash))
+        real_succs = self._db.get_successors(block_hash)
         model_succs = self._model.get_successors(block_hash)
 
         assert set(real_succs) == set(model_succs), (
@@ -242,7 +242,7 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
 
         gc_slot = data.draw(st.integers(min_value=0, max_value=max_slot + 2))
 
-        real_removed = run_async(self._db.gc(gc_slot))
+        real_removed = self._db.gc(gc_slot)
         model_removed = self._model.gc(gc_slot)
 
         assert real_removed == model_removed, (
@@ -256,7 +256,7 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
     @precondition(lambda self: not self._closed)
     def get_max_slot(self):
         """Verify both agree on max slot number."""
-        real_max = run_async(self._db.get_max_slot())
+        real_max = self._db.get_max_slot()
         model_max = self._model.max_slot
 
         assert real_max == model_max, f"max_slot mismatch: real={real_max}, model={model_max}"
@@ -292,7 +292,7 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         )
 
         # Verify max slot matches
-        real_max = run_async(self._db.get_max_slot())
+        real_max = self._db.get_max_slot()
         assert real_max == self._model.max_slot
 
     @rule(data=st.data())
@@ -310,14 +310,12 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         info, cbor = entry
         count_before = self._db.block_count
 
-        run_async(
-            self._db.add_block(
-                block_hash,
-                info.slot,
-                info.predecessor_hash,
-                info.block_number,
-                cbor,
-            )
+        self._db.add_block(
+            block_hash,
+            info.slot,
+            info.predecessor_hash,
+            info.block_number,
+            cbor,
         )
         # Model: re-add is idempotent (same hash overwrites same data)
         self._model.add_block(
@@ -349,7 +347,7 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         """real.max_slot == model.max_slot."""
         if self._closed:
             return
-        real_max = run_async(self._db.get_max_slot())
+        real_max = self._db.get_max_slot()
         model_max = self._model.max_slot
         assert real_max == model_max, f"Max slot: real={real_max}, model={model_max}"
 
@@ -359,7 +357,7 @@ class VolatileDBStateMachine(RuleBasedStateMachine):
         if self._closed:
             return
         for block_hash in self._model.blocks:
-            real_succs = run_async(self._db.get_successors(block_hash))
+            real_succs = self._db.get_successors(block_hash)
             model_succs = self._model.get_successors(block_hash)
             assert set(real_succs) == set(model_succs), (
                 f"Successor mismatch for {block_hash.hex()[:16]}: "

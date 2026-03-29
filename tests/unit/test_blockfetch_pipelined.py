@@ -24,6 +24,25 @@ POINT_B = Point(slot=100, hash=HASH_B)
 SAMPLE_BLOCK = b"\xde\xad" * 50
 
 
+def _tag24_wrapped(block_cbor: bytes) -> bytes:
+    """Return the CBOR Tag(24) + bstr encoding of block_cbor.
+
+    encode_block produces [4, Tag(24, bstr(block_cbor))]. The pipelined
+    receiver extracts element [1] as raw bytes, which includes the Tag 24
+    header and byte string header wrapping the block data.
+    """
+    n = len(block_cbor)
+    if n < 24:
+        bstr_hdr = bytes([0x40 | n])
+    elif n < 256:
+        bstr_hdr = bytes([0x58, n])
+    elif n < 65536:
+        bstr_hdr = bytes([0x59, n >> 8, n & 0xFF])
+    else:
+        bstr_hdr = bytes([0x5A, (n >> 24) & 0xFF, (n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF])
+    return b'\xd8\x18' + bstr_hdr + block_cbor
+
+
 class FakeChannel:
     """Mock mux channel that records sent bytes and feeds scripted responses."""
 
@@ -89,9 +108,9 @@ class TestPipelinedSender:
         decoded = cbor2.loads(channel.sent[0])
         assert decoded[0] == MSG_REQUEST_RANGE
 
-        # Verify: processor received the block
+        # Verify: processor received the block (wrapped in Tag 24)
         assert len(blocks_received) == 1
-        assert blocks_received[0] == SAMPLE_BLOCK
+        assert blocks_received[0] == _tag24_wrapped(SAMPLE_BLOCK)
 
 
 class TestPipelining:
@@ -329,7 +348,7 @@ class TestExternalBlockQueue:
 
         assert not block_queue.empty()
         block = block_queue.get_nowait()
-        assert block == SAMPLE_BLOCK
+        assert block == _tag24_wrapped(SAMPLE_BLOCK)
 
     @pytest.mark.asyncio
     async def test_range_lifecycle_callbacks(self):
@@ -419,4 +438,4 @@ class TestReassembly:
         await stopper
 
         assert len(blocks) == 1
-        assert blocks[0] == SAMPLE_BLOCK
+        assert blocks[0] == _tag24_wrapped(SAMPLE_BLOCK)

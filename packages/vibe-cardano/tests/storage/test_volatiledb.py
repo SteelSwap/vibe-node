@@ -56,7 +56,7 @@ async def test_volatiledb_max_blocks_per_file(tmp_path: Path) -> None:
         bh = _block_hash(i)
         hashes.append(bh)
         cbor = f"block-data-{i}".encode()
-        await db.add_block(
+        db.add_block(
             block_hash=bh,
             slot=i,
             predecessor_hash=prev_hash,
@@ -81,7 +81,7 @@ async def test_volatiledb_max_blocks_per_file(tmp_path: Path) -> None:
         assert data == f"block-data-{i}".encode()
 
     # After GC, files for removed blocks should be gone.
-    gc_count = await db.gc(immutable_tip_slot=3)
+    gc_count = db.gc(immutable_tip_slot=3)
     assert gc_count == 3  # blocks at slots 1, 2, 3
 
     remaining_files = list(db_dir.glob("*.block"))
@@ -104,7 +104,7 @@ async def test_add_and_get_block() -> None:
     bh = _block_hash(42)
     cbor = b"round-trip-payload"
 
-    await db.add_block(
+    db.add_block(
         block_hash=bh,
         slot=10,
         predecessor_hash=_genesis_hash(),
@@ -112,7 +112,7 @@ async def test_add_and_get_block() -> None:
         cbor_bytes=cbor,
     )
 
-    result = await db.get_block(bh)
+    result = db.get_block(bh)
     assert result == cbor
     assert db.block_count == 1
 
@@ -129,14 +129,14 @@ async def test_add_duplicate_block() -> None:
     bh = _block_hash(1)
     genesis = _genesis_hash()
 
-    await db.add_block(
+    db.add_block(
         block_hash=bh,
         slot=1,
         predecessor_hash=genesis,
         block_number=1,
         cbor_bytes=b"first",
     )
-    await db.add_block(
+    db.add_block(
         block_hash=bh,
         slot=1,
         predecessor_hash=genesis,
@@ -145,7 +145,7 @@ async def test_add_duplicate_block() -> None:
     )
 
     # The second write should have overwritten
-    result = await db.get_block(bh)
+    result = db.get_block(bh)
     assert result == b"second"
     # Block count stays at 1 (same key)
     assert db.block_count == 1
@@ -160,7 +160,7 @@ async def test_get_block_not_found() -> None:
         returns Nothing for missing blocks.
     """
     db = VolatileDB(db_dir=None)
-    result = await db.get_block(_block_hash(999))
+    result = db.get_block(_block_hash(999))
     assert result is None
 
 
@@ -180,21 +180,21 @@ async def test_get_predecessor() -> None:
 
     # Chain: genesis -> bh1 -> bh2
     # Fork:  genesis -> bh3
-    await db.add_block(
+    db.add_block(
         block_hash=bh1,
         slot=1,
         predecessor_hash=genesis,
         block_number=1,
         cbor_bytes=b"b1",
     )
-    await db.add_block(
+    db.add_block(
         block_hash=bh2,
         slot=2,
         predecessor_hash=bh1,
         block_number=2,
         cbor_bytes=b"b2",
     )
-    await db.add_block(
+    db.add_block(
         block_hash=bh3,
         slot=1,
         predecessor_hash=genesis,
@@ -203,19 +203,19 @@ async def test_get_predecessor() -> None:
     )
 
     # Genesis has two successors
-    successors = await db.get_successors(genesis)
+    successors = db.get_successors(genesis)
     assert set(successors) == {bh1, bh3}
 
     # bh1 has one successor
-    successors_of_bh1 = await db.get_successors(bh1)
+    successors_of_bh1 = db.get_successors(bh1)
     assert successors_of_bh1 == [bh2]
 
     # bh2 has no successors
-    successors_of_bh2 = await db.get_successors(bh2)
+    successors_of_bh2 = db.get_successors(bh2)
     assert successors_of_bh2 == []
 
     # Block info tracks the predecessor hash
-    info = await db.get_block_info(bh2)
+    info = db.get_block_info(bh2)
     assert info is not None
     assert info.predecessor_hash == bh1
 
@@ -234,7 +234,7 @@ async def test_gc_removes_old_blocks() -> None:
     prev = genesis
     for i in range(1, 11):
         bh = _block_hash(i)
-        await db.add_block(
+        db.add_block(
             block_hash=bh,
             slot=i,
             predecessor_hash=prev,
@@ -246,20 +246,20 @@ async def test_gc_removes_old_blocks() -> None:
     assert db.block_count == 10
 
     # GC everything at or below slot 7
-    removed = await db.gc(immutable_tip_slot=7)
+    removed = db.gc(immutable_tip_slot=7)
     assert removed == 7
     assert db.block_count == 3
 
     # Blocks 1-7 are gone
     for i in range(1, 8):
-        assert await db.get_block(_block_hash(i)) is None
+        assert db.get_block(_block_hash(i)) is None
 
     # Blocks 8-10 survive
     for i in range(8, 11):
-        result = await db.get_block(_block_hash(i))
+        result = db.get_block(_block_hash(i))
         assert result is not None
         assert result == f"block-{i}".encode()
 
     # Max slot should reflect surviving blocks
-    max_slot = await db.get_max_slot()
+    max_slot = db.get_max_slot()
     assert max_slot == 10

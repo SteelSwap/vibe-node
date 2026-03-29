@@ -205,7 +205,7 @@ async def test_blocks_promoted_to_immutable_after_k(chain_db):
     # Blocks 5-7 should still be in volatile (or possibly GC'd from volatile
     # if they were below the GC threshold — but blocks 5-7 are above slot 4)
     for slot, bh, _, bn, cbor in blocks[4:]:
-        result = await chain_db.volatile_db.get_block(bh)
+        result = chain_db.volatile_db.get_block(bh)
         assert result == cbor, f"Block at slot {slot} missing from volatile"
 
 
@@ -220,7 +220,7 @@ async def test_gc_cleans_volatile_after_promotion(chain_db):
 
     # Blocks at or below immutable slot 4 should be gone from volatile
     for slot, bh, _, bn, cbor in blocks[:4]:
-        result = await chain_db.volatile_db.get_block(bh)
+        result = chain_db.volatile_db.get_block(bh)
         assert result is None, f"Block at slot {slot} should have been GC'd from volatile"
 
 
@@ -262,7 +262,7 @@ async def test_get_block_fallback_to_immutable(chain_db):
 
     # Slot 1 block: promoted to immutable, GC'd from volatile
     bh = blocks[0][1]
-    assert await chain_db.volatile_db.get_block(bh) is None
+    assert chain_db.volatile_db.get_block(bh) is None
     assert await chain_db.immutable_db.get_block(bh) is not None
 
     # ChainDB should still find it
@@ -320,7 +320,7 @@ async def test_ignore_block_older_than_immutable_tip(chain_db):
     )
     # Should not have been added to volatile
     assert chain_db.volatile_db.block_count == vol_count_before
-    assert await chain_db.volatile_db.get_block(old_hash) is None
+    assert chain_db.volatile_db.get_block(old_hash) is None
 
 
 @pytest.mark.asyncio
@@ -340,7 +340,7 @@ async def test_ignore_block_equal_to_immutable_tip(chain_db):
         block_number=4,
         cbor_bytes=make_block_cbor(51, 4),
     )
-    assert await chain_db.volatile_db.get_block(eq_hash) is None
+    assert chain_db.volatile_db.get_block(eq_hash) is None
 
 
 @pytest.mark.asyncio
@@ -361,7 +361,7 @@ async def test_accept_block_one_above_immutable_tip(chain_db):
         cbor_bytes=make_block_cbor(52, 5),
     )
     # Should be in volatile
-    assert await chain_db.volatile_db.get_block(new_hash) is not None
+    assert chain_db.volatile_db.get_block(new_hash) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -414,7 +414,7 @@ async def test_advance_immutable_explicit(chain_db):
 
     # All should be in volatile
     for _, bh, _, _, cbor in blocks:
-        assert await chain_db.volatile_db.get_block(bh) == cbor
+        assert chain_db.volatile_db.get_block(bh) == cbor
 
     # Manually advance immutable to slot 2
     copied = await chain_db.advance_immutable(2)
@@ -425,7 +425,7 @@ async def test_advance_immutable_explicit(chain_db):
         assert await chain_db.immutable_db.get_block(bh) == cbor
 
     # Block 3 should still be in volatile
-    assert await chain_db.volatile_db.get_block(blocks[2][1]) is not None
+    assert chain_db.volatile_db.get_block(blocks[2][1]) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -496,7 +496,7 @@ async def test_fork_blocks_older_than_immutable_ignored(chain_db):
             block_number=i,
             cbor_bytes=make_block_cbor(100 + i, i),
         )
-        assert await chain_db.volatile_db.get_block(fork_hash) is None
+        assert chain_db.volatile_db.get_block(fork_hash) is None
 
     # Tip should still be the original chain
     tip = await chain_db.get_tip()
@@ -668,7 +668,7 @@ async def test_add_future_block_rejected(chain_db):
         cbor_bytes=make_block_cbor(999_999, 4),
     )
     # Block should be stored in volatile
-    assert await chain_db.volatile_db.get_block(future_hash) is not None
+    assert chain_db.volatile_db.get_block(future_hash) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -778,7 +778,7 @@ async def test_wipe_volatile_db(chain_db):
 
     # Volatile blocks should be gone
     for slot, bh, _, bn, cbor in blocks[4:]:
-        assert await chain_db.volatile_db.get_block(bh) is None
+        assert chain_db.volatile_db.get_block(bh) is None
 
     # Immutable blocks should still be accessible
     for slot, bh, _, bn, cbor in blocks[:4]:
@@ -806,13 +806,13 @@ async def test_get_block_after_gc_returns_none(tmp_path):
 
     # Add a fork block directly to volatile (not on the main chain)
     fork_hash = make_hash(500)
-    await vol.add_block(fork_hash, 3, GENESIS_HASH, 1, b"fork_block")
+    vol.add_block(fork_hash, 3, GENESIS_HASH, 1, b"fork_block")
 
     # Block should be findable initially
     assert await db.get_block(fork_hash) is not None
 
     # GC the volatile DB at slot 5 (removes block at slot 3)
-    await vol.gc(immutable_tip_slot=5)
+    vol.gc(immutable_tip_slot=5)
 
     # Block should no longer be findable
     assert await db.get_block(fork_hash) is None

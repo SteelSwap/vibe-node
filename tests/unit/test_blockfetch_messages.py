@@ -196,7 +196,9 @@ class TestKnownCBORVectors:
         raw = encode_block(block_data)
         parsed = cbor2.loads(raw)
         assert parsed[0] == 4
-        assert parsed[1] == block_data
+        # encode_block wraps in CBOR-in-CBOR (Tag 24 + byte string)
+        assert hasattr(parsed[1], 'tag') and parsed[1].tag == 24
+        assert parsed[1].value == block_data
 
 
 # ---------------------------------------------------------------------------

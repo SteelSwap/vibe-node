@@ -278,7 +278,7 @@ class VolatileDB:
         """
         return self._block_info.get(block_hash)
 
-    async def get_successors(self, block_hash: bytes) -> list[bytes]:
+    def get_successors(self, block_hash: bytes) -> list[bytes]:
         """Get the hashes of all known successor blocks.
 
         Used by chain selection to walk forward from a given block and
@@ -295,7 +295,7 @@ class VolatileDB:
         """
         return list(self._successors.get(block_hash, []))
 
-    async def get_max_slot(self) -> int:
+    def get_max_slot(self) -> int:
         """Return the highest slot number of any block in the store.
 
         Returns:

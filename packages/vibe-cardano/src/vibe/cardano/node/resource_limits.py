@@ -232,7 +232,7 @@ class VolatilePruner:
         Returns:
             Number of blocks removed.
         """
-        max_slot = await self._volatile_db.get_max_slot()
+        max_slot = self._volatile_db.get_max_slot()
         if max_slot < 0:
             return 0
 
@@ -240,7 +240,7 @@ class VolatilePruner:
         if immutable_slot < 0:
             return 0
 
-        removed = await self._volatile_db.gc(immutable_slot)
+        removed = self._volatile_db.gc(immutable_slot)
         if removed > 0:
             logger.info(
                 "VolatilePruner: pruned %d blocks at or below slot %d (tip slot %d, k=%d)",

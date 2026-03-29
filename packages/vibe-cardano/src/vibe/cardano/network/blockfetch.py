@@ -230,6 +230,10 @@ def decode_server_message(cbor_bytes: bytes) -> ServerMessage:
         if len(msg) != 2:
             raise ValueError(f"MsgBlock: expected 2 elements, got {len(msg)}")
         block_data = msg[1]
+        # Unwrap CBOR-in-CBOR Tag 24 — the block bytes are inside the tag
+        if hasattr(block_data, 'tag') and block_data.tag == 24:
+            block_cbor = block_data.value if isinstance(block_data.value, bytes) else bytes(block_data.value)
+            return MsgBlock(block_cbor=block_cbor)
         if isinstance(block_data, bytes):
             block_cbor = block_data
         elif isinstance(block_data, memoryview):

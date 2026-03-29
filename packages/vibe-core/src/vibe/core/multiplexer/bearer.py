@@ -146,10 +146,11 @@ class Bearer:
 
         try:
             self._writer.write(wire)
-            # Buffer only — the mux sender calls flush() after
-            # draining all channels in a pass, batching writes
-            # into a single syscall. Haskell's mux similarly
-            # collects segments before writing.
+            # Drain immediately so the bytes reach the peer. The mux
+            # sender uses buffer_segment() + flush() for batching,
+            # but write_segment is the public API used by direct
+            # callers (integration tests, raw protocol usage).
+            await self._writer.drain()
         except (ConnectionError, OSError) as exc:
             self._closed = True
             raise ConnectionError(str(exc)) from exc

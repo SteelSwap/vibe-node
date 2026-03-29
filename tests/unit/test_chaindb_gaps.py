@@ -283,7 +283,7 @@ class TestIteratorRegression1435:
 
         # Immutable has blocks 1-4, volatile has 5-7
         # GC volatile at slot 10 (removes everything from volatile)
-        await chain_db.volatile_db.gc(immutable_tip_slot=10)
+        chain_db.volatile_db.gc(immutable_tip_slot=10)
 
         # Immutable iterator should still work fine
         it = chain_db.immutable_db.stream(start_slot=1)
@@ -354,7 +354,7 @@ class TestIteratorCloseDuringGC:
 
         async def gc_task():
             """Run GC to remove old volatile blocks."""
-            await chain_db.volatile_db.gc(immutable_tip_slot=5)
+            chain_db.volatile_db.gc(immutable_tip_slot=5)
             gc_done.set()
 
         async def close_task():
@@ -465,13 +465,13 @@ class TestGCScheduleOverlap:
         pred = GENESIS_HASH
         for i in range(1, 11):
             bh = make_hash(i)
-            await vol.add_block(bh, i, pred, i, make_block_cbor(i, i))
+            vol.add_block(bh, i, pred, i, make_block_cbor(i, i))
             pred = bh
 
-        first_gc = await vol.gc(immutable_tip_slot=5)
+        first_gc = vol.gc(immutable_tip_slot=5)
         assert first_gc == 5  # blocks 1-5 removed
 
-        second_gc = await vol.gc(immutable_tip_slot=5)
+        second_gc = vol.gc(immutable_tip_slot=5)
         assert second_gc == 0  # nothing left to remove
 
     @pytest.mark.asyncio
@@ -483,13 +483,13 @@ class TestGCScheduleOverlap:
         pred = GENESIS_HASH
         for i in range(1, 11):
             bh = make_hash(i)
-            await vol.add_block(bh, i, pred, i, make_block_cbor(i, i))
+            vol.add_block(bh, i, pred, i, make_block_cbor(i, i))
             pred = bh
 
-        gc1 = await vol.gc(immutable_tip_slot=3)
+        gc1 = vol.gc(immutable_tip_slot=3)
         assert gc1 == 3  # blocks at slots 1,2,3
 
-        gc2 = await vol.gc(immutable_tip_slot=6)
+        gc2 = vol.gc(immutable_tip_slot=6)
         assert gc2 == 3  # blocks at slots 4,5,6
 
         assert vol.block_count == 4  # blocks 7,8,9,10 remain
@@ -528,7 +528,7 @@ class TestPathReachability:
             if current in visited:
                 continue
             visited.add(current)
-            succs = await vol.get_successors(current)
+            succs = vol.get_successors(current)
             queue.extend(succs)
         return False
 
@@ -536,9 +536,9 @@ class TestPathReachability:
     async def test_linear_chain_reachability(self):
         """In a linear chain A -> B -> C, A can reach C and C cannot reach A."""
         vol = VolatileDB()
-        await vol.add_block(make_hash(1), 1, GENESIS_HASH, 1, b"A")
-        await vol.add_block(make_hash(2), 2, make_hash(1), 2, b"B")
-        await vol.add_block(make_hash(3), 3, make_hash(2), 3, b"C")
+        vol.add_block(make_hash(1), 1, GENESIS_HASH, 1, b"A")
+        vol.add_block(make_hash(2), 2, make_hash(1), 2, b"B")
+        vol.add_block(make_hash(3), 3, make_hash(2), 3, b"C")
 
         assert await self._is_reachable(vol, GENESIS_HASH, make_hash(3))
         assert await self._is_reachable(vol, make_hash(1), make_hash(3))
@@ -555,9 +555,9 @@ class TestPathReachability:
         but B is NOT reachable from C and vice versa.
         """
         vol = VolatileDB()
-        await vol.add_block(make_hash(1), 1, GENESIS_HASH, 1, b"A")
-        await vol.add_block(make_hash(2), 2, make_hash(1), 2, b"B")
-        await vol.add_block(make_hash(3), 3, GENESIS_HASH, 1, b"C")
+        vol.add_block(make_hash(1), 1, GENESIS_HASH, 1, b"A")
+        vol.add_block(make_hash(2), 2, make_hash(1), 2, b"B")
+        vol.add_block(make_hash(3), 3, GENESIS_HASH, 1, b"C")
 
         # Both reachable from genesis
         assert await self._is_reachable(vol, GENESIS_HASH, make_hash(2))
@@ -571,16 +571,16 @@ class TestPathReachability:
     async def test_self_reachable(self):
         """A block is always reachable from itself."""
         vol = VolatileDB()
-        await vol.add_block(make_hash(1), 1, GENESIS_HASH, 1, b"A")
+        vol.add_block(make_hash(1), 1, GENESIS_HASH, 1, b"A")
         assert await self._is_reachable(vol, make_hash(1), make_hash(1))
 
     @pytest.mark.asyncio
     async def test_unreachable_disconnected_block(self):
         """A block not connected to the chain is not reachable."""
         vol = VolatileDB()
-        await vol.add_block(make_hash(1), 1, GENESIS_HASH, 1, b"A")
+        vol.add_block(make_hash(1), 1, GENESIS_HASH, 1, b"A")
         # Block 99 has predecessor hash(50) which isn't in the DB
-        await vol.add_block(make_hash(99), 99, make_hash(50), 99, b"Z")
+        vol.add_block(make_hash(99), 99, make_hash(50), 99, b"Z")
 
         assert not await self._is_reachable(vol, GENESIS_HASH, make_hash(99))
 
@@ -666,7 +666,7 @@ class TestGetIsValid:
             )
 
             # Block is stored (above immutable tip which is None for k=10 chain of 5)
-            assert await chain_db.volatile_db.get_block(fork_hash) is not None
+            assert chain_db.volatile_db.get_block(fork_hash) is not None
 
             # But tip hasn't changed
             tip_after = await chain_db.get_tip()

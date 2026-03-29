@@ -187,7 +187,7 @@ class TestChainDBBetweenCurrentChain:
 
             # All blocks should be in volatile DB and retrievable.
             for bh in hashes:
-                data = await db.get_block(bh)
+                data = db.get_block(bh)
                 assert data is not None, f"Block {bh.hex()[:8]} not found"
 
             # Tip should be the last block.
