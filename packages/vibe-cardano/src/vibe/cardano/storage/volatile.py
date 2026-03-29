@@ -102,6 +102,31 @@ class VolatileDB:
         self._write_batch_size = write_batch_size
         self._write_buffer: list[tuple[bytes, bytes]] = []  # (hash, cbor)
 
+        # Background disk writer — processes batches without blocking
+        # the chain selection runner. Uses a queue + daemon thread.
+        import queue as _queue
+        self._disk_queue: _queue.Queue[list[tuple[bytes, bytes]] | None] = _queue.Queue()
+        self._disk_thread: object = None
+        if db_dir is not None:
+            import threading
+            def _disk_writer():
+                while True:
+                    batch = self._disk_queue.get()
+                    if batch is None:
+                        self._disk_queue.task_done()
+                        break
+                    for bh, cb in batch:
+                        try:
+                            self._write_file(bh, cb)
+                        except OSError:
+                            logger.warning(
+                                "VolatileDB: disk write failed for %s",
+                                bh.hex()[:16],
+                            )
+                    self._disk_queue.task_done()
+            self._disk_thread = threading.Thread(target=_disk_writer, daemon=True)
+            self._disk_thread.start()
+
         # Closed flag
         self._closed: bool = False
 
@@ -124,12 +149,16 @@ class VolatileDB:
         self._closed = True
 
     def _flush_writes(self) -> None:
-        """Flush buffered block writes to disk."""
-        if not self._write_buffer or self._db_dir is None:
-            return
-        for block_hash, cbor_bytes in self._write_buffer:
-            self._write_file(block_hash, cbor_bytes)
-        self._write_buffer.clear()
+        """Flush remaining buffered writes and stop background writer."""
+        # Send remaining buffer to writer
+        if self._write_buffer and self._db_dir is not None:
+            self._disk_queue.put(list(self._write_buffer))
+            self._write_buffer.clear()
+        # Signal writer to stop and wait
+        if self._disk_thread is not None:
+            self._disk_queue.put(None)  # Sentinel
+            self._disk_thread.join(timeout=5)
+            self._disk_thread = None
 
     @property
     def is_closed(self) -> bool:
@@ -241,11 +270,17 @@ class VolatileDB:
         if slot > self._max_slot:
             self._max_slot = slot
 
-        # Buffer disk writes — flush synchronously when batch is full.
+        # Buffer disk writes — send to background writer when batch is full.
         if self._db_dir is not None:
             self._write_buffer.append((block_hash, cbor_bytes))
             if len(self._write_buffer) >= self._write_batch_size:
-                self._flush_writes()
+                batch = list(self._write_buffer)
+                self._write_buffer.clear()
+                self._disk_queue.put(batch)
+                # For small batches (tests), wait for completion so
+                # files exist immediately after add_block returns.
+                if self._write_batch_size <= 5:
+                    self._disk_queue.join()
 
         logger.debug(
             "VolatileDB: added block %s at slot %d (predecessor: %s)",

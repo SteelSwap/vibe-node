@@ -113,12 +113,17 @@ class TestDiskErrorDuringPutBlock:
 
         db._write_file = failing_write  # type: ignore[assignment]
 
-        with pytest.raises(OSError, match="Simulated disk error"):
-            db.add_block(h2, 2, h, 2, _cbor(2))
+        # With background disk writes, the disk error is caught and logged
+        # but doesn't propagate to the caller. The block IS added in memory.
+        db.add_block(h2, 2, h, 2, _cbor(2))
 
-        # In-memory state got the block (write happens after index update)
-        # but on-disk it's missing. Verify first block is still intact.
+        # In-memory state has both blocks
+        assert db.block_count == 2
+        assert db.get_block(h2) == _cbor(2)
+        # First block persisted, second didn't (disk error)
         assert (tmp_path / f"{h.hex()}.block").exists()
+        # Wait for background writer to process
+        db._disk_queue.join()
         assert not (tmp_path / f"{h2.hex()}.block").exists()
 
 

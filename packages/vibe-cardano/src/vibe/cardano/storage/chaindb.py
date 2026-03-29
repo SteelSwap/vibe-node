@@ -880,16 +880,42 @@ class ChainDB:
                 hash_hex, ct_info.slot, candidate_bn, rollback_depth,
             )
         else:
-            logger.info(
-                "ChainDB.AddBlockEvent.AddedToCurrentChain: tip=%s slot=%d block_no=%d",
-                hash_hex, ct_info.slot, candidate_bn,
-            )
+            # During bulk sync (many blocks per second), log at debug
+            # with periodic info summaries. At the tip (one block every
+            # few seconds), log every block at info.
+            # Track blocks-per-second: if >10 bps, we're syncing.
+            now = time.monotonic()
+            self._block_count_since_log = getattr(self, '_block_count_since_log', 0) + 1
+            last_log_time = getattr(self, '_last_progress_log', 0.0)
+            elapsed = now - last_log_time if last_log_time > 0 else 0
+            if elapsed >= 10.0 and self._block_count_since_log > 10:
+                # Bulk sync — summarize
+                bps = self._block_count_since_log / elapsed
+                logger.info(
+                    "ChainDB.SyncProgress: block_no=%d slot=%d tip=%s %.0f blocks/sec",
+                    candidate_bn, ct_info.slot, hash_hex, bps,
+                )
+                self._block_count_since_log = 0
+                self._last_progress_log = now
+            elif elapsed >= 10.0 or last_log_time == 0:
+                # At tip or first block — log normally
+                logger.info(
+                    "ChainDB.AddBlockEvent.AddedToCurrentChain: tip=%s slot=%d block_no=%d",
+                    hash_hex, ct_info.slot, candidate_bn,
+                )
+                self._block_count_since_log = 0
+                self._last_progress_log = now
+            else:
+                logger.debug(
+                    "ChainDB.AddBlockEvent.AddedToCurrentChain: tip=%s slot=%d block_no=%d",
+                    hash_hex, ct_info.slot, candidate_bn,
+                )
 
         self._tip_generation += 1
         self._notify_tip_changed()
         t_notify = time.monotonic()
 
-        logger.info(
+        logger.debug(
             "ChainDB.Timing: volatile=%.1fms ledger=%.1fms chainsel=%.1fms notify=%.1fms total=%.1fms",
             (t_volatile - t_start) * 1000,
             (t_ledger - t_volatile) * 1000,
