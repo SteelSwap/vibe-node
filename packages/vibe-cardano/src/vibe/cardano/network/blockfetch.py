@@ -159,11 +159,26 @@ def encode_no_blocks() -> bytes:
 
 
 def encode_block(block_cbor: bytes) -> bytes:
-    """Encode MsgBlock: ``[4, block_cbor]``.
+    """Encode MsgBlock: ``[4, Tag24(ByteString(block_bytes))]``.
 
-    The block_cbor is passed through as raw CBOR-tagged bytes.
+    Builds the wire bytes directly without CBOR library overhead.
+    The format is fixed: array(2) + uint(4) + Tag(24) + bstr(block).
+
+    Haskell ref: cBlockFetchCodecSerialised uses Serialise instance
+    for Serialised which encodes as Tag 24 + byte string.
     """
-    return cbor2.dumps([MSG_BLOCK, block_cbor])
+    n = len(block_cbor)
+    # CBOR byte string length prefix
+    if n < 24:
+        bstr_hdr = bytes([0x40 | n])
+    elif n < 256:
+        bstr_hdr = bytes([0x58, n])
+    elif n < 65536:
+        bstr_hdr = bytes([0x59, n >> 8, n & 0xFF])
+    else:
+        bstr_hdr = bytes([0x5A, (n >> 24) & 0xFF, (n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF])
+    # array(2) + uint(4) + Tag(24) + bstr header + block bytes
+    return b'\x82\x04\xd8\x18' + bstr_hdr + block_cbor
 
 
 def encode_batch_done() -> bytes:

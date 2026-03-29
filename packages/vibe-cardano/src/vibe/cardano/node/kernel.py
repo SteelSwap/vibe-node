@@ -1,26 +1,24 @@
-"""NodeKernel — Praos chain-dependent state and delegation tracking.
+"""NodeKernel -- delegation, stake, and protocol parameter tracking.
 
-Holds the consensus-level state that evolves per-block: epoch nonces,
-delegation state, stake distribution, and protocol parameters. ChainDB
-is the source of truth for the selected chain and block serving;
-NodeKernel only tracks the protocol state that depends on the chain.
+ChainDB is the source of truth for the selected chain and Praos nonce state
+(via LedgerSeq). NodeKernel holds the remaining protocol-level state:
+- Delegation state
+- Stake distribution
+- Protocol parameters
+
+The epoch nonce TVar is wired to ChainDB.praos_nonce_tvar so that the forge
+loop can read the nonce atomically via STM.
 
 Haskell reference:
     Ouroboros.Consensus.NodeKernel (initNodeKernel, NodeKernel)
-    The Haskell NodeKernel holds ChainDB, Mempool, BlockFetchInterface, etc.
-    Our NodeKernel holds a reference to ChainDB and owns the Praos state.
 """
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from typing import Any
 
-from vibe.cardano.consensus.nonce import (
-    EpochNonce,
-    stability_window,
-)
+from vibe.cardano.consensus.nonce import EpochNonce
 from vibe.cardano.ledger.delegation import (
     DelegationState,
     apply_block_certs,
@@ -44,52 +42,33 @@ class StakeDistribution:
 
 
 class NodeKernel:
-    """Praos chain-dependent state and delegation/stake tracking.
+    """Delegation, stake, and protocol parameter tracking.
 
-    ChainDB is the source of truth for the selected chain. NodeKernel
-    holds only the protocol-level state that evolves per block:
-    - Epoch nonces (5-nonce Praos model)
+    ChainDB owns the Praos nonce state via LedgerSeq. NodeKernel holds:
+    - nonce_tvar / stake_tvar (TVars read by the forge loop)
     - Delegation state
     - Stake distribution
     - Protocol parameters
 
     Haskell reference:
-        Ouroboros.Consensus.NodeKernel — owns ChainDB and protocol state.
+        Ouroboros.Consensus.NodeKernel -- owns ChainDB and protocol state.
     """
 
     def __init__(self, chain_db: Any = None, lock: Any = None) -> None:
         self._chain_db = chain_db
 
-        # Thread-safety: RWLock for concurrent nonce reads / exclusive writes
+        # Thread-safety: RWLock for concurrent reads / exclusive writes
         if lock is None:
             from vibe.core.rwlock import RWLock
 
             lock = RWLock()
         self._lock = lock
 
-        # Praos chain-dependent state — full 5-nonce model
-        # Haskell ref: PraosState in Ouroboros.Consensus.Protocol.Praos
-        self._epoch_nonce: EpochNonce = EpochNonce(value=b"\x00" * 32)
-
-        # STM TVar for epoch nonce — used by forge loop for atomic reads
+        # STM TVars for forge loop reads
         from vibe.core.stm import TVar
 
-        self.nonce_tvar: TVar = TVar(self._epoch_nonce.value)
+        self.nonce_tvar: TVar = TVar(b"\x00" * 32)
         self.stake_tvar: TVar = TVar({})
-        self._evolving_nonce: bytes = b"\x00" * 32
-        self._candidate_nonce: bytes = b"\x00" * 32
-        self._lab_nonce: bytes = b"\x00" * 32
-        self._last_epoch_block_nonce: bytes = b"\x00" * 32
-        self._current_epoch: int = 0
-        self._epoch_length: int = 432000
-        self._security_param: int = 2160
-        self._active_slot_coeff: float = 0.05
-
-        # Nonce state checkpoints: block_hash → snapshot of nonce state.
-        # Used to rollback nonce state on fork switches.
-        # Haskell ref: PraosState is part of the ledger state which gets
-        # rolled back during fork switches in ChainSel.switchTo.
-        self._nonce_checkpoints: dict[bytes, dict] = {}
 
         # Delegation state tracking
         self._delegation_state: DelegationState = DelegationState()
@@ -107,7 +86,11 @@ class NodeKernel:
 
     @property
     def epoch_nonce(self) -> EpochNonce:
-        return self._epoch_nonce
+        """Read the epoch nonce from the TVar (source of truth is ChainDB)."""
+        val = self.nonce_tvar.value
+        if val is None:
+            val = b"\x00" * 32
+        return EpochNonce(value=val)
 
     @property
     def delegation_state(self) -> DelegationState:
@@ -118,16 +101,42 @@ class NodeKernel:
         return self._stake_distribution
 
     @property
-    def current_epoch(self) -> int:
-        return self._current_epoch
-
-    @property
-    def epoch_length(self) -> int:
-        return self._epoch_length
-
-    @property
     def protocol_params(self) -> dict[str, Any]:
         return self._protocol_params
+
+    # ------------------------------------------------------------------
+    # Nonce initialisation (wires TVar to ChainDB)
+    # ------------------------------------------------------------------
+
+    def init_nonce(
+        self,
+        genesis_hash: bytes | None = None,
+        epoch_length: int = 0,
+        security_param: int = 2160,
+        active_slot_coeff: float = 0.05,
+        *,
+        chain_db: Any = None,
+    ) -> None:
+        """Wire nonce TVar to ChainDB's praos_nonce_tvar.
+
+        Accepts legacy positional args for backward compatibility but
+        the only meaningful parameter is chain_db. If chain_db is provided
+        (and has praos_nonce_tvar), the kernel's nonce_tvar is pointed at it.
+        Otherwise falls back to setting the TVar from genesis_hash.
+        """
+        if chain_db is not None and hasattr(chain_db, "praos_nonce_tvar"):
+            self.nonce_tvar = chain_db.praos_nonce_tvar
+            logger.info(
+                "NodeKernel nonce TVar wired to ChainDB.praos_nonce_tvar",
+            )
+            return
+
+        # Legacy fallback: seed TVar directly from genesis_hash
+        if genesis_hash is not None:
+            self.nonce_tvar._write(genesis_hash)
+            logger.info(
+                "Epoch nonce initialised from genesis_hash (legacy path)",
+            )
 
     # ------------------------------------------------------------------
     # Delegation and stake
@@ -196,286 +205,3 @@ class NodeKernel:
                 count,
                 extra={"event": "params.updated", "update_count": count},
             )
-
-    # ------------------------------------------------------------------
-    # Praos nonce state
-    # ------------------------------------------------------------------
-
-    def init_nonce(
-        self,
-        genesis_hash: bytes,
-        epoch_length: int,
-        security_param: int = 2160,
-        active_slot_coeff: float = 0.05,
-    ) -> None:
-        """Seed the Praos chain-dependent state from the genesis hash.
-
-        Haskell ref: translateChainDepStateByronToShelley
-        """
-        self._epoch_nonce = EpochNonce(value=genesis_hash)
-        self.nonce_tvar._write(genesis_hash)
-        self._evolving_nonce = genesis_hash
-        self._candidate_nonce = genesis_hash
-        self._lab_nonce = b"\x00" * 32
-        # Haskell: TICKN initial state uses mkNonceFromNumber 0, which is
-        # blake2b_256(0 :: Word64), NOT NeutralNonce. This is a real nonce
-        # value that participates in the first epoch's nonce computation.
-        import struct as _struct
-        self._last_epoch_block_nonce = hashlib.blake2b(
-            _struct.pack(">Q", 0), digest_size=32,
-        ).digest()
-        self._epoch_length = epoch_length
-        self._security_param = security_param
-        self._active_slot_coeff = active_slot_coeff
-        logger.info(
-            "Epoch nonce initialised (epoch_length=%d, k=%d, f=%.4f)",
-            epoch_length,
-            security_param,
-            active_slot_coeff,
-            extra={
-                "event": "nonce.init",
-                "nonce": genesis_hash.hex()[:16],
-                "epoch_length": epoch_length,
-            },
-        )
-
-    def _combine_nonces(self, a: bytes, b: bytes) -> bytes:
-        """Combine two nonces with the ⭒ operator.
-
-        Haskell ref: (⭒) in Cardano.Ledger.BaseTypes
-        """
-        neutral = b"\x00" * 32
-        if a == neutral:
-            return b
-        if b == neutral:
-            return a
-        return hashlib.blake2b(a + b, digest_size=32).digest()
-
-    def on_block(
-        self, slot: int, block_hash: bytes, vrf_output: bytes,
-    ) -> None:
-        """Update Praos chain-dependent state for a block.
-
-        Haskell ref: reupdateChainDepState from Praos.hs
-            labNonce = hash of the last applied block (NOT its predecessor).
-        """
-        epoch_len = self._epoch_length
-        if epoch_len <= 0:
-            return
-
-        from vibe.cardano.crypto.vrf import vrf_nonce_value
-
-        vrf_nonce = vrf_nonce_value(vrf_output)
-
-        old_ev = self._evolving_nonce
-        self._evolving_nonce = self._combine_nonces(
-            self._evolving_nonce,
-            vrf_nonce,
-        )
-        logger.info(
-            "Nonce blk slot=%d hash=%s vrf=%s ev=%s->%s",
-            slot,
-            block_hash.hex()[:16],
-            vrf_output.hex()[:16] if vrf_output else "none",
-            old_ev.hex()[:16] if isinstance(old_ev, bytes) else "?",
-            self._evolving_nonce.hex()[:16],
-        )
-
-        block_epoch = slot // epoch_len
-        first_slot_next_epoch = (block_epoch + 1) * epoch_len
-        stab_window = stability_window(
-            epoch_len,
-            self._security_param,
-            self._active_slot_coeff,
-        )
-        # When stab_window >= epoch_length (small devnet epochs), ALL blocks
-        # contribute to the nonce. Otherwise, only blocks before the stability
-        # cutoff contribute. Haskell ref: stabilityWindow caps at epoch_length,
-        # so the condition below becomes trivially true for all blocks.
-        if stab_window >= epoch_len or slot + stab_window < first_slot_next_epoch:
-            self._candidate_nonce = self._evolving_nonce
-
-        # labNonce = hash of the last applied block itself (not predecessor).
-        # Haskell ref: lastAppliedHash in PraosState
-        self._lab_nonce = block_hash
-
-    def on_epoch_boundary(self, new_epoch: int, extra_entropy: bytes | None = None) -> None:
-        """Evolve the epoch nonce at an epoch transition.
-
-        Haskell ref: tickChainDepState in Praos.hs
-        """
-        if new_epoch <= self._current_epoch:
-            return
-
-        # Shelley spec: the epoch nonce has a 1-epoch stabilization lag.
-        # At epoch 0->1, the genesis nonce is retained (no accumulation
-        # has stabilized yet). The first real nonce evolution happens at
-        # epoch 1->2 using epoch 0's accumulated candidate.
-        # Haskell ref: the initial TicknState epochNonce is set by
-        # translateChainDepStateByronToShelley to the genesis nonce and
-        # stays unchanged until the TICKN rule fires with real data.
-        if self._current_epoch == 0:
-            self._last_epoch_block_nonce = self._lab_nonce
-            self._current_epoch = new_epoch
-            logger.info(
-                "Epoch 0->%d: retaining genesis nonce (stabilization lag)",
-                new_epoch,
-            )
-            return
-
-        new_nonce_bytes = self._combine_nonces(
-            self._candidate_nonce,
-            self._last_epoch_block_nonce,
-        )
-        if extra_entropy is not None:
-            new_nonce_bytes = self._combine_nonces(
-                new_nonce_bytes,
-                extra_entropy,
-            )
-
-        old_epoch = self._current_epoch
-        self._epoch_nonce = EpochNonce(value=new_nonce_bytes)
-        self.nonce_tvar._write(new_nonce_bytes)
-        self._last_epoch_block_nonce = self._lab_nonce
-        self._current_epoch = new_epoch
-        logger.info(
-            "Epoch %d->%d nonce=%s cand=%s lab=%s prevLab=%s evolving=%s",
-            old_epoch,
-            new_epoch,
-            new_nonce_bytes.hex(),
-            self._candidate_nonce.hex()[:16] if isinstance(self._candidate_nonce, bytes) else "?",
-            self._lab_nonce.hex()[:16] if isinstance(self._lab_nonce, bytes) else "?",
-            self._last_epoch_block_nonce.hex()[:16] if isinstance(self._last_epoch_block_nonce, bytes) else "?",
-            self._evolving_nonce.hex()[:16] if isinstance(self._evolving_nonce, bytes) else "?",
-            extra={
-                "event": "epoch.transition",
-                "from_epoch": old_epoch,
-                "to_epoch": new_epoch,
-            },
-        )
-
-    def _save_nonce_checkpoint(self, block_hash: bytes) -> None:
-        """Save a snapshot of nonce state keyed by block hash.
-
-        Haskell ref: PraosState is part of the ledger state, which is
-        snapshotted per-block for rollback support.
-        """
-        self._nonce_checkpoints[block_hash] = {
-            "epoch_nonce": self._epoch_nonce.value,
-            "evolving_nonce": self._evolving_nonce,
-            "candidate_nonce": self._candidate_nonce,
-            "lab_nonce": self._lab_nonce,
-            "last_epoch_block_nonce": self._last_epoch_block_nonce,
-            "current_epoch": self._current_epoch,
-        }
-        # GC old checkpoints — keep at most 2*k
-        max_checkpoints = max(20, self._security_param * 2)
-        if len(self._nonce_checkpoints) > max_checkpoints:
-            # Remove oldest (first inserted — Python 3.7+ dicts are ordered)
-            excess = len(self._nonce_checkpoints) - max_checkpoints
-            for _ in range(excess):
-                oldest_key = next(iter(self._nonce_checkpoints))
-                del self._nonce_checkpoints[oldest_key]
-
-    def _restore_nonce_checkpoint(self, block_hash: bytes) -> bool:
-        """Restore nonce state from a checkpoint.
-
-        Returns True if checkpoint found and restored, False otherwise.
-        """
-        cp = self._nonce_checkpoints.get(block_hash)
-        if cp is None:
-            return False
-        self._epoch_nonce = EpochNonce(value=cp["epoch_nonce"])
-        self.nonce_tvar._write(cp["epoch_nonce"])
-        self._evolving_nonce = cp["evolving_nonce"]
-        self._candidate_nonce = cp["candidate_nonce"]
-        self._lab_nonce = cp["lab_nonce"]
-        self._last_epoch_block_nonce = cp["last_epoch_block_nonce"]
-        self._current_epoch = cp["current_epoch"]
-        return True
-
-    def on_block_adopted(
-        self,
-        slot: int,
-        block_hash: bytes,
-        prev_hash: bytes,
-        vrf_output: bytes | None,
-    ) -> None:
-        """Update Praos state after a block is adopted by ChainDB.
-
-        Always restores state from the predecessor's checkpoint first,
-        then applies this block's contribution. This ensures the nonce
-        is always derived from the chain tip, never from accumulated
-        state that could be stale due to fork switches.
-
-        Haskell ref: reupdateChainDepState runs atomically within chain
-        selection, so state is always consistent with the selected chain.
-        We approximate this by restoring to the predecessor's state
-        before each block update.
-        """
-        epoch_len = self._epoch_length
-        if epoch_len <= 0:
-            return
-
-        # Restore to predecessor's nonce state so we always build
-        # from the chain, not from potentially stale accumulation.
-        # This handles fork switches correctly: if the predecessor
-        # changed (new fork), its checkpoint reflects the new chain.
-        if prev_hash and prev_hash != b"\x00" * 32:
-            self._restore_nonce_checkpoint(prev_hash)
-
-        block_epoch = slot // epoch_len
-        if block_epoch > self._current_epoch:
-            self.on_epoch_boundary(block_epoch)
-        if vrf_output:
-            self.on_block(slot, block_hash, vrf_output)
-        # Save checkpoint AFTER updating state
-        self._save_nonce_checkpoint(block_hash)
-
-    def on_fork_switch(
-        self,
-        intersection_hash: bytes | None,
-        new_chain_blocks: list[tuple[int, bytes, bytes, bytes | None]],
-    ) -> None:
-        """Rollback and re-apply nonce state for a fork switch.
-
-        When ChainDB switches to a fork, the nonce state must be rolled
-        back to the intersection point and re-applied with the new
-        chain's blocks.
-
-        Haskell ref: switchTo in ChainSel.hs rolls back the ledger
-        state (including PraosState) to the intersection and re-applies.
-
-        Args:
-            intersection_hash: Block hash of the fork point, or None.
-            new_chain_blocks: List of (slot, block_hash, prev_hash, vrf_output)
-                for each block on the new chain after the intersection,
-                ordered oldest-first.
-        """
-        if intersection_hash is None:
-            return
-
-        # Restore to intersection checkpoint
-        if not self._restore_nonce_checkpoint(intersection_hash):
-            logger.warning(
-                "No nonce checkpoint at intersection %s — nonce may drift",
-                intersection_hash.hex()[:16],
-            )
-            return
-
-        # Re-apply new chain blocks from intersection forward
-        for slot, block_hash, prev_hash, vrf_output in new_chain_blocks:
-            epoch_len = self._epoch_length
-            if epoch_len > 0:
-                block_epoch = slot // epoch_len
-                if block_epoch > self._current_epoch:
-                    self.on_epoch_boundary(block_epoch)
-            if vrf_output:
-                self.on_block(slot, block_hash, vrf_output)
-            self._save_nonce_checkpoint(block_hash)
-
-        logger.debug(
-            "Nonce state rolled back to %s and re-applied %d blocks",
-            intersection_hash.hex()[:16],
-            len(new_chain_blocks),
-        )

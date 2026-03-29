@@ -60,7 +60,7 @@ def make_block_cbor(slot: int, block_number: int) -> bytes:
     return struct.pack(">QI", slot, block_number) + b"\x00" * 20
 
 
-async def add_chain(
+def add_chain(
     chain_db: ChainDB,
     start_slot: int,
     count: int,
@@ -76,7 +76,7 @@ async def add_chain(
         bn = start_block_number + i
         bh = make_hash(hash_offset + i)
         cbor = make_block_cbor(slot, bn)
-        await chain_db.add_block(slot, bh, pred, bn, cbor)
+        chain_db.add_block(slot, bh, pred, bn, cbor)
         blocks.append((slot, bh, pred, bn, cbor))
         pred = bh
     return blocks
@@ -98,13 +98,19 @@ def _make_chain_db(tmp_path, k=3):
 @pytest.fixture
 def chain_db(tmp_path):
     """ChainDB with k=3."""
-    return _make_chain_db(tmp_path, k=3)
+    db = _make_chain_db(tmp_path, k=3)
+    db.start_chain_sel_runner()
+    yield db
+    db.stop_chain_sel_runner()
 
 
 @pytest.fixture
 def chain_db_k5(tmp_path):
     """ChainDB with k=5."""
-    return _make_chain_db(tmp_path, k=5)
+    db = _make_chain_db(tmp_path, k=5)
+    db.start_chain_sel_runner()
+    yield db
+    db.stop_chain_sel_runner()
 
 
 # ===========================================================================
@@ -217,9 +223,11 @@ class TestIteratorRegression1435:
         """
         db_dir = tmp_path
         chain_db = _make_chain_db(db_dir, k=3)
+        chain_db.start_chain_sel_runner()
 
         # Add 7 blocks: blocks 1-4 get promoted to immutable, 5-7 stay volatile
-        await add_chain(chain_db, start_slot=1, count=7)
+        add_chain(chain_db, start_slot=1, count=7)
+        chain_db.stop_chain_sel_runner()
 
         # Create an immutable iterator starting at slot 1
         imm_it = chain_db.immutable_db.stream(start_slot=1)
@@ -269,7 +277,9 @@ class TestIteratorRegression1435:
         None for those blocks. Iterator over immutable is unaffected.
         """
         chain_db = _make_chain_db(tmp_path, k=3)
-        blocks = await add_chain(chain_db, start_slot=1, count=7)
+        chain_db.start_chain_sel_runner()
+        blocks = add_chain(chain_db, start_slot=1, count=7)
+        chain_db.stop_chain_sel_runner()
 
         # Immutable has blocks 1-4, volatile has 5-7
         # GC volatile at slot 10 (removes everything from volatile)
@@ -329,7 +339,9 @@ class TestIteratorCloseDuringGC:
     async def test_close_iterator_during_concurrent_gc(self, tmp_path):
         """Closing an iterator while a GC task is running should not crash."""
         chain_db = _make_chain_db(tmp_path, k=5)
-        await add_chain(chain_db, start_slot=1, count=10)
+        chain_db.start_chain_sel_runner()
+        add_chain(chain_db, start_slot=1, count=10)
+        chain_db.stop_chain_sel_runner()
 
         # Create an immutable iterator
         it = chain_db.immutable_db.stream(start_slot=1)
@@ -374,8 +386,7 @@ class TestGCScheduleQueueLength:
     within a reasonable size bound.
     """
 
-    @pytest.mark.asyncio
-    async def test_volatile_block_count_bounded_after_many_blocks(self, tmp_path):
+    def test_volatile_block_count_bounded_after_many_blocks(self, tmp_path):
         """After adding many blocks (well past k), the volatile DB should
         hold at most ~k blocks (plus a small margin for timing).
 
@@ -385,43 +396,50 @@ class TestGCScheduleQueueLength:
         """
         k = 5
         chain_db = _make_chain_db(tmp_path, k=k)
+        chain_db.start_chain_sel_runner()
 
-        # Add 30 blocks — each one triggers _maybe_advance_immutable
-        pred = GENESIS_HASH
-        for i in range(1, 31):
-            bh = make_hash(i)
-            await chain_db.add_block(i, bh, pred, i, make_block_cbor(i, i))
-            pred = bh
+        try:
+            # Add 30 blocks — each one triggers _maybe_advance_immutable
+            pred = GENESIS_HASH
+            for i in range(1, 31):
+                bh = make_hash(i)
+                chain_db.add_block(i, bh, pred, i, make_block_cbor(i, i))
+                pred = bh
 
-        # Volatile should hold at most k+1 blocks (the window above immutable tip)
-        vol_count = chain_db.volatile_db.block_count
-        # Allow some margin: volatile might hold up to k+2 due to GC timing
-        assert vol_count <= k + 2, f"Volatile block count {vol_count} exceeds bound k+2={k + 2}"
+            # Volatile should hold at most k+1 blocks (the window above immutable tip)
+            vol_count = chain_db.volatile_db.block_count
+            # Allow some margin: volatile might hold up to k+2 due to GC timing
+            assert vol_count <= k + 2, f"Volatile block count {vol_count} exceeds bound k+2={k + 2}"
+        finally:
+            chain_db.stop_chain_sel_runner()
 
-    @pytest.mark.asyncio
-    async def test_gc_runs_on_every_promotion_cycle(self, tmp_path):
+    def test_gc_runs_on_every_promotion_cycle(self, tmp_path):
         """Each time immutable advances, GC should clean volatile.
         Track immutable tip progression to verify it advances regularly.
         """
         k = 3
         chain_db = _make_chain_db(tmp_path, k=k)
+        chain_db.start_chain_sel_runner()
 
-        immutable_tips = []
-        pred = GENESIS_HASH
-        for i in range(1, 21):
-            bh = make_hash(i)
-            await chain_db.add_block(i, bh, pred, i, make_block_cbor(i, i))
-            pred = bh
-            tip_bn = chain_db._immutable_tip_block_number
-            if tip_bn is not None:
-                immutable_tips.append(tip_bn)
+        try:
+            immutable_tips = []
+            pred = GENESIS_HASH
+            for i in range(1, 21):
+                bh = make_hash(i)
+                chain_db.add_block(i, bh, pred, i, make_block_cbor(i, i))
+                pred = bh
+                tip_bn = chain_db._immutable_tip_block_number
+                if tip_bn is not None:
+                    immutable_tips.append(tip_bn)
 
-        # Immutable tip should advance monotonically
-        for a, b in zip(immutable_tips, immutable_tips[1:]):
-            assert b >= a, f"Immutable tip regressed: {a} -> {b}"
+            # Immutable tip should advance monotonically
+            for a, b in zip(immutable_tips, immutable_tips[1:]):
+                assert b >= a, f"Immutable tip regressed: {a} -> {b}"
 
-        # Final immutable tip should be at or near (20 - k)
-        assert chain_db._immutable_tip_block_number >= 17 - 1  # allow margin
+            # Final immutable tip should be at or near (20 - k)
+            assert chain_db._immutable_tip_block_number >= 17 - 1  # allow margin
+        finally:
+            chain_db.stop_chain_sel_runner()
 
 
 # ===========================================================================
@@ -598,23 +616,27 @@ class TestGetIsValid:
             "olderThanK check"
         """
         chain_db = _make_chain_db(tmp_path, k=3)
-        await add_chain(chain_db, start_slot=1, count=7)
-        # Immutable tip at blockNo=4
+        chain_db.start_chain_sel_runner()
+        try:
+            add_chain(chain_db, start_slot=1, count=7)
+            # Immutable tip at blockNo=4
 
-        invalid_hash = make_hash(800)
-        await chain_db.add_block(
-            slot=50,
-            block_hash=invalid_hash,
-            predecessor_hash=GENESIS_HASH,
-            block_number=3,  # below immutable tip
-            cbor_bytes=make_block_cbor(50, 3),
-        )
+            invalid_hash = make_hash(800)
+            chain_db.add_block(
+                slot=50,
+                block_hash=invalid_hash,
+                predecessor_hash=GENESIS_HASH,
+                block_number=3,  # below immutable tip
+                cbor_bytes=make_block_cbor(50, 3),
+            )
 
-        # Should not be stored
-        assert await chain_db.get_block(invalid_hash) is None
-        # Tip should not change
-        tip = await chain_db.get_tip()
-        assert tip[0] == 7
+            # Should not be stored
+            assert await chain_db.get_block(invalid_hash) is None
+            # Tip should not change
+            tip = await chain_db.get_tip()
+            assert tip[0] == 7
+        finally:
+            chain_db.stop_chain_sel_runner()
 
     @pytest.mark.asyncio
     async def test_lower_block_number_does_not_become_tip(self, tmp_path):
@@ -626,28 +648,32 @@ class TestGetIsValid:
             "preferCandidate — candidate must have strictly higher selectView"
         """
         chain_db = _make_chain_db(tmp_path, k=10)
-        await add_chain(chain_db, start_slot=1, count=5)
+        chain_db.start_chain_sel_runner()
+        try:
+            add_chain(chain_db, start_slot=1, count=5)
 
-        tip_before = await chain_db.get_tip()
-        assert tip_before[0] == 5
+            tip_before = await chain_db.get_tip()
+            assert tip_before[0] == 5
 
-        # Add a fork block with lower block_number
-        fork_hash = make_hash(700)
-        await chain_db.add_block(
-            slot=100,
-            block_hash=fork_hash,
-            predecessor_hash=GENESIS_HASH,
-            block_number=2,
-            cbor_bytes=make_block_cbor(100, 2),
-        )
+            # Add a fork block with lower block_number
+            fork_hash = make_hash(700)
+            chain_db.add_block(
+                slot=100,
+                block_hash=fork_hash,
+                predecessor_hash=GENESIS_HASH,
+                block_number=2,
+                cbor_bytes=make_block_cbor(100, 2),
+            )
 
-        # Block is stored (above immutable tip which is None for k=10 chain of 5)
-        assert await chain_db.volatile_db.get_block(fork_hash) is not None
+            # Block is stored (above immutable tip which is None for k=10 chain of 5)
+            assert await chain_db.volatile_db.get_block(fork_hash) is not None
 
-        # But tip hasn't changed
-        tip_after = await chain_db.get_tip()
-        assert tip_after[0] == 5
-        assert tip_after[1] == tip_before[1]
+            # But tip hasn't changed
+            tip_after = await chain_db.get_tip()
+            assert tip_after[0] == 5
+            assert tip_after[1] == tip_before[1]
+        finally:
+            chain_db.stop_chain_sel_runner()
 
 
 # ===========================================================================
@@ -705,7 +731,7 @@ class ChainDBWithFollowers:
         self._followers.append(f)
         return f
 
-    async def add_block(
+    def add_block(
         self,
         slot: int,
         block_hash: bytes,
@@ -713,104 +739,113 @@ class ChainDBWithFollowers:
         block_number: int,
         cbor_bytes: bytes,
     ):
-        old_tip = await self.chain_db.get_tip()
-        await self.chain_db.add_block(
+        old_tip = self.chain_db._tip
+        self.chain_db.add_block(
             slot,
             block_hash,
             predecessor_hash,
             block_number,
             cbor_bytes,
         )
-        new_tip = await self.chain_db.get_tip()
+        new_tip = self.chain_db._tip
 
         # Notify followers if tip changed
         if new_tip != old_tip and new_tip is not None:
             for f in self._followers:
-                f.on_add_block(new_tip[0], new_tip[1])
+                f.on_add_block(new_tip.slot, new_tip.block_hash)
 
 
 class TestFollowerSubscriber:
     """Test follower registration and update notifications."""
 
-    @pytest.mark.asyncio
-    async def test_follower_receives_add_block_updates(self, tmp_path):
+    def test_follower_receives_add_block_updates(self, tmp_path):
         """Register a follower, add blocks, verify it receives updates."""
         chain_db = _make_chain_db(tmp_path, k=10)
-        wrapper = ChainDBWithFollowers(chain_db)
-        follower = wrapper.register_follower()
+        chain_db.start_chain_sel_runner()
+        try:
+            wrapper = ChainDBWithFollowers(chain_db)
+            follower = wrapper.register_follower()
 
-        # Add a chain of blocks
-        pred = GENESIS_HASH
-        for i in range(1, 6):
-            bh = make_hash(i)
-            await wrapper.add_block(
-                slot=i,
-                block_hash=bh,
-                predecessor_hash=pred,
-                block_number=i,
-                cbor_bytes=make_block_cbor(i, i),
-            )
-            pred = bh
+            # Add a chain of blocks
+            pred = GENESIS_HASH
+            for i in range(1, 6):
+                bh = make_hash(i)
+                wrapper.add_block(
+                    slot=i,
+                    block_hash=bh,
+                    predecessor_hash=pred,
+                    block_number=i,
+                    cbor_bytes=make_block_cbor(i, i),
+                )
+                pred = bh
 
-        # Follower should have received 5 updates
-        assert len(follower.updates) == 5
-        assert all(u.update_type == "add" for u in follower.updates)
-        assert [u.slot for u in follower.updates] == [1, 2, 3, 4, 5]
+            # Follower should have received 5 updates
+            assert len(follower.updates) == 5
+            assert all(u.update_type == "add" for u in follower.updates)
+            assert [u.slot for u in follower.updates] == [1, 2, 3, 4, 5]
+        finally:
+            chain_db.stop_chain_sel_runner()
 
-    @pytest.mark.asyncio
-    async def test_follower_not_notified_for_non_tip_block(self, tmp_path):
+    def test_follower_not_notified_for_non_tip_block(self, tmp_path):
         """A block that doesn't change the tip should not notify followers."""
         chain_db = _make_chain_db(tmp_path, k=10)
-        wrapper = ChainDBWithFollowers(chain_db)
-        follower = wrapper.register_follower()
+        chain_db.start_chain_sel_runner()
+        try:
+            wrapper = ChainDBWithFollowers(chain_db)
+            follower = wrapper.register_follower()
 
-        # Add main chain
-        pred = GENESIS_HASH
-        for i in range(1, 4):
-            bh = make_hash(i)
-            await wrapper.add_block(
-                slot=i,
-                block_hash=bh,
-                predecessor_hash=pred,
-                block_number=i,
-                cbor_bytes=make_block_cbor(i, i),
+            # Add main chain
+            pred = GENESIS_HASH
+            for i in range(1, 4):
+                bh = make_hash(i)
+                wrapper.add_block(
+                    slot=i,
+                    block_hash=bh,
+                    predecessor_hash=pred,
+                    block_number=i,
+                    cbor_bytes=make_block_cbor(i, i),
+                )
+                pred = bh
+
+            # 3 updates for the main chain
+            assert len(follower.updates) == 3
+
+            # Add a fork block with lower block_number — should NOT change tip
+            wrapper.add_block(
+                slot=100,
+                block_hash=make_hash(700),
+                predecessor_hash=GENESIS_HASH,
+                block_number=1,
+                cbor_bytes=make_block_cbor(100, 1),
             )
-            pred = bh
 
-        # 3 updates for the main chain
-        assert len(follower.updates) == 3
+            # Still only 3 updates — the fork block didn't change tip
+            assert len(follower.updates) == 3
+        finally:
+            chain_db.stop_chain_sel_runner()
 
-        # Add a fork block with lower block_number — should NOT change tip
-        await wrapper.add_block(
-            slot=100,
-            block_hash=make_hash(700),
-            predecessor_hash=GENESIS_HASH,
-            block_number=1,
-            cbor_bytes=make_block_cbor(100, 1),
-        )
-
-        # Still only 3 updates — the fork block didn't change tip
-        assert len(follower.updates) == 3
-
-    @pytest.mark.asyncio
-    async def test_multiple_followers_all_receive_updates(self, tmp_path):
+    def test_multiple_followers_all_receive_updates(self, tmp_path):
         """Multiple registered followers all receive the same updates."""
         chain_db = _make_chain_db(tmp_path, k=10)
-        wrapper = ChainDBWithFollowers(chain_db)
-        f1 = wrapper.register_follower()
-        f2 = wrapper.register_follower()
+        chain_db.start_chain_sel_runner()
+        try:
+            wrapper = ChainDBWithFollowers(chain_db)
+            f1 = wrapper.register_follower()
+            f2 = wrapper.register_follower()
 
-        await wrapper.add_block(
-            slot=1,
-            block_hash=make_hash(1),
-            predecessor_hash=GENESIS_HASH,
-            block_number=1,
-            cbor_bytes=make_block_cbor(1, 1),
-        )
+            wrapper.add_block(
+                slot=1,
+                block_hash=make_hash(1),
+                predecessor_hash=GENESIS_HASH,
+                block_number=1,
+                cbor_bytes=make_block_cbor(1, 1),
+            )
 
-        assert len(f1.updates) == 1
-        assert len(f2.updates) == 1
-        assert f1.updates[0].slot == f2.updates[0].slot == 1
+            assert len(f1.updates) == 1
+            assert len(f2.updates) == 1
+            assert f1.updates[0].slot == f2.updates[0].slot == 1
+        finally:
+            chain_db.stop_chain_sel_runner()
 
 
 # ===========================================================================
@@ -886,84 +921,92 @@ class TestModelCorrectness:
         with the reference model on tip and block lookups.
 
         This is a simplified version of the Haskell ChainDB.Model
-        testing approach — sequential operations, no shrinking.
+        testing approach -- sequential operations, no shrinking.
         """
         k = 5
         chain_db = _make_chain_db(tmp_path, k=k)
-        model = RefChainDBModel(k=k)
+        chain_db.start_chain_sel_runner()
+        try:
+            model = RefChainDBModel(k=k)
 
-        pred = GENESIS_HASH
-        for i in range(1, 16):
-            bh = make_hash(i)
-            slot = i
-            cbor = make_block_cbor(slot, i)
+            pred = GENESIS_HASH
+            for i in range(1, 16):
+                bh = make_hash(i)
+                slot = i
+                cbor = make_block_cbor(slot, i)
 
-            await chain_db.add_block(slot, bh, pred, i, cbor)
-            model.add_block(slot, bh, pred, i, cbor)
+                chain_db.add_block(slot, bh, pred, i, cbor)
+                model.add_block(slot, bh, pred, i, cbor)
 
-            # Tip should agree
-            real_tip = await chain_db.get_tip()
-            model_tip = model.get_tip()
-            assert real_tip is not None
-            assert model_tip is not None
-            assert real_tip[0] == model_tip[0], (
-                f"Tip slot mismatch at block {i}: real={real_tip[0]}, model={model_tip[0]}"
-            )
-            assert real_tip[1] == model_tip[1], f"Tip hash mismatch at block {i}"
+                # Tip should agree
+                real_tip = await chain_db.get_tip()
+                model_tip = model.get_tip()
+                assert real_tip is not None
+                assert model_tip is not None
+                assert real_tip[0] == model_tip[0], (
+                    f"Tip slot mismatch at block {i}: real={real_tip[0]}, model={model_tip[0]}"
+                )
+                assert real_tip[1] == model_tip[1], f"Tip hash mismatch at block {i}"
 
-            # Block lookup should agree
-            for j in range(1, i + 1):
-                jh = make_hash(j)
-                real_block = await chain_db.get_block(jh)
-                model_block = model.get_block(jh)
-                # Model keeps all blocks; ChainDB may have GC'd old volatile
-                # blocks but promoted them to immutable. The block should
-                # still be findable via ChainDB.get_block (volatile then immutable).
-                if model_block is not None:
-                    assert real_block is not None, (
-                        f"Block {j} in model but not in ChainDB at step {i}"
-                    )
-                    assert real_block == model_block
+                # Block lookup should agree
+                for j in range(1, i + 1):
+                    jh = make_hash(j)
+                    real_block = await chain_db.get_block(jh)
+                    model_block = model.get_block(jh)
+                    # Model keeps all blocks; ChainDB may have GC'd old volatile
+                    # blocks but promoted them to immutable. The block should
+                    # still be findable via ChainDB.get_block (volatile then immutable).
+                    if model_block is not None:
+                        assert real_block is not None, (
+                            f"Block {j} in model but not in ChainDB at step {i}"
+                        )
+                        assert real_block == model_block
 
-            pred = bh
+                pred = bh
+        finally:
+            chain_db.stop_chain_sel_runner()
 
     @pytest.mark.asyncio
     async def test_fork_model_agreement(self, tmp_path):
         """Test model agreement with forking chains."""
         k = 10
         chain_db = _make_chain_db(tmp_path, k=k)
-        model = RefChainDBModel(k=k)
+        chain_db.start_chain_sel_runner()
+        try:
+            model = RefChainDBModel(k=k)
 
-        # Main chain: blocks 1-5
-        pred = GENESIS_HASH
-        for i in range(1, 6):
-            bh = make_hash(i)
-            cbor = make_block_cbor(i, i)
-            await chain_db.add_block(i, bh, pred, i, cbor)
-            model.add_block(i, bh, pred, i, cbor)
-            pred = bh
+            # Main chain: blocks 1-5
+            pred = GENESIS_HASH
+            for i in range(1, 6):
+                bh = make_hash(i)
+                cbor = make_block_cbor(i, i)
+                chain_db.add_block(i, bh, pred, i, cbor)
+                model.add_block(i, bh, pred, i, cbor)
+                pred = bh
 
-        # Fork chain from genesis: blocks with block_numbers 1-3
-        fork_pred = GENESIS_HASH
-        for i in range(1, 4):
-            bh = make_hash(500 + i)
-            slot = 100 + i
-            cbor = make_block_cbor(slot, i)
-            await chain_db.add_block(slot, bh, fork_pred, i, cbor)
-            model.add_block(slot, bh, fork_pred, i, cbor)
-            fork_pred = bh
+            # Fork chain from genesis: blocks with block_numbers 1-3
+            fork_pred = GENESIS_HASH
+            for i in range(1, 4):
+                bh = make_hash(500 + i)
+                slot = 100 + i
+                cbor = make_block_cbor(slot, i)
+                chain_db.add_block(slot, bh, fork_pred, i, cbor)
+                model.add_block(slot, bh, fork_pred, i, cbor)
+                fork_pred = bh
 
-        # Tips should agree — main chain has higher block_number
-        real_tip = await chain_db.get_tip()
-        model_tip = model.get_tip()
-        assert real_tip[0] == model_tip[0]
-        assert real_tip[1] == model_tip[1]
+            # Tips should agree — main chain has higher block_number
+            real_tip = await chain_db.get_tip()
+            model_tip = model.get_tip()
+            assert real_tip[0] == model_tip[0]
+            assert real_tip[1] == model_tip[1]
 
-        # Fork blocks should be stored (not promoted to immutable, so in volatile)
-        for i in range(1, 4):
-            bh = make_hash(500 + i)
-            assert await chain_db.get_block(bh) is not None
-            assert model.get_block(bh) is not None
+            # Fork blocks should be stored (not promoted to immutable, so in volatile)
+            for i in range(1, 4):
+                bh = make_hash(500 + i)
+                assert await chain_db.get_block(bh) is not None
+                assert model.get_block(bh) is not None
+        finally:
+            chain_db.stop_chain_sel_runner()
 
 
 # ===========================================================================
@@ -997,6 +1040,7 @@ class ChainDBStateMachine(RuleBasedStateMachine):
         tmp = Path(self._tmp_dir)
         self.k = 3
         self.chain_db = _make_chain_db(tmp, k=self.k)
+        self.chain_db.start_chain_sel_runner()
         self.model = RefChainDBModel(k=self.k)
         self.next_block_number = 1
         self.current_pred = GENESIS_HASH
@@ -1018,7 +1062,7 @@ class ChainDBStateMachine(RuleBasedStateMachine):
         bh = make_hash(bn + 10000)  # avoid collisions
         cbor = make_block_cbor(slot, bn)
 
-        self._run(self.chain_db.add_block(slot, bh, self.current_pred, bn, cbor))
+        self.chain_db.add_block(slot, bh, self.current_pred, bn, cbor)
         self.model.add_block(slot, bh, self.current_pred, bn, cbor)
 
         self.current_pred = bh
@@ -1038,6 +1082,8 @@ class ChainDBStateMachine(RuleBasedStateMachine):
     def teardown(self):
         import shutil
 
+        if hasattr(self, "chain_db") and self.chain_db._chain_sel_thread is not None:
+            self.chain_db.stop_chain_sel_runner()
         if hasattr(self, "_loop"):
             self._loop.close()
         if hasattr(self, "_tmp_dir"):

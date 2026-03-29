@@ -137,6 +137,7 @@ def _run_receive_thread(
     shutdown_event: threading.Event,
     slot_clock: Any,
     ledger_db: Any,
+    peer_tip_tvar: Any = None,
 ) -> None:
     """Thread 2: block reception (peer_manager + outbound connections).
 
@@ -166,6 +167,8 @@ def _run_receive_thread(
             node_kernel=node_kernel,
             block_received_event=block_received_event,
         )
+        if peer_tip_tvar is not None:
+            peer_manager.peer_tip_block_no_tvar = peer_tip_tvar
 
         # Build intersection points from loaded chain fragment.
         # Haskell ref: chainSyncClient → findIntersection → mkOffsets → AF.selectPoints
@@ -424,12 +427,13 @@ async def _async_init(config: NodeConfig) -> dict:
         config.genesis_hash
         or hashlib.blake2b(config.network_magic.to_bytes(4, "big"), digest_size=32).digest()
     )
-    node_kernel.init_nonce(
+    chain_db.init_praos_state(
         nonce_seed,
         config.epoch_length,
-        security_param=config.security_param,
-        active_slot_coeff=config.active_slot_coeff,
+        config.security_param,
+        config.active_slot_coeff,
     )
+    node_kernel.init_nonce(chain_db=chain_db)
     if config.initial_pool_stakes:
         node_kernel.update_stake_distribution(
             {}, pool_stakes_direct=config.initial_pool_stakes,
@@ -513,9 +517,18 @@ def run_node(config: NodeConfig) -> None:
     block_received = threading.Event()
     shutdown = threading.Event()
 
+    # Shared TVar: best known peer tip block number.
+    # Written by peer_manager (Thread 2), read by forge_loop (Thread 1).
+    from vibe.core.stm import TVar
+    peer_tip_tvar = TVar(0)
+
+    # Start chain selection runner (Thread 4) — must be running before
+    # any thread calls add_block or add_block_async.
+    chain_db.start_chain_sel_runner()
+
     receive_thread = threading.Thread(
         target=_run_receive_thread,
-        args=(config, chain_db, node_kernel, block_received, shutdown, slot_clock, ledger_db),
+        args=(config, chain_db, node_kernel, block_received, shutdown, slot_clock, ledger_db, peer_tip_tvar),
         daemon=True,
         name="vibe-receive",
     )
@@ -536,7 +549,7 @@ def run_node(config: NodeConfig) -> None:
 
     receive_thread.start()
     serve_thread.start()
-    logger.info("Node started — 3 threads (forge, receive, serve)")
+    logger.info("Node started — 4 threads (forge, receive, serve, chainsel)")
 
     # Thread 1: FORGE (main thread — no asyncio loop)
     if config.is_block_producer:
@@ -548,6 +561,7 @@ def run_node(config: NodeConfig) -> None:
             chain_db=chain_db,
             node_kernel=node_kernel,
             mempool=mempool,
+            peer_tip_tvar=peer_tip_tvar,
         )
     else:
         shutdown.wait()
@@ -557,5 +571,6 @@ def run_node(config: NodeConfig) -> None:
     shutdown.set()
     receive_thread.join(timeout=5)
     serve_thread.join(timeout=5)
+    chain_db.stop_chain_sel_runner()
     chain_db.close()
     logger.info("Node stopped")

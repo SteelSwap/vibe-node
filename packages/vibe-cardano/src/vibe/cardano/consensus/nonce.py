@@ -114,14 +114,14 @@ def stability_window(
     security_param: int = 0,
     active_slot_coeff: float = 0.0,
 ) -> int:
-    """Return the stability window size for the given parameters.
+    """Return the randomness stabilisation window for Praos.
 
-    Haskell ref: ``stabilityWindow`` in ``Ouroboros.Consensus.Protocol.Praos``
-        stabilityWindow = 3 * k / f
+    Haskell ref: ``computeRandomnessStabilisationWindow`` in
+        ``Cardano.Ledger.Shelley.StabilityWindow``
+        randomnessStabilisationWindow = ceil(4 * k / f)
 
-    If security_param (k) and active_slot_coeff (f) are provided, uses the
-    Haskell formula ``3 * k / f``, capped at epoch_length.  Otherwise falls
-    back to the legacy 2/3 * epoch_length approximation.
+    Note: TPraos (Shelley-Alonzo) used 3k/f; Praos (Babbage/Conway)
+    uses 4k/f. Since we target Babbage+ only, we use 4k/f.
 
     Args:
         epoch_length: Number of slots per epoch.
@@ -129,10 +129,11 @@ def stability_window(
         active_slot_coeff: Active slot coefficient f (0.0 = use fallback).
 
     Returns:
-        Number of slots in the stability window.
+        Number of slots in the randomness stabilisation window.
     """
     if security_param > 0 and active_slot_coeff > 0.0:
-        window = int(3 * security_param / active_slot_coeff)
+        import math
+        window = math.ceil(4 * security_param / active_slot_coeff)
         return min(window, epoch_length)
     # Fallback: 2/3 of epoch (approximate, correct for mainnet-like params)
     return (epoch_length * 2) // 3

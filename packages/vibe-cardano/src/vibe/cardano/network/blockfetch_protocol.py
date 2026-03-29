@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
+import time
 from collections.abc import Awaitable, Callable
 
 from vibe.cardano.network.blockfetch import (
@@ -981,15 +982,16 @@ async def run_block_fetch_server(
 
         if isinstance(msg, BfMsgRequestRange):
             # Fetch blocks for the requested range.
+            t_recv = time.monotonic()
             blocks = await block_provider.get_blocks(msg.point_from, msg.point_to)
+            t_lookup = time.monotonic()
 
             if blocks is None or len(blocks) == 0:
                 # No blocks available for this range.
                 await runner.send_message(BfMsgNoBlocks())
-                logger.debug(
-                    "Block-fetch server: NoBlocks for range %s -> %s",
-                    msg.point_from,
-                    msg.point_to,
+                logger.info(
+                    "BlockFetch.Server.NoBlocks: range=%s..%s",
+                    msg.point_from, msg.point_to,
                 )
             else:
                 # Stream the blocks.
@@ -997,6 +999,18 @@ async def run_block_fetch_server(
                 for block_cbor in blocks:
                     await runner.send_message(BfMsgBlock(block_cbor=block_cbor))
                 await runner.send_message(BfMsgBatchDone())
+                t_sent = time.monotonic()
+                logger.info(
+                    "BlockFetch.Server.Timing: lookup=%.1fms send=%.1fms total=%.1fms blocks=%d",
+                    (t_lookup - t_recv) * 1000,
+                    (t_sent - t_lookup) * 1000,
+                    (t_sent - t_recv) * 1000,
+                    len(blocks),
+                )
+                logger.info(
+                    "BlockFetch.Server.SendBlock: range=%s..%s blocks=%d",
+                    msg.point_from, msg.point_to, len(blocks),
+                )
                 logger.debug(
                     "Block-fetch server: sent %d blocks for range %s -> %s",
                     len(blocks),

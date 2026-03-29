@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -641,6 +642,11 @@ async def run_chain_sync(
             "tip_block": tip.block_number,
         },
     )
+    # Haskell-matching intersection event for log correlation
+    logger.info(
+        "ChainSync.Client.FoundIntersection: point=%s tip_block=%d",
+        intersection, tip.block_number,
+    )
 
     # Step 2: Pipelined sync loop
     # Send multiple MsgRequestNext without waiting for responses.
@@ -831,8 +837,27 @@ async def run_chain_sync_server(
     )
 
     client_point: PointOrOrigin = ORIGIN
+    last_sent_block_no: int | None = None  # Track for UnexpectedBlockNo prevention
 
-    logger.debug("Chain-sync server started")
+    def _extract_block_no(header_cbor: Any) -> int | None:
+        """Extract block_number from wrapped header CBOR."""
+        try:
+            if isinstance(header_cbor, (list, tuple)) and len(header_cbor) >= 2:
+                inner = header_cbor[1]
+                raw = inner.value if hasattr(inner, 'value') else inner
+                if isinstance(raw, bytes):
+                    import cbor2pure as _cbor2
+                    decoded = _cbor2.loads(raw)
+                    if isinstance(decoded, (list, tuple)):
+                        hdr_body = decoded[0]
+                        if isinstance(hdr_body, (list, tuple)):
+                            return hdr_body[0]
+        except Exception:
+            pass
+        return None
+
+    logger.debug("Chain-sync server started (follower=%s)",
+                  follower.id if follower else "none")
 
     while True:
         if stop_event is not None and stop_event.is_set():
@@ -860,51 +885,98 @@ async def run_chain_sync_server(
             else:
                 action, header, point, tip = await chain_provider.next_block(client_point)
 
+            if action == "roll_forward" and header is None:
+                # Block exists but header CBOR is missing (fork switch rebuilt
+                # fragment without header data). Treat as await so the protocol
+                # doesn't get stuck in StNext. Without this fix, the outer loop
+                # calls recv_message() while server has agency, crashing with
+                # "should send, not receive".
+                action = "await"
+
             if action == "roll_forward" and header is not None:
+                hdr_bn = _extract_block_no(header)
+                logger.debug("ChainSync.Server.BnCheck: hdr_bn=%s last=%s", hdr_bn, last_sent_block_no)
+                if hdr_bn is not None and last_sent_block_no is not None:
+                    if hdr_bn != last_sent_block_no + 1:
+                        logger.warning(
+                            "ChainSync.Server.BlockNoSkip: last=%d hdr=%d",
+                            last_sent_block_no, hdr_bn,
+                        )
                 if follower is None:
                     client_point = point  # type: ignore[assignment]
+                last_sent_block_no = hdr_bn
+                t_send_start = time.monotonic()
                 await runner.send_message(CsMsgRollForward(header=header, tip=tip))
+                t_send_done = time.monotonic()
+                send_ms = (t_send_done - t_send_start) * 1000
+                if send_ms > 1.0:
+                    logger.info(
+                        "ChainSync.Server.Timing: send_header=%.1fms",
+                        send_ms,
+                    )
             elif action == "roll_backward" and point is not None:
                 if follower is None:
                     client_point = point
+                # Find the block_number at the rollback point so we can
+                # track what Haskell expects next. The client resets its
+                # tip to this point's block_number.
+                rollback_bn = None
+                if follower is not None and hasattr(point, 'hash'):
+                    frag, frag_idx = follower._chain_db.fragment_tvar.value
+                    rb_idx = frag_idx.get(point.hash)
+                    if rb_idx is not None and rb_idx < len(frag):
+                        rollback_bn = frag[rb_idx].block_number
+                last_sent_block_no = rollback_bn
+                logger.info(
+                    "ChainSync.Server.RollBack: to_slot=%s rollback_bn=%s",
+                    getattr(point, 'slot', '?'), rollback_bn,
+                )
                 await runner.send_message(CsMsgRollBackward(point=point, tip=tip))
             elif action == "await":
-                # Send AwaitReply, then block until new data.
-                await runner.send_message(CsMsgAwaitReply())
-                # Now in StNext(MustReply) — must send roll_forward or
-                # roll_backward next. Wait for follower/chain_provider to
-                # have data.
+                # At tip — send MsgAwaitReply IMMEDIATELY to transition
+                # Haskell's client from StCanAwait (10s timeout) to
+                # StMustReply (601-911s timeout for non-trustable,
+                # infinite for trustable peers).
                 #
-                # While we poll for new blocks, the client may disconnect
-                # (MsgDone from StIdle is not valid here per the FSM, but
-                # the channel may close). We catch exceptions to exit
-                # gracefully rather than crashing.
+                # Haskell ref: chainSyncServerPeer in Server.hs
+                #   Right waiting -> Yield MsgAwaitReply $ Effect (waiting >>= ...)
+                await runner.send_message(CsMsgAwaitReply())
+
+                # Now in StMustReply — block until data arrives.
+                # Use instruction_blocking() which waits for the
+                # chain tip to change via asyncio.Event.
                 try:
-                    while True:
-                        if stop_event is not None and stop_event.is_set():
-                            return
-                        if follower is not None:
-                            action2, header2, point2, tip2 = await follower.instruction()
-                        else:
+                    if follower is not None:
+                        action2, header2, point2, tip2 = await follower.instruction_blocking()
+                    else:
+                        # Legacy path: poll chain_provider
+                        while True:
+                            if stop_event is not None and stop_event.is_set():
+                                return
                             action2, header2, point2, tip2 = await chain_provider.next_block(
                                 client_point
                             )
-                        if action2 == "roll_forward" and header2 is not None:
-                            if follower is None:
-                                client_point = point2  # type: ignore[assignment]
-                            await runner.send_message(CsMsgRollForward(header=header2, tip=tip2))
-                            break
-                        elif action2 == "roll_backward" and point2 is not None:
-                            if follower is None:
-                                client_point = point2
-                            await runner.send_message(CsMsgRollBackward(point=point2, tip=tip2))
-                            break
-                        # Still no data — brief sleep to avoid busy-wait.
-                        await asyncio.sleep(0.1)
+                            if action2 != "await":
+                                break
+                            await asyncio.sleep(0.001)
+
+                    if action2 == "roll_forward" and header2 is not None:
+                        if follower is None:
+                            client_point = point2  # type: ignore[assignment]
+                        last_sent_block_no = _extract_block_no(header2)
+                        await runner.send_message(CsMsgRollForward(header=header2, tip=tip2))
+                    elif action2 == "roll_backward" and point2 is not None:
+                        if follower is None:
+                            client_point = point2
+                        rollback_bn2 = None
+                        if follower is not None and hasattr(point2, 'hash'):
+                            frag2, frag_idx2 = follower._chain_db.fragment_tvar.value
+                            rb_idx2 = frag_idx2.get(point2.hash)
+                            if rb_idx2 is not None and rb_idx2 < len(frag2):
+                                rollback_bn2 = frag2[rb_idx2].block_number
+                        last_sent_block_no = rollback_bn2
+                        await runner.send_message(CsMsgRollBackward(point=point2, tip=tip2))
                 except (asyncio.CancelledError, Exception) as exc:
-                    # Client disconnected or channel closed while we were
-                    # waiting for new blocks. This is expected — the client
-                    # may send MsgDone (closing the channel) at any time.
                     logger.debug(
                         "Chain-sync server: client disconnected during await: %s",
                         exc,

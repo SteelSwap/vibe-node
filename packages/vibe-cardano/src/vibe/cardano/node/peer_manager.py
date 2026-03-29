@@ -29,43 +29,10 @@ from vibe.core.multiplexer import (
 )
 
 from .config import NodeConfig, PeerAddress
-from .inbound_server import N2N_PROTOCOL_IDS
 
 __all__ = ["PeerManager", "_RangeTracker"]
 
 logger = logging.getLogger(__name__)
-
-
-def _get_new_chain_blocks(
-    chain_db: Any,
-    intersection_hash: bytes,
-    tip_hash: bytes,
-) -> list[tuple[int, bytes, bytes, bytes | None]]:
-    """Walk backward from tip to intersection through VolatileDB.
-
-    Returns list of (slot, block_hash, prev_hash, vrf_output) oldest-first,
-    for blocks AFTER the intersection (not including intersection itself).
-    Used to re-apply nonce state after a fork switch.
-    """
-    from vibe.cardano.serialization.block import decode_block_header
-
-    blocks: list[tuple[int, bytes, bytes, bytes | None]] = []
-    h = tip_hash
-    while h and h != intersection_hash and h in chain_db.volatile_db._block_info:
-        info = chain_db.volatile_db._block_info[h]
-        # Try to get VRF output from the block
-        vrf_out: bytes | None = None
-        block_cbor = chain_db.volatile_db._blocks.get(h)
-        if block_cbor:
-            try:
-                hdr = decode_block_header(block_cbor)
-                vrf_out = hdr.vrf_output
-            except Exception:
-                pass
-        blocks.append((info.slot, info.block_hash, info.predecessor_hash, vrf_out))
-        h = info.predecessor_hash
-    blocks.reverse()  # oldest first
-    return blocks
 
 
 @dataclass
@@ -151,6 +118,7 @@ class PeerManager:
         "_range_tracker",
         "_chain_sync_peer",
         "_block_notify",
+        "peer_tip_block_no_tvar",
     )
 
     def __init__(
@@ -178,6 +146,11 @@ class PeerManager:
         self._range_tracker: _RangeTracker | None = None
         self._chain_sync_peer: str | None = None
         self._block_notify = asyncio.Event()
+        # Best known peer tip block number — updated by chain-sync client
+        # when it receives headers. Read by forge loop to avoid forging
+        # on a chain that's behind the peer tip (would be orphaned).
+        from vibe.core.stm import TVar
+        self.peer_tip_block_no_tvar: TVar = TVar(0)
 
     @property
     def known_points(self) -> list[Any]:
@@ -328,13 +301,32 @@ class PeerManager:
             extra={"event": "peer.connect", "peer": str(peer.address)},
         )
         reader, writer = await asyncio.open_connection(peer.address.host, peer.address.port)
+        # Disable Nagle's algorithm for low-latency segment delivery.
+        # Haskell uses Socket.sendAll per segment; without NODELAY our
+        # small chain-sync headers get buffered for up to 200ms.
+        sock = writer.transport.get_extra_info('socket')
+        if sock is not None:
+            import socket
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         bearer = Bearer(reader, writer)
         mux = Multiplexer(bearer, is_initiator=True)
 
-        # Register N2N miniprotocol channels.
-        channels: dict[int, MiniProtocolChannel] = {}
-        for proto_id in N2N_PROTOCOL_IDS:
-            channels[proto_id] = mux.add_protocol(proto_id)
+        # Register N2N miniprotocol channels with dual (init+resp) support.
+        # Handshake is single-direction (initiator only for outbound).
+        # All other protocols get both initiator and responder channels
+        # so we can serve data back to the peer on the same connection.
+        init_channels: dict[int, MiniProtocolChannel] = {}
+        resp_channels: dict[int, MiniProtocolChannel] = {}
+
+        init_channels[HANDSHAKE_PROTOCOL_ID] = mux.add_protocol(HANDSHAKE_PROTOCOL_ID)
+
+        for proto_id in [CHAIN_SYNC_N2N_ID, BLOCK_FETCH_N2N_ID, TX_SUBMISSION_N2N_ID, KEEP_ALIVE_PROTOCOL_ID]:
+            init_ch, resp_ch = mux.add_protocol_pair(proto_id)
+            init_channels[proto_id] = init_ch
+            resp_channels[proto_id] = resp_ch
+
+        # Alias: existing code uses `channels[X]` for initiator protocols.
+        channels = init_channels
 
         peer.bearer = bearer
         peer.mux = mux
@@ -466,8 +458,25 @@ class PeerManager:
                         point = Point(slot=slot, hash=blk_hash)
                         await fetch_queue.put(point)
 
+                        # Haskell-matching chain-sync header event for log correlation
+                        if _headers_received % 1000 == 0:
+                            logger.info(
+                                "ChainSync.Client.DownloadedHeader: slot=%d hash=%s peer=%s",
+                                slot, blk_hash.hex()[:16], str(peer.address),
+                            )
+                        else:
+                            logger.debug(
+                                "ChainSync.Client.DownloadedHeader: slot=%d hash=%s peer=%s",
+                                slot, blk_hash.hex()[:16], str(peer.address),
+                            )
+
+                        # Track best known peer tip for forge loop
+                        tip_block_no = getattr(tip, "block_number", 0) or 0
+                        if tip_block_no > self.peer_tip_block_no_tvar.value:
+                            self.peer_tip_block_no_tvar._write(tip_block_no)
+
                         if _headers_received % 1000 == 1 or _headers_received <= 5:
-                            tip_block = getattr(tip, "block_number", 0) or 0
+                            tip_block = tip_block_no
                             # Use the header's block_number (not session count)
                             # for accurate sync percentage when resuming
                             current_block = hdr_block_number
@@ -477,24 +486,33 @@ class PeerManager:
                                 else 0.0,
                                 100.0,
                             )
-                            logger.info(
-                                "Chain-sync header #%d at slot %d block #%d (%.2f%% synced) from %s",
-                                _headers_received,
-                                slot,
-                                current_block,
-                                sync_pct,
-                                peer.address,
-                                extra={
-                                    "event": "chainsync.header",
-                                    "peer": str(peer.address),
-                                    "header_num": _headers_received,
-                                    "slot": slot,
-                                    "block_number": current_block,
-                                    "hash": blk_hash.hex()[:16],
-                                    "sync_pct": round(sync_pct, 2),
-                                    "tip_block": tip_block,
-                                },
-                            )
+                            if _headers_received % 10000 == 1:
+                                logger.info(
+                                    "Chain-sync: %d headers (block #%d, %.1f%% synced) from %s",
+                                    _headers_received,
+                                    current_block,
+                                    sync_pct,
+                                    peer.address,
+                                )
+                            else:
+                                logger.debug(
+                                    "Chain-sync header #%d at slot %d block #%d (%.2f%% synced) from %s",
+                                    _headers_received,
+                                    slot,
+                                    current_block,
+                                    sync_pct,
+                                    peer.address,
+                                    extra={
+                                        "event": "chainsync.header",
+                                        "peer": str(peer.address),
+                                        "header_num": _headers_received,
+                                        "slot": slot,
+                                        "block_number": current_block,
+                                        "hash": blk_hash.hex()[:16],
+                                        "sync_pct": round(sync_pct, 2),
+                                        "tip_block": tip_block,
+                                    },
+                                )
                     else:
                         if _headers_received % 100 == 1:
                             logger.debug(
@@ -521,7 +539,7 @@ class PeerManager:
                 )
 
             # Scale pipeline depth with peer count
-            pipeline_depth = 200 * max(1, len(self._config.peers))
+            pipeline_depth = 250 * max(1, len(self._config.peers))
 
             peer.protocol_tasks.append(asyncio.create_task(
                 _safe_run(
@@ -584,7 +602,33 @@ class PeerManager:
         # Non-producing nodes use the shared queue for parallel multi-peer.
         is_producer = self._config.pool_keys is not None
         if is_producer and peer_addr != self._chain_sync_peer:
-            # Non-chain-sync peers on a producer skip block-fetch
+            # Non-chain-sync peers on a producer skip block-fetch but
+            # MUST run keep-alive to prevent Haskell's inbound governor
+            # from demoting the idle connection to Cold.
+            from vibe.cardano.network.keepalive_protocol import run_keep_alive_client
+
+            # Keep-alive client on initiator channel.
+            peer.protocol_tasks.append(asyncio.create_task(
+                _safe_run(
+                    run_keep_alive_client(
+                        channels[KEEP_ALIVE_PROTOCOL_ID],
+                        stop_event=stop_event,
+                        interval=10.0,
+                        peer_info=peer_addr,
+                    ),
+                    "keep-alive",
+                ),
+                name=f"keepalive-{peer.address}",
+            ))
+
+            # Responder bundle on resp_channels (bidirectional support).
+            from vibe.cardano.node.miniprotocol_bundle import launch_responder_bundle
+            resp_tasks = await launch_responder_bundle(
+                resp_channels, chain_db, None, stop_event, peer_info=peer_addr,
+            )
+            for t in resp_tasks:
+                peer.protocol_tasks.append(t)
+
             peer.mux_task = mux_task
             return
 
@@ -662,6 +706,7 @@ class PeerManager:
                     channels[KEEP_ALIVE_PROTOCOL_ID],
                     stop_event=stop_event,
                     interval=10.0,
+                    peer_info=peer_addr,
                 ),
                 "keep-alive",
             ),
@@ -697,6 +742,17 @@ class PeerManager:
             ),
             name=f"txsub-{peer.address}",
         ))
+
+        # Launch responder bundle on resp_channels (bidirectional support).
+        # This lets the peer pull headers, blocks, and txs from us, and
+        # responds to keep-alive pings — preventing Haskell's inbound
+        # governor from demoting us to Cold.
+        from vibe.cardano.node.miniprotocol_bundle import launch_responder_bundle
+        resp_tasks = await launch_responder_bundle(
+            resp_channels, chain_db, None, stop_event, peer_info=peer_addr,
+        )
+        for t in resp_tasks:
+            peer.protocol_tasks.append(t)
 
         # Store the mux task -- peer_loop will await it instead of mux.run().
         peer.mux_task = mux_task
@@ -766,7 +822,7 @@ class PeerManager:
                     cbor2.CBORTag(24, hdr_cbor),
                 ]
                 hdr_vrf_out = getattr(hdr, "vrf_output", None)
-                result = await chain_db.add_block(
+                result = await chain_db.add_block_async(
                     slot=slot,
                     block_hash=block_hash,
                     predecessor_hash=prev_hash,
@@ -779,28 +835,30 @@ class PeerManager:
                 if result.adopted and self._block_received_event is not None:
                     self._block_received_event.set()
 
-                # Nonce update inline -- synchronous with block processing
-                if result.adopted and self._node_kernel is not None:
-                    if result.rollback_depth > 0 and result.intersection_hash is not None:
-                        new_blocks = _get_new_chain_blocks(
-                            chain_db, result.intersection_hash, block_hash,
-                        )
-                        self._node_kernel.on_fork_switch(
-                            result.intersection_hash, new_blocks,
-                        )
-                    else:
-                        self._node_kernel.on_block_adopted(
-                            slot, block_hash, prev_hash, hdr_vrf_out,
-                        )
-
             blocks_stored[0] += 1
             tx_count = (
                 len(block_body[1])
                 if len(block_body) > 1 and isinstance(block_body[1], list)
                 else 0
             )
-            if blocks_stored[0] % 100 == 1 or blocks_stored[0] <= 5:
+            # Haskell-matching block-fetch event for log correlation
+            if blocks_stored[0] % 1000 == 0:
                 logger.info(
+                    "BlockFetch.Client.CompletedBlockFetch: hash=%s slot=%d peer=inline",
+                    block_hash.hex()[:16], slot,
+                )
+            else:
+                logger.debug(
+                    "BlockFetch.Client.CompletedBlockFetch: hash=%s slot=%d peer=inline",
+                    block_hash.hex()[:16], slot,
+                )
+            if blocks_stored[0] % 1000 == 0:
+                logger.info(
+                    "Block-fetch: %d blocks stored (block #%d at slot %d, %s)",
+                    blocks_stored[0], block_number, slot, era.name,
+                )
+            elif blocks_stored[0] % 100 == 1 or blocks_stored[0] <= 5:
+                logger.debug(
                     "Block #%d stored at slot %d (%s, %d txs, %d bytes) [%d total]",
                     block_number, slot, era.name, tx_count,
                     len(raw_block), blocks_stored[0],
@@ -978,7 +1036,7 @@ class PeerManager:
                         cbor2.CBORTag(24, hdr_cbor),
                     ]
                     hdr_vrf_out = getattr(hdr, "vrf_output", None)
-                    result = await chain_db.add_block(
+                    result = await chain_db.add_block_async(
                         slot=slot,
                         block_hash=block_hash,
                         predecessor_hash=prev_hash,
@@ -991,35 +1049,30 @@ class PeerManager:
                     if result.adopted and self._block_received_event is not None:
                         self._block_received_event.set()
 
-                    # Update nonce state directly (not via nonce worker)
-                    # to ensure forge loop sees updated state immediately.
-                    if result.adopted and self._node_kernel is not None:
-                        if result.rollback_depth > 0 and result.intersection_hash is not None:
-                            new_blocks = _get_new_chain_blocks(
-                                chain_db,
-                                result.intersection_hash,
-                                block_hash,
-                            )
-                            self._node_kernel.on_fork_switch(
-                                result.intersection_hash,
-                                new_blocks,
-                            )
-                        else:
-                            self._node_kernel.on_block_adopted(
-                                slot,
-                                block_hash,
-                                prev_hash,
-                                hdr_vrf_out,
-                            )
-
                 _blocks_stored += 1
                 tx_count = (
                     len(block_body[1])
                     if len(block_body) > 1 and isinstance(block_body[1], list)
                     else 0
                 )
-                if _blocks_stored % 100 == 1 or _blocks_stored <= 5:
+                # Haskell-matching block-fetch event for log correlation
+                if _blocks_stored % 1000 == 0:
                     logger.info(
+                        "BlockFetch.Client.CompletedBlockFetch: hash=%s slot=%d peer=shared",
+                        block_hash.hex()[:16], slot,
+                    )
+                else:
+                    logger.debug(
+                        "BlockFetch.Client.CompletedBlockFetch: hash=%s slot=%d peer=shared",
+                        block_hash.hex()[:16], slot,
+                    )
+                if _blocks_stored % 1000 == 0:
+                    logger.info(
+                        "Block-fetch: %d blocks stored (block #%d at slot %d, %s)",
+                        _blocks_stored, block_number, slot, era.name,
+                    )
+                elif _blocks_stored % 100 == 1 or _blocks_stored <= 5:
+                    logger.debug(
                         "Block #%d stored at slot %d (%s, %d txs, %d bytes) [%d total]",
                         block_number, slot, era.name, tx_count,
                         len(raw_block), _blocks_stored,
@@ -1046,64 +1099,11 @@ class PeerManager:
                     raise
 
     async def _nonce_worker(self, stop_event: asyncio.Event) -> None:
-        """Walk chain fragment sequentially, accumulate nonce for new blocks.
+        """No-op stub — nonce is now tracked atomically inside ChainDB.add_block().
 
-        Reads from fragment_tvar (atomic snapshot) to avoid races with
-        the processor. Woken by _block_notify event on new blocks.
+        Retained to avoid attribute errors from existing task references.
         """
-        node_kernel = self._node_kernel
-        chain_db = self._chain_db
-        if node_kernel is None or chain_db is None:
-            return
-
-        last_hash = b""
-        last_generation = 0
-
-        while not stop_event.is_set():
-            try:
-                await asyncio.wait_for(self._block_notify.wait(), timeout=0.5)
-                self._block_notify.clear()
-            except TimeoutError:
-                pass
-
-            current_gen = chain_db._tip_generation
-            if current_gen == last_generation:
-                continue
-            last_generation = current_gen
-
-            fragment_snapshot, index_snapshot = chain_db.fragment_tvar.value
-            if not fragment_snapshot:
-                continue
-
-            start_idx = 0
-            if last_hash:
-                idx = index_snapshot.get(last_hash)
-                if idx is not None:
-                    start_idx = idx + 1
-                else:
-                    # Fork switch — last_hash no longer in fragment
-                    # Re-apply nonce from fragment start via fork_switch
-                    new_blocks = [
-                        (e.slot, e.block_hash, e.predecessor_hash,
-                         getattr(e, "vrf_output", None))
-                        for e in fragment_snapshot
-                    ]
-                    if new_blocks:
-                        node_kernel.on_fork_switch(
-                            fragment_snapshot[0].predecessor_hash,
-                            new_blocks,
-                        )
-                        last_hash = fragment_snapshot[-1].block_hash
-                    continue
-
-            # Process new blocks sequentially
-            for entry in fragment_snapshot[start_idx:]:
-                vrf_out = getattr(entry, "vrf_output", None)
-                node_kernel.on_block_adopted(
-                    entry.slot, entry.block_hash,
-                    entry.predecessor_hash, vrf_out,
-                )
-                last_hash = entry.block_hash
+        return
 
     async def _disconnect_peer(self, peer: _PeerConnection) -> None:
         """Tear down a peer's multiplexer and bearer."""

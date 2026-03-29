@@ -23,6 +23,7 @@ import asyncio
 import enum
 import logging
 import random
+import time
 
 from vibe.cardano.network.keepalive import (
     COOKIE_MAX,
@@ -322,6 +323,7 @@ async def run_keep_alive_client(
     interval: float = 90.0,
     timeout: float = 30.0,
     stop_event: asyncio.Event | None = None,
+    peer_info: str = "unknown",
 ) -> None:
     """Run a keep-alive ping loop on the given channel.
 
@@ -369,10 +371,16 @@ async def run_keep_alive_client(
         cookie = random.randint(COOKIE_MIN, COOKIE_MAX)
         logger.debug("Sending keep-alive ping, cookie=%d", cookie)
 
+        t0 = time.monotonic()
         async with asyncio.timeout(timeout):
             echoed = await client.ping(cookie)
+        rtt = time.monotonic() - t0
 
         logger.debug("Keep-alive pong received, cookie=%d", echoed)
+        # Haskell-matching keep-alive event for log correlation
+        logger.info(
+            "KeepAlive.Client.AddSample: peer=%s rtt=%.6fs", peer_info, rtt,
+        )
 
         # Wait for the next interval, but exit early if stop is requested.
         if stop_event is not None:

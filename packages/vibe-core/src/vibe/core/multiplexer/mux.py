@@ -178,7 +178,7 @@ class Multiplexer:
     def __init__(self, bearer: Bearer, is_initiator: bool) -> None:
         self._bearer = bearer
         self._is_initiator = is_initiator
-        self._channels: dict[int, MiniProtocolChannel] = {}
+        self._channels: dict[tuple[int, bool], MiniProtocolChannel] = {}
         self._sender_task: asyncio.Task[None] | None = None
         self._receiver_task: asyncio.Task[None] | None = None
         self._running = False
@@ -199,10 +199,14 @@ class Multiplexer:
         return self._closed
 
     def add_protocol(self, protocol_id: int, max_ingress_size: int = 0) -> MiniProtocolChannel:
-        """Register a miniprotocol and return its channel.
+        """Register a miniprotocol in a single direction and return its channel.
 
-        Must be called before run(). Each protocol_id can only be registered
-        once.
+        Backward-compatible API: registers only the direction matching
+        ``self._is_initiator``. For full-duplex (both initiator and responder
+        on the same connection), use :meth:`add_protocol_pair` instead.
+
+        Must be called before run(). Each ``(protocol_id, direction)`` can
+        only be registered once.
 
         Args:
             protocol_id: The miniprotocol number (0-32767).
@@ -214,23 +218,75 @@ class Multiplexer:
             A MiniProtocolChannel for sending/receiving on this protocol.
 
         Raises:
-            ValueError: If the protocol_id is already registered or out of range.
+            ValueError: If the (protocol_id, direction) is already registered or out of range.
             MuxClosedError: If the multiplexer has been closed.
         """
         if self._closed:
             raise MuxClosedError("multiplexer is closed")
         if not (0 <= protocol_id <= 0x7FFF):
             raise ValueError(f"protocol_id must be 0..32767, got {protocol_id}")
-        if protocol_id in self._channels:
-            raise ValueError(f"protocol {protocol_id} is already registered")
+        key = (protocol_id, self._is_initiator)
+        if key in self._channels:
+            raise ValueError(f"protocol {protocol_id} direction {'initiator' if self._is_initiator else 'responder'} is already registered")
         channel = MiniProtocolChannel(
             protocol_id=protocol_id,
             is_initiator=self._is_initiator,
             max_ingress_size=max_ingress_size,
         )
         channel._on_send = self._data_available.set
-        self._channels[protocol_id] = channel
+        self._channels[key] = channel
         return channel
+
+    def add_protocol_pair(
+        self, protocol_id: int, max_ingress_size: int = 0
+    ) -> tuple[MiniProtocolChannel, MiniProtocolChannel]:
+        """Register both initiator and responder channels for a protocol.
+
+        This matches the Haskell mux model where protocols are keyed by
+        ``(MiniProtocolNum, MiniProtocolDir)``, supporting full-duplex
+        operation on a single bearer connection.
+
+        Args:
+            protocol_id: The miniprotocol number (0-32767).
+            max_ingress_size: Maximum inbound queue depth per channel.
+                0 = unbounded.
+
+        Returns:
+            A tuple of ``(initiator_channel, responder_channel)``.
+
+        Raises:
+            ValueError: If either direction is already registered or protocol_id
+                is out of range.
+            MuxClosedError: If the multiplexer has been closed.
+
+        Haskell reference:
+            Network.Mux.Types — MuxMode InitiatorResponderMode registers both
+            InitiatorDir and ResponderDir for each MiniProtocolNum.
+        """
+        if self._closed:
+            raise MuxClosedError("multiplexer is closed")
+        if not (0 <= protocol_id <= 0x7FFF):
+            raise ValueError(f"protocol_id must be 0..32767, got {protocol_id}")
+        init_key = (protocol_id, True)
+        resp_key = (protocol_id, False)
+        if init_key in self._channels or resp_key in self._channels:
+            raise ValueError(f"protocol {protocol_id} is already registered")
+
+        init_channel = MiniProtocolChannel(
+            protocol_id=protocol_id,
+            is_initiator=True,
+            max_ingress_size=max_ingress_size,
+        )
+        resp_channel = MiniProtocolChannel(
+            protocol_id=protocol_id,
+            is_initiator=False,
+            max_ingress_size=max_ingress_size,
+        )
+        init_channel._on_send = self._data_available.set
+        resp_channel._on_send = self._data_available.set
+        self._channels[init_key] = init_channel
+        self._channels[resp_key] = resp_channel
+        return init_channel, resp_channel
 
     async def run(self) -> None:
         """Start the sender and receiver background tasks.
@@ -333,61 +389,71 @@ class Multiplexer:
             Network.Mux.Bearer.Socket uses buffered writes (sendAll) and the
             mux sender collects from all miniprotocols before writing.
         """
-        protocol_ids = list(self._channels.keys())
-        if not protocol_ids:
+        channel_keys = list(self._channels.keys())
+        if not channel_keys:
             # No protocols registered — just wait for cancellation.
             try:
                 await asyncio.Future()
             except asyncio.CancelledError:
                 return
 
-        idx = 0
         while not self._closed:
+            # Event-driven: wait for any channel to signal data,
+            # then drain ALL channels with pending data immediately.
+            # This is faster than round-robin because there's no
+            # cycling through empty channels — we go straight to
+            # the ones that have data.
+            self._data_available.clear()
+
+            # Drain all channels, buffering segments, then flush once.
+            # Haskell's mux sender collects from all miniprotocols
+            # before writing. We buffer via buffer_segment() and flush
+            # once per pass to reduce syscalls and TCP round-trips.
             sent_any = False
-
-            # One full round-robin pass — buffer writes, flush once.
-            for _ in range(len(protocol_ids)):
-                pid = protocol_ids[idx % len(protocol_ids)]
-                idx += 1
-                channel = self._channels[pid]
-
+            for channel in self._channels.values():
                 if channel._closed:
                     continue
+                # Drain up to 20 segments per channel per wake
+                for _ in range(20):
+                    try:
+                        payload = channel._outbound.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
 
+                    if payload is _CHANNEL_CLOSED:
+                        break
+
+                    assert isinstance(payload, bytes)
+                    segment = MuxSegment(
+                        timestamp=self._make_timestamp(),
+                        protocol_id=channel.protocol_id,
+                        is_initiator=channel.is_initiator,
+                        payload=payload,
+                    )
+                    try:
+                        self._bearer.buffer_segment(segment)
+                    except (BearerClosedError, ConnectionError) as exc:
+                        logger.debug("sender: bearer disconnected: %s", exc)
+                        return
+                    sent_any = True
+
+            # Flush all buffered segments in one syscall
+            if sent_any:
                 try:
-                    payload = channel._outbound.get_nowait()
-                except asyncio.QueueEmpty:
-                    continue
-
-                if payload is _CHANNEL_CLOSED:
-                    continue
-
-                assert isinstance(payload, bytes)
-                segment = MuxSegment(
-                    timestamp=self._make_timestamp(),
-                    protocol_id=pid,
-                    is_initiator=self._is_initiator,
-                    payload=payload,
-                )
-                try:
-                    await self._bearer.write_segment(segment)
+                    await self._bearer.flush()
                 except (BearerClosedError, ConnectionError) as exc:
                     logger.debug("sender: bearer disconnected: %s", exc)
                     return
-                sent_any = True
 
             if not sent_any:
-                # Event-driven wait: block until a channel signals data
-                # or shutdown is requested. No polling.
-                self._data_available.clear()
-                # Double-check after clearing — a send() could have raced
-                # between the round-robin pass and the clear().
+                # Nothing to send — wait for data or shutdown.
+                # Double-check after clearing _data_available to
+                # avoid race between drain loop and new send().
                 if any(
                     not ch._closed and not ch._outbound.empty()
                     for ch in self._channels.values()
                 ):
                     continue
-                # Truly idle — wait for data or shutdown.
                 data_task = asyncio.create_task(self._data_available.wait())
                 stop_task = asyncio.create_task(self._stop_event.wait())
                 done, pending = await asyncio.wait(
@@ -422,14 +488,19 @@ class Multiplexer:
                 logger.debug("receiver: incomplete read — bearer disconnected")
                 return
 
-            channel = self._channels.get(segment.protocol_id)
+            # Flip direction: the remote's initiator sends to our responder
+            # and vice versa. This matches Haskell's Network.Mux.demux which
+            # routes by (MiniProtocolNum, flipDir MiniProtocolDir).
+            local_dir = not segment.is_initiator
+            channel = self._channels.get((segment.protocol_id, local_dir))
             if channel is None:
                 # Haskell escalates to ShutdownNode for unknown protocols.
                 # We log and drop for now — we don't have a connection manager
                 # to escalate to yet. This is a documented gap.
                 logger.warning(
-                    "receiver: unknown protocol_id %d — dropping %d bytes",
+                    "receiver: unknown protocol_id %d dir %s — dropping %d bytes",
                     segment.protocol_id,
+                    "initiator" if local_dir else "responder",
                     len(segment.payload),
                 )
                 continue

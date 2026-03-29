@@ -146,16 +146,10 @@ class Bearer:
 
         try:
             self._writer.write(wire)
-            # Only drain when the write buffer exceeds 64KB. Small writes
-            # (e.g. MsgRequestRange ~100 bytes) skip the syscall entirely
-            # and let the OS TCP stack flush naturally. This avoids the
-            # per-segment drain() latency that was our main overhead.
-            try:
-                buf_size = self._writer.transport.get_write_buffer_size()
-                if buf_size > 65536:
-                    await self._writer.drain()
-            except (AttributeError, TypeError):
-                pass
+            # Buffer only — the mux sender calls flush() after
+            # draining all channels in a pass, batching writes
+            # into a single syscall. Haskell's mux similarly
+            # collects segments before writing.
         except (ConnectionError, OSError) as exc:
             self._closed = True
             raise ConnectionError(str(exc)) from exc

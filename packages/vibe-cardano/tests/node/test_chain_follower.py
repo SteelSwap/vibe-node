@@ -197,9 +197,12 @@ class TestFollowerForkSwitch:
         )
         a_aff, _, _, _ = await f_affected.instruction()
         assert a_aff == "roll_backward"
-        a_safe, _, p_safe, _ = await f_safe.instruction()
-        assert a_safe == "roll_forward"
-        assert p_safe == Point(slot=3, hash=_hash(3))
+        # All followers roll back on fork switch (prevents UnexpectedBlockNo)
+        a_safe, _, _, _ = await f_safe.instruction()
+        assert a_safe == "roll_backward"
+        # After rollback, next instruction should serve the new chain
+        a_safe2, _, p_safe2, _ = await f_safe.instruction()
+        assert a_safe2 == "roll_forward"
 
 
 class TestFollowerFindIntersect:

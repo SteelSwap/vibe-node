@@ -156,14 +156,23 @@ def _build_block_body(
     # split the transaction into body/witnesses/auxiliary, but for the forge
     # module the key property is: the block body is deterministically encoded
     # and its hash can be verified.
-    body_array: list[Any] = [
-        selected_txs,  # transaction_bodies (as raw CBOR blobs)
-        [],  # transaction_witness_sets (placeholder)
-        None,  # auxiliary_data_map (null = no auxiliary data)
-        [],  # invalid_transactions (empty)
-    ]
+    # Alonzo/Conway block body is NOT a CBOR array. It's 4 separate
+    # CBOR-encoded items concatenated: bodies || wits || auxdata || isvalid.
+    # Each part is independently serialized.
+    #
+    # Haskell ref: encCBORGroup in Alonzo/BlockBody/Internal.hs:177-181
+    #   encCBORGroup = encodePreEncoded (bodyBytes <> witsBytes <> metaBytes <> invalidBytes)
+    #   listLen = 4
+    #
+    # The body hash uses hashAlonzoSegWits which hashes each part separately:
+    #   hash( hash(bodies) || hash(wits) || hash(auxdata) || hash(isvalid) )
+    bodies_cbor = cbor2.dumps(selected_txs)  # CBOR array of tx bodies
+    wits_cbor = cbor2.dumps([])  # CBOR array of witness sets
+    auxdata_cbor = cbor2.dumps({})  # CBOR map of auxiliary data
+    isvalid_cbor = cbor2.dumps([])  # CBOR array of invalid tx indices
 
-    body_cbor = cbor2.dumps(body_array)
+    # Body is the concatenation of the 4 parts (no outer array wrapper)
+    body_cbor = bodies_cbor + wits_cbor + auxdata_cbor + isvalid_cbor
 
     logger.debug(
         "Block body: %d txs, %d bytes (limit %d)",
@@ -172,7 +181,7 @@ def _build_block_body(
         max_body_size,
     )
 
-    return body_cbor, len(selected_txs)
+    return body_cbor, len(selected_txs), bodies_cbor, wits_cbor, auxdata_cbor, isvalid_cbor
 
 
 # ---------------------------------------------------------------------------
@@ -305,11 +314,22 @@ def forge_block(
     block_number = prev_block_number + 1
     slot = leader_proof.slot
 
-    # Step 1: Build block body
-    body_cbor, num_txs = _build_block_body(mempool_txs, max_body_size)
+    # Step 1: Build block body (4 separate CBOR-encoded parts)
+    body_cbor, num_txs, bodies_bytes, wits_bytes, auxdata_bytes, isvalid_bytes = (
+        _build_block_body(mempool_txs, max_body_size)
+    )
 
-    # Step 2: Compute body hash
-    body_hash = hashlib.blake2b(body_cbor, digest_size=32).digest()
+    # Step 2: Compute body hash (Alonzo segmented witness hash)
+    # Haskell ref: hashAlonzoSegWits in Alonzo/BlockBody/Internal.hs:194-206
+    #   hash( hash(bodies) || hash(wits) || hash(auxdata) || hash(isvalid) )
+    def _hash_part(data: bytes) -> bytes:
+        return hashlib.blake2b(data, digest_size=32).digest()
+
+    body_hash = hashlib.blake2b(
+        _hash_part(bodies_bytes) + _hash_part(wits_bytes)
+        + _hash_part(auxdata_bytes) + _hash_part(isvalid_bytes),
+        digest_size=32,
+    ).digest()
 
     # Step 3: Construct header body
     vrf_result = (leader_proof.vrf_output, leader_proof.vrf_proof)
@@ -347,18 +367,30 @@ def forge_block(
         slot=slot,
     )
 
-    # Step 8: Assemble full block as CBOR array
-    # block = [header, tx_bodies, tx_witnesses, auxiliary, invalid_txs]
-    # We re-decode the body to get the arrays, or just use the raw structure.
-    # For wire format, the block is the 4-element array from the body
-    # with the header prepended as the first element.
+    # Step 8: Assemble full block for storage.
+    # Haskell's Shelley block on disk is [era_tag, block_body] where
+    # block_body uses encCBORGroup (4 consecutive items, NOT an array).
+    # The wire format for a Shelley block is:
+    #   CBOR array(5): [header, tx_bodies, tx_witnesses, aux_data, invalid_txs]
+    # wrapped in [era_tag, ...] for the HFC.
     #
-    # Actually: block = [header, transaction_bodies, transaction_witness_sets,
-    #                    auxiliary_data_map]
-    # The header is the [header_body, kes_sig] pair.
-    # The remaining 3 elements come from the body.
-    full_block = [header_array] + cbor2.loads(body_cbor)
-    full_block_cbor = cbor2.dumps(full_block)
+    # Haskell ref: ShelleyBlock serialization uses encCBOR which produces
+    #   encodeListLen 5 <> header <> encCBORGroup body
+    # i.e., a 5-element array: header + 4 body parts.
+    #
+    # For storage, we produce [era_tag, [header, bodies, wits, aux, isvalid]]
+    # matching how received Haskell blocks are stored in VolatileDB.
+    full_block = cbor2.dumps([
+        7,  # Conway era tag
+        [
+            header_array,  # [header_body, kes_signature]
+            cbor2.loads(bodies_bytes),  # tx bodies array
+            cbor2.loads(wits_bytes),  # tx witness sets array
+            cbor2.loads(auxdata_bytes),  # aux data map
+            cbor2.loads(isvalid_bytes),  # invalid tx indices
+        ],
+    ])
+    full_block_cbor = full_block
 
     logger.debug(
         "forge_block: block #%d slot=%d txs=%d header=%d body=%d hash=%s",

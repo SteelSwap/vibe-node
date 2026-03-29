@@ -4,7 +4,8 @@ Ouroboros Praos uses a **longest-chain** rule: prefer the chain with the
 highest block number (not the highest slot number, since slots can be
 empty).  When two chains have the same block number, the protocol breaks
 ties deterministically using the VRF output — the chain whose tip has
-the lower VRF output wins.
+the lower VRF output wins.  If no VRF preference exists, stay on the
+current chain (Haskell has no block-hash fallback).
 
 Chain selection is constrained by the **security parameter k** (2160 on
 mainnet).  A block more than k blocks from the tip is considered
@@ -77,7 +78,7 @@ class ChainCandidate:
         chain_length: Total chain length (may differ from tip_block_number
             in edge cases with genesis offsets, but usually identical).
         vrf_output: Optional 64-byte VRF output for deterministic tiebreaking.
-            If None, tiebreaking falls back to block hash comparison.
+            If None, chains with equal block number are considered EQUAL.
     """
 
     tip_slot: int
@@ -106,13 +107,12 @@ def compare_chains(
 
     2. **Tiebreak on VRF output** — if both chains have the same block
        number and both provide VRF outputs, prefer the chain whose tip
-       has the numerically lower VRF output (interpreted as a big-endian
-       unsigned integer). This ensures deterministic, unpredictable
-       tiebreaking.
+       has the lexicographically lower VRF output. This ensures
+       deterministic, unpredictable tiebreaking.
 
-    3. **Fallback tiebreak on block hash** — if VRF outputs are not
-       available (or equal), compare block hashes. Lower hash wins.
-       This is a last resort that should rarely be reached.
+    3. **No fallback** — if VRF outputs are unavailable or equal,
+       return EQUAL. Haskell stays on the current chain when there is
+       no preference (no block hash fallback).
 
     Spec ref: Ouroboros Praos, Definition 4 — maxvalid selects the
     longest valid chain.
@@ -134,20 +134,16 @@ def compare_chains(
     if chain_b.tip_block_number > chain_a.tip_block_number:
         return Preference.PREFER_SECOND
 
-    # Tiebreak: same block number — use VRF output (lower wins)
+    # Tiebreak: same block number — use VRF output (lower wins).
+    # Haskell ref: comparePraos uses `compare `on` Down . ptvTieBreakVRF`
+    # which prefers lower VRF (Down reverses the ordering).
+    # When VRF outputs are equal or unavailable, return EQUAL — Haskell
+    # stays on the current chain (no block hash fallback).
     if chain_a.vrf_output is not None and chain_b.vrf_output is not None:
-        vrf_a = int.from_bytes(chain_a.vrf_output, byteorder="big")
-        vrf_b = int.from_bytes(chain_b.vrf_output, byteorder="big")
-        if vrf_a < vrf_b:
+        if chain_a.vrf_output < chain_b.vrf_output:
             return Preference.PREFER_FIRST
-        if vrf_b < vrf_a:
+        if chain_b.vrf_output < chain_a.vrf_output:
             return Preference.PREFER_SECOND
-
-    # Fallback tiebreak: block hash (lower wins)
-    if chain_a.tip_hash < chain_b.tip_hash:
-        return Preference.PREFER_FIRST
-    if chain_b.tip_hash < chain_a.tip_hash:
-        return Preference.PREFER_SECOND
 
     return Preference.EQUAL
 

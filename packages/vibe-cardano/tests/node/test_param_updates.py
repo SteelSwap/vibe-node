@@ -114,20 +114,17 @@ class TestParamsAtEpochBoundary:
     """Test that params are applied correctly around epoch boundaries."""
 
     def test_params_available_after_epoch_boundary(self) -> None:
-        """Simulate epoch boundary: queue update, then apply via epoch transition."""
+        """Queue update, then apply (epoch boundary is now handled by ChainDB)."""
         kernel = NodeKernel()
-        kernel.init_nonce(b"\x00" * 32, epoch_length=100)
         kernel.init_protocol_params({"max_tx_size": 16384})
 
         # Queue an update (as if a governance action was enacted)
         kernel.queue_param_update({"max_tx_size": 32768})
 
-        # Simulate epoch boundary
-        kernel.on_epoch_boundary(1)
+        # Apply pending updates (epoch boundary nonce evolution is in ChainDB now)
         kernel.apply_pending_updates()
 
         assert kernel.protocol_params["max_tx_size"] == 32768
-        assert kernel._current_epoch == 1
 
     def test_no_update_without_epoch_boundary(self) -> None:
         """Queued updates should not affect params until epoch boundary."""
@@ -142,19 +139,16 @@ class TestParamsAtEpochBoundary:
     def test_multiple_epochs_accumulate(self) -> None:
         """Updates across multiple epochs apply independently."""
         kernel = NodeKernel()
-        kernel.init_nonce(b"\x00" * 32, epoch_length=100)
         kernel.init_protocol_params({"max_tx_size": 16384, "min_fee_constant": 155381})
 
         # Epoch 1: update max_tx_size
         kernel.queue_param_update({"max_tx_size": 32768})
-        kernel.on_epoch_boundary(1)
         kernel.apply_pending_updates()
         assert kernel.protocol_params["max_tx_size"] == 32768
         assert kernel.protocol_params["min_fee_constant"] == 155381
 
         # Epoch 2: update min_fee_constant
         kernel.queue_param_update({"min_fee_constant": 200000})
-        kernel.on_epoch_boundary(2)
         kernel.apply_pending_updates()
         assert kernel.protocol_params["max_tx_size"] == 32768
         assert kernel.protocol_params["min_fee_constant"] == 200000

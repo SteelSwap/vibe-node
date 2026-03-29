@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -35,6 +36,7 @@ def forge_loop(
     chain_db: Any = None,
     node_kernel: Any = None,
     mempool: Any = None,
+    peer_tip_tvar: Any = None,
 ) -> None:
     """Slot-by-slot leader check and block forging loop.
 
@@ -168,6 +170,7 @@ def forge_loop(
                 prev_block_number = chain_db._tip.block_number
 
     blocks_forged = 0
+    last_checked_slot = -1  # Track last slot we checked to avoid duplicates
 
     logger.info(
         "Forge loop started (stake=%.2f%%, kes_period=%d)",
@@ -181,6 +184,36 @@ def forge_loop(
             "kes_period": _current_kes_period,
         },
     )
+
+    # ---------------------------------------------------------------
+    # Wait for initial peer sync before forging
+    # ---------------------------------------------------------------
+    # Haskell's forge loop blocks in an STM retry on CurrentSlotUnknown
+    # until the node is synced. We approximate this by waiting for the
+    # peer_tip_tvar to become non-zero, meaning at least one peer has
+    # announced a chain tip via chain-sync. Without this gate, the
+    # forge loop races ahead building a divergent chain before hearing
+    # from any peers.
+    if peer_tip_tvar is not None and chain_db is not None:
+        logger.info("Forge loop waiting for initial peer sync...")
+        while not shutdown_event.is_set():
+            peer_bn = peer_tip_tvar.value
+            our_tip = chain_db.tip_tvar.value
+            our_bn = our_tip.block_number if our_tip is not None else 0
+            if peer_bn > 0 and our_bn >= peer_bn:
+                logger.info(
+                    "Forge loop: synced with peers (our_bn=%d peer_bn=%d), starting",
+                    our_bn, peer_bn,
+                )
+                break
+            if peer_bn > 0 and our_bn < peer_bn:
+                logger.debug(
+                    "Forge loop: syncing (our_bn=%d peer_bn=%d)",
+                    our_bn, peer_bn,
+                )
+            # Check every 200ms — block-fetch brings us up to speed
+            block_received_event.wait(timeout=0.2)
+            block_received_event.clear()
 
     # ---------------------------------------------------------------
     # Main forge loop — runs until shutdown
@@ -201,6 +234,13 @@ def forge_loop(
             return
 
         slot = wall_clock_to_slot(datetime.now(UTC), slot_config)
+
+        # Skip if we already checked this slot — prevents forging
+        # duplicate blocks when block_received_event wakes us mid-slot.
+        # Haskell's forge loop only checks each slot once.
+        if slot <= last_checked_slot:
+            continue
+        last_checked_slot = slot
 
         # Evolve KES key if period has advanced
         new_kes_period = (
@@ -232,13 +272,17 @@ def forge_loop(
             # Read tip from ChainDB TVar
             tip_val = tx.read(chain_db.tip_tvar) if chain_db is not None else None
             if tip_val is not None:
-                if slot - tip_val.slot > 10:
+                # Haskell uses 3k/f as the syncing threshold. With
+                # activeSlotsCoeff=0.1 and k=10 that's 300 seconds.
+                # Using ceil(3k/f) slots to match Haskell's maxRollbacks.
+                max_behind = int(3 * config.security_param / config.active_slot_coeff)
+                if slot - tip_val.slot > max_behind:
                     return None  # Still syncing
             elif slot > 10:
                 return None
 
             # Read nonce + stake from NodeKernel TVars
-            nonce_val = tx.read(node_kernel.nonce_tvar) if node_kernel is not None else epoch_nonce
+            nonce_val = tx.read(chain_db.praos_nonce_tvar) if chain_db is not None else epoch_nonce
             stake_val = tx.read(node_kernel.stake_tvar) if node_kernel is not None else {}
 
             return {
@@ -254,6 +298,31 @@ def forge_loop(
         # Extract snapshot values
         tip_snap = snapshot["tip"]
         if tip_snap is not None:
+            # Epoch boundary guard: if the forge slot is in a newer epoch
+            # than the tip AND the nonce hasn't been updated yet, the
+            # epoch boundary block is still queued. Skip this slot.
+            # But if tip_epoch matches forge_epoch (nonce was updated
+            # by a block in this epoch), proceed — don't lose the slot.
+            tip_epoch = tip_snap.slot // config.epoch_length
+            forge_epoch = slot // config.epoch_length
+            if forge_epoch > tip_epoch + 1:
+                # More than 1 epoch behind — definitely stale
+                logger.debug(
+                    "Forge.Loop.EpochBoundarySkip: slot=%d forge_epoch=%d tip_epoch=%d",
+                    slot, forge_epoch, tip_epoch,
+                )
+                continue
+            if forge_epoch == tip_epoch + 1:
+                # Exactly 1 epoch ahead — the boundary block may not
+                # have been processed yet. Only skip if no block from
+                # the new epoch exists on our chain (tip is still in
+                # the old epoch).
+                logger.debug(
+                    "Forge.Loop.EpochBoundaryWait: slot=%d forge_epoch=%d tip_epoch=%d",
+                    slot, forge_epoch, tip_epoch,
+                )
+                continue
+
             prev_header_hash = tip_snap.block_hash
             prev_block_number = tip_snap.block_number
 
@@ -265,6 +334,10 @@ def forge_loop(
             relative_stake = pool_stake / total_stake if total_stake > 0 else relative_stake
 
         # --- VRF leader check (pure computation, no shared state) ---
+        logger.debug(
+            "Forge.Loop.VRFCheck: slot=%d nonce=%s nonce_len=%d",
+            slot, epoch_nonce.hex(), len(epoch_nonce),
+        )
         proof = check_leadership(
             slot=slot,
             vrf_sk=pool_keys.vrf_sk,
@@ -277,7 +350,21 @@ def forge_loop(
         if proof is None:
             continue
 
+        # --- Check if behind peer tip — skip forge if clearly orphaned ---
+        # Only skip if the peer is MORE than 1 block ahead. At the same
+        # height (peer_bn == prev_block_number + 1), our block could win
+        # via VRF tiebreak (lower VRF output wins in Praos comparePraos).
+        if peer_tip_tvar is not None:
+            peer_bn = peer_tip_tvar.value
+            if peer_bn > prev_block_number + 1:
+                logger.info(
+                    "Skipping forge at slot %d — peer tip block_no %d > ours %d",
+                    slot, peer_bn, prev_block_number,
+                )
+                continue
+
         # --- Forge block (pure computation, no shared state) ---
+        t_forge_start = time.monotonic()
         try:
             forged = forge_block(
                 leader_proof=proof,
@@ -291,41 +378,31 @@ def forge_loop(
                 vrf_vk=pool_keys.vrf_vk,
             )
 
+            t_forge_done = time.monotonic()
+
             blocks_forged += 1
             forged_predecessor = prev_header_hash or b"\x00" * 32
 
-            # --- Store forged block + verify nonce consistency ---
-            # Use STM to verify the nonce hasn't changed since we read it.
-            # If it changed (header processing ticked epoch), retry forging.
+            # --- Store forged block ---
             if chain_db is not None:
+                result = chain_db.add_block(
+                    slot=forged.block.slot,
+                    block_hash=forged.block.block_hash,
+                    predecessor_hash=forged_predecessor,
+                    block_number=forged.block.block_number,
+                    cbor_bytes=forged.cbor,
+                    header_cbor=[6, cbor2.CBORTag(24, forged.block.header_cbor)],
+                    vrf_output=proof.vrf_output,
+                )
 
-                def _store_tx(tx):
-                    # Verify nonce is still what we used for VRF
-                    current_nonce = tx.read(node_kernel.nonce_tvar) if node_kernel else epoch_nonce
-                    if current_nonce != epoch_nonce:
-                        return "nonce_changed"  # Will retry next slot
-
-                    # Store block (non-transactional — VolatileDB is append-only)
-                    result = chain_db.add_block_sync(
-                        slot=forged.block.slot,
-                        block_hash=forged.block.block_hash,
-                        predecessor_hash=forged_predecessor,
-                        block_number=forged.block.block_number,
-                        cbor_bytes=forged.cbor,
-                        header_cbor=[6, cbor2.CBORTag(24, forged.block.header_cbor)],
-                        vrf_output=proof.vrf_output,
-                    )
-                    return result
-
-                store_result = atomically(_store_tx)
-                if store_result == "nonce_changed":
-                    logger.info(
-                        "Forged block #%d at slot %d discarded (nonce changed)",
-                        forged.block.block_number,
-                        forged.block.slot,
-                    )
-                    continue
-                result = store_result
+                t_store_done = time.monotonic()
+                logger.info(
+                    "Forge.Loop.Timing: slot=%d forge=%.1fms store=%.1fms total=%.1fms",
+                    forged.block.slot,
+                    (t_forge_done - t_forge_start) * 1000,
+                    (t_store_done - t_forge_done) * 1000,
+                    (t_store_done - t_forge_start) * 1000,
+                )
 
                 if not result.adopted:
                     logger.info(
@@ -334,15 +411,6 @@ def forge_loop(
                         forged.block.slot,
                     )
                     continue
-
-                # Nonce update for our forged block
-                if node_kernel is not None:
-                    node_kernel.on_block_adopted(
-                        forged.block.slot,
-                        forged.block.block_hash,
-                        forged_predecessor,
-                        proof.vrf_output,
-                    )
 
             prev_block_number = forged.block.block_number
             prev_header_hash = forged.block.block_hash
@@ -365,6 +433,15 @@ def forge_loop(
                     "hash": forged.block.block_hash.hex()[:16],
                     "blocks_forged": blocks_forged,
                 },
+            )
+            # Haskell-matching forge event for log correlation
+            logger.info(
+                "Forge.Loop.ForgedBlock: slot=%d hash=%s block_no=%d vrf_out=%s nonce=%s",
+                forged.block.slot,
+                forged.block.block_hash.hex(),
+                forged.block.block_number,
+                proof.vrf_output.hex(),
+                epoch_nonce.hex(),
             )
         except Exception as exc:
             logger.error("Failed to forge block at slot %d: %s", slot, exc)
