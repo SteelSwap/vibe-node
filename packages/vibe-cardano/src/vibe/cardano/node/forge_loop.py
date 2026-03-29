@@ -135,7 +135,13 @@ def forge_loop(
         total_stake = sum(node_kernel.stake_distribution.values())
         relative_stake = pool_stake / total_stake if total_stake > 0 else 0.0
     else:
-        relative_stake = 1.0 / 3.0
+        # No stake distribution available yet. On devnets with genesis
+        # delegates, this is seeded at init. On public testnets, the
+        # delegation tracking populates it at epoch boundaries.
+        # Default to 0 — don't forge until we know our real stake.
+        # The forge loop will skip elections (proof=None) until
+        # stake_tvar is populated.
+        relative_stake = 0.0
 
     # KES evolution
     slots_per_kes = config.slots_per_kes_period
