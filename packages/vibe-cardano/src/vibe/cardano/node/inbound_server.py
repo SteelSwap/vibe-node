@@ -177,7 +177,9 @@ async def run_n2n_server(
         resp_channels[HANDSHAKE_PROTOCOL_ID] = mux.add_protocol(HANDSHAKE_PROTOCOL_ID)
 
         # All other N2N protocols -- dual channels.
-        for proto_id in [CHAIN_SYNC_N2N_ID, BLOCK_FETCH_N2N_ID, TX_SUBMISSION_N2N_ID, KEEP_ALIVE_PROTOCOL_ID]:
+        from vibe.cardano.network.peersharing import PEER_SHARING_PROTOCOL_ID
+
+        for proto_id in [CHAIN_SYNC_N2N_ID, BLOCK_FETCH_N2N_ID, TX_SUBMISSION_N2N_ID, KEEP_ALIVE_PROTOCOL_ID, PEER_SHARING_PROTOCOL_ID]:
             init_ch, resp_ch = mux.add_protocol_pair(proto_id)
             init_channels[proto_id] = init_ch
             resp_channels[proto_id] = resp_ch
@@ -222,7 +224,7 @@ async def run_n2n_server(
             )
 
         except (HandshakeError, ConnectionError, MuxClosedError) as exc:
-            logger.debug("N2N inbound %s: %s", peer_info, exc)
+            logger.info("N2N inbound %s: %s (%s)", peer_info, exc, type(exc).__name__)
         except Exception as exc:
             logger.debug("N2N inbound %s ended: %s", peer_info, exc)
         finally:

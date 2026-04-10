@@ -28,6 +28,7 @@ async def launch_responder_bundle(
     mempool: Any,
     stop_event: asyncio.Event,
     peer_info: str = "",
+    peer_registry: Any = None,
 ) -> list[asyncio.Task[None]]:
     """Start responder-side miniprotocol tasks for an N2N connection.
 
@@ -160,6 +161,29 @@ async def launch_responder_bundle(
             )
         )
 
+    # Peer-sharing server (share our known peers when asked).
+    from vibe.cardano.network.peersharing import PEER_SHARING_PROTOCOL_ID
+
+    if PEER_SHARING_PROTOCOL_ID in channels and peer_registry is not None:
+        from vibe.cardano.network.peersharing_protocol import run_peer_sharing_server
+
+        async def _peer_provider(amount: int) -> list:
+            return peer_registry.get_peers(amount)
+
+        tasks.append(
+            asyncio.create_task(
+                _safe(
+                    run_peer_sharing_server(
+                        channels[PEER_SHARING_PROTOCOL_ID],
+                        peer_provider=_peer_provider,
+                        stop_event=stop_event,
+                    ),
+                    "peer-sharing",
+                ),
+                name=f"ps-server-{peer_info}",
+            )
+        )
+
     return tasks
 
 
@@ -246,5 +270,33 @@ async def launch_initiator_bundle(
             name=f"txsub-client-{peer_info}",
         )
     )
+
+    # Peer-sharing client (discover peers from the remote node).
+    from vibe.cardano.network.peersharing import PEER_SHARING_PROTOCOL_ID
+
+    if PEER_SHARING_PROTOCOL_ID in channels:
+        from vibe.cardano.network.peersharing import PeerAddress
+        from vibe.cardano.network.peersharing_protocol import run_peer_sharing_client
+
+        async def _on_peers(peers: list[PeerAddress]) -> None:
+            for peer in peers:
+                logger.info(
+                    "PeerSharing.Client.Discovered: %s:%d", peer.ip, peer.port
+                )
+
+        tasks.append(
+            asyncio.create_task(
+                _safe(
+                    run_peer_sharing_client(
+                        channels[PEER_SHARING_PROTOCOL_ID],
+                        on_peers_received=_on_peers,
+                        stop_event=stop_event,
+                        peer_info=peer_info,
+                    ),
+                    "peer-sharing",
+                ),
+                name=f"ps-client-{peer_info}",
+            )
+        )
 
     return tasks

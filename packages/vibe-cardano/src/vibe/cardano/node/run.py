@@ -372,20 +372,74 @@ async def _async_init(config: NodeConfig) -> dict:
     # Haskell ref: openDB → initialChainSelection
     restored = await chain_db.initial_chain_selection()
 
-    # Mithril snapshot import (only if DB is empty after chain selection)
+    # Mithril snapshot: one-time block import + always-reload stake/delegation.
+    # Block import only runs when the DB is empty (first boot).
+    # Stake distribution and delegation state reload on EVERY startup so
+    # the forge loop has correct stake after restarts.
+    _mithril_praos_state = None
+    _mithril_protocol_params = None
+    _mithril_stake_dist: dict[bytes, int] | None = None
+    _mithril_delegations = None
     if config.mithril_snapshot_path is not None:
+        # --- One-time block import (first boot only) ---
         tip = await chain_db.get_tip()
         if tip is None:
             logger.info("Importing Mithril snapshot from %s", config.mithril_snapshot_path)
             try:
                 from vibe.cardano.sync import import_mithril_snapshot
 
-                await import_mithril_snapshot(
+                tip_slot, tip_hash = await import_mithril_snapshot(
                     snapshot_dir=config.mithril_snapshot_path,
                     immutable_db=immutable_db,
+                    ledger_db=ledger_db,
+                )
+                chain_db.set_immutable_tip(tip_slot, tip_hash)
+                logger.info(
+                    "Mithril import set immutable tip: slot=%d hash=%s",
+                    tip_slot, tip_hash.hex()[:16],
                 )
             except Exception as exc:
-                logger.warning("Mithril import failed: %s", exc)
+                logger.warning("Mithril block import failed: %s", exc)
+
+        # --- Always bootstrap nonce, params, stake, delegation ---
+        try:
+            from vibe.cardano.sync.mithril import bootstrap_praos_nonce
+
+            _nonce_seed = (
+                config.genesis_hash
+                or hashlib.blake2b(
+                    config.network_magic.to_bytes(4, "big"), digest_size=32,
+                ).digest()
+            )
+            _mithril_praos_state = bootstrap_praos_nonce(
+                immutable_dir=config.mithril_snapshot_path / "immutable",
+                genesis_hash=_nonce_seed,
+                epoch_length=config.epoch_length,
+                security_param=config.security_param,
+                active_slot_coeff=config.active_slot_coeff,
+            )
+
+            if config.protocol_params:
+                from vibe.cardano.sync.mithril import bootstrap_protocol_params
+
+                _mithril_protocol_params = bootstrap_protocol_params(
+                    snapshot_dir=config.mithril_snapshot_path,
+                    genesis_params=config.protocol_params,
+                )
+
+            from vibe.cardano.sync.mithril import (
+                bootstrap_delegation_state,
+                bootstrap_stake_distribution,
+            )
+
+            _mithril_stake_dist = bootstrap_stake_distribution(
+                snapshot_dir=config.mithril_snapshot_path,
+            )
+            _mithril_delegations = bootstrap_delegation_state(
+                snapshot_dir=config.mithril_snapshot_path,
+            )
+        except Exception as exc:
+            logger.warning("Mithril bootstrap failed: %s", exc)
 
     tip = await chain_db.get_tip()
     # Ledger restore
@@ -433,13 +487,152 @@ async def _async_init(config: NodeConfig) -> dict:
         config.security_param,
         config.active_slot_coeff,
     )
+    # Try to restore persisted praos state from disk (survives restarts).
+    # This is preferred over Mithril re-derivation because it has the
+    # correct nonce evolved through ALL blocks, including those now in
+    # the immutable DB that we can't easily replay.
+    _saved_praos_path = db_path / "praos_state.json"
+    if _saved_praos_path.exists():
+        try:
+            from vibe.cardano.consensus.praos_state import PraosState
+            _saved_praos = PraosState.load(_saved_praos_path)
+            chain_db._ledger_seq._anchor_state = _saved_praos
+            chain_db._ledger_seq._checkpoints.clear()
+            chain_db.praos_nonce_tvar._write(_saved_praos.epoch_nonce)
+            logger.info(
+                "Praos state restored from disk: epoch=%d nonce=%s",
+                _saved_praos.current_epoch,
+                _saved_praos.epoch_nonce.hex()[:16],
+            )
+            _mithril_praos_state = None  # skip Mithril bootstrap
+        except Exception as exc:
+            logger.warning("Failed to restore praos state: %s", exc)
+
+    # If Mithril nonce bootstrap ran (and no saved state), install the evolved state.
+    if _mithril_praos_state is not None:
+        chain_db._ledger_seq._anchor_state = _mithril_praos_state
+        chain_db._ledger_seq._checkpoints.clear()
+        chain_db.praos_nonce_tvar._write(_mithril_praos_state.epoch_nonce)
+        logger.info(
+            "Nonce bootstrapped from Mithril: epoch=%d nonce=%s",
+            _mithril_praos_state.current_epoch,
+            _mithril_praos_state.epoch_nonce.hex()[:16],
+        )
+        # Replay volatile chain fragment through ledger_seq to evolve nonce
+        # through each block's VRF output. Without this, restarts skip the
+        # per-block nonce updates from epochs between the Mithril snapshot
+        # and the current tip, causing the forge loop to use the wrong nonce.
+        fragment = getattr(chain_db, '_chain_fragment', None) or []
+        logger.info("Nonce replay: fragment has %d entries", len(fragment))
+        if fragment:
+            from vibe.cardano.serialization.block import Era, decode_block_header_raw
+            replayed = 0
+            skipped_no_cbor = 0
+            skipped_no_vrf = 0
+            skipped_error = 0
+            first_error = None
+            for entry in fragment:
+                block_cbor = chain_db.volatile_db._blocks.get(entry.block_hash)
+                if block_cbor is None:
+                    skipped_no_cbor += 1
+                    continue
+                try:
+                    # Extract VRF output from block using the existing decoder
+                    from vibe.cardano.serialization.block import (
+                        Era,
+                        decode_block_header_raw,
+                    )
+                    import cbor2pure as _cbor2
+                    outer = _cbor2.loads(block_cbor)
+                    era_tag = outer[0]
+                    block_data = outer[1].value if hasattr(outer[1], 'value') else outer[1]
+                    try:
+                        era = Era(era_tag)
+                        hdr = decode_block_header_raw(block_data, era)
+                        vrf_output = getattr(hdr, 'vrf_output', None) or getattr(hdr, 'vrf_result', None)
+                        if isinstance(vrf_output, (list, tuple)):
+                            vrf_output = vrf_output[1] if len(vrf_output) >= 2 else None
+                    except (NotImplementedError, ValueError, Exception):
+                        # Fallback: manual CBOR extraction
+                        block_inner = _cbor2.loads(block_data) if isinstance(block_data, bytes) else block_data
+                        header_data = block_inner[0]
+                        if isinstance(header_data, bytes):
+                            header_data = _cbor2.loads(header_data)
+                        header_body = header_data[0] if isinstance(header_data, (list, tuple)) else header_data
+                        # VRF result is at index 5 in Conway header body:
+                        # [block_no, slot, prev_hash, issuer_vkey, vrf_vkey, vrf_result, ...]
+                        vrf_result = header_body[5] if isinstance(header_body, (list, tuple)) and len(header_body) > 5 else None
+                        vrf_output = None
+                        if isinstance(vrf_result, (list, tuple)) and len(vrf_result) >= 2:
+                            vrf_out = vrf_result[1]
+                            if isinstance(vrf_out, bytes):
+                                vrf_output = vrf_out
+                    if vrf_output and isinstance(vrf_output, bytes):
+                        chain_db._ledger_seq = chain_db._ledger_seq.extend(
+                            slot=entry.slot,
+                            block_hash=entry.block_hash,
+                            prev_hash=entry.predecessor_hash,
+                            vrf_output=vrf_output,
+                        )
+                        replayed += 1
+                    else:
+                        skipped_no_vrf += 1
+                except Exception as exc:
+                    skipped_error += 1
+                    if first_error is None:
+                        first_error = f"slot {entry.slot}: {exc}"
+            logger.info(
+                "Nonce replay: %d replayed, %d no_cbor, %d no_vrf, %d errors%s",
+                replayed, skipped_no_cbor, skipped_no_vrf, skipped_error,
+                f" (first error: {first_error})" if first_error else "",
+            )
+            if replayed:
+                chain_db.praos_nonce_tvar._write(chain_db._ledger_seq.tip_state().epoch_nonce)
+                logger.info(
+                    "Nonce replayed through %d volatile blocks, epoch_nonce=%s",
+                    replayed,
+                    chain_db._ledger_seq.tip_state().epoch_nonce.hex()[:16],
+                )
     node_kernel.init_nonce(chain_db=chain_db)
-    if config.initial_pool_stakes:
+    if _mithril_delegations:
+        # Seed the full delegation state so epoch boundary recomputation works.
+        deleg_map, rewards_map, pool_ids, cred_stakes = _mithril_delegations
+        for cred, pool in deleg_map.items():
+            node_kernel._delegation_state.delegations[cred] = pool
+        # Note: we don't seed rewards into delegation_state because
+        # cred_stakes already includes rewards + UTxO balances.
+        # compute_pool_stake_distribution adds utxo_stakes + rewards,
+        # so seeding rewards would double-count them.
+        for pid in pool_ids:
+            if pid not in node_kernel._delegation_state.pools:
+                node_kernel._delegation_state.pools[pid] = {}
+        # Store per-credential total stakes for recomputation.
+        # These include both rewards and UTxO balances from the snapshot.
+        node_kernel._cred_stakes = cred_stakes
+        logger.info(
+            "Delegation state from Mithril: %d delegations, %d rewards, %d pools, %d cred_stakes",
+            len(deleg_map), len(rewards_map), len(pool_ids), len(cred_stakes),
+        )
+    if _mithril_stake_dist:
+        node_kernel.update_stake_distribution(
+            {}, pool_stakes_direct=_mithril_stake_dist,
+        )
+        logger.info(
+            "Stake distribution from Mithril: %d pools",
+            len(_mithril_stake_dist),
+        )
+    elif config.initial_pool_stakes:
         node_kernel.update_stake_distribution(
             {}, pool_stakes_direct=config.initial_pool_stakes,
         )
-    if config.protocol_params:
-        node_kernel.init_protocol_params(config.protocol_params)
+    _final_params = _mithril_protocol_params if _mithril_protocol_params else config.protocol_params
+    if _final_params:
+        node_kernel.init_protocol_params(_final_params)
+        logger.info(
+            "Protocol params: maxBlockSize=%s, protocolVersion=%s",
+            _final_params.get("maxBlockBodySize"),
+            _final_params.get("protocolVersion"),
+        )
 
     # --- Slot clock ---
     slot_config = SlotConfig(

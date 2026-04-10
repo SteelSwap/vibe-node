@@ -261,7 +261,7 @@ def build_version_table(
     network_magic: int,
     *,
     initiator_only: bool = False,
-    peer_sharing: PeerSharing = PeerSharing.DISABLED,
+    peer_sharing: PeerSharing = PeerSharing.ENABLED,
     query: bool = False,
 ) -> dict[int, NodeToNodeVersionData]:
     """Build a version table with current N2N versions (V14, V15).

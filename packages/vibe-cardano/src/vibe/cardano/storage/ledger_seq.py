@@ -127,23 +127,27 @@ class LedgerSeq:
         """
         current = self.tip_state()
 
-        # Epoch boundary tick
+        # Epoch boundary tick — must tick through EACH intermediate epoch.
+        # When catching up across multiple epochs (e.g. 1254→1261), each
+        # epoch boundary must be ticked individually because the nonce
+        # evolution depends on the cumulative state at each boundary.
         new_epoch = slot // current.epoch_length
         if new_epoch > current.current_epoch:
             old_epoch = current.current_epoch
-            logger.info(
-                "Epoch %d->%d cand=%s lab=%s lastEpochBlk=%s ev=%s",
-                old_epoch, new_epoch,
-                current.candidate_nonce.hex(),
-                current.lab_nonce.hex(),
-                current.last_epoch_block_nonce.hex(),
-                current.evolving_nonce.hex(),
-            )
-            current = tick_praos_state(current, new_epoch)
-            logger.info(
-                "Epoch %d->%d result nonce=%s",
-                old_epoch, new_epoch, current.epoch_nonce.hex(),
-            )
+            for intermediate_epoch in range(old_epoch + 1, new_epoch + 1):
+                logger.info(
+                    "Epoch %d->%d cand=%s lab=%s lastEpochBlk=%s ev=%s",
+                    current.current_epoch, intermediate_epoch,
+                    current.candidate_nonce.hex(),
+                    current.lab_nonce.hex(),
+                    current.last_epoch_block_nonce.hex(),
+                    current.evolving_nonce.hex(),
+                )
+                current = tick_praos_state(current, intermediate_epoch)
+                logger.info(
+                    "Epoch %d->%d result nonce=%s",
+                    old_epoch, intermediate_epoch, current.epoch_nonce.hex(),
+                )
 
         # Per-block nonce update
         new_state = reupdate_praos_state(current, slot, block_hash, prev_hash, vrf_output)

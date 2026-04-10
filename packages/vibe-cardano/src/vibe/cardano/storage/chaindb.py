@@ -810,6 +810,13 @@ class ChainDB:
                     )
             # Write nonce BEFORE tip so forge loop never reads new tip + old nonce
             self.praos_nonce_tvar._write(self._ledger_seq.tip_state().epoch_nonce)
+            # Persist praos state so restarts don't need to re-derive the nonce
+            try:
+                self._ledger_seq.tip_state().save(
+                    self.volatile_db._db_dir.parent / "praos_state.json"
+                )
+            except Exception:
+                pass  # best-effort persistence
 
         t_ledger = time.monotonic()
 
@@ -912,15 +919,6 @@ class ChainDB:
         self._tip_generation += 1
         self._notify_tip_changed()
         t_notify = time.monotonic()
-
-        logger.debug(
-            "ChainDB.Timing: volatile=%.1fms ledger=%.1fms chainsel=%.1fms notify=%.1fms total=%.1fms",
-            (t_volatile - t_start) * 1000,
-            (t_ledger - t_volatile) * 1000,
-            (t_chainsel - t_ledger) * 1000,
-            (t_notify - t_chainsel) * 1000,
-            (t_notify - t_start) * 1000,
-        )
 
         await self._maybe_advance_immutable()
 
@@ -1393,9 +1391,10 @@ class ChainDB:
         Haskell reference:
             Ouroboros.Consensus.Storage.ChainDB.Impl.copyToImmutableDB
         """
-        all_info = self.volatile_db.get_all_block_info()
+        # Read internal dict directly — avoid copying the entire dict
         to_promote: list[BlockInfo] = [
-            info for info in all_info.values() if info.slot <= new_immutable_slot
+            info for info in self.volatile_db._block_info.values()
+            if info.slot <= new_immutable_slot
         ]
         to_promote.sort(key=lambda bi: bi.slot)
 
@@ -1429,7 +1428,11 @@ class ChainDB:
         return copied
 
     async def _maybe_advance_immutable(self) -> None:
-        """Check if the chain has grown enough to advance the immutable tip.
+        """Advance the immutable tip by one block if chain is deep enough.
+
+        Called after every block addition. Promotes at most ONE block per
+        call to keep latency bounded. Over many blocks, the immutable tip
+        steadily advances without creating batch storms.
 
         Haskell reference:
             Ouroboros.Consensus.Storage.ChainDB.Impl.copyToImmutableDB
@@ -1443,19 +1446,41 @@ class ChainDB:
         if tip_bn - imm_bn <= self._k:
             return
 
-        new_imm_block_number = tip_bn - self._k
-
-        all_info = self.volatile_db.get_all_block_info()
+        # Find the next block to promote (imm_bn + 1) via O(1) index
+        next_imm_bn = imm_bn + 1
         target_block: BlockInfo | None = None
-        for info in all_info.values():
-            if info.block_number == new_imm_block_number:
+        candidates = self.volatile_db._by_block_number.get(next_imm_bn, [])
+        for h in candidates:
+            info = self.volatile_db._block_info.get(h)
+            if info is not None:
                 if target_block is None or info.slot > target_block.slot:
                     target_block = info
 
         if target_block is None:
             return
 
-        await self.advance_immutable(target_block.slot)
+        # Promote just this one block
+        cbor_bytes = self.volatile_db.get_block(target_block.block_hash)
+        if cbor_bytes is None:
+            return
+        try:
+            await self.immutable_db.append_block(
+                slot=target_block.slot,
+                block_hash=target_block.block_hash,
+                cbor_bytes=cbor_bytes,
+            )
+            self._immutable_tip_block_number = target_block.block_number
+        except Exception:
+            logger.debug(
+                "ChainDB: skipped promoting block %s (slot %d)",
+                target_block.block_hash.hex()[:16],
+                target_block.slot,
+                exc_info=True,
+            )
+            return
+
+        # GC promoted block from volatile
+        self.volatile_db.gc(target_block.slot)
 
     # ------------------------------------------------------------------
     # Misc
@@ -1478,6 +1503,52 @@ class ChainDB:
     @property
     def is_closed(self) -> bool:
         return getattr(self, "_closed", False)
+
+    def set_immutable_tip(self, slot: int, block_hash: bytes) -> None:
+        """Set the chain tip from an imported immutable tip (e.g. Mithril).
+
+        Called after bulk-importing blocks into the ImmutableDB when no
+        volatile blocks exist yet. Sets ``_tip`` and updates the tip TVar
+        so that chain-sync can find an intersection point.
+
+        The block_number is not available from the import metadata, so we
+        estimate it from the ImmutableDB secondary index count.
+        """
+        padded_hash = block_hash[:32].ljust(32, b"\x00")
+
+        # Estimate block_number from secondary index if possible.
+        # Block numbers are 0-indexed, so the last block_number = count - 1.
+        block_number = 0
+        imm_tip_slot = self.immutable_db.get_tip_slot()
+        if imm_tip_slot is not None:
+            count = len(self.immutable_db._hash_index)
+            block_number = max(0, count - 1)
+
+        self._tip = _ChainTip(
+            slot=slot,
+            block_hash=padded_hash,
+            block_number=block_number,
+        )
+        self._immutable_tip_block_number = block_number
+        self.tip_tvar._write(self._tip)
+
+        # Add a single-entry chain fragment so chain-sync has an
+        # intersection point at the immutable tip.
+        entry = FragmentEntry(
+            slot=slot,
+            block_hash=padded_hash,
+            block_number=block_number,
+            predecessor_hash=b"\x00" * 32,  # unknown, but not needed for intersection
+            header_cbor=b"",  # no header available from bulk import
+        )
+        self._chain_fragment = [entry]
+        self._fragment_index = {padded_hash: 0}
+        self.fragment_tvar._write(([entry], {padded_hash: 0}))
+
+        logger.info(
+            "Immutable tip set: slot=%d block_no=%d hash=%s",
+            slot, block_number, padded_hash.hex()[:16],
+        )
 
     async def wipe_volatile(self) -> None:
         """Wipe the volatile DB, reverting the chain to the immutable tip."""

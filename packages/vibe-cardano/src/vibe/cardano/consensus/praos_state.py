@@ -120,6 +120,41 @@ class PraosState:
     active_slot_coeff: float
     """Active slot coefficient f."""
 
+    def save(self, path: "Path") -> None:
+        """Persist praos state to a JSON file for restart recovery."""
+        import json
+        from pathlib import Path as _Path
+        data = {
+            "epoch_nonce": self.epoch_nonce.hex(),
+            "evolving_nonce": self.evolving_nonce.hex(),
+            "candidate_nonce": self.candidate_nonce.hex(),
+            "lab_nonce": self.lab_nonce.hex(),
+            "last_epoch_block_nonce": self.last_epoch_block_nonce.hex(),
+            "current_epoch": self.current_epoch,
+            "epoch_length": self.epoch_length,
+            "security_param": self.security_param,
+            "active_slot_coeff": self.active_slot_coeff,
+        }
+        _Path(path).write_text(json.dumps(data))
+
+    @classmethod
+    def load(cls, path: "Path") -> "PraosState":
+        """Restore praos state from a JSON file."""
+        import json
+        from pathlib import Path as _Path
+        data = json.loads(_Path(path).read_text())
+        return cls(
+            epoch_nonce=bytes.fromhex(data["epoch_nonce"]),
+            evolving_nonce=bytes.fromhex(data["evolving_nonce"]),
+            candidate_nonce=bytes.fromhex(data["candidate_nonce"]),
+            lab_nonce=bytes.fromhex(data["lab_nonce"]),
+            last_epoch_block_nonce=bytes.fromhex(data["last_epoch_block_nonce"]),
+            current_epoch=data["current_epoch"],
+            epoch_length=data["epoch_length"],
+            security_param=data["security_param"],
+            active_slot_coeff=data["active_slot_coeff"],
+        )
+
 
 # ---------------------------------------------------------------------------
 # Stability window
@@ -127,16 +162,22 @@ class PraosState:
 
 
 def _stability_window(security_param: int, active_slot_coeff: float) -> int:
-    """Compute the randomness stabilisation window: ceil(4k/f).
+    """Compute the randomness stabilisation window: ceil(3k/f).
 
-    NOT capped at epoch_length. Haskell's reupdateChainDepState uses
-    ``slot + window < firstSlotNextEpoch`` which naturally handles the
-    case where window > epoch_length (candidate nonce stops updating).
+    Haskell uses two different window sizes depending on the era:
+      - ``computeStabilityWindow``                = ceil(3k/f) — TPraos + Babbage
+      - ``computeRandomnessStabilisationWindow``   = ceil(4k/f) — Conway+
 
-    Haskell ref: ``computeRandomnessStabilisationWindow`` in
+    Babbage overrides to 3k/f for backward compatibility (erratum 17.3).
+    See ``partialConsensusConfigBabbage`` in ``Ouroboros.Consensus.Cardano.Node``.
+
+    We default to ceil(3k/f) since that covers all eras through Babbage.
+    Conway's ceil(4k/f) must be handled by the caller when the era is known.
+
+    Haskell ref: ``computeStabilityWindow`` in
         ``Cardano.Ledger.Shelley.StabilityWindow``
     """
-    return math.ceil(4 * security_param / active_slot_coeff)
+    return math.ceil(3 * security_param / active_slot_coeff)
 
 
 # ---------------------------------------------------------------------------

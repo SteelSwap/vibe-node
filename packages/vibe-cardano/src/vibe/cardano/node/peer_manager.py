@@ -119,6 +119,9 @@ class PeerManager:
         "_chain_sync_peer",
         "_block_notify",
         "peer_tip_block_no_tvar",
+        "_last_inline_epoch",
+        "_last_sync_epoch",
+        "_peer_registry",
     )
 
     def __init__(
@@ -138,6 +141,9 @@ class PeerManager:
         # threading.Event — set when a new block is processed,
         # wakes the forge thread to check leadership immediately.
         self._block_received_event = block_received_event
+        # Peer registry for peer sharing protocol
+        from vibe.cardano.node.peer_registry import PeerRegistry
+        self._peer_registry = PeerRegistry()
         # Multi-peer shared state
         self._shared_range_queue: asyncio.Queue | None = None
         self._shared_block_queue: asyncio.Queue | None = None
@@ -151,6 +157,8 @@ class PeerManager:
         # on a chain that's behind the peer tip (would be orphaned).
         from vibe.core.stm import TVar
         self.peer_tip_block_no_tvar: TVar = TVar(0)
+        self._last_inline_epoch: int | None = None
+        self._last_sync_epoch: int | None = None
 
     @property
     def known_points(self) -> list[Any]:
@@ -225,20 +233,21 @@ class PeerManager:
         """
         while not self._stopped:
             try:
+                logger.info("DEBUG Peer %s: _peer_loop entering _connect_peer", peer.address)
                 await self._connect_peer(peer)
                 # Reset backoff on successful connection.
                 peer.reconnect_delay = 1.0
                 peer.reconnect_attempt = 0
+                logger.info("DEBUG Peer %s: _connect_peer returned, mux_task=%s", peer.address, peer.mux_task)
 
                 # Mux is already running (started in _connect_peer after
                 # handshake). Await the mux task until disconnect.
                 if peer.mux_task is not None:
                     await peer.mux_task
+                    logger.info("DEBUG Peer %s: mux_task completed", peer.address)
 
             except (MuxClosedError, BearerClosedError) as exc:
                 # Multiplexer or bearer closed -- normal disconnect path.
-                # Log at INFO rather than WARNING since this is expected
-                # during peer disconnects and node shutdowns.
                 logger.info(
                     "Peer %s: connection closed: %s",
                     peer.address,
@@ -251,6 +260,7 @@ class PeerManager:
                     exc,
                 )
             except asyncio.CancelledError:
+                logger.info("DEBUG Peer %s: _peer_loop cancelled", peer.address)
                 return
             except Exception as exc:
                 logger.error(
@@ -260,6 +270,7 @@ class PeerManager:
                     exc_info=True,
                 )
             finally:
+                logger.info("DEBUG Peer %s: _peer_loop finally block, stopped=%s", peer.address, self._stopped)
                 peer.connected = False
                 await self._disconnect_peer(peer)
 
@@ -320,7 +331,9 @@ class PeerManager:
 
         init_channels[HANDSHAKE_PROTOCOL_ID] = mux.add_protocol(HANDSHAKE_PROTOCOL_ID)
 
-        for proto_id in [CHAIN_SYNC_N2N_ID, BLOCK_FETCH_N2N_ID, TX_SUBMISSION_N2N_ID, KEEP_ALIVE_PROTOCOL_ID]:
+        from vibe.cardano.network.peersharing import PEER_SHARING_PROTOCOL_ID
+
+        for proto_id in [CHAIN_SYNC_N2N_ID, BLOCK_FETCH_N2N_ID, TX_SUBMISSION_N2N_ID, KEEP_ALIVE_PROTOCOL_ID, PEER_SHARING_PROTOCOL_ID]:
             init_ch, resp_ch = mux.add_protocol_pair(proto_id)
             init_channels[proto_id] = init_ch
             resp_channels[proto_id] = resp_ch
@@ -346,13 +359,20 @@ class PeerManager:
         # instead, we await the background mux task.
 
         # Start mux sender/receiver loops in background.
+        logger.info("DEBUG Peer %s: starting mux", peer.address)
         mux_task = asyncio.create_task(mux.run(), name=f"mux-{peer.address}")
 
         try:
             # Run N2N handshake on channel 0.
             hs_channel = channels[HANDSHAKE_PROTOCOL_ID]
+            logger.info("DEBUG Peer %s: starting handshake", peer.address)
             result = await run_handshake_client(hs_channel, self._config.network_magic)
+            logger.info("DEBUG Peer %s: handshake complete (v%d)", peer.address, result.version_number)
             peer.connected = True
+            # Register peer for peer sharing
+            from vibe.cardano.node.peer_registry import PeerAddress as _PSAddr
+            self._peer_registry.add_peer(_PSAddr(ip=peer.address.host, port=peer.address.port))
+            logger.info("DEBUG Peer %s: registered in peer_registry, about to log connected", peer.address)
             logger.info(
                 "Peer %s connected (v%d, magic %d)",
                 peer.address,
@@ -365,8 +385,17 @@ class PeerManager:
                     "magic": result.version_data.network_magic,
                 },
             )
+        except asyncio.CancelledError:
+            logger.info("DEBUG Peer %s: CANCELLED during handshake/setup phase", peer.address)
+            await mux.close()
+            try:
+                await mux_task
+            except Exception:
+                pass
+            raise
         except (HandshakeError, Exception) as exc:
             # Handshake failed — tear down the mux and propagate.
+            logger.info("DEBUG Peer %s: handshake/setup error: %s (%s)", peer.address, exc, type(exc).__name__)
             await mux.close()
             try:
                 await mux_task
@@ -556,6 +585,89 @@ class PeerManager:
                 name=f"chainsync-{peer.address}",
             ))
 
+            # Responder protocols — serve our chain to the peer so they
+            # can follow us and fetch blocks we forge. Without these,
+            # forged blocks never reach peers on outbound connections.
+            if chain_db is not None:
+                # Chain-sync server on responder channel.
+                if CHAIN_SYNC_N2N_ID in resp_channels:
+                    from vibe.cardano.network.chainsync_protocol import run_chain_sync_server
+
+                    cs_follower = chain_db.new_follower()
+
+                    async def _cs_server_with_cleanup() -> None:
+                        try:
+                            await run_chain_sync_server(
+                                resp_channels[CHAIN_SYNC_N2N_ID],
+                                follower=cs_follower,
+                                stop_event=stop_event,
+                            )
+                        finally:
+                            chain_db.close_follower(cs_follower.id)
+
+                    peer.protocol_tasks.append(asyncio.create_task(
+                        _safe_run(_cs_server_with_cleanup(), "chain-sync-server"),
+                        name=f"cs-server-{peer.address}",
+                    ))
+
+                # Block-fetch server on responder channel.
+                if BLOCK_FETCH_N2N_ID in resp_channels:
+                    from vibe.cardano.network.blockfetch_protocol import run_block_fetch_server
+
+                    peer.protocol_tasks.append(asyncio.create_task(
+                        _safe_run(
+                            run_block_fetch_server(
+                                resp_channels[BLOCK_FETCH_N2N_ID],
+                                block_provider=chain_db,
+                                stop_event=stop_event,
+                            ),
+                            "block-fetch-server",
+                        ),
+                        name=f"bf-server-{peer.address}",
+                    ))
+
+            # Peer-sharing server on responder channel.
+            from vibe.cardano.network.peersharing import PEER_SHARING_PROTOCOL_ID as _PS_ID
+            if _PS_ID in resp_channels:
+                from vibe.cardano.network.peersharing_protocol import run_peer_sharing_server
+
+                async def _ps_peer_provider(amount: int) -> list:
+                    return self._peer_registry.get_peers(amount)
+
+                peer.protocol_tasks.append(asyncio.create_task(
+                    _safe_run(
+                        run_peer_sharing_server(
+                            resp_channels[_PS_ID],
+                            peer_provider=_ps_peer_provider,
+                            stop_event=stop_event,
+                        ),
+                        "peer-sharing-server",
+                    ),
+                    name=f"ps-server-{peer.address}",
+                ))
+
+            # Peer-sharing client on initiator channel.
+            if _PS_ID in channels:
+                from vibe.cardano.network.peersharing import PeerAddress as _PSPeerAddr
+                from vibe.cardano.network.peersharing_protocol import run_peer_sharing_client
+
+                async def _on_peers_discovered(peers: list[_PSPeerAddr]) -> None:
+                    for p in peers:
+                        logger.info("PeerSharing.Client.Discovered: %s:%d", p.ip, p.port)
+
+                peer.protocol_tasks.append(asyncio.create_task(
+                    _safe_run(
+                        run_peer_sharing_client(
+                            channels[_PS_ID],
+                            on_peers_received=_on_peers_discovered,
+                            stop_event=stop_event,
+                            peer_info=peer_addr,
+                        ),
+                        "peer-sharing-client",
+                    ),
+                    name=f"ps-client-{peer.address}",
+                ))
+
             # Range builder: drain fetch_queue Points into shared range_queue
             async def _range_builder() -> None:
                 while not stop_event.is_set():
@@ -622,10 +734,34 @@ class PeerManager:
                 name=f"keepalive-{peer.address}",
             ))
 
+            # Peer-sharing client on initiator channel (non-chain-sync peers too).
+            from vibe.cardano.network.peersharing import PEER_SHARING_PROTOCOL_ID as _PS_ID2
+            if _PS_ID2 in channels:
+                from vibe.cardano.network.peersharing import PeerAddress as _PSPeerAddr2
+                from vibe.cardano.network.peersharing_protocol import run_peer_sharing_client as _run_ps_client2
+
+                async def _on_peers_discovered2(peers: list[_PSPeerAddr2]) -> None:
+                    for p in peers:
+                        logger.info("PeerSharing.Client.Discovered: %s:%d", p.ip, p.port)
+
+                peer.protocol_tasks.append(asyncio.create_task(
+                    _safe_run(
+                        _run_ps_client2(
+                            channels[_PS_ID2],
+                            on_peers_received=_on_peers_discovered2,
+                            stop_event=stop_event,
+                            peer_info=peer_addr,
+                        ),
+                        "peer-sharing-client",
+                    ),
+                    name=f"ps-client-{peer.address}",
+                ))
+
             # Responder bundle on resp_channels (bidirectional support).
             from vibe.cardano.node.miniprotocol_bundle import launch_responder_bundle
             resp_tasks = await launch_responder_bundle(
                 resp_channels, chain_db, None, stop_event, peer_info=peer_addr,
+                peer_registry=self._peer_registry,
             )
             for t in resp_tasks:
                 peer.protocol_tasks.append(t)
@@ -751,6 +887,7 @@ class PeerManager:
         from vibe.cardano.node.miniprotocol_bundle import launch_responder_bundle
         resp_tasks = await launch_responder_bundle(
             resp_channels, chain_db, None, stop_event, peer_info=peer_addr,
+            peer_registry=self._peer_registry,
         )
         for t in resp_tasks:
             peer.protocol_tasks.append(t)
@@ -763,85 +900,31 @@ class PeerManager:
     ) -> None:
         """Process a single block inline (producer mode).
 
-        Same logic as _shared_block_processor but called synchronously
-        from the block-fetch callback. This ensures nonce updates happen
-        in the same task as block processing, matching the architecture
-        at commit 79fb652 that achieved 35% forge rate.
-        """
-        import hashlib
+        Uses fast header-only CBOR decoding (~100x faster than full decode)
+        during sync. Full body decode is deferred to the shared processor
+        path which handles validation and ledger state updates.
 
+        Delegation cert tracking uses the lightweight ``apply_certs_from_block_body``
+        which scans raw tx body maps for key 4 — only blocks with certs pay the
+        decode cost. Cert tracking is skipped during bulk sync (>1000 blocks behind
+        tip) since we can't forge until synced anyway.
+        """
         import cbor2pure as cbor2
 
         try:
             from vibe.cardano.serialization.block import (
                 Era,
-                decode_block_header_from_array,
+                decode_block_header_fast,
             )
 
-            raw_wire = block_cbor
-            decoded = cbor2.loads(block_cbor)
-
-            if hasattr(decoded, "tag") and decoded.tag == 24:
-                inner = decoded.value
-                if isinstance(inner, bytes):
-                    raw_wire = inner
-                    decoded = cbor2.loads(inner)
-                else:
-                    decoded = inner
-
-            if isinstance(decoded, list) and len(decoded) >= 2 and isinstance(decoded[0], int):
-                era_tag = decoded[0]
-                block_body = decoded[1]
-            elif hasattr(decoded, "tag"):
-                era_tag = decoded.tag
-                block_body = decoded.value
-            else:
-                raise ValueError(f"Unexpected block format: {type(decoded)}")
-
-            raw_block = raw_wire
+            # Fast path: decode only the header, skip body/witnesses/aux
+            era_tag, hdr, raw_block = decode_block_header_fast(block_cbor)
             era = Era(era_tag)
-            try:
-                hdr = decode_block_header_from_array(block_body, era)
-                slot = hdr.slot
-                block_number = hdr.block_number
-                prev_hash = hdr.prev_hash or b"\x00" * 32
-                block_hash = hdr.hash
-                hdr_cbor = hdr.header_cbor
-            except NotImplementedError:
-                hdr_arr = block_body[0]
-                hdr_body_arr = hdr_arr[0]
-                block_number = hdr_body_arr[0]
-                slot = hdr_body_arr[1]
-                prev_hash = hdr_body_arr[2] or b"\x00" * 32
-                from vibe.cardano.serialization.transaction import _normalize_cbor_types
-                hdr_cbor = cbor2.dumps(_normalize_cbor_types(hdr_arr))
-                block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
-
-            # Apply delegation certs (producer path)
-            tx_bodies_raw = block_body[1] if len(block_body) > 1 else []
-            has_txs = hasattr(tx_bodies_raw, "__len__") and len(tx_bodies_raw) > 0
-            if has_txs and self._node_kernel is not None:
-                try:
-                    from vibe.cardano.serialization.transaction import decode_block_body_from_array
-                    body = decode_block_body_from_array(block_body, era, skip_pycardano=True)
-                    if body and body.transactions:
-                        epoch = slot // self._config.epoch_length
-                        self._node_kernel.apply_delegation_certs(body.transactions, epoch)
-                except Exception:
-                    pass
-
-            # Detect epoch boundary and recompute stake distribution
-            epoch = slot // self._config.epoch_length
-            if not hasattr(self, '_last_inline_epoch'):
-                self._last_inline_epoch = epoch
-            if epoch > self._last_inline_epoch:
-                self._last_inline_epoch = epoch
-                if self._node_kernel is not None:
-                    self._node_kernel.update_stake_distribution({})
-                    logger.info(
-                        "Epoch %d: stake distribution updated (%d pools)",
-                        epoch, len(self._node_kernel.stake_distribution),
-                    )
+            slot = hdr.slot
+            block_number = hdr.block_number
+            prev_hash = hdr.prev_hash or b"\x00" * 32
+            block_hash = hdr.hash
+            hdr_cbor = hdr.header_cbor
 
             if chain_db is not None:
                 header_cbor_wrapped = [
@@ -862,33 +945,56 @@ class PeerManager:
                 if result.adopted and self._block_received_event is not None:
                     self._block_received_event.set()
 
+            # Delegation cert tracking — only near tip (within 1000 blocks).
+            # During bulk sync, certs are tracked by the shared processor path.
+            # Near tip, do a full decode to extract certs for stake distribution.
+            peer_tip_bn = self.peer_tip_block_no_tvar.value
+            near_tip = peer_tip_bn == 0 or block_number >= peer_tip_bn - 1000
+            if near_tip and self._node_kernel is not None:
+                try:
+                    decoded = cbor2.loads(raw_block)
+                    if isinstance(decoded, list) and len(decoded) >= 2:
+                        block_body = decoded[1] if isinstance(decoded[0], int) else decoded
+                    elif hasattr(decoded, "tag"):
+                        block_body = decoded.value
+                    else:
+                        block_body = None
+
+                    if block_body is not None:
+                        from vibe.cardano.ledger.delegation import apply_certs_from_block_body
+                        epoch = slot // self._config.epoch_length
+                        self._node_kernel._delegation_state = apply_certs_from_block_body(
+                            self._node_kernel._delegation_state, block_body, epoch,
+                        )
+                except Exception:
+                    pass
+
+            # Detect epoch boundary. The stake distribution from nesPd
+            # is authoritative and doesn't need recomputation — it already
+            # includes the correct per-pool totals with UTxO + rewards.
+            # Live delegation tracking will update it incrementally as
+            # new certs arrive in blocks.
+            epoch = slot // self._config.epoch_length
+            if self._last_inline_epoch is None:
+                self._last_inline_epoch = epoch
+            if epoch > self._last_inline_epoch:
+                self._last_inline_epoch = epoch
+
             blocks_stored[0] += 1
-            tx_count = (
-                len(block_body[1])
-                if len(block_body) > 1 and isinstance(block_body[1], list)
-                else 0
-            )
             # Haskell-matching block-fetch event for log correlation
             if blocks_stored[0] % 1000 == 0:
                 logger.info(
                     "BlockFetch.Client.CompletedBlockFetch: hash=%s slot=%d peer=inline",
                     block_hash.hex()[:16], slot,
                 )
-            else:
-                logger.debug(
-                    "BlockFetch.Client.CompletedBlockFetch: hash=%s slot=%d peer=inline",
-                    block_hash.hex()[:16], slot,
-                )
-            if blocks_stored[0] % 1000 == 0:
                 logger.info(
                     "Block-fetch: %d blocks stored (block #%d at slot %d, %s)",
                     blocks_stored[0], block_number, slot, era.name,
                 )
-            elif blocks_stored[0] % 100 == 1 or blocks_stored[0] <= 5:
+            else:
                 logger.debug(
-                    "Block #%d stored at slot %d (%s, %d txs, %d bytes) [%d total]",
-                    block_number, slot, era.name, tx_count,
-                    len(raw_block), blocks_stored[0],
+                    "BlockFetch.Client.CompletedBlockFetch: hash=%s slot=%d peer=inline",
+                    block_hash.hex()[:16], slot,
                 )
         except Exception as exc:
             logger.error("Block process error: %s", exc, exc_info=True)
@@ -970,11 +1076,17 @@ class PeerManager:
                     hdr_cbor = cbor2.dumps(_normalize_cbor_types(hdr_arr))
                     block_hash = hashlib.blake2b(hdr_cbor, digest_size=32).digest()
 
-                # Decode body only if block has transactions
+                # Decode body only if block has transactions.
+                # During bulk sync (far from tip), skip pycardano parsing
+                # for speed. Near tip, use full pycardano for proper validation.
                 tx_bodies_raw = block_body[1] if len(block_body) > 1 else []
                 has_txs = hasattr(tx_bodies_raw, "__len__") and len(tx_bodies_raw) > 0
+                peer_tip = self.peer_tip_block_no_tvar.value
+                near_tip = peer_tip > 0 and block_number >= peer_tip - 1000
                 body = (
-                    decode_block_body_from_array(block_body, era, skip_pycardano=True)
+                    decode_block_body_from_array(
+                        block_body, era, skip_pycardano=not near_tip,
+                    )
                     if has_txs
                     else None
                 )
@@ -1057,15 +1169,14 @@ class PeerManager:
                             )
 
                 # Apply delegation certificates for stake distribution.
-                # Haskell tracks these in the ledger state and computes
-                # a PoolDistr at each epoch boundary (mark/set/go rotation).
-                # We apply certs to NodeKernel's delegation state and
-                # recompute the stake distribution at epoch boundaries.
-                if body and body.transactions and self._node_kernel is not None:
+                # Lightweight scan of raw tx body maps for key 4 (certs),
+                # no full body decode needed.
+                if self._node_kernel is not None:
                     try:
+                        from vibe.cardano.ledger.delegation import apply_certs_from_block_body
                         epoch = slot // self._config.epoch_length
-                        self._node_kernel.apply_delegation_certs(
-                            body.transactions, epoch,
+                        self._node_kernel._delegation_state = apply_certs_from_block_body(
+                            self._node_kernel._delegation_state, block_body, epoch,
                         )
                     except Exception as exc:
                         logger.debug(
@@ -1077,7 +1188,7 @@ class PeerManager:
                 # rule. We approximate by recomputing from delegation state
                 # + UTxO at each epoch transition.
                 epoch = slot // self._config.epoch_length
-                if not hasattr(self, '_last_sync_epoch'):
+                if self._last_sync_epoch is None:
                     self._last_sync_epoch = epoch
                 if epoch > self._last_sync_epoch:
                     self._last_sync_epoch = epoch
@@ -1088,11 +1199,13 @@ class PeerManager:
                                 utxo_stakes = chain_db.ledger_db.get_stake_by_address()
                             except Exception:
                                 pass
-                        self._node_kernel.update_stake_distribution(utxo_stakes)
-                        logger.info(
-                            "Epoch %d: stake distribution updated (%d pools)",
-                            epoch, len(self._node_kernel.stake_distribution),
-                        )
+                        if utxo_stakes:
+                            # Full UTxO data available from LedgerDB — proper recompute
+                            self._node_kernel.update_stake_distribution(utxo_stakes)
+                            logger.info(
+                                "Epoch %d: stake distribution recomputed (%d pools)",
+                                epoch, len(self._node_kernel.stake_distribution),
+                            )
 
                 # Store in ChainDB (chain selection handles out-of-order)
                 if chain_db is not None:
@@ -1177,6 +1290,12 @@ class PeerManager:
             peer.address,
             extra={"event": "peer.disconnect", "peer": str(peer.address)},
         )
+        # Unregister peer from peer sharing registry
+        from vibe.cardano.node.peer_registry import PeerAddress as _PSAddr
+        try:
+            self._peer_registry.remove_peer(_PSAddr(ip=peer.address.host, port=peer.address.port))
+        except Exception:
+            pass  # best-effort cleanup
         # If this was the chain-sync peer, clear so next connecting peer takes over
         if self._chain_sync_peer == str(peer.address):
             logger.info(
